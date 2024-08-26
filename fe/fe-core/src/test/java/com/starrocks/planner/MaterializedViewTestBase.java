@@ -331,4 +331,16 @@ public class MaterializedViewTestBase extends PlanTestBase {
         Map.Entry<Table, Column> e = result.entrySet().iterator().next();
         return Pair.create(e.getKey(), e.getValue());
     }
+
+    public String getQueryPlan(String query) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
+    }
 }
+
