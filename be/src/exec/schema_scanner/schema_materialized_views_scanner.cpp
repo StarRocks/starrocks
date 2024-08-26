@@ -60,7 +60,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
          false},
         {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"QUERY_REWRITE_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"OWNER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -120,7 +120,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
                            Slice(info.text),
                            Slice(info.extra_message),
                            Slice(info.query_rewrite_status),
-                           Slice(info.owner)};
+                           Slice(info.creator)};
 
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
