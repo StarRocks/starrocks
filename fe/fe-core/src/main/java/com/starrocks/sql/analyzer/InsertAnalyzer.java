@@ -118,7 +118,7 @@ public class InsertAnalyzer {
                 }
             }
             insertStmt.setTargetPartitionIds(targetPartitionIds);
-            for(long id : targetPartitionIds) {
+            for (long id : targetPartitionIds) {
                 LOG.info("insert stmt target partition id: {}", id);
             }
         }
