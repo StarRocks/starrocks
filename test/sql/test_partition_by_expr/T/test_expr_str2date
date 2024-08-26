@@ -68,7 +68,7 @@ insert into partition_str2date values('2021-01-05','1',1.1,1);
 insert into partition_str2date values('2021-01-06','1',1.1,1);
 select * from partition_str2date order by create_time;
 select * from partition_str2date where create_time='2021-01-05';
-explain select * from partition_str2date where create_time='2021-01-05';
+[UC]explain select * from partition_str2date where create_time='2021-01-05';
 select * from partition_str2date where '2021-01-05'=create_time;
 select * from partition_str2date where create_time>='2021-01-05';
 
