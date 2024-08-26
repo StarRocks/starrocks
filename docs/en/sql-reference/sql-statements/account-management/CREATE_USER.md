@@ -54,16 +54,17 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   ```SQL
   -- Set the maximum user connection number.
-  SET PROPERTIES ("max_user_connections" = "<Integer>")
+  PROPERTIES ("max_user_connections" = "<Integer>")
   -- Set the catalog.
-  SET PROPERTIES ("catalog" = "<catalog_name>")
+  PROPERTIES ("catalog" = "<catalog_name>")
   -- Set the database.
-  SET PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
+  PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
   -- Set session variables.
-  SET PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  PROPERTIES ("session.<variable_name>" = "<value>", ...)
   ```
 
   :::tip
+  - `PROPERTIES` works on user instead of user identity.
   - Global variables and read-only variables cannot be set for a specific user.
   - Variables take effect in the following order: SET_VAR > Session > User property > Global.
   - You can use [SHOW PROPERTY](./SHOW_PROPERTY.md) to view the properties of a specific user.
@@ -119,23 +120,23 @@ CREATE USER 'jack'@'192.168.%' DEFAULT ROLE db_admin, user_admin;
 Example 8: Create a user and set its maximum user connection number to `600`.
 
 ```SQL
-CREATE USER 'jack'@'192.168.%' SET PROPERTIES ("max_user_connections" = "600");
+CREATE USER 'jack'@'192.168.%' PROPERTIES ("max_user_connections" = "600");
 ```
 
 Example 9: Create a user and set the catalog of the user to `hive_catalog`.
 
 ```SQL
-CREATE USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'hive_catalog');
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'hive_catalog');
 ```
 
 Example 10: Create a user and set the database of the user to `test_db` in the default catalog.
 
 ```SQL
-CREATE USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
 ```
 
 Example 11: Create a user and set the session variable `query_timeout` to `600` for the user.
 
 ```SQL
-CREATE USER 'jack'@'192.168.%' SET PROPERTIES ('session.query_timeout' = '600');
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```

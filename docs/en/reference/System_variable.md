@@ -152,7 +152,7 @@ Example:
 
 ```SQL
 -- Set the session variable `query_timeout` to `600` for the user jack.
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('session.query_timeout' = '600');
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ```
 
 ## Descriptions of variables

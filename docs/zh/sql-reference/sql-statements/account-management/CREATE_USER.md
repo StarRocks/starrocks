@@ -50,20 +50,21 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定了此参数，则会自动将此角色赋予给用户，并且在用户登录后默认激活。如果不指定，则该用户默认没有任何权限。指定的角色必须已经存在。
 
-- `SET PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`），Catalog，数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
+- `PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`），Catalog，数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
 
   ```SQL
   -- 设置用户最大连接数。
-  SET PROPERTIES ("max_user_connections" = "<Integer>")
+  PROPERTIES ("max_user_connections" = "<Integer>")
   -- 设置 Catalog。
-  SET PROPERTIES ("catalog" = "<catalog_name>")
+  PROPERTIES ("catalog" = "<catalog_name>")
   -- 设置数据库。
-  SET PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
+  PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
   -- 设置 Session 变量。
-  SET PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  PROPERTIES ("session.<variable_name>" = "<value>", ...)
   ```
 
   :::tip
+  - `PROPERTIES` 作用于用户本身而非用户标识。
   - 全局变量和只读变量无法为单个用户设置。
   - 变量按照以下顺序生效：SET_VAR > Session > 用户属性 > Global。
   - 您可以通过 [SHOW PROPERTY](./SHOW_PROPERTY.md) 查看特定用户的属性。
@@ -114,25 +115,25 @@ CREATE USER 'jack'@'192.168.%' DEFAULT ROLE db_admin, user_admin;
 示例七：创建用户，设置最大用户连接数为 `600`。
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ("max_user_connections" = "600");
+CREATE USER 'jack'@'192.168.%' PROPERTIES ("max_user_connections" = "600");
 ```
 
 示例八：创建用户，设置用户的 Catalog 为 `hive_catalog`。
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'hive_catalog');
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'hive_catalog');
 ```
 
 示例九：创建用户，设置用户的数据库为 Default Catalog 中的 `test_db`。
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
 ```
 
 示例十：创建用户，设置用户的 Session 变量 `query_timeout` 为 `600`。
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('session.query_timeout' = '600');
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```
 
 ## 相关文档

@@ -149,7 +149,7 @@ SELECT /*+ SET_VAR
 
 ```SQL
 -- 设置用户 jack 的 Session 变量 `query_timeout` 为 `600`。
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('session.query_timeout' = '600');
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ```
 
 ## 支持的变量

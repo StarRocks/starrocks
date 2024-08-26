@@ -13,7 +13,7 @@ Property 指针对用户粒度的属性的设置项。设置用户的属性，�
 您可以通过以下命令管理特定用户的客户端到 FE 最大连接数。
 
 ```sql
-ALTER USER user SET PROPERTIES ("key"="value", ...)
+ALTER USER '<username>' SET PROPERTIES ("key"="value", ...)
 ```
 
 以下示例修改用户 jack 的最大连接数为 1000。

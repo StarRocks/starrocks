@@ -9,7 +9,7 @@ displayed_sidebar: "English"
 `Property` is set for user granularity. To set the maximum number of connections between Client and FE, use the following command.
 
 ```sql
-ALTER USER user_identity SET PROPERTIES ("key"="value", ...)
+ALTER USER '<username>' SET PROPERTIES ("key"="value", ...)
 ```
 
 User properties include the resources assigned to the user. The properties set here are for the user, not `user_identity`. That is, if two users `jack'@'%` and `jack'@'192.%` are created by the `CREATE USER` statement, then the `ALTER USER SET PROPERTIES` statement can work on the user `jack`, not `jack'@'%` or `jack'@'192.%`.

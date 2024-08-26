@@ -24,7 +24,7 @@ ALTER USER user_identity
 
 ## Parameters
 
-- `user_identity` consists of two parts, "user_name" and "host", in the format of `username@'userhost'`.  For the "host" part, you can use `%` for fuzzy match. If "host" is not specified, "%" is used by default, meaning that the user can connect to StarRocks from any host.
+- `user_identity` consists of two parts, "user_name" and "host", in the format of `username@'userhost'`.  For the "host" part, you can use `%` for fuzzy match. If "host" is not specified, "%" is used by default, meaning that the user can connect to StarRocks from any host. However, when you use this statement with `SET PROPERTIES` to modify the user properties, you must specify the `username` instead of `user_identity`.
 
 - `auth_option` specifies the authentication method. Currently, three authentication methods are supported: StarRocks native password, mysql_native_password, and "authentication_ldap_simple". StarRocks native password is the same as mysql_native_password in logic but slightly differs in syntax. One user identity can use only one authentication method. You can use ALTER USER to modify users' passwords and authentication methods.
 
@@ -76,6 +76,7 @@ ALTER USER user_identity
   ```
 
   :::tip
+  - `SET PROPERTIES` works on user instead of user identity. Therefore, when modifying the user properties, you must specify the `username` instead of `user_identity` in the `ALTER USER` statement.
   - Global variables and read-only variables cannot be set for a specific user.
   - Variables take effect in the following order: SET_VAR > Session > User property > Global.
   - You can use [SHOW PROPERTY](./SHOW_PROPERTY.md) to view the properties of a specific user.
@@ -134,31 +135,31 @@ ALTER USER 'jack'@'192.168.%' DEFAULT ROLE NONE;
 Example 8: Set the maximum user connection number to `600`.
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ("max_user_connections" = "600");
+ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "600");
 ```
 
 Example 9: Set the catalog of the user to `hive_catalog`.
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'hive_catalog');
+ALTER USER 'jack' SET PROPERTIES ('catalog' = 'hive_catalog');
 ```
 
 Example 10: Set the database of the user to `test_db` in the default catalog.
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
+ALTER USER 'jack' SET PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
 ```
 
 Example 11: Set the session variable `query_timeout` to `600` for the user.
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('session.query_timeout' = '600');
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ```
 
 Example 12: Clear the properties set for the user.
 
 ```SQL
-ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = '', 'database' = '', 'session.query_timeout' = '');
+ALTER USER 'jack' SET PROPERTIES ('catalog' = '', 'database' = '', 'session.query_timeout' = '');
 ```
 
 ## References
