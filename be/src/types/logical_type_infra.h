@@ -54,6 +54,17 @@ namespace starrocks {
     M(TYPE_VARBINARY)                \
     M(TYPE_BOOLEAN)
 
+#define APPLY_FOR_ALL_COMPARABLE_SCALAR_TYPE(M) \
+    APPLY_FOR_ALL_NUMBER_TYPE(M)                \
+    M(TYPE_DECIMALV2)                           \
+    M(TYPE_VARCHAR)                             \
+    M(TYPE_CHAR)                                \
+    M(TYPE_DATE)                                \
+    M(TYPE_DATETIME)                            \
+    M(TYPE_TIME)                                \
+    M(TYPE_VARBINARY)                           \
+    M(TYPE_BOOLEAN)
+
 #define APPLY_FOR_COMPLEX_TYPE(M) \
     M(TYPE_STRUCT)                \
     M(TYPE_MAP)                   \
@@ -200,7 +211,7 @@ Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, Args...
 template <class Functor, class Ret, class... Args>
 auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
     switch (ltype) {
-        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_ALL_COMPARABLE_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
         return default_value;
     }

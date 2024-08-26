@@ -389,6 +389,7 @@ set(EXEC_FILES
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
         ./types/type_checker_test.cpp
+        ./types/logical_type_infra_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
