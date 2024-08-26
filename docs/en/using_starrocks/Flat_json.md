@@ -50,14 +50,14 @@ The `a` and `b` fields exist in most rows and their data types are similar (both
 
 In v3.3.0, v3.3.1, and v3.3.2:
 
-- During data loading, it supports extracts common fields and stored them as a JSON type, but type inference is not supported.
+- During data loading, Flat JSON supports extracting common fields and storing them as a JSON type, but type inference is not supported.
 - Both the extracted columns and the original JSON data will be stored. The extracted data is removed when the original data is deleted.
 
 From v3.3.3 onwards
 
-- The results extracted from Flat JSON are divided into common subfield columns and remain json column. When all JSON schemas are consistent, remain json column will not be generated.
-- Flat JSON only stores common subfield columns and remain json column, and doesn't store the original JSON data.
-- During data loading, common subfield columns will be automatically inferred as types (BIGINT/LARGEINT/DOUBLE/STRING), and unrecognized types will be inferred as JSON types, the remain json column will be stored as a JSON type.
+- The results extracted from Flat JSON are divided into common fields and reserved fields. When all JSON schemas are consistent, no reserved field will be generated.
+- During data loading, common fields will be automatically inferred as BIGINT/LARGEINT/DOUBLE/STRING types. Unrecognized types will be inferred as a JSON type. Reserved fields will be stored as a JSON type.
+- Flat JSON only stores common fields and reserved fields, and does not store the original JSON data.
 
 ## How to use Flat JSON
 
