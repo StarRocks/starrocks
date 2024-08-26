@@ -1676,7 +1676,8 @@ public class PlanFragmentBuilder {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                    || scanNode.getTableName().equalsIgnoreCase("loads")) {
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
