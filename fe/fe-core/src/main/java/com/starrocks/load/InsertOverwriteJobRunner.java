@@ -210,6 +210,9 @@ public class InsertOverwriteJobRunner {
         for (int i = 0; i < job.getSourcePartitionIds().size(); ++i) {
             tmpPartitionIds.add(GlobalStateMgr.getCurrentState().getNextId());
         }
+        for (long id : job.getSourcePartitionIds()) {
+            LOG.info("job source partition id: {}", id);
+        }
         job.setTmpPartitionIds(tmpPartitionIds);
         Database db = getAndWriteLockDatabase(dbId);
         try {
