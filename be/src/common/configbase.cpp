@@ -153,7 +153,12 @@ inline bool parse_key_value_pairs(std::istream& input) {
 
         auto op_field = Field::get(kv.first);
         if (!op_field.has_value()) {
-            std::cerr << fmt::format("Ignored unknown config: {}\n", kv.first);
+            // A valid env var name should be: [A-Z_][A-Z0-9_]*
+            static const std::string ENV_CHARSET("ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890_");
+            if (kv.first.find_first_not_of(ENV_CHARSET) != std::string::npos) {
+                // only report error when the var name appears not to be valid, not strict here.
+                std::cerr << fmt::format("Ignored unknown config: {}\n", kv.first);
+            }
             continue;
         }
         auto field = op_field.value();
