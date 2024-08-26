@@ -312,6 +312,7 @@ public class InsertOverwriteJobRunner {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
         try (ConnectContext.ScopeGuard guard = context.bindScope()) {
+            Thread.sleep(10000);
             ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
             // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
             // InsertOverwriteJobRunner.
@@ -392,7 +393,6 @@ public class InsertOverwriteJobRunner {
         Database db = getAndWriteLockDatabase(dbId);
         OlapTable tmpTargetTable = null;
         try {
-            Thread.sleep(10000);
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
             tmpTargetTable = targetTable;
