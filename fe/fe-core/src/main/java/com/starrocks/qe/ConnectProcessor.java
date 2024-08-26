@@ -178,7 +178,11 @@ public class ConnectProcessor {
         if (ctx.getState().getErrType() == QueryState.ErrType.IGNORE_ERR) {
             return;
         }
-
+        
+        if (ctx.getUserVariables().size() > 0) {
+            ctx.getAuditEventBuilder().setUserVariables(ctx.getUserVariables());
+        }
+        
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
                 .setErrorCode(ctx.getNormalizedErrorCode())
