@@ -1458,7 +1458,6 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
                     group_by_columns[0]->append_default();
-
                     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                     if (!use_intermediate) {
                         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
