@@ -80,6 +80,7 @@ public class InsertAnalyzer {
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (insertStmt.isSpecifyPartitionNames()) {
+                
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
                     throw new SemanticException("No partition specified in partition lists",
                             targetPartitionNames.getPos());
@@ -117,6 +118,9 @@ public class InsertAnalyzer {
                 }
             }
             insertStmt.setTargetPartitionIds(targetPartitionIds);
+            for(long id : targetPartitionIds) {
+                LOG.info("insert stmt target partition id: {}", id);
+            }
         }
 
         if (table.isIcebergTable() || table.isHiveTable()) {
