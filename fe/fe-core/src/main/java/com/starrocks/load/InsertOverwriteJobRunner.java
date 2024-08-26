@@ -388,13 +388,20 @@ public class InsertOverwriteJobRunner {
     private void doCommit(boolean isReplay) {
         Database db = getAndWriteLockDatabase(dbId);
         OlapTable tmpTargetTable = null;
+        Thread.sleep(10000);
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
             tmpTargetTable = targetTable;
+            for (long partitionId : job.getSourcePartitionIds()) {
+                LOG.info("source partition ID: {}", partitionId);
+            }
             List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
+            for (String name : sourcePartitionNames) {
+                LOG.info("source partition name: {}", name);
+            }
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
