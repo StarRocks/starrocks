@@ -73,6 +73,11 @@ public class MVRewriteTest {
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        Config.default_mv_refresh_immediate = true;
+
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
         connectContext = UtFrameUtils.createDefaultCtx();
