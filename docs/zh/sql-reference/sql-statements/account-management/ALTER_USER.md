@@ -7,7 +7,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-更改 StarRocks 用户信息，例如用户密码，认证方式，或默认角色。
+更改 StarRocks 用户信息，例如用户密码，认证方式，默认角色，或用户属性。
 
 :::tip
 
@@ -18,7 +18,11 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-ALTER USER user_identity [auth_option] [default_role]
+ALTER USER user_identity 
+[auth_option] 
+[default_role] 
+[DEFAULT ROLE <role_name>[, <role_name>, ...]]
+[SET PROPERTIES ("key"="value", ...)]
 ```
 
 ## 参数说明
@@ -46,7 +50,7 @@ ALTER USER user_identity [auth_option] [default_role]
 
     > 注：在所有认证方式中，StarRocks 均会加密存储用户的密码。
 
-- `DEFAULT ROLE`
+- `DEFAULT ROLE`：设置用户默认角色。
 
     ```SQL
     -- 将列举的角色设置为用户的默认激活角色。
@@ -58,6 +62,27 @@ ALTER USER user_identity [auth_option] [default_role]
     ```
 
     通过 ALTER 命令更改用户默认角色前请确保对应角色已经赋予给用户。设置后，用户再次登录时会默认激活对应角色。
+
+- `SET PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`），Catalog，数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
+
+  ```SQL
+  -- 设置用户最大连接数。
+  SET PROPERTIES ("max_user_connections" = "<Integer>")
+  -- 设置 Catalog。
+  SET PROPERTIES ("catalog" = "<catalog_name>")
+  -- 设置数据库。
+  SET PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
+  -- 设置 Session 变量。
+  SET PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  -- 清空用户所有属性设置。
+  SET PROPERTIES ("catalog" = "", "database" = "", "session.<variable_name>" = "");
+  ```
+
+  :::tip
+  - 全局变量和只读变量无法为单个用户设置。
+  - 变量按照以下顺序生效：SET_VAR > Session > 用户属性 > Global。
+  - 您可以通过 [SHOW PROPERTY](./SHOW_PROPERTY.md) 查看特定用户的属性。
+  :::
 
 ## 示例
 
@@ -86,7 +111,7 @@ ALTER USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple;
 示例四：修改用户为 LDAP 认证，并指定用户在 LDAP 中的 DN (Distinguished Name)。
 
 ```SQL
-CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
+ALTER USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
 ```
 
 示例五：修改用户默认激活角色为 `db_admin` 和 `user_admin`。
@@ -112,6 +137,37 @@ ALTER USER 'jack'@'192.168.%' DEFAULT ROLE NONE;
 ```
 
 > 注意：用户还将默认激活 `public` 角色。
+
+示例八：设置最大用户连接数为 `600`。
+
+```SQL
+ALTER USER 'jack'@'192.168.%' SET PROPERTIES ("max_user_connections" = "600");
+```
+
+示例九：设置用户的 Catalog 为 `hive_catalog`。
+
+```SQL
+ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'hive_catalog');
+```
+
+示例十：设置用户的数据库为 Default Catalog 中的 `test_db`。
+
+```SQL
+ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
+```
+
+示例十一：设置用户的 Session 变量 `query_timeout` 为 `600`。
+
+```SQL
+ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
+示例十二：清空用户所有属性设置。
+
+```SQL
+ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('catalog' = '', 'database' = '', 'session.query_timeout' = '');
+```
+
 
 ## 相关文档
 

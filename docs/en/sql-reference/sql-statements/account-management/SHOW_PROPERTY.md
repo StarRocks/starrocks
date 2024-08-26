@@ -16,15 +16,15 @@ The current user can view its own property. Only users with the `user_admin` rol
 ## Syntax
 
 ```SQL
-SHOW PROPERTY [FOR 'user_name'] [LIKE 'max_user_connections']
+SHOW PROPERTY [FOR 'user_name'] [LIKE '<property_name>']
 ```
 
 ## Parameters
 
-| **Parameter**              | **Required** | **Description**                                    |
-| -------------------- | -------- | ----------------------------------------- |
-| user_name            | No       | The user name. If not specified, the property of the current user is viewed. |
-| max_user_connections | No       | The maximum number of connections for a user.      |
+| **Parameter**        | **Required** | **Description**                                                              |
+| -------------------- | ------------ | ---------------------------------------------------------------------------- |
+| user_name            | No           | The user name. If not specified, the property of the current user is viewed. |
+| property_name        | No           | The user property name.                                                      |
 
 ## Examples
 
@@ -62,4 +62,4 @@ SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 
 ## See also
 
-[SET PROPERTY](./SET_PROPERTY.md): Sets the maximum number of connections for a user.
+[ALTER USER](./ALTER_USER.md): Sets properties for a user.

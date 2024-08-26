@@ -144,6 +144,17 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+### Set variables as user properties
+
+You can set session variables as user properties using the [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
+
+Example:
+
+```SQL
+-- Set the session variable `query_timeout` to `600` for the user jack.
+ALTER USER 'jack'@'192.168.%' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
 ## Descriptions of variables
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
@@ -438,7 +449,7 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 ### enable_spill_to_remote_storage
 
-* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: false
 * **Introduced in**: v3.3.0
 
@@ -900,7 +911,7 @@ This variable takes effect only when the variable `enable_spill` is set to `true
 
 ### spill_storage_volume
 
-* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: Empty string
 * **Introduced in**: v3.3.0
 

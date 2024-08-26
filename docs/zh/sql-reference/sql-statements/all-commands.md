@@ -51,7 +51,6 @@ displayed_sidebar: "Chinese"
 - [REVOKE](./account-management/REVOKE.md)
 - [SET DEFAULT ROLE](./account-management/SET_DEFAULT_ROLE.md)
 - [SET PASSWORD](./account-management/SET_PASSWORD.md)
-- [SET PROPERTY](./account-management/SET_PROPERTY.md)
 - [SET ROLE](./account-management/SET_ROLE.md)
 - [SHOW AUTHENTICATION](./account-management/SHOW_AUTHENTICATION.md)
 - [SHOW GRANTS](./account-management/SHOW_GRANTS.md)
