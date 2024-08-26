@@ -211,6 +211,9 @@ public:
     // dynamic update max threads num
     [[nodiscard]] Status update_max_threads(int max_threads);
 
+    // dynamic update min threads num
+    Status update_min_threads(int max_threads);
+
     // Allocates a new token for use in token-based task submission. All tokens
     // must be destroyed before their ThreadPool is destroyed.
     //
@@ -292,7 +295,7 @@ private:
     void release_token(ThreadPoolToken* t);
 
     const std::string _name;
-    const int _min_threads;
+    std::atomic<int> _min_threads;
     std::atomic<int> _max_threads;
     const int _max_queue_size;
     const MonoDelta _idle_timeout;

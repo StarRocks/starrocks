@@ -402,6 +402,7 @@ set(EXEC_FILES
         ./util/string_util_test.cpp
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
+        ./util/threadpool_test.cpp
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
