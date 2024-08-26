@@ -4568,39 +4568,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### enable_json_flat
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_null_factor
-
-- Default: 0.3
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- Default: 0.9
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### pk_dump_interval_seconds
 
 - Default: 3600
