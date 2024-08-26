@@ -56,9 +56,6 @@ public class MetricCalculator extends TimerTask {
     private long lastQueryErrCounter = -1;
     private long lastQueryEventTime = -1;
 
-    private long lastQueryAnalysisErrCounter = -1;
-    private long lastQueryInternalErrCounter = -1;
-
     @Override
     public void run() {
         update();
@@ -71,8 +68,6 @@ public class MetricCalculator extends TimerTask {
             lastQueryCounter = MetricRepo.COUNTER_QUERY_ALL.getValue();
             lastRequestCounter = MetricRepo.COUNTER_REQUEST_ALL.getValue();
             lastQueryErrCounter = MetricRepo.COUNTER_QUERY_ERR.getValue();
-            lastQueryAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
-            lastQueryInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
             lastQueryEventTime = System.currentTimeMillis() * 1000000;
             return;
         }
