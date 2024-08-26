@@ -23,11 +23,12 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.util.Map;
+import java.util.Optional;
 
 public class MVTestUtils {
     private static final Logger LOG = LogManager.getLogger(MVTestUtils.class);
 
-    public static void waitingRollupJobV2Finish() throws Exception {
+    public static void waitingRollupJobV2Finish() {
         // waiting alterJobV2 finish
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         //Assert.assertEquals(1, alterJobs.size());
@@ -49,10 +50,13 @@ public class MVTestUtils {
         }
     }
 
-    public static void waitForSchemaChangeAlterJobFinish() throws Exception {
+    public static void waitForSchemaChangeAlterJobFinish() {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
+                if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
+                    continue;
+                }
                 LOG.info(
                         "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
@@ -60,5 +64,27 @@ public class MVTestUtils {
             System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
+    }
+
+    public static Optional<AlterJobV2> findAlterJobV2(long dbId,
+                                                      long tableId) {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        return alterJobs.values().stream()
+                .filter(job -> job.getDbId() == dbId && job.getTableId() == tableId)
+                .findFirst();
+    }
+
+    public static boolean waitForSchemaChangeAlterJobFinish(AlterJobV2 alterJobV2) {
+        while (!alterJobV2.getJobState().isFinalState()) {
+            if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
+                return false;
+            }
+            LOG.info(
+                    "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
+        }
+        System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        return true;
     }
 }
