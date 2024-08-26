@@ -43,29 +43,21 @@ The `a` and `b` fields exist in most rows and their data types are similar (both
 
 ## Usage notes
 
-Supported from version 3.3.0 to 3.3.2:
-
-- Only StarRocks shared-nothing clusters support Flat JSON.
+- Shared-nothing clusters support Flat JSON from v3.3.0 onwards. Shared-data clusters support Flat JSON from v3.3.3 onwards.
 - All table types in StarRocks support Flat JSON.
+- Flat JSON is compatible with historical JSON data. Historical data that have been loaded before will not be overwritten after Flat JSON is enabled. It will coexist with the flattened JSON data.
+- When new data is written, the Flat JSON operation is automatically completed through Compaction.
+
+In v3.3.0, v3.3.1, and v3.3.2:
+
 - During data loading, it supports extracts common fields and stored them as a JSON type, but type inference is not supported.
-- Both the extracted columns and the original JSON data will be stored. The extracted data is removed when the original
-  data is deleted.
-- Flat JSON is compatible with historical JSON data. Historical data that have been loaded before will not be
-  overwritten after Flat JSON is enabled. It will coexist with the flattened JSON data.
-- When new data is written, the Flat JSON operation is automatically completed through Compaction.
+- Both the extracted columns and the original JSON data will be stored. The extracted data is removed when the original data is deleted.
 
-Starting from version 3.3.3:
+From v3.3.3 onwards
 
-- StarRocks shared-nothing/shared-data clusters support Flat JSON.
-- All table types in StarRocks support Flat JSON.
-- The results extracted from Flat JSON are divided into common subfield columns and remain json column. When all JSON schemas
-  are consistent, remain json column will not be generated.
+- The results extracted from Flat JSON are divided into common subfield columns and remain json column. When all JSON schemas are consistent, remain json column will not be generated.
 - Flat JSON only stores common subfield columns and remain json column, and doesn't store the original JSON data.
-- During data loading, common subfield columns will be automatically inferred as types (BIGINT/LARGEINT/DOUBLE/STRING), and
-  unrecognized types will be inferred as JSON types, the remain json column will be stored as a JSON type.
-- Flat JSON is compatible with historical JSON data. Historical data that have been loaded before will not be
-  overwritten after Flat JSON is enabled. It will coexist with the flattened JSON data.
-- When new data is written, the Flat JSON operation is automatically completed through Compaction.
+- During data loading, common subfield columns will be automatically inferred as types (BIGINT/LARGEINT/DOUBLE/STRING), and unrecognized types will be inferred as JSON types, the remain json column will be stored as a JSON type.
 
 ## How to use Flat JSON
 
