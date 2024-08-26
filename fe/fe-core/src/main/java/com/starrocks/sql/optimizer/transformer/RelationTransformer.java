@@ -922,34 +922,6 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return plan;
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public LogicalPlan visitPivotRelation(PivotRelation node, ExpressionMapping context) {
-        LogicalPlan queryPlan = visit(node.getQuery());
-
-        // aggregate
-        List<Expr> groupKeys = node.getGroupByKeys();
-        List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
-        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
-                inlineView, mvTransformerContext);
-        OptExprBuilder builder = queryTransformer.aggregate(
-                queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
-
-        // output
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) builder.getRoot().getOp();
-        List<ColumnRefOperator> output = new ArrayList<>(aggregationOperator.getGroupingKeys());
-        for (Expr agg : aggFunctions) {
-            ColumnRefOperator ref = builder.getExpressionMapping().get(agg);
-            output.add(ref);
-        }
-
-        ExpressionMapping mapping = new ExpressionMapping(node.getScope(), output);
-        builder.setExpressionMapping(mapping);
-        return new LogicalPlan(builder, output, List.of());
-    }
-
->>>>>>> 8f9c666a28 ([BugFix] Fix text based mv rewrite compare bugs (#50249))
     /**
      * The process is as follows:
      * Step1. Parse each conjunct of joinOnPredicate(Expr), and transforming to ScalarOperator.

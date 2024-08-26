@@ -173,7 +173,7 @@ public class Optimizer {
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
-            logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
+            logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, mvTransformerContext)
                     .transform(logicOperatorTree, context).get(0);
 
             OptExpression result = optimizerConfig.isRuleBased() ?
