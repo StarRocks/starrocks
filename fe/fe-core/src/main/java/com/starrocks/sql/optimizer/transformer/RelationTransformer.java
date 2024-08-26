@@ -26,7 +26,6 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Column;
@@ -153,7 +152,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final boolean inlineView;
     private final boolean enableViewBasedMvRewrite;
-    private final Map<Operator, ParseNode> optToAstMap;
+    private final MVTransformerContext mvTransformerContext;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session,
@@ -173,7 +172,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.cteContext = context.getCteContext();
         this.inlineView = context.isInlineView();
         this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
-        this.optToAstMap = context.getOptToAstMap();
+        this.mvTransformerContext = context.getMVTransformerContext();
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -261,7 +260,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
+                inlineView, mvTransformerContext);
         LogicalPlan logicalPlan = queryTransformer.plan(node, outer);
         return logicalPlan;
     }
@@ -667,8 +667,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         // store opt expression to ast map if sub-query's type is supported.
         OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
-        if (optToAstMap != null && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(operatorType)) {
-            optToAstMap.put(subQueryOptExpression.getOp(), node.getQueryStatement());
+        if (this.mvTransformerContext != null
+                && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(operatorType)) {
+            this.mvTransformerContext.registerOpAST(subQueryOptExpression.getOp(), node.getQueryStatement());
         }
 
         return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
@@ -921,6 +922,34 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return plan;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public LogicalPlan visitPivotRelation(PivotRelation node, ExpressionMapping context) {
+        LogicalPlan queryPlan = visit(node.getQuery());
+
+        // aggregate
+        List<Expr> groupKeys = node.getGroupByKeys();
+        List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
+                inlineView, mvTransformerContext);
+        OptExprBuilder builder = queryTransformer.aggregate(
+                queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
+
+        // output
+        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) builder.getRoot().getOp();
+        List<ColumnRefOperator> output = new ArrayList<>(aggregationOperator.getGroupingKeys());
+        for (Expr agg : aggFunctions) {
+            ColumnRefOperator ref = builder.getExpressionMapping().get(agg);
+            output.add(ref);
+        }
+
+        ExpressionMapping mapping = new ExpressionMapping(node.getScope(), output);
+        builder.setExpressionMapping(mapping);
+        return new LogicalPlan(builder, output, List.of());
+    }
+
+>>>>>>> 8f9c666a28 ([BugFix] Fix text based mv rewrite compare bugs (#50249))
     /**
      * The process is as follows:
      * Step1. Parse each conjunct of joinOnPredicate(Expr), and transforming to ScalarOperator.

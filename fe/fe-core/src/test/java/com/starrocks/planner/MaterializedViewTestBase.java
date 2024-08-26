@@ -344,4 +344,26 @@ public class MaterializedViewTestBase extends PlanTestBase {
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
     }
+<<<<<<< HEAD
+=======
+
+    public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
+        Map<Table, Column> result = mv.getRefBaseTablePartitionColumns();
+        Assert.assertTrue(result.size() == 1);
+        Map.Entry<Table, Column> e = result.entrySet().iterator().next();
+        return Pair.create(e.getKey(), e.getValue());
+    }
+
+    public String getQueryPlan(String query) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
+    }
+>>>>>>> 8f9c666a28 ([BugFix] Fix text based mv rewrite compare bugs (#50249))
 }
+
