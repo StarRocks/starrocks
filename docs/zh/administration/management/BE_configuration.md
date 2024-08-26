@@ -3206,7 +3206,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：
 - 是否动态：是
-- 描述：控制 Flat JSON 时，最多提取的子列数量，默认为 20。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 描述：控制 Flat JSON 时，最多提取的子列数量。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
 
 ##### enable_compaction_flat_json
@@ -3215,7 +3215,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Bool
 - 单位：
 - 是否动态：是
-- 描述：控制 Compaction Json 时，是否直接基于 Flat Json 数据进行 Compaction。
+- 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
 
 ##### enable_lazy_dynamic_flat_json
@@ -3224,7 +3224,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Bool
 - 单位：
 - 是否动态：是
-- 描述：控制读取 Json 时，无法命中 Flat Json 时，是否延迟动态提取 Flat Json。
+- 描述：当查询在读过程中未命中 Flat JSON Schema 时，是否启用 Lazy Dynamic Flat JSON。当此项设置为 `true` 时，StarRocks 将把 Flat JSON 操作推迟到计算流程，而不是读取流程。
 - 引入版本：v3.3.3
 
 ### 存算分离
@@ -4527,83 +4527,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：
 - 引入版本：-
--->
-
-<!--
-##### enable_json_flat
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_null_factor
-
-- 默认值：0.3
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- 默认值：0.9
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- 默认值：5
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_column_max
-
-- 默认值：100
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_compaction_flat_json
-
-- 默认值：True
-- 类型：Bool
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_lazy_dynamic_flat_json
-
-- 默认值：True
-- 类型：Bool
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：
 -->
 
 <!--
