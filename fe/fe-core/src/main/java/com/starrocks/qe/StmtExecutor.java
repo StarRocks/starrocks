@@ -1808,6 +1808,10 @@ public class StmtExecutor {
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, database.getId(), olapTable.getId());
+
+        for (long id : job.getSourcePartitionIds()) {
+            LOG.info("insert overwrite job source partition ID: {}", id);
+        }        
         if (!database.writeLockAndCheckExist()) {
             throw new DmlException("database:%s does not exist.", database.getFullName());
         }
