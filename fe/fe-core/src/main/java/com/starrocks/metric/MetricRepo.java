@@ -112,8 +112,8 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_RUNNING;
 
-    public static LongCounterMetric COUNT_QUERY_ANALYSIS_ERR;
-    public static LongCounterMetric COUNT_QUERY_INTERNAL_ERR;
+    public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
+    public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
 
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
             new MetricWithLabelGroup<>("category",
@@ -460,10 +460,10 @@ public final class MetricRepo {
         COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
 
-        COUNT_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS, "total analysis error query");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNT_QUERY_ANALYSIS_ERR);
-        COUNT_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, "total internal error query");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNT_QUERY_INTERNAL_ERR);
+        COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS, "total analysis error query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
+        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, "total internal error query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);
 
         COUNTER_TXN_REJECT =
                 new LongCounterMetric("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
