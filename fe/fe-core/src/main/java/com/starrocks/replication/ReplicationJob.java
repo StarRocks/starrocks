@@ -866,8 +866,9 @@ public class ReplicationJob implements GsonPostProcessable {
         sendRunningTasks();
     }
 
-    private void sendReplicateSnapshotTasks() {
+    private void sendReplicateSnapshotTasks() throws Exception {
         runningTasks.clear();
+        byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
         for (PartitionInfo partitionInfo : partitionInfos.values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
@@ -893,7 +894,7 @@ public class ReplicationJob implements GsonPostProcessable {
                                 indexInfo.getSchemaHash(), partitionInfo.getVersion(),
                                 srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                 indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
-                                flippedSrcSnapshotInfos);
+                                flippedSrcSnapshotInfos, encryptionMeta);
                         runningTasks.put(task, task);
                     }
                 }
