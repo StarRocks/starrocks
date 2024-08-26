@@ -460,9 +460,11 @@ public final class MetricRepo {
         COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
 
-        COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS, "total analysis error query");
+        COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
+                                                           "total analysis error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
-        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, "total internal error query");
+        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, 
+                                                           "total internal error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);
 
         COUNTER_TXN_REJECT =
