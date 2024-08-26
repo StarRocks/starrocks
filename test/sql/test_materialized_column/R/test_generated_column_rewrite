@@ -12,7 +12,7 @@ insert into t1 values(1);
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Table t1 is not found.')
 -- !result
- explain select * from (select id + 1 as v from t) t2;
+[UC]explain select * from (select id + 1 as v from t) t2;
 -- result:
 PLAN FRAGMENT 0
  OUTPUT EXPRS:2: g1
@@ -22,7 +22,7 @@ PLAN FRAGMENT 0
 
   0:EMPTYSET
 -- !result
- explain select v from (select id + 1 as v from t) t2;
+[UC]explain select v from (select id + 1 as v from t) t2;
 -- result:
 PLAN FRAGMENT 0
  OUTPUT EXPRS:2: g1

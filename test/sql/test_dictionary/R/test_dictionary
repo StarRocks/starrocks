@@ -1154,7 +1154,7 @@ function: wait_refresh_dictionary_finish("test_dictionary_common_expression", "F
 -- result:
 None
 -- !result
-explain SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+[UC]explain select dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
 -- result:
 [REGEX]*common*
 -- !result

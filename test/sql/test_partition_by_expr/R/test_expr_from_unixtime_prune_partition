@@ -29,7 +29,7 @@ select * from partition_unixtime where create_time=1609776000;
 -- result:
 1609776000	1	1	1
 -- !result
-explain select * from partition_unixtime where create_time=1609776000;
+[UC]explain select * from partition_unixtime where create_time=1609776000;
 select * from partition_unixtime where 1609776000=create_time;
 -- result:
 1609776000	1	1	1
@@ -68,7 +68,7 @@ select * from partition_unixtime_ms where create_time=1609776000000;
 -- result:
 1609776000000	1	1	1
 -- !result
-explain select * from partition_unixtime_ms where create_time=1609776000000;
+[UC]explain select * from partition_unixtime_ms where create_time=1609776000000;
 select * from partition_unixtime_ms where 1609776000000=create_time;
 -- result:
 1609776000000	1	1	1
