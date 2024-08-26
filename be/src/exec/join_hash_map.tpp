@@ -1029,7 +1029,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         }
     }
 
-    size_t probe_cont = 0;
+    [[maybe_unused]] size_t probe_cont = 0;
 
     size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
