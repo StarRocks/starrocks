@@ -44,22 +44,19 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 
 ## 使用说明
 
-StarRocks 对 Flat JSON 的支持情况，从 3.3.0 版本 ~ 3.3.2 版本：
-- 仅 StarRocks 存算一体集群支持 Flat JSON。
+- StarRocks 存算一体集群自 v3.3.0 起支持 Flat JSON，存算分离集群自 v3.3.3 起支持。
 - StarRocks 所有表类型都支持 Flat JSON。
-- 导入数据时，支持提取公共字段、单独存储为 JSON 类型，未实现类型推导。
-- 会同时存储提取的列和原始 JSON 数据。提取的数据会在原始数据删除时一起删除。
 - 兼容历史数据，无须重新导入。历史数据会和 Flat JSON 打平的数据共存。
 - 向历史表导入新数据时，自动通过 Compaction 完成 Flat JSON 操作。
 
-从 3.3.3 版本起：
-- StarRocks 存算一体/存算分离集群都支持 Flat JSON。
-- StarRocks 所有表类型都支持 Flat JSON。
-- Flat JSON 提取的结果分为公共的列和保留字段列，当所有 JSON schema 一致时，不会生成保留字段列。
+在 v3.3.0、v3.3.1、v3.3.2 版本中：
+- 导入数据时，支持提取公共字段、单独存储为 JSON 类型，未实现类型推导。
+- 会同时存储提取的列和原始 JSON 数据。提取的数据会在原始数据删除时一起删除。
+
+自 v3.3.3 版本起：
+- Flat JSON 提取的结果分为公共的列和保留字段列，当所有 JSON Schema 一致时，不会生成保留字段列。
 - Flat JSON 仅存储公共字段列和保留字段列，不会再额外存储原始 JSON 数据。
-- 导入数据时，公共字段会自动推导类型为（BIGINT/LARGEINT/DOUBLE/STRING）,不能识别的类型推导为 JSON 类型，保留字段列会存储为 JSON 类型。
-- 兼容历史数据，无须重新导入。历史数据会和 Flat JSON 打平的数据可以共存。
-- 向历史表导入新数据时，自动通过 Compaction 完成 Flat JSON 操作。
+- 导入数据时，公共字段会自动推导类型为 BIGINT/LARGEINT/DOUBLE/STRING,不能识别的类型推导为 JSON 类型，保留字段列会存储为 JSON 类型。
 
 ## 使用 Flat JSON
 
