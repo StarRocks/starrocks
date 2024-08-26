@@ -388,8 +388,8 @@ public class InsertOverwriteJobRunner {
     private void doCommit(boolean isReplay) {
         Database db = getAndWriteLockDatabase(dbId);
         OlapTable tmpTargetTable = null;
-        Thread.sleep(10000);
         try {
+            Thread.sleep(10000);
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
             tmpTargetTable = targetTable;
