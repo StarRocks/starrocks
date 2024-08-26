@@ -23,6 +23,7 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -53,6 +54,7 @@ public:
     ~LakeReplicationTxnManagerTest() override = default;
 
     void SetUp() override {
+        config::enable_transparent_data_encryption = false;
         std::vector<starrocks::StorePath> paths;
         CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
         _test_dir = paths[0].path + "/lake";
@@ -73,8 +75,11 @@ public:
             auto src_tablet = create_tablet(_src_tablet_id, 1, _schema_hash);
 
             std::vector<int64_t> keys{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+            Int64Column deletes;
+            int64_t deletes_array[2] = {10, 11};
+            deletes.append_numbers(deletes_array, sizeof(int64_t) * 2);
             for (int i = 2; i <= _src_version; i++) {
-                ASSERT_TRUE(src_tablet->rowset_commit(i, create_rowset(src_tablet, keys)).ok());
+                ASSERT_TRUE(src_tablet->rowset_commit(i, create_rowset(src_tablet, keys, &deletes)).ok());
             }
         }
     }
@@ -86,6 +91,7 @@ public:
         EXPECT_TRUE(status.ok()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        config::enable_transparent_data_encryption = false;
     }
 
     TCreateTabletReq get_create_tablet_req(int64_t tablet_id, int64_t version, int32_t schema_hash,
@@ -344,6 +350,72 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
 }
 
 TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
+    TRemoteSnapshotRequest remote_snapshot_request;
+    remote_snapshot_request.__set_transaction_id(_transaction_id);
+    remote_snapshot_request.__set_table_id(_table_id);
+    remote_snapshot_request.__set_partition_id(_partition_id);
+    remote_snapshot_request.__set_tablet_id(_tablet_id);
+    remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    remote_snapshot_request.__set_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_visible_version(_version);
+    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_src_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_src_visible_version(_src_version);
+    remote_snapshot_request.__set_src_backends({TBackend()});
+
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
+    EXPECT_TRUE(status.ok()) << status;
+
+    TReplicateSnapshotRequest replicate_snapshot_request;
+    replicate_snapshot_request.__set_transaction_id(_transaction_id);
+    replicate_snapshot_request.__set_table_id(_table_id);
+    replicate_snapshot_request.__set_partition_id(_partition_id);
+    replicate_snapshot_request.__set_tablet_id(_tablet_id);
+    replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    replicate_snapshot_request.__set_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_visible_version(_version);
+    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_src_visible_version(_src_version);
+    replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
+
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    EXPECT_TRUE(status.ok()) << status;
+
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    EXPECT_TRUE(status.ok()) << status;
+
+    auto txn_info = TxnInfoPB();
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(0);
+    txn_info.set_force_publish(false);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, {txn_info});
+    EXPECT_TRUE(status_or.ok()) << status_or.status();
+
+    EXPECT_EQ(_src_version, status_or.value()->version());
+}
+
+TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
+    EncryptionKeyPB pb;
+    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    pb.set_plain_key("0000000000000000");
+    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+    auto val_st = root_encryption_key->generate_key();
+    EXPECT_TRUE(val_st.ok());
+    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+    encryption_key->set_id(2);
+    KeyCache::instance().add_key(root_encryption_key);
+    KeyCache::instance().add_key(encryption_key);
+    config::enable_transparent_data_encryption = true;
+
     TRemoteSnapshotRequest remote_snapshot_request;
     remote_snapshot_request.__set_transaction_id(_transaction_id);
     remote_snapshot_request.__set_table_id(_table_id);
