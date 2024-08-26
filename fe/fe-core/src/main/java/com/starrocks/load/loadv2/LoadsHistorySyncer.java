@@ -17,6 +17,7 @@ package com.starrocks.load.loadv2;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
@@ -149,6 +150,9 @@ public class LoadsHistorySyncer extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (FeConstants.runningUnitTest) {
+            return;
+        }
         try {
             checkMeta();
             syncData();
