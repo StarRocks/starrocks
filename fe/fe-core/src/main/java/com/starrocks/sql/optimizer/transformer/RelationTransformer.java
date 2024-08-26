@@ -26,7 +26,6 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Column;
@@ -162,7 +161,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final boolean inlineView;
     private final boolean enableViewBasedMvRewrite;
-    private final Map<Operator, ParseNode> optToAstMap;
+    private final MVTransformerContext mvTransformerContext;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session,
@@ -182,7 +181,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         this.cteContext = context.getCteContext();
         this.inlineView = context.isInlineView();
         this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
-        this.optToAstMap = context.getOptToAstMap();
+        this.mvTransformerContext = context.getMVTransformerContext();
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -270,7 +269,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
+                inlineView, mvTransformerContext);
         LogicalPlan logicalPlan = queryTransformer.plan(node, outer);
         return logicalPlan;
     }
@@ -711,8 +711,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         // store opt expression to ast map if sub-query's type is supported.
         OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
-        if (optToAstMap != null && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(operatorType)) {
-            optToAstMap.put(subQueryOptExpression.getOp(), node.getQueryStatement());
+        if (this.mvTransformerContext != null
+                && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(operatorType)) {
+            this.mvTransformerContext.registerOpAST(subQueryOptExpression.getOp(), node.getQueryStatement());
         }
 
         return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
@@ -972,7 +973,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         // aggregate
         List<Expr> groupKeys = node.getGroupByKeys();
         List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
-        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
+                inlineView, mvTransformerContext);
         OptExprBuilder builder = queryTransformer.aggregate(
                 queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
 
