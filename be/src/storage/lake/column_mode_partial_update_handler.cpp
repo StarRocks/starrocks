@@ -259,8 +259,9 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     }
     uint32_t rowset_id = params.container.rssid_to_rowid().at(rssid);
     // 2. load segment meta.
-    ASSIGN_OR_RETURN(auto segment, params.tablet->tablet_mgr()->load_segment(fileinfo, 0, &footer_size_hint,
-                                                                             lake_io_opts, true, params.tablet_schema));
+    ASSIGN_OR_RETURN(auto segment, params.tablet->tablet_mgr()->load_segment(
+                                           fileinfo, rssid - rowset_id /* segment id inside rowset */,
+                                           &footer_size_hint, lake_io_opts, true, params.tablet_schema));
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(fileinfo.path));
     seg_options.stats = &stats;
