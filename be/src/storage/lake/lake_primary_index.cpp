@@ -76,13 +76,8 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-<<<<<<< HEAD
-
-    if (tablet->get_enable_persistent_index(base_version)) {
-=======
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
-    if (metadata->enable_persistent_index() && (fix_size <= 128)) {
->>>>>>> 55603eab6b ([BugFix] Revert behavior change of PR #49427 (backport #49998) (#49998))
+    if (tablet->get_enable_persistent_index(base_version) && (fix_size <= 128)) {
         DCHECK(_persistent_index == nullptr);
 
         auto persistent_index_type = tablet->get_persistent_index_type(base_version);
