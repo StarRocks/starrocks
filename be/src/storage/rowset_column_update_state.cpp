@@ -316,7 +316,7 @@ static Status read_from_source_segment_and_update(
     CHECK_MEM_LIMIT("RowsetColumnUpdateState::read_from_source_segment");
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     // We need to estimate each update rows size before it has been actually updated.
-    const int64_t upt_memory_usage_per_row = calc_upt_memory_usage_per_row(rowset);
+    const int64_t upt_memory_usage_per_row = RowsetColumnUpdateState::calc_upt_memory_usage_per_row(rowset);
     auto segment = Segment::open(fs, FileInfo{path}, rowset_seg_id.segment_id, rowset->schema());
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
@@ -767,7 +767,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
                                       << " row cnt: " << container.chunk_ptr->num_rows() << "] row range : ["
                                       << container.start_rowid << ", " << container.end_rowid
                                       << ") upt_memory_usage_per_row : " << upt_memory_usage_per_row
-                                      << " update column cnt : " << update_column_ids;
+                                      << " update column cnt : " << update_column_ids.size();
                         }
                         const size_t source_chunk_size = container.chunk_ptr->memory_usage();
                         tracker->consume(source_chunk_size);
