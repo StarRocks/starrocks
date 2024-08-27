@@ -26,6 +26,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -98,10 +99,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
         try {
             partitions = table.getPhysicalPartitions().stream()
-                    .filter(p -> p.getVisibleVersionTime() > staleTime)
-                    .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
-                    .filter(p -> current >=
-                            p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
+                    .filter(p -> p.shouldVacuum())
                     .collect(Collectors.toList());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
@@ -204,11 +202,20 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
         }
 
-        partition.setLastVacuumTime(startTime);
-        LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
+        long finishTime = System.currentTimeMillis();
+        if (!hasError) {
+            partition.setLastSuccVacuumTime(finishTime);
+        }
+
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_VACUUM_FILES_NUMBER.increase(vacuumedFiles);
+            MetricRepo.COUNTER_VACUUM_FILES_BYTES.increase(vacuumedFileSize);
+        }
+
+        LOG.info("Vacuumed {}.{}.{} hasError={}, vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
-                db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, System.currentTimeMillis() - startTime);
+                db.getFullName(), table.getName(), partition.getName(), hasError,
+                vacuumedFiles, vacuumedFileSize, visibleVersion, minRetainVersion, minActiveTxnId, finishTime - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {

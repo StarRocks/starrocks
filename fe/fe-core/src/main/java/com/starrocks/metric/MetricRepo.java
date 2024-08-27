@@ -158,6 +158,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_QUERY;
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_RPC;
 
+    // count file number and total size vacuumed for cloud native
+    public static LongCounterMetric COUNTER_VACUUM_FILES_NUMBER;
+    public static LongCounterMetric COUNTER_VACUUM_FILES_BYTES;
+
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
@@ -500,6 +504,13 @@ public final class MetricRepo {
 
             }
         }
+
+        COUNTER_VACUUM_FILES_NUMBER = new LongCounterMetric("vacuum_files_count", MetricUnit.REQUESTS,
+                "total files have been vacuumed");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_NUMBER);
+        COUNTER_VACUUM_FILES_BYTES = new LongCounterMetric("vacuum_files_bytes", MetricUnit.BYTES,
+                "total file bytes have been vacuumed");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_BYTES);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));

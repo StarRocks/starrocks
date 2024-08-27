@@ -16,9 +16,12 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.transaction.TransactionType;
 import org.junit.Assert;
 import org.junit.Before;
@@ -91,7 +94,7 @@ public class PhysicalPartitionImplTest {
 
         Assert.assertTrue(p.hasMaterializedView());
         Assert.assertTrue(p.hasStorageData());
-        Assert.assertEquals(0, p.storageDataSize());
+        Assert.assertEquals(0, p.getDataSize());
         Assert.assertEquals(0, p.storageRowCount());
         Assert.assertEquals(0, p.storageReplicaCount());
         Assert.assertEquals(0, p.getTabletMaxDataSize());
@@ -128,8 +131,8 @@ public class PhysicalPartitionImplTest {
 
         p.setMinRetainVersion(1);
         Assert.assertEquals(1, p.getMinRetainVersion());
-        p.setLastVacuumTime(1);
-        Assert.assertEquals(1, p.getLastVacuumTime());
+        p.setLastSuccVacuumTime(1);
+        Assert.assertEquals(1, p.getLastSuccVacuumTime());
 
         p.setDataVersion(0);
         p.setNextDataVersion(0);
@@ -155,5 +158,31 @@ public class PhysicalPartitionImplTest {
         p1.createRollupIndex(new MaterializedIndex(1));
         p2.createRollupIndex(new MaterializedIndex(2));
         Assert.assertFalse(p1.equals(p2));
+    }
+
+    @Test
+    public void testPhysicalPartitionVacuum() throws Exception {
+        LakeTablet tablet = new LakeTablet(100);
+        TabletMeta meta = new TabletMeta(1, 1, 1, 2, 1, 1, TStorageMedium.HDD, true);
+
+        MaterializedIndex index = new MaterializedIndex();
+        index.addTablet(tablet, meta);
+
+        PhysicalPartitionImpl p = new PhysicalPartitionImpl(1, "", 1, 0, index);
+
+        // last vacuumed 1 sec ago
+        p.setLastSuccVacuumTime(System.currentTimeMillis() - 1000);
+        Assert.assertFalse(p.shouldVacuum());
+
+        // ensure last vacuum have past long enough
+        // but storage size is not so large
+        p.setLastSuccVacuumTime(System.currentTimeMillis() - Config.lake_autovacuum_partition_naptime_seconds * 1000 - 1000);
+        tablet.setDataSize(100L * 1024 * 1024);
+        tablet.setStorageSize(100L * 1024 * 1024 + Config.lake_enable_vacuum_storage_size_exceeds_mb - 1L * 1024 * 1024);
+        Assert.assertFalse(p.shouldVacuum());
+
+        tablet.setStorageSize(100L * 1024 * 1024 + Config.lake_enable_vacuum_storage_size_exceeds_mb * 1024L * 1024
+                              + 1L * 1024 * 1024);
+        Assert.assertTrue(p.shouldVacuum());
     }
 }

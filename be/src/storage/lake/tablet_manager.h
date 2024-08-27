@@ -195,6 +195,8 @@ public:
 
     Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
 
+    StatusOr<int64_t> collect_tablet_storage_size(int64_t tablet_id, int64_t version);
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);

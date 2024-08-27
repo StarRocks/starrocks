@@ -238,13 +238,15 @@ public class TabletStatMgr extends FrontendDaemon {
         String dbName = db.getFullName();
         String tableName = table.getName();
         long partitionId = partition.getId();
+        String partitionName = partition.getName();
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
             List<Tablet> tablets = new ArrayList<>(partition.getBaseIndex().getTablets());
-            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
+            return new PartitionSnapshot(dbName, tableName, partitionId, partitionName,
+                                         visibleVersion, visibleVersionTime, tablets);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -255,7 +257,13 @@ public class TabletStatMgr extends FrontendDaemon {
                                                             @NotNull PhysicalPartition partition) {
         PartitionSnapshot snapshot = createPartitionSnapshot(db, table, partition);
         long visibleVersionTime = snapshot.visibleVersionTime;
-        snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
+        long lastSuccVacuumTime = partition.getLastSuccVacuumTime();
+
+        // avoid unnecessary tablet stat, only stat for tablet which:
+        // 1. data ingestion or compaction since last tablet stat
+        // 2. file vacuumed since last tablet stat
+        snapshot.tablets.removeIf(t -> (((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime) &&
+                                       ((LakeTablet) t).getDataSizeUpdateTime() > lastSuccVacuumTime);
         if (snapshot.tablets.isEmpty()) {
             LOG.debug("Skipped tablet stat collection of partition {}", snapshot.debugName());
             return null;
@@ -278,22 +286,24 @@ public class TabletStatMgr extends FrontendDaemon {
         private final String dbName;
         private final String tableName;
         private final long partitionId;
+        private final String partitionName;
         private final long visibleVersion;
         private final long visibleVersionTime;
         private final List<Tablet> tablets;
 
-        PartitionSnapshot(String dbName, String tableName, long partitionId, long visibleVersion,
-                          long visibleVersionTime, List<Tablet> tablets) {
+        PartitionSnapshot(String dbName, String tableName, long partitionId, String partitionName,
+                          long visibleVersion, long visibleVersionTime, List<Tablet> tablets) {
             this.dbName = dbName;
             this.tableName = tableName;
             this.partitionId = partitionId;
+            this.partitionName = partitionName;
             this.visibleVersion = visibleVersion;
             this.visibleVersionTime = visibleVersionTime;
             this.tablets = Objects.requireNonNull(tablets);
         }
 
         private String debugName() {
-            return String.format("%s.%s.%d version %d", dbName, tableName, partitionId, visibleVersion);
+            return String.format("%s.%s.%s version %d", dbName, tableName, partitionName, visibleVersion);
         }
     }
 
@@ -376,6 +386,7 @@ public class TabletStatMgr extends FrontendDaemon {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
                             tablet.setRowCount(stat.numRows);
+                            tablet.setStorageSize(stat.storageSize);
                             tablet.setDataSizeUpdateTime(collectStatTime);
                         }
                     }
