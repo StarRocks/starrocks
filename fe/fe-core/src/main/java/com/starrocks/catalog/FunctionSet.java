@@ -81,6 +81,7 @@ public class FunctionSet {
     public static final String DAYOFYEAR = "dayofyear";
     public static final String FROM_DAYS = "from_days";
     public static final String FROM_UNIXTIME = "from_unixtime";
+    public static final String FROM_UNIXTIME_MILLISECONDS = "from_unixtime_milliseconds";
     public static final String FROM_UNIXTIME_MS = "from_unixtime_ms";
     public static final String HOUR = "hour";
     public static final String MINUTE = "minute";
@@ -93,6 +94,7 @@ public class FunctionSet {
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String TIMESTAMPDIFF = "timestampdiff";
     public static final String TO_DATE = "to_date";
+    public static final String TO_UNIXTIME_MILLISECONDS = "to_unixtime_milliseconds";
     public static final String DATE = "date";
     public static final String LAST_DAY = "last_day";
     public static final String MAKEDATE = "makedate";
@@ -637,6 +639,7 @@ public class FunctionSet {
                     .add(CURRENT_TIMESTAMP)
                     .add(CURRENT_TIME)
                     .add(NOW)
+                    .add(TO_UNIXTIME_MILLISECONDS)
                     .add(UNIX_TIMESTAMP)
                     .add(UTC_TIMESTAMP)
                     .add(UTC_TIME)

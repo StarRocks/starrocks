@@ -312,12 +312,15 @@ public:
     //it returns seconds of the value of date literal since '1970-01-01 00:00:00' UTC
     bool unix_timestamp(int64_t* timestamp, std::string_view timezone) const;
     bool unix_timestamp(int64_t* timestamp, const cctz::time_zone& ctz) const;
+    bool unix_timestamp_ms(int64_t* timestamp, std::string_view timezone) const;
+    bool unix_timestamp_ms(int64_t* timestamp, const cctz::time_zone& ctz) const;
 
     //construct datetime_value from timestamp and timezone
     //timestamp is an internal timestamp value representing seconds since '1970-01-01 00:00:00' UTC
     bool from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, std::string_view timezone, cctz::time_zone& ctz);
     bool from_unixtime(int64_t, const std::string& timezone);
     bool from_unixtime(int64_t, const cctz::time_zone& ctz);
+    bool from_unixtime(int64_t, int64_t, const std::string& timezone);
     bool from_unixtime(int64_t, int64_t, const cctz::time_zone& ctz);
 
     bool operator==(const DateTimeValue& other) const {
@@ -480,7 +483,6 @@ protected:
     uint16_t _year{0};
     uint8_t _month{0};
     uint8_t _day{0};
-    // TODO(zc): used for nothing
     uint64_t _microsecond{0};
 
     DateTimeValue(uint8_t neg, uint8_t type, uint8_t hour, uint8_t minute, uint8_t second, uint32_t microsecond,

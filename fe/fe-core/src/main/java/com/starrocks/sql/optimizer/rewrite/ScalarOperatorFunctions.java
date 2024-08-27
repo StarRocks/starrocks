@@ -569,6 +569,26 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "to_unixtime_milliseconds", argTypes = {DATETIME}, returnType = BIGINT),
+            @ConstantFunction(name = "to_unixtime_milliseconds", argTypes = {DATE}, returnType = BIGINT),
+            @ConstantFunction(name = "to_unixtime_milliseconds", argTypes = {VARCHAR}, returnType = BIGINT)
+    })
+    public static ConstantOperator toUnixTimestampMilliseconds(ConstantOperator arg) {
+        LocalDateTime dt;
+        if (arg.getType().isDateType()) {
+            dt = arg.getDatetime();
+        } else {
+            dt = DateUtils.parseStrictDateTime(arg.getVarchar());
+        }
+        ZonedDateTime zdt = ZonedDateTime.of(dt, TimeUtils.getTimeZone().toZoneId());
+        long value = zdt.toInstant().toEpochMilli();
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
+            value = 0;
+        }
+        return ConstantOperator.createBigint(value);
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
             @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
     })
@@ -588,15 +608,38 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(dl.toString());
     }
 
+    @ConstantFunction(name = "from_unixtime_milliseconds", argTypes = { BIGINT }, returnType = VARCHAR)
+    public static ConstantOperator fromUnixTimeMilliseconds(ConstantOperator unixTime) throws AnalysisException {
+        long millisecond = unixTime.getBigint();
+
+        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP * 1000);
+        }
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(millisecond), TimeUtils.getTimeZone().toZoneId()));
+        return ConstantOperator.createVarchar(dl.toString());
+    }
+
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime_milliseconds", argTypes = { FLOAT }, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime_milliseconds", argTypes = { DOUBLE }, returnType = VARCHAR)
     })
+    public static ConstantOperator fromUnixTimeDecimalMilliseconds(ConstantOperator unixTime) throws AnalysisException {
+        // getDouble() and getFloat() are the same.
+        long millisecond = (long) unixTime.getDouble();
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(millisecond), TimeUtils.getTimeZone().toZoneId()));
+        return ConstantOperator.createVarchar(dl.toString());
+    }
+
+    @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
         long millisecond = unixTime.getBigint();
 
         if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
             throw new AnalysisException(
-                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP * 1000);
         }
         long second = millisecond / 1000;
         ConstantOperator dl = ConstantOperator.createDatetime(
@@ -622,6 +665,44 @@ public class ScalarOperatorFunctions {
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
+        return dateFormat(dl, fmtLiteral);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime_milliseconds", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime_milliseconds", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+    })
+    public static ConstantOperator fromUnixTimeMilliseconds(ConstantOperator unixTime, ConstantOperator fmtLiteral)
+            throws AnalysisException {
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP * 1000);
+        }
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(value), TimeUtils.getTimeZone().toZoneId()));
+        return dateFormat(dl, fmtLiteral);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime_milliseconds", argTypes = {FLOAT, VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime_milliseconds", argTypes = {DOUBLE, VARCHAR}, returnType = VARCHAR)
+    })
+    public static ConstantOperator fromUnixTimeDecimalMilliseconds(ConstantOperator unixTime, ConstantOperator fmtLiteral)
+            throws AnalysisException {
+        // getDouble() and getFloat() are the same.
+        long millisecond = (long) unixTime.getDouble();
+        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP * 1000);
+        }
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(millisecond), TimeUtils.getTimeZone().toZoneId()));
         return dateFormat(dl, fmtLiteral);
     }
 

@@ -2345,6 +2345,21 @@ bool DateTimeValue::unix_timestamp(int64_t* timestamp, const cctz::time_zone& ct
     return true;
 }
 
+bool DateTimeValue::unix_timestamp_ms(int64_t* timestamp, std::string_view timezone) const {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+        return false;
+    }
+    return unix_timestamp_ms(timestamp, ctz);
+}
+
+bool DateTimeValue::unix_timestamp_ms(int64_t* timestamp, const cctz::time_zone& ctz) const {
+    // cctz does not suuport "civil_second", so we convert to second first.
+    const auto tp = cctz::convert(cctz::civil_second(_year, _month, _day, _hour, _minute, _second), ctz);
+    *timestamp = tp.time_since_epoch().count() * 1000 + static_cast<int64_t>(_microsecond) / 1000;
+    return true;
+}
+
 bool DateTimeValue::from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, std::string_view timezone,
                                        cctz::time_zone& ctz) {
     return TimezoneUtils::find_cctz_time_zone(timezone_hsscan, timezone, ctz);
@@ -2360,6 +2375,14 @@ bool DateTimeValue::from_unixtime(int64_t timestamp, const std::string& timezone
 
 bool DateTimeValue::from_unixtime(int64_t timestamp, const cctz::time_zone& ctz) {
     return from_unixtime(timestamp, 0, ctz);
+}
+
+bool DateTimeValue::from_unixtime(int64_t timestamp, int64_t microsecond, const std::string& timezone) {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+        return false;
+    }
+    return from_unixtime(timestamp, microsecond, ctz);
 }
 
 bool DateTimeValue::from_unixtime(int64_t timestamp, int64_t microsecond, const cctz::time_zone& ctz) {
