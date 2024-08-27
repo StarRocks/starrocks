@@ -139,43 +139,6 @@ public class OptExpressionDuplicator {
                     LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
                 }
-<<<<<<< HEAD
-=======
-
-                if (isResetSelectedPartitions) {
-                    olapScanBuilder.setSelectedPartitionId(null)
-                            .setPrunedPartitionPredicates(Lists.newArrayList())
-                            .setSelectedTabletId(Lists.newArrayList());
-                } else {
-                    List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
-                    if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
-                        List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
-                        for (ScalarOperator predicate : prunedPartitionPredicates) {
-                            ScalarOperator newPredicate = rewriter.rewrite(predicate);
-                            newPrunedPartitionPredicates.add(newPredicate);
-                        }
-                        olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
-                    }
-                }
-            } else {
-                if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-                    // refresh iceberg table's metadata
-                    Table refBaseTable = scanOperator.getTable();
-                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
-                    String catalogName = cachedIcebergTable.getCatalogName();
-                    String dbName = cachedIcebergTable.getRemoteDbName();
-                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                    Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
-                    if (currentTable == null) {
-                        return null;
-                    }
-                    scanBuilder.setTable(currentTable);
-                    TableVersionRange versionRange = TableVersionRange.withEnd(
-                            Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
-                                    .map(Snapshot::snapshotId));
-                    scanBuilder.setTableVersionRange(versionRange);
-                }
->>>>>>> 556928ff43 ([Enhancement] Optimize view based mv rewrite performance (#50256))
             }
 
             processCommon(opBuilder);
@@ -199,23 +162,7 @@ public class OptExpressionDuplicator {
 
             // process external table scan operator's predicates
             LogicalScanOperator newScanOperator = (LogicalScanOperator) opBuilder.build();
-            if (!(scanOperator instanceof LogicalOlapScanOperator)) {
-                processExternalTableScanOperator(newScanOperator);
-            }
             return OptExpression.create(newScanOperator);
-        }
-
-        private void processExternalTableScanOperator(LogicalScanOperator newScanOperator) {
-            try {
-                ScanOperatorPredicates scanOperatorPredicates = newScanOperator.getScanOperatorPredicates();
-                if (isResetSelectedPartitions) {
-                    scanOperatorPredicates.clear();
-                } else {
-                    scanOperatorPredicates.duplicate(rewriter);
-                }
-            } catch (AnalysisException e) {
-                // ignore exception
-            }
         }
 
         @Override

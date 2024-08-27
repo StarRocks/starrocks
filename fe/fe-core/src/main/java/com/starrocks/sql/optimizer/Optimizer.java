@@ -328,15 +328,7 @@ public class Optimizer {
                                   ColumnRefFactory columnRefFactory, ColumnRefSet requiredColumns) {
         // prepare related mvs if needed and initialize mv rewrite strategy
         new MvRewritePreprocessor(connectContext, columnRefFactory, context, requiredColumns)
-<<<<<<< HEAD
-                .prepare(logicOperatorTree, mvRewriteStrategy);
-=======
-                .prepare(logicOperatorTree);
-
-        // initialize mv rewrite strategy finally
-        mvRewriteStrategy = MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, logicOperatorTree);
-        OptimizerTraceUtil.logMVPrepare("MV rewrite strategy: {}", mvRewriteStrategy);
->>>>>>> 556928ff43 ([Enhancement] Optimize view based mv rewrite performance (#50256))
+                .prepare(logicOperatorTree, mvRewriteStrategy);;
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -602,20 +594,8 @@ public class Optimizer {
             OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
-<<<<<<< HEAD
             deriveLogicalProperty(treeWithView);
             ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
-            List<Operator> viewScanOperators = Lists.newArrayList();
-            MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
-=======
-            if (mvRewriteStrategy.enableMultiTableRewrite) {
-                ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.MULTI_TABLE_MV_REWRITE);
-            }
-            if (mvRewriteStrategy.enableSingleTableRewrite) {
-                ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            }
->>>>>>> 556928ff43 ([Enhancement] Optimize view based mv rewrite performance (#50256))
-
             List<Operator> leftViewScanOperators = Lists.newArrayList();
             MvUtils.collectViewScanOperator(treeWithView, leftViewScanOperators);
             List<LogicalViewScanOperator> origQueryViewScanOperators = queryMaterializationContext.getQueryViewScanOps();

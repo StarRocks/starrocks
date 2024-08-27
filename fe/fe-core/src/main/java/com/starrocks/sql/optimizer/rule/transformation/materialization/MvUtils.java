@@ -91,11 +91,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
->>>>>>> 556928ff43 ([Enhancement] Optimize view based mv rewrite performance (#50256))
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -1123,42 +1119,6 @@ public class MvUtils {
         }
     }
 
-    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
-                                                               QueryMaterializationContext queryMaterializationContext) {
-        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
-        if (viewScans == null) {
-            return queryExpression;
-        }
-        // add a LogicalTreeAnchorOperator to replace the tree easier
-        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
-        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
-        List<Operator> viewScanOperators = Lists.newArrayList();
-        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
-        if (!viewScanOperators.isEmpty()) {
-            return null;
-        }
-        OptExpression newQuery = anchorExpr.inputAt(0);
-        deriveLogicalProperty(newQuery);
-        return newQuery;
-    }
-
-    private static void doReplaceLogicalViewScanOperator(
-            OptExpression parent,
-            int index,
-            OptExpression queryExpression,
-            List<LogicalViewScanOperator> viewScans) {
-        LogicalOperator op = queryExpression.getOp().cast();
-        if (op instanceof LogicalViewScanOperator) {
-            LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
-            parent.setChild(index, viewPlan);
-            return;
-        }
-        for (int i = 0; i < queryExpression.getInputs().size(); i++) {
-            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
-        }
-    }
-
     public static void deriveLogicalProperty(OptExpression root) {
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
@@ -1167,18 +1127,6 @@ public class MvUtils {
         ExpressionContext context = new ExpressionContext(root);
         context.deriveLogicalProperty();
         root.setLogicalProperty(context.getRootProperty());
-    }
-
-    public static OptExpression cloneExpression(OptExpression logicalTree) {
-        List<OptExpression> inputs = Lists.newArrayList();
-        for (OptExpression input : logicalTree.getInputs()) {
-            OptExpression clone = cloneExpression(input);
-            inputs.add(clone);
-        }
-        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
-        builder.withOperator(logicalTree.getOp());
-        Operator newOp = builder.build();
-        return OptExpression.create(newOp, inputs);
     }
 
     /**
@@ -1256,7 +1204,6 @@ public class MvUtils {
         return (opRuleMask & ruleMask) != 0;
     }
 
-<<<<<<< HEAD
     public static void setAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
         op.setOpRuleMask(opRuleMask);
@@ -1265,7 +1212,8 @@ public class MvUtils {
     public static boolean isAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask();
         return (opRuleMask & OP_UNION_ALL_BIT) != 0;
-=======
+    }
+
     public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
         // add a LogicalTreeAnchorOperator to replace the tree easier
         OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
@@ -1295,21 +1243,6 @@ public class MvUtils {
         }
     }
 
-    public static void deriveLogicalProperty(OptExpression root) {
-        // TODO: avoid duplicate derive
-        if (root.getLogicalProperty() != null) {
-            return;
-        }
-
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
-
-        ExpressionContext context = new ExpressionContext(root);
-        context.deriveLogicalProperty();
-        root.setLogicalProperty(context.getRootProperty());
-    }
-
     public static OptExpression cloneExpression(OptExpression logicalTree) {
         List<OptExpression> inputs = Lists.newArrayList();
         for (OptExpression input : logicalTree.getInputs()) {
@@ -1322,16 +1255,6 @@ public class MvUtils {
         return OptExpression.create(newOp, inputs);
     }
 
-    /**
-     * Check whether opt expression or its children have applied mv union rewrite.
-     *
-     * @param optExpression: opt expression to check
-     * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
-     */
-    public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
-        return Utils.isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
->>>>>>> 556928ff43 ([Enhancement] Optimize view based mv rewrite performance (#50256))
-    }
 
     /**
      * Return mv's plan context. If mv's plan context is not in cache, optimize it.
@@ -1417,50 +1340,6 @@ public class MvUtils {
         }
         return map;
     }
-<<<<<<< HEAD
-=======
-
-    /**
-     * Get the mv partition expr by partition expr maps and table.
-     *
-     * @param partitionExprMaps partition expr maps of the specific mv
-     * @param table             the base table to find the specific partition expr
-     * @return the mv partition expr if found, otherwise empty
-     */
-    public static Optional<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
-        if (partitionExprMaps == null || partitionExprMaps.isEmpty() || table == null) {
-            return Optional.empty();
-        }
-        return partitionExprMaps.entrySet().stream()
-                .filter(entry -> SRStringUtils.areTableNamesEqual(table, entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
-                .map(entry -> new MVPartitionExpr(entry.getKey(), entry.getValue()))
-                .findFirst();
-    }
-
-    /**
-     * Get the column by slot ref from table's columns
-     *
-     * @param columns base table's columns
-     * @param slotRef the base table's partition slot ref to find
-     * @return the column if found, otherwise empty
-     */
-    public static Optional<Column> getColumnBySlotRef(List<Column> columns, SlotRef slotRef) {
-        return columns.stream()
-                .filter(col -> SRStringUtils.areColumnNamesEqual(slotRef.getColumnName(), col.getName())).findFirst();
-    }
-
-    /**
-     * Format the base table infos to readable string.
-     *
-     * @param baseTableInfos: input base table infos
-     * @return formatted string
-     */
-    public static String formatBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
-        if (baseTableInfos == null) {
-            return "";
-        }
-        return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
-    }
 
     public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
                                                                      Collection<PartitionKey> partitionRanges) {
@@ -1493,5 +1372,4 @@ public class MvUtils {
                 new PhysicalPropertySet(), requiredColumns, columnRefFactory);
         return optimizedViewPlan;
     }
->>>>>>> 556928ff43 ([Enhancement] Optimize view based mv rewrite performance (#50256))
 }
