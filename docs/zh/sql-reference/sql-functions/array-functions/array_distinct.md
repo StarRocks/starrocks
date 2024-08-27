@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_distinct
 
-## 功能
+
 
 数组元素去重。
 

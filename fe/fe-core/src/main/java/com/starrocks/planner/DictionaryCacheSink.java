@@ -16,7 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
@@ -26,7 +25,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -115,10 +113,11 @@ public class DictionaryCacheSink extends DataSink {
         List<String> columns = Lists.newArrayList();
         List<TColumn> columnsDesc = Lists.newArrayList();
         List<Integer> columnSortKeyUids = Lists.newArrayList();
-        columns.addAll(table.getBaseSchema().stream().map(Column::getPhysicalName).collect(Collectors.toList()));
+        columns.addAll(table.getBaseSchema().stream().map(column -> column.getColumnId().getId())
+                .collect(Collectors.toList()));
         for (Column column : table.getBaseSchema()) {
             TColumn tColumn = column.toThrift();
-            tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+            tColumn.setColumn_name(column.getColumnId().getId());
             columnsDesc.add(tColumn);
         }
         TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids, 0);
@@ -129,9 +128,11 @@ public class DictionaryCacheSink extends DataSink {
     }
 
     private TOlapTableSchemaParam buildTSchema() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(
+                                        dictionary.getCatalogName(), dictionary.getDbName());
         String queryableObject = dictionary.getQueryableObject();
-        Table tbl = db.getTable(queryableObject);
+        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                                        dictionary.getCatalogName(), dictionary.getDbName(), queryableObject);
         Preconditions.checkNotNull(tbl);
 
         TupleDescriptor tupleDescriptor = new TupleDescriptor(TupleId.createGenerator().getNextId());
@@ -140,17 +141,17 @@ public class DictionaryCacheSink extends DataSink {
         Map<String, SlotDescriptor> valueSlots = new HashMap();
 
         for (Column column : tbl.getBaseSchema()) {
-            if (!dictionary.getKeys().contains(column.getName()) && !dictionary.getValues().contains(column.getName())) {
-                currentSlotId++;
-                continue;
-            }
-            SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsMaterialized(true);
-
             if (dictionary.getKeys().contains(column.getName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsMaterialized(true);
+
                 keySlots.put(column.getName(), slotDescriptor);
             } else if (dictionary.getValues().contains(column.getName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsMaterialized(true);
+
                 valueSlots.put(column.getName(), slotDescriptor);
             }
         }

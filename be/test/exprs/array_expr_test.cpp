@@ -20,9 +20,12 @@
 #include <utility>
 
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "gutil/casts.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -66,8 +69,10 @@ TEST_F(ArrayExprTest, test_evaluate) {
         std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_int));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(1, result->size());
-        ASSERT_TRUE(result->is_array());
-        EXPECT_EQ(0, result->get(0).get_array().size());
+        ASSERT_TRUE(result->is_constant());
+        auto array = down_cast<ConstColumn*>(result.get())->data_column();
+        ASSERT_TRUE(array->is_array());
+        EXPECT_EQ(0, array->get(0).get_array().size());
     }
 
     // [1, 2, 4]
@@ -153,6 +158,35 @@ TEST_F(ArrayExprTest, test_evaluate) {
         EXPECT_EQ("", result->get(2).get_array()[0].get_slice());
         EXPECT_EQ("xyz", result->get(2).get_array()[1].get_slice());
         EXPECT_EQ("x", result->get(2).get_array()[2].get_slice());
+    }
+
+    // constant: [1, 4, 8]
+    {
+        std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_int));
+        expr->add_child(
+                new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(1, 3), LogicalType::TYPE_INT));
+        expr->add_child(
+                new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(4, 3), LogicalType::TYPE_INT));
+        expr->add_child(
+                new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(8, 3), LogicalType::TYPE_INT));
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->is_constant());
+
+        // row: [1, 4, 8]
+        EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
+        EXPECT_EQ(4, result->get(0).get_array()[1].get_int32());
+        EXPECT_EQ(8, result->get(0).get_array()[2].get_int32());
+
+        // row: [1, 4, 8]
+        EXPECT_EQ(1, result->get(1).get_array()[0].get_int32());
+        EXPECT_EQ(4, result->get(1).get_array()[1].get_int32());
+        EXPECT_EQ(8, result->get(1).get_array()[2].get_int32());
+
+        // row: [1, 4, 8]
+        EXPECT_EQ(1, result->get(2).get_array()[0].get_int32());
+        EXPECT_EQ(4, result->get(2).get_array()[1].get_int32());
+        EXPECT_EQ(8, result->get(2).get_array()[2].get_int32());
     }
 }
 

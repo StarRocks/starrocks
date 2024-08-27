@@ -1,0 +1,68 @@
+-- name: test_spill_agg_streaming_strategy @sequential
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(20))
+DUPLICATE KEY(k1)
+PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t1 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+set enable_agg_spill_preaggregation=true;
+-- result:
+-- !result
+admin enable failpoint 'spill_always_streaming';
+-- result:
+-- !result
+select avg(k1) x from (select * from t1 union all select * from t1)t group by k2 order by x limit 10;
+-- result:
+1.0
+2.0
+3.0
+4.0
+5.0
+6.0
+7.0
+8.0
+9.0
+10.0
+-- !result
+admin disable failpoint 'spill_always_streaming';
+-- result:
+-- !result
+admin enable failpoint 'spill_always_selection_streaming';
+-- result:
+-- !result
+select avg(k1) x from (select * from t1 union all select * from t1)t group by k2 order by x limit 10;
+-- result:
+1.0
+2.0
+3.0
+4.0
+5.0
+6.0
+7.0
+8.0
+9.0
+10.0
+-- !result
+select count(*), sum(x) from (select sum(k1) x from (select * from t1 union all SELECT generate_series + 40960, generate_series + 40960 FROM TABLE(generate_series(1,  40960)))t group by k2 ) t;
+-- result:
+81920	3355484160
+-- !result
+admin disable failpoint 'spill_always_selection_streaming';
+-- result:
+-- !result

@@ -16,21 +16,40 @@
 
 #include <cstdint>
 #include <memory>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "block_cache/block_cache.h"
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
+#include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
+
+namespace tparquet {
+class ColumnMetaData;
+class ColumnOrder;
+class RowGroup;
+} // namespace tparquet
 
 namespace starrocks {
 class RandomAccessFile;
-
 struct HdfsScannerContext;
+class BlockCache;
+class SlotDescriptor;
+
+namespace io {
+class SharedBufferedInputStream;
+} // namespace io
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
+struct TypeDescriptor;
 
 } // namespace starrocks
 
@@ -42,11 +61,12 @@ constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 48 * 1024;
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
 
-class FileMetaData;
+using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+               const DataCacheOptions& datacache_options = DataCacheOptions(),
                io::SharedBufferedInputStream* sb_stream = nullptr,
                const std::set<int64_t>* _need_skip_rowids = nullptr);
     ~FileReader();
@@ -57,24 +77,32 @@ public:
 
     FileMetaData* get_file_metadata();
 
+    Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
+
 private:
     int _chunk_size;
 
     // get footer of parquet file from cache or parquet file
     Status _get_footer();
 
-    void _build_metacache_key();
+    std::string _build_metacache_key();
 
-    // parse footer of parquet file
-    Status _parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size);
+    std::shared_ptr<MetaHelper> _build_meta_helper();
 
-    void _prepare_read_columns();
+    Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
 
-    // init row group readers.
+    void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
+
     Status _init_group_readers();
 
-    // filter row group by min/max conjuncts
-    StatusOr<bool> _filter_group(const tparquet::RowGroup& row_group);
+    // filter row group by conjuncts
+    bool _filter_group(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_min_max_conjuncts(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_bloom_filter_min_max_conjuncts(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_more_filter(const tparquet::RowGroup& row_group);
 
     // get row group to read
     // if scan range conatain the first byte in the row group, will be read
@@ -84,7 +112,7 @@ private:
     // make min/max chunk from stats of row group meta
     // exist=true: group meta contain statistics info
     Status _read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
-                               ChunkPtr* min_chunk, ChunkPtr* max_chunk, bool* exist) const;
+                               ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
 
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
@@ -98,22 +126,18 @@ private:
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
-    Status _prepare_cur_row_group();
-
-    // decode min/max value from row group stats
-    Status _decode_min_max_column(const ParquetField& field, const std::string& timezone, const TypeDescriptor& type,
-                                  const tparquet::ColumnMetaData& column_meta,
-                                  const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                  ColumnPtr* max_column, bool* decode_ok) const;
+    // get min/max value from row group stats
+    Status _get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
+                              const ParquetField* field, std::vector<std::string>& min_values,
+                              std::vector<std::string>& max_values) const;
 
     bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
-    // get the data page start offset in parquet file
-    static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
+    Status _build_split_tasks();
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
-    int64_t _file_mtime = 0;
+    const DataCacheOptions _datacache_options;
 
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
@@ -124,10 +148,7 @@ private:
     bool _no_materialized_column_scan = false;
 
     BlockCache* _cache = nullptr;
-    FileMetaData* _file_metadata = nullptr;
-    bool _is_metadata_cached = false;
-    std::string _metacache_key;
-    CacheHandle _cache_handle;
+    FileMetaDataPtr _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

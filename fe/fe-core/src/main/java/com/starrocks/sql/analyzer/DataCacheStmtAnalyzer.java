@@ -26,12 +26,20 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 
+import java.time.Duration;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,7 +52,7 @@ public class DataCacheStmtAnalyzer {
         new DataCacheStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class DataCacheStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class DataCacheStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -113,6 +121,49 @@ public class DataCacheStmtAnalyzer {
 
         @Override
         public Void visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+            InsertStmt insertStmt = statement.getInsertStmt();
+            QueryStatement queryStatement = insertStmt.getQueryStatement();
+            // Analyze query sql is valid
+            Analyzer.analyze(queryStatement, context);
+
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
+            TableName tableName = tableRelation.getResolveTableName();
+            if (CatalogMgr.isInternalCatalog(tableName.getCatalog()) && RunMode.isSharedNothingMode()) {
+                throw new SemanticException("Currently cache select is not supported in local olap table");
+            }
+            statement.setCatalog(tableName.getCatalog());
+
+            Map<String, String> properties = statement.getProperties();
+            statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault("verbose", "false")));
+
+            int priority = Integer.parseInt(properties.getOrDefault("priority", "0"));
+            if (priority != 0 && priority != 1) {
+                throw new SemanticException("DataCache's priority can only be set to 0 or 1");
+            }
+            statement.setPriority(priority);
+
+            // Duration for cache remains active.
+            // Use PT0M to prevent expiration of the rule.
+            // Use duration specified in ISO-8601 duration format (PnDTnHnMn).
+            long ttlSeconds = 0L;
+            try {
+                ttlSeconds = Duration.parse(properties.getOrDefault("ttl", "PT0M")).toSeconds();
+            } catch (DateTimeParseException e) {
+                throw new SemanticException(String.format(
+                        "Illegal ttl format, use duration specified in ISO-8601 duration format (PnDTnHnMn). Error msg: %s",
+                        e.getMessage()));
+            }
+            if (priority > 0 && ttlSeconds == 0) {
+                throw new SemanticException("TTL must be specified when priority > 0");
+            }
+            statement.setTTLSeconds(ttlSeconds);
+
             return null;
         }
     }

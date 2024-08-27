@@ -20,6 +20,9 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
 public class WindowTest extends PlanTestBase {
 
     @Test
@@ -44,10 +47,11 @@ public class WindowTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, lag(NULL, 1, 1), ]");
 
-        sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("The type of the third parameter of LEAD/LAG not match the type DATETIME");
-        getThriftPlan(sql);
+
+        String invalidSql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
+        SemanticException e = assertThrows(SemanticException.class, () -> getThriftPlan(invalidSql));
+        Assert.assertTrue(e.getMessage(),
+                e.getMessage().contains("The type of the third parameter of LEAD/LAG not match the type DATETIME"));
     }
 
     @Test
@@ -202,6 +206,7 @@ public class WindowTest extends PlanTestBase {
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: <slot 3> 3: k3 ASC\n" +
+                "  |  analytic partition by: 3: k3\n" +
                 "  |  offset: 0");
     }
 
@@ -211,6 +216,7 @@ public class WindowTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
+                "  |  analytic partition by: 2: v2\n" +
                 "  |  offset: 0");
 
     }
@@ -261,7 +267,7 @@ public class WindowTest extends PlanTestBase {
                 .analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
 
         sql = "select v1, v2, NTILE(9223372036854775808) over (partition by v1 order by v2) as j1 from t0";
-        starRocksAssert.query(sql).analysisError("Number out of range");
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
 
         sql = "select v1, v2, NTILE((select v1 from t0)) over (partition by v1 order by v2) as j1 from t0";
         starRocksAssert.query(sql)
@@ -509,6 +515,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:EXCHANGE");
@@ -601,6 +608,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -612,6 +620,7 @@ public class WindowTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
         }
         {
@@ -625,6 +634,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -636,6 +646,7 @@ public class WindowTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0");
         }
         {
@@ -649,6 +660,7 @@ public class WindowTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  analytic partition by: 3: v3\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:EXCHANGE");
@@ -979,15 +991,16 @@ public class WindowTest extends PlanTestBase {
                 "(select v1 from t0 where v1 = 1) b " +
                 "where a.v1 = b.v1";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:SORT\n" +
+        assertContains(plan, "1:SORT\n" +
                 "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
+                "  |  analytic partition by: [1: v1, BIGINT, true]\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     table: t0, rollup: t0\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: 1: v1 IS NOT NULL\n" +
+                "     Predicates: [1: v1, BIGINT, true] = 1, 1: v1 IS NOT NULL\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     actualRows=0, avgRowSize=2.0\n" +
@@ -1073,6 +1086,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
@@ -1098,6 +1112,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
@@ -1115,10 +1130,8 @@ public class WindowTest extends PlanTestBase {
                 "    select *, " +
                         "        row_number() over (PARTITION BY v1 order by v2) as rk " +
                         "    from t0 where v1 > 1 and v2 > 1 having rk = 1;\n";
-
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("HAVING clause cannot contain window function");
-        getFragmentPlan(sql);
+        SemanticException e = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        assertTrue(e.getMessage(), e.getMessage().contains("HAVING clause cannot contain window function"));
     }
 
     @Test
@@ -1323,5 +1336,50 @@ public class WindowTest extends PlanTestBase {
                 "  |  isSkewed\n" +
                 "  |  \n" +
                 "  1:SORT");
+    }
+
+    @Test
+    public void testWindowOutputColumnNullCheck() throws Exception {
+        String sql = "select t1a, t1b, t1c, count(t1d) over (partition by t1d) " +
+                "from test_all_type_not_null";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, count[([4: t1d, BIGINT, false]); args: BIGINT; result: BIGINT; " +
+                "args nullable: false; result nullable: false], ]\n" +
+                "  |  partition by: [4: t1d, BIGINT, false]\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, false]\n" +
+                "  |  3 <-> [3: t1c, INT, false]\n" +
+                "  |  11 <-> [11: count(4: t1d), BIGINT, false]\n" +
+                "  |  cardinality: 1");
+
+        plan = getDescTbl(sql);
+        assertContains(plan, "TSlotDescriptor(id:11, parent:2, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+        assertContains(plan, "TSlotDescriptor(id:11, parent:4, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+    }
+
+    @Test
+    public void testPruneSubfieldAfterWindow() throws Exception {
+        String sql = "select array_length(v3) from (select v3, row_number() over (order by v2) row_num from tarray) t " +
+                "where row_num = 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  3:MERGING-EXCHANGE");
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 6> : array_length(3: v3)");
     }
 }

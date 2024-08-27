@@ -16,6 +16,9 @@
 package com.starrocks.persist;
 
 import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -110,7 +113,10 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
 
     @Test
     public void testReplayWhenDbIsEmpty() {
-        AlterJobMgr alterJobMgr = new AlterJobMgr();
+        AlterJobMgr alterJobMgr = new AlterJobMgr(
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler());
         alterJobMgr.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
     }
 

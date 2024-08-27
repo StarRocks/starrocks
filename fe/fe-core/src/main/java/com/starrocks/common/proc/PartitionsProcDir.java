@@ -51,7 +51,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -59,6 +58,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -75,6 +75,7 @@ import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -121,7 +122,10 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("AsyncWrite")
                     .add("AvgCS") // Average compaction score
                     .add("P50CS") // 50th percentile compaction score
-                    .add("MaxCS"); // Maximum compaction score
+                    .add("MaxCS") // Maximum compaction score
+                    .add("DataVersion")
+                    .add("VersionEpoch")
+                    .add("VersionTxnType");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -141,7 +145,10 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("LastConsistencyCheckTime")
                     .add("DataSize")
                     .add("IsInMemory")
-                    .add("RowCount");
+                    .add("RowCount")
+                    .add("DataVersion")
+                    .add("VersionEpoch")
+                    .add("VersionTxnType");
             this.titleNames = builder.build();
         }
     }
@@ -297,13 +304,15 @@ public class PartitionsProcDir implements ProcDirInterface {
                     if (partitionName != null &&
                             !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                         if (table.isOlapTableOrMaterializedView()) {
-                            partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                            partitionInfos.add(
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
                         } else {
                             partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
                         }
                     } else if (Config.enable_display_shadow_partitions) {
                         if (table.isOlapTableOrMaterializedView()) {
-                            partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                            partitionInfos.add(
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
                         } else {
                             partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
                         }
@@ -316,25 +325,18 @@ public class PartitionsProcDir implements ProcDirInterface {
         return partitionInfos;
     }
 
-    public static String distributionKeyAsString(DistributionInfo distributionInfo) {
+    public static String distributionKeyAsString(Table table, DistributionInfo distributionInfo) {
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < distributionColumns.size(); i++) {
-                if (i != 0) {
-                    sb.append(", ");
-                }
-                sb.append(distributionColumns.get(i).getName());
-            }
-            return sb.toString();
+            List<String> columnNames = MetaUtils.getColumnNamesByColumnIds(
+                    table.getIdToColumn(), distributionInfo.getDistributionColumns());
+            return Joiner.on(", ").join(columnNames);
         } else {
             return "ALL KEY";
         }
     }
 
-    private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo, Partition partition,
-                                                  PhysicalPartition physicalPartition) {
+    private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo,
+                                                  Partition partition, PhysicalPartition physicalPartition) {
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
         partitionInfo.add(physicalPartition.getId()); // PartitionId
         partitionInfo.add(partition.getName()); // PartitionName
@@ -344,10 +346,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(partition.getState()); // State
 
         // partition key , range or list value
-        partitionInfo.add(Joiner.on(", ").join(findPartitionColNames(tblPartitionInfo)));
+        partitionInfo.add(Joiner.on(", ").join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList())));
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
-        partitionInfo.add(distributionKeyAsString(distributionInfo));
+        partitionInfo.add(distributionKeyAsString(table, distributionInfo));
         partitionInfo.add(distributionInfo.getBucketNum());
 
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
@@ -362,6 +365,10 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(byteSizeValue);
         partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
         partitionInfo.add(physicalPartition.storageRowCount());
+
+        partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
+        partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
+        partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
 
         return partitionInfo;
     }
@@ -380,9 +387,10 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
         partitionInfo.add(physicalPartition.getNextVersion()); // NextVersion
         partitionInfo.add(partition.getState()); // State
-        partitionInfo.add(Joiner.on(", ").join(findPartitionColNames(tblPartitionInfo))); // PartitionKey
+        partitionInfo.add(Joiner.on(", ").join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList()))); // Partition key
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
-        partitionInfo.add(distributionKeyAsString(partition.getDistributionInfo())); // DistributionKey
+        partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
         partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
         partitionInfo.add(physicalPartition.storageRowCount()); // RowCount
@@ -391,19 +399,12 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
-        return partitionInfo;
-    }
 
-    public static List<String> findPartitionColNames(PartitionInfo partitionInfo) {
-        List<Column> partitionColumns;
-        if (partitionInfo.getType() == PartitionType.LIST) {
-            partitionColumns = ((ListPartitionInfo) partitionInfo).getPartitionColumns();
-        } else if (partitionInfo.isRangePartition()) {
-            partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
-        } else {
-            partitionColumns = new ArrayList<>();
-        }
-        return partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
+        partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
+        partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
+        partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
+
+        return partitionInfo;
     }
 
     public static String findRangeOrListValues(PartitionInfo partitionInfo, long partitionId) {

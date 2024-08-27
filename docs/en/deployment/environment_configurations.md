@@ -18,6 +18,7 @@ On the instances used for the FE deployment, you need to check the following por
 - `9020`: FE Thrift server port (`rpc_port`)
 - `9030`: FE MySQL server port (`query_port`)
 - `9010`: FE internal communication port (`edit_log_port`)
+- `6090`: FE cloud-native metadata server RPC listen port (`cloud_native_meta_port`)
 
 Run the following commands on the FE instances to check whether these ports are occupied:
 
@@ -26,6 +27,7 @@ netstat -tunlp | grep 8030
 netstat -tunlp | grep 9020
 netstat -tunlp | grep 9030
 netstat -tunlp | grep 9010
+netstat -tunlp | grep 6090
 ```
 
 If any of the above ports are occupied, you must find alternatives and specify them later when you deploy FE nodes. For detailed instructions, see [Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#step-1-start-the-leader-fe-node).
@@ -38,6 +40,7 @@ On the instances used for the BE deployment, you need to check the following por
 - `8040`: BE HTTP server port (`be_http_port`)
 - `9050`: BE heartbeat service port (`heartbeat_service_port`)
 - `8060`: BE bRPC port (`brpc_port`)
+- `9070`: An extra agent service port for BE and CN (`starlet_port`)
 
 Run the following commands on the BE instances to check whether these ports are occupied:
 
@@ -46,6 +49,7 @@ netstat -tunlp | grep 9060
 netstat -tunlp | grep 8040
 netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
+netstat -tunlp | grep 9070
 ```
 
 If any of the above ports are occupied, you must find alternatives and specify them later when you deploy BE nodes. For detailed instructions, see [Deploy StarRocks - Start the BE service](../deployment/deploy_manually.md#step-2-start-the-be-service).
@@ -58,7 +62,7 @@ On the instances used for the CN deployment, you need to check the following por
 - `8040`: CN HTTP server port (`be_http_port`)
 - `9050`: CN heartbeat service port (`heartbeat_service_port`)
 - `8060`: CN bRPC port (`brpc_port`)
-- `9070`: An extra agent service port for CN (BE in v3.0) in a shared-data cluster (`starlet_port`)
+- `9070`: An extra agent service port for BE and CN (`starlet_port`)
 
 Run the following commands on the CN instances to check whether these ports are occupied:
 
@@ -74,7 +78,7 @@ If any of the above ports are occupied, you must find alternatives and specify t
 
 ## Hostnames
 
-If you want to [enable FQDN access](../administration/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
+If you want to [enable FQDN access](../administration/management/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
 
 In the file **/etc/hosts** on each instance, you must specify the IP addresses and corresponding hostnames of all the other instances in the cluster.
 
@@ -380,7 +384,7 @@ You must configure time synchronization between nodes within your StarRocks clus
 4. Check the connectivity and monitoring status of the NTP service.
 
    ```Bash
-   netstat -tlunp | grep ntp
+   netstat -tunlp | grep ntp
    ```
 
 5. Check if your application is synchronized with the NTP server.

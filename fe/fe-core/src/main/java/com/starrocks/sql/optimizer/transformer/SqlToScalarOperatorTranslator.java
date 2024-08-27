@@ -37,6 +37,7 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.Parameter;
@@ -46,6 +47,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -70,6 +72,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.SubqueryUtils;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -93,6 +96,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -196,6 +200,12 @@ public final class SqlToScalarOperatorTranslator {
         return visitor.visit(expression, new Context());
     }
 
+    public static ScalarOperator translateWithSlotRef(Expr expr,
+                                                      java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+        ResolveSlotVisitor visitor = new ResolveSlotVisitor(resolver);
+        return visitor.visit(expr, new Context());
+    }
+
     private static final class Context {
 
         public final boolean hasSubquery;
@@ -255,7 +265,7 @@ public final class SqlToScalarOperatorTranslator {
         }
     }
 
-    private static class Visitor extends AstVisitor<ScalarOperator, Context> {
+    private static class Visitor implements AstVisitor<ScalarOperator, Context> {
         private ExpressionMapping expressionMapping;
         private final ColumnRefFactory columnRefFactory;
         private final List<ColumnRefOperator> correlation;
@@ -284,12 +294,15 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visit(ParseNode node, Context context) {
             Expr expr = (Expr) node;
-            if (expressionMapping.get(expr) != null && !(expr.isConstant())) {
-                return expressionMapping.get(expr);
+            if (!expressionMapping.getExpressionToColumns().isEmpty() &&
+                    !expr.isConstant()) {
+                ScalarOperator res = Utils.getValueIfExists(expressionMapping.getExpressionToColumns(), expr);
+                if (res != null) {
+                    return res;
+                }
             }
 
-            return super.visit(node, context);
-
+            return node.accept(this, context);
         }
 
         @Override
@@ -652,6 +665,17 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+        public ScalarOperator visitMatchExpr(MatchExpr node, Context context)
+                throws SemanticException {
+            ScalarOperator[] children = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .toArray(ScalarOperator[]::new);
+
+            return new MatchExprOperator(children);
+        }
+
+        @Override
         public ScalarOperator visitLiteral(LiteralExpr node, Context context) {
             if (node instanceof NullLiteral) {
                 return ConstantOperator.createNull(node.getType());
@@ -666,6 +690,12 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
+
+            // for nonDeterministicFunctions, we need add an argument as its unique id to distinguish
+            // the reusing behavior in common exprs
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+                arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
+            }
 
             CallOperator callOperator = new CallOperator(
                     node.getFnName().getFunction(),
@@ -724,30 +754,23 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitInformationFunction(InformationFunction node,
-                                                       Context context) {
-            if (node.getFuncType().equalsIgnoreCase("CONNECTION_ID")) {
-                return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
-                        ConstantOperator.createBigint(node.getIntValue())));
-            }
-
-            if (node.getFuncType().equalsIgnoreCase("DATABASE") ||
-                    node.getFuncType().equalsIgnoreCase("SCHEMA")) {
+        public ScalarOperator visitInformationFunction(InformationFunction node, Context context) {
+            String funcType = node.getFuncType();
+            if (funcType.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+                return ConstantOperator.createBigint(node.getIntValue());
+            } else {
                 return ConstantOperator.createVarchar(node.getStrValue());
             }
-
-            return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
-                    ConstantOperator.createVarchar(node.getStrValue()),
-                    ConstantOperator.createBigint(node.getIntValue())));
         }
 
         @Override
         public ScalarOperator visitVariableExpr(VariableExpr node, Context context) {
-            if (node.isNull()) {
-                return ConstantOperator.createNull(node.getType());
-            } else {
-                return new ConstantOperator(node.getValue(), node.getType());
-            }
+            return new ConstantOperator(node.getValue(), node.getType());
+        }
+
+        @Override
+        public ScalarOperator visitUserVariableExpr(UserVariableExpr node, Context context) {
+            return visit(node.getValue(), context);
         }
 
         @Override
@@ -841,7 +864,7 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
         }
 
         @Override
@@ -852,8 +875,34 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
 
             DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
-                    node.getDictionaryTxnId(), node.getKeySize());
+                    node.getDictionaryTxnId(), node.getKeySize(), node.getNullIfNotExist());
             return op;
+        }
+    }
+
+    /**
+     * Resolve the SlotRef
+     */
+    static class ResolveSlotVisitor extends Visitor {
+
+        private final java.util.function.Function<SlotRef, ColumnRefOperator> resolver;
+
+        public ResolveSlotVisitor(java.util.function.Function<SlotRef, ColumnRefOperator> resolver) {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    new ColumnRefFactory(), Collections.emptyList(),
+                    null, null, null, null);
+            this.resolver = resolver;
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Context context) {
+            if (!node.isAnalyzed()) {
+                ColumnRefOperator ref = resolver.apply(node);
+                if (ref != null) {
+                    return ref;
+                }
+            }
+            throw unsupportedException("unknown slot: " + node.toSql());
         }
     }
 

@@ -36,6 +36,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TIndexReplicationInfo;
 import com.starrocks.thrift.TPartitionReplicationInfo;
 import com.starrocks.thrift.TReplicaReplicationInfo;
+import com.starrocks.thrift.TSnapshotInfo;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableReplicationRequest;
@@ -100,6 +101,10 @@ public class ReplicationMgrTest {
     public void setUp() throws Exception {
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(100);
+        partition.setDataVersion(8);
+        partition.setNextDataVersion(9);
+        srcPartition.setDataVersion(98);
+        srcPartition.setNextDataVersion(99);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
@@ -127,8 +132,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
 
             Deencapsulation.invoke(new LeaderImpl(), "finishRemoteSnapshotTask",
@@ -157,6 +161,7 @@ public class ReplicationMgrTest {
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
         Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
+        Assert.assertEquals(partition.getCommittedDataVersion(), srcPartition.getDataVersion());
 
         replicationMgr.replayReplicationJob(job);
     }
@@ -203,8 +208,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -232,8 +236,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -266,20 +269,8 @@ public class ReplicationMgrTest {
         Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
-            TStatus status = new TStatus(TStatusCode.OK);
-            request.setTask_status(status);
+            request.setTask_status(new TStatus(TStatusCode.OK));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
-        }
-
-        replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
-
-        for (AgentTask task : runningTasks.values()) {
-            TFinishTaskRequest request = new TFinishTaskRequest();
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.addToError_msgs("failed");
-            request.setTask_status(status);
-            replicationMgr.finishReplicateSnapshotTask((ReplicateSnapshotTask) task, request);
         }
 
         replicationMgr.runAfterCatalogReady();
@@ -300,8 +291,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -337,6 +327,7 @@ public class ReplicationMgrTest {
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
         partitionInfo.src_version = srcPartition.getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getVersionEpoch();
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
@@ -360,7 +351,8 @@ public class ReplicationMgrTest {
 
             tabletInfo.replica_replication_infos = new ArrayList<TReplicaReplicationInfo>();
             TReplicaReplicationInfo replicaInfo = new TReplicaReplicationInfo();
-            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator().next();
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator()
+                    .next();
             replicaInfo.src_backend = new TBackend(backend.getHost(), backend.getBePort(), backend.getHttpPort());
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }
@@ -370,5 +362,13 @@ public class ReplicationMgrTest {
         } catch (Exception e) {
             Assert.assertNull(e);
         }
+    }
+
+    private static TSnapshotInfo newTSnapshotInfo(TBackend backend, String snapshotPath, boolean incrementalSnapshot) {
+        TSnapshotInfo tSnapshotInfo = new TSnapshotInfo();
+        tSnapshotInfo.setBackend(backend);
+        tSnapshotInfo.setSnapshot_path(snapshotPath);
+        tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
+        return tSnapshotInfo;
     }
 }

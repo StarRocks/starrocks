@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
@@ -23,10 +22,10 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -63,8 +62,9 @@ import java.util.List;
  */
 public class ShowRoutineLoadStmt extends ShowStmt {
 
-    private static final ImmutableList<String> TITLE_NAMES =
-            new ImmutableList.Builder<String>()
+    private static final ImmutableList<String> TITLE_NAMES;
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                     .add("Id")
                     .add("Name")
                     .add("CreateTime")
@@ -84,9 +84,14 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .add("ReasonOfStateChanged")
                     .add("ErrorLogUrls")
                     .add("TrackingSQL")
-                    .add("OtherMsg")
-                    .add("LatestSourcePosition")
-                    .build();
+                    .add("OtherMsg");
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            builder.add("Warehouse");
+        }
+
+        builder.add("LatestSourcePosition");
+        TITLE_NAMES = builder.build();
+    }
 
     private final LabelName labelName;
     private boolean includeHistory = false;
@@ -128,7 +133,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         return includeHistory;
     }
 
-    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) throws AnalysisException {
+    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) {
         if (null == functionalExprProvider) {
             functionalExprProvider = new RoutineLoadFunctionalExprProvider();
         }

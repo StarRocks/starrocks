@@ -96,9 +96,13 @@ Status UpdateManager::init() {
     if (config::transaction_apply_worker_count > 0) {
         max_thread_cnt = config::transaction_apply_worker_count;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
-    REGISTER_GAUGE_STARROCKS_METRIC(update_apply_queue_count,
-                                    [this]() { return _apply_thread_pool->num_queued_tasks(); });
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("update_apply")
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::transaction_apply_worker_idle_time_ms))
+                    .set_min_threads(config::transaction_apply_thread_pool_num_min)
+                    .set_max_threads(max_thread_cnt)
+                    .build(&_apply_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(update_apply, _apply_thread_pool);
 
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
@@ -495,6 +499,8 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
 }
 
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), config::enable_pk_strict_memcheck);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? mem_tracker() : nullptr);
     if (!rowset->has_data_files() || tablet->tablet_state() == TABLET_NOTREADY) {
         // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index
         return Status::OK();

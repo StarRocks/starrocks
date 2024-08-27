@@ -534,32 +534,32 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select array_difference(d_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([4: d_1, ARRAY<DECIMAL128(26,2)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,2)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(27,2)>;");
 
         sql = "select array_difference(d_2) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([5: d_2, ARRAY<DECIMAL64(4,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,3)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(5,3)>;");
 
         sql = "select array_difference(d_3) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([6: d_3, ARRAY<DECIMAL128(25,19)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,19)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(26,19)>;");
 
         sql = "select array_difference(d_4) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([7: d_4, ARRAY<DECIMAL32(8,5)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,5)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL32(9,5)>;");
 
         sql = "select array_difference(d_5) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,3)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(17,3)>;");
 
         sql = "select array_difference(d_6) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([9: d_6, ARRAY<DECIMAL128(18,6)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,6)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(19,6)>;");
     }
 
     @Test
@@ -730,5 +730,15 @@ public class ArrayTypeTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "arrays_overlap[([[],[]], cast([] as ARRAY<ARRAY<BOOLEAN>>)); " +
                 "args: INVALID_TYPE,INVALID_TYPE; result: BOOLEAN; args nullable: true; result nullable: true]");
+    }
+
+    @Test
+    public void testCountDistinctLambdaGlobalAgg() throws Exception {
+        String sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "count(distinct array_length(array_map(x -> x + 1, d_2))) from adec";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(array_length(array_map" +
+                "(<slot 10> -> CAST(<slot 10> AS DECIMAL64(13,3)) + 1, 5: d_2)))");
     }
 }

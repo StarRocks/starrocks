@@ -1,0 +1,53 @@
+-- name: test_json_null
+drop database if exists db_json_null;
+-- result:
+-- !result
+create database db_json_null;
+-- result:
+-- !result
+use db_json_null;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL,
+  `c1` json NULL
+);
+-- result:
+-- !result
+INSERT INTO t0 VALUES(0, '{"a": 0, "b": null}');
+-- result:
+-- !result
+SELECT c1 IS NULL FROM t0;
+-- result:
+0
+-- !result
+SELECT c1->'a' IS NULL, c1->'a' IS NOT NULL FROM t0;
+-- result:
+0	1
+-- !result
+SELECT c1->'b' IS NULL, c1->'b' IS NOT NULL FROM t0;
+-- result:
+1	0
+-- !result
+SELECT c1->'c' IS NULL, c1->'c' IS NOT NULL FROM t0;
+-- result:
+1	0
+-- !result
+SELECT 
+    parse_json('{"a": 0, "b": null}')->'a' IS NULL,
+    parse_json('{"a": 0, "b": null}')->'a' IS NOT NULL;
+-- result:
+0	1
+-- !result
+SELECT 
+    parse_json('{"a": 0, "b": null}')->'b' IS NULL,
+    parse_json('{"a": 0, "b": null}')->'b' IS NOT NULL;
+-- result:
+1	0
+-- !result
+SELECT 
+    parse_json('{"a": 0, "b": null}')->'c' IS NULL,
+    parse_json('{"a": 0, "b": null}')->'c' IS NOT NULL;
+-- result:
+1	0
+-- !result

@@ -38,7 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -231,9 +231,13 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverHighWater() {
         if (queryQueueDriverHighWater == 0) {
-            return BackendCoreStat.getAvgNumOfHardwareCoresOfBe() * 16;
+            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 16;
         }
         return queryQueueDriverHighWater;
+    }
+
+    public static void setQueryQueueDriverHighWater(int queryQueueDriverHighWater) {
+        GlobalVariable.queryQueueDriverHighWater = queryQueueDriverHighWater;
     }
 
     public static boolean isQueryQueueDriverLowWaterEffective() {
@@ -242,9 +246,13 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverLowWater() {
         if (queryQueueDriverLowWater == 0) {
-            return BackendCoreStat.getAvgNumOfHardwareCoresOfBe() * 8;
+            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 8;
         }
         return queryQueueDriverLowWater;
+    }
+
+    public static void setQueryQueueDriverLowWater(int queryQueueDriverLowWater) {
+        GlobalVariable.queryQueueDriverLowWater = queryQueueDriverLowWater;
     }
 
     public static boolean isQueryQueueMemUsedPctLimitEffective() {

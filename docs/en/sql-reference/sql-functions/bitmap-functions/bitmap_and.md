@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_and
 
-## Description
+
 
 Calculates the intersection of two input bitmaps and returns the new bitmap.
 

@@ -45,7 +45,8 @@ import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.SetListItem;
@@ -78,6 +79,7 @@ public class LeaderOpExecutor {
     private int waitTimeoutMs;
     // the total time of thrift connectTime add readTime and writeTime
     private int thriftTimeoutMs;
+    private final Pair<String, Integer> ipAndPort;
 
     public LeaderOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status) {
         this(null, originStmt, ctx, status);
@@ -85,6 +87,13 @@ public class LeaderOpExecutor {
 
     public LeaderOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
                             ConnectContext ctx, RedirectStatus status) {
+        this(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort(), parsedStmt, originStmt, ctx,
+                status);
+    }
+
+    public LeaderOpExecutor(Pair<String, Integer> ipAndPort, StatementBase parsedStmt, OriginStatement originStmt,
+                            ConnectContext ctx, RedirectStatus status) {
+        this.ipAndPort = ipAndPort;
         this.originStmt = originStmt;
         this.ctx = ctx;
         if (status.isNeedToWaitJournalSync()) {
@@ -110,6 +119,9 @@ public class LeaderOpExecutor {
             MysqlStateType state = MysqlStateType.fromString(result.state);
             if (state != null) {
                 ctx.getState().setStateType(state);
+                if (result.isSetErrorMsg()) {
+                    ctx.getState().setMsg(result.getErrorMsg());
+                }
                 if (state == MysqlStateType.EOF || state == MysqlStateType.OK) {
                     afterForward();
                 }
@@ -160,50 +172,17 @@ public class LeaderOpExecutor {
         }
         if (forwardTimes > MAX_FORWARD_TIMES) {
             LOG.warn("too many forward times, max allowed forward time is {}", MAX_FORWARD_TIMES);
-            ErrorReportException.report(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, forwardTimes);
+            throw ErrorReportException.report(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, forwardTimes);
         }
 
-        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
-        TMasterOpRequest params = new TMasterOpRequest();
-        params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-        params.setSql(originStmt.originStmt);
-        params.setStmtIdx(originStmt.idx);
-        params.setUser(ctx.getQualifiedUser());
-        params.setCatalog(ctx.getCurrentCatalog());
-        params.setDb(ctx.getDatabase());
-        params.setSqlMode(ctx.getSessionVariable().getSqlMode());
-        params.setUser_ip(ctx.getRemoteIP());
-        params.setTime_zone(ctx.getSessionVariable().getTimeZone());
-        params.setStmt_id(ctx.getStmtId());
-        params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
-        params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
-        params.setForward_times(forwardTimes);
-
-        TUserRoles currentRoles = new TUserRoles();
-        Preconditions.checkState(ctx.getCurrentRoleIds() != null);
-        currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
-        params.setUser_roles(currentRoles);
-
-        params.setIsLastStmt(ctx.getIsLastStmt());
-
-        TQueryOptions queryOptions = new TQueryOptions();
-        queryOptions.setMem_limit(ctx.getSessionVariable().getMaxExecMemByte());
-        queryOptions.setQuery_timeout(ctx.getSessionVariable().getQueryTimeoutS());
-        queryOptions.setLoad_mem_limit(ctx.getSessionVariable().getLoadMemLimit());
-        params.setQuery_options(queryOptions);
-
-        params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        // forward all session variables
-        SetStmt setStmt = ctx.getModifiedSessionVariables();
-        if (setStmt != null) {
-            params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
-        }
+        TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
         LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
-        result = FrontendServiceProxy.call(thriftAddress,
+        result = ThriftRPCRequestExecutor.call(
+                ThriftConnectionPool.frontendPool,
+                thriftAddress,
                 thriftTimeoutMs,
-                Config.thrift_rpc_retry_times,
                 client -> client.forward(params));
     }
 
@@ -245,6 +224,48 @@ public class LeaderOpExecutor {
 
     public void setResult(TMasterOpResult result) {
         this.result = result;
+    }
+
+    public TMasterOpRequest createTMasterOpRequest(ConnectContext ctx, int forwardTimes) {
+        TMasterOpRequest params = new TMasterOpRequest();
+        params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        params.setSql(originStmt.originStmt);
+        params.setStmtIdx(originStmt.idx);
+        params.setUser(ctx.getQualifiedUser());
+        params.setCatalog(ctx.getCurrentCatalog());
+        params.setDb(ctx.getDatabase());
+        params.setSqlMode(ctx.getSessionVariable().getSqlMode());
+        params.setUser_ip(ctx.getRemoteIP());
+        params.setTime_zone(ctx.getSessionVariable().getTimeZone());
+        params.setStmt_id(ctx.getStmtId());
+        params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
+        params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
+        params.setForward_times(forwardTimes);
+        params.setSession_id(ctx.getSessionId().toString());
+
+        TUserRoles currentRoles = new TUserRoles();
+        Preconditions.checkState(ctx.getCurrentRoleIds() != null);
+        currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
+        params.setUser_roles(currentRoles);
+
+        params.setIsLastStmt(ctx.getIsLastStmt());
+
+        TQueryOptions queryOptions = new TQueryOptions();
+        queryOptions.setMem_limit(ctx.getSessionVariable().getMaxExecMemByte());
+        queryOptions.setQuery_timeout(ctx.getSessionVariable().getQueryTimeoutS());
+        queryOptions.setLoad_mem_limit(ctx.getSessionVariable().getLoadMemLimit());
+        params.setQuery_options(queryOptions);
+
+        params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        // forward all session variables
+        SetStmt setStmt = ctx.getModifiedSessionVariables();
+        if (setStmt != null) {
+            params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
+        }
+
+        params.setWarehouse_id(ctx.getCurrentWarehouseId());
+
+        return params;
     }
 }
 

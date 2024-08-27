@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # lower
 
-## 功能
+
 
 将参数中所有的字符串转换成小写。
 

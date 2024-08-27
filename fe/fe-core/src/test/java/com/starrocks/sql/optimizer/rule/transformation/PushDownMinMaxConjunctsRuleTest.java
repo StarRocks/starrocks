@@ -21,6 +21,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.Memo;
@@ -41,6 +42,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
@@ -74,7 +76,7 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
         columnMetaToColRefMap.put(col, colRef);
         OptExpression scan =
                 new OptExpression(new LogicalIcebergScanOperator(table, colRefToColumnMetaMap, columnMetaToColRefMap,
-                        -1, binaryPredicateOperator));
+                        -1, binaryPredicateOperator, TableVersionRange.empty()));
 
         assertEquals(0, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
 
@@ -87,7 +89,7 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
 
         OptExpression scanNoPushDown =
                 new OptExpression(new LogicalIcebergScanOperator(table, colRefToColumnMetaMap, columnMetaToColRefMap,
-                        -1, binaryPredicateOperatorNoPushDown));
+                        -1, binaryPredicateOperatorNoPushDown, TableVersionRange.empty()));
 
         assertEquals(0,
                 ((LogicalIcebergScanOperator) scanNoPushDown.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
@@ -106,7 +108,7 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
         mockedNativeTableA.refresh();
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableA, Maps.newHashMap());
 
         ColumnRefOperator colRef1 = new ColumnRefOperator(1, Type.INT, "id", true);
         Column col1 = new Column("id", Type.INT, true);
@@ -117,9 +119,11 @@ public class PushDownMinMaxConjunctsRuleTest extends TableTestBase {
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
         colRefToColumnMetaMap.put(colRef1, col1);
         columnMetaToColRefMap.put(col2, colRef2);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
         OptExpression scan =
                 new OptExpression(new LogicalIcebergScanOperator(icebergTable, colRefToColumnMetaMap, columnMetaToColRefMap,
-                        -1, null));
+                        -1, null, version));
 
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
         assertEquals(1, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates()

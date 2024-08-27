@@ -21,6 +21,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -56,8 +58,12 @@ public class OptExpression {
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
     private PhysicalPropertySet outputProperty;
+    private UKFKConstraints constraints;
 
     private Boolean isShortCircuit = false;
+
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
 
     private OptExpression() {
     }
@@ -143,10 +149,17 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
-    public void initRowOutputInfo() {
+    public DomainProperty getDomainProperty() {
+        return op.getDomainProperty(inputs);
+    }
+
+    public void clearStatsAndInitOutputInfo() {
         for (OptExpression optExpression : inputs) {
-            optExpression.initRowOutputInfo();
+            optExpression.clearStatsAndInitOutputInfo();
         }
+        // clear statistics cache and row output info cache
+        setStatistics(null);
+        op.clearRowOutputInfo();
         getRowOutputInfo();
     }
 
@@ -164,6 +177,14 @@ public class OptExpression {
 
     public PhysicalPropertySet getOutputProperty() {
         return this.outputProperty;
+    }
+
+    public UKFKConstraints getConstraints() {
+        return constraints;
+    }
+
+    public void setConstraints(UKFKConstraints constraints) {
+        this.constraints = constraints;
     }
 
     // This function assume the child expr logical property has been derived
@@ -228,15 +249,23 @@ public class OptExpression {
         return debugString("", "", limitLine);
     }
 
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
+    }
+
     private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
+        sb.append('\n');
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
 
-        sb.append('\n');
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
@@ -277,6 +306,16 @@ public class OptExpression {
 
         public Builder setLogicalProperty(LogicalProperty property) {
             optExpression.property = property;
+            return this;
+        }
+
+        public Builder setStatistics(Statistics statistics) {
+            optExpression.statistics = statistics;
+            return this;
+        }
+
+        public Builder setCost(double cost) {
+            optExpression.cost = cost;
             return this;
         }
 

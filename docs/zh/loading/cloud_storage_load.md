@@ -16,7 +16,7 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 >
 > Broker Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
-从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
+从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 AWS S3 导入特定格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
 本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 从云存储系统导入数据。
 
@@ -30,6 +30,8 @@ Broker Load 支持如下数据文件格式：
 
 - ORC
 
+- JSON（自 3.2.3 版本起支持）
+
 > **说明**
 >
 > 对于 CSV 格式的数据，需要注意以下两点：
@@ -39,11 +41,11 @@ Broker Load 支持如下数据文件格式：
 
 ## 基本原理
 
-提交导入作业以后，FE 会生成对应的查询计划，并根据目前可用 BE 的个数和源数据文件的大小，将查询计划分配给多个 BE 执行。每个 BE 负责执行一部分导入任务。BE 在执行过程中，会从外部存储系统拉取数据，并且会在对数据进行预处理之后将数据导入到 StarRocks 中。所有 BE 均完成导入后，由 FE 最终判断导入作业是否成功。
+提交导入作业以后，FE 会生成对应的查询计划，并根据目前可用 BE（或 CN）的个数和源数据文件的大小，将查询计划分配给多个 BE（或 CN）执行。每个 BE（或 CN）负责执行一部分导入任务。BE（或 CN）在执行过程中，会从外部存储系统拉取数据，并且会在对数据进行预处理之后将数据导入到 StarRocks 中。所有 BE（或 CN）均完成导入后，由 FE 最终判断导入作业是否成功。
 
 下图展示了 Broker Load 的主要流程：
 
-![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
+![Broker Load 原理图](../_assets/broker_load_how-to-work_zh.png)
 
 ## 准备数据样例
 
@@ -1098,7 +1100,7 @@ PROPERTIES
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_701
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -1145,7 +1147,7 @@ SELECT * FROM table1;
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_702
 (
-    DATA INFILE("obs://bucket_minio/input/*")
+    DATA INFILE("s3://bucket_minio/input/*")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -1196,12 +1198,12 @@ SELECT * FROM table1;
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_703
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("obs://bucket_minio/input/file2.csv")
+    DATA INFILE("s3://bucket_minio/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -1380,17 +1382,11 @@ WHERE LABEL = "label1";
 
 - 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
 
-每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/FE_configuration.md#配置-fe-动态参数)决定：
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE（或 CN）上并行执行。实例的拆分由 FE 配置参数 [`min_bytes_per_broker_scanner`](../administration/management/FE_configuration.md) 和 BE（或 CN）节点数量决定，可以使用如下公式计算单个子任务的实例总数：
 
-- `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
+单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`, BE/CN 节点数量）
 
-- `load_parallel_instance_num`：单个 BE 上每个作业允许的并发实例数，默认为 1 个。自 3.1 版本起弃用。
-
-   可以使用如下公式计算单个子任务的实例总数：
-
-   单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`，`load_parallel_instance_num` x BE 总数）
-
-一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE 总数相等的实例。
+一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE（或 CN）节点数量相等的实例。
 
 ## 常见问题
 

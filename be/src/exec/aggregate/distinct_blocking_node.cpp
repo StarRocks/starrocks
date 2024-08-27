@@ -208,7 +208,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
             std::vector<ExprContext*> group_by_expr_ctxs;
             WARN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
-                                                  runtime_state()),
+                                                  runtime_state(), true),
                           "create grouping expr failed");
             return group_by_expr_ctxs;
         });

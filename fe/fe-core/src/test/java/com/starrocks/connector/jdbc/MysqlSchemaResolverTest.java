@@ -22,6 +22,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
@@ -149,7 +150,7 @@ public class MysqlSchemaResolverTest {
     public void testListPartitionNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1", TableVersionRange.empty());
             Assert.assertFalse(partitionNames.isEmpty());
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -162,14 +163,14 @@ public class MysqlSchemaResolverTest {
         try {
             JDBCCacheTestUtil.openCacheEnable(connectContext);
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1", TableVersionRange.empty());
             Assert.assertFalse(partitionNames.isEmpty());
-            List<String> partitionNamesWithCache = jdbcMetadata.listPartitionNames("test", "tbl1");
+            List<String> partitionNamesWithCache = jdbcMetadata.listPartitionNames("test", "tbl1", TableVersionRange.empty());
             Assert.assertFalse(partitionNamesWithCache.isEmpty());
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
             Map<String, String> properties = new HashMap<>();
             jdbcMetadata.refreshCache(properties);
-            List<String> partitionNamesWithOutCache = jdbcMetadata.listPartitionNames("test", "tbl1");
+            List<String> partitionNamesWithOutCache = jdbcMetadata.listPartitionNames("test", "tbl1", TableVersionRange.empty());
             Assert.assertTrue(partitionNamesWithOutCache.isEmpty());
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -188,7 +189,7 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1", TableVersionRange.empty());
             Assert.assertTrue(partitionNames.size() == 0);
         } catch (Exception e) {
             System.out.println(e.getMessage());

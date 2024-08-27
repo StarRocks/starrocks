@@ -43,8 +43,6 @@ int DiskInfo::_s_num_datanode_dirs;
 void DiskInfo::get_device_names() {
     // Format of this file is:
     //    major, minor, #blocks, name
-    // We are only interesting in name which is formatted as device_name<partition #>
-    // The same device will show up multiple times for each partition (e.g. sda1, sda2).
     std::ifstream partitions("/proc/partitions", std::ios::in);
 
     while (partitions.good() && !partitions.eof()) {
@@ -63,9 +61,6 @@ void DiskInfo::get_device_names() {
         if (name == "name") {
             continue;
         }
-
-        // Remove the partition# from the name.  e.g. sda2 --> sda
-        boost::trim_right_if(name, boost::is_any_of("0123456789"));
 
         // Create a mapping of all device ids (one per partition) to the disk id.
         int major_dev_id = atoi(fields[0].c_str());
@@ -192,7 +187,6 @@ Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::se
                 continue;
             }
             std::string dev(basename(dev_path));
-            boost::trim_right_if(dev, boost::is_any_of("0123456789"));
             if (_s_disk_name_to_disk_id.find(dev) != std::end(_s_disk_name_to_disk_id)) {
                 max_mount_size = mount_size;
                 match_dev = dev;

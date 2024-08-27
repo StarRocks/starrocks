@@ -91,6 +91,10 @@ public class Subquery extends Expr {
 
     @Override
     public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
         if (!super.equals(o)) {
             return false;
         }
@@ -98,7 +102,7 @@ public class Subquery extends Expr {
         if (((Subquery) o).getQueryStatement() == null) {
             return false;
         } else {
-            return o.equals(queryStatement);
+            return ((Subquery) o).getQueryStatement().equals(queryStatement);
         }
     }
 

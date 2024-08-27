@@ -134,7 +134,6 @@ public class FrontendServiceImplTest {
             }
         };
 
-
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
@@ -281,7 +280,9 @@ public class FrontendServiceImplTest {
                 .withView("create view v3 as select database()")
                 .withView("create view v4 as select user()")
                 .withView("create view v5 as select CONNECTION_ID()")
-                .withView("create view v6 as select CATALOG()");
+                .withView("create view v6 as select CATALOG()")
+
+                .withMaterializedView("create materialized view mv refresh async as select * from site_access_empty");
     }
 
     @AfterClass
@@ -357,14 +358,14 @@ public class FrontendServiceImplTest {
 
         partition = impl.updateImmutablePartition(request);
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
-        Assert.assertEquals(3, table.getPhysicalPartitions().size());
+        Assert.assertEquals(2, table.getPhysicalPartitions().size());
 
         partitionIds = table.getPhysicalPartitions().stream()
                 .map(PhysicalPartition::getId).collect(Collectors.toList());
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
-        Assert.assertEquals(5, table.getPhysicalPartitions().size());
+        Assert.assertEquals(3, table.getPhysicalPartitions().size());
     }
 
     @Test
@@ -397,6 +398,66 @@ public class FrontendServiceImplTest {
         partition = impl.createPartition(request);
         Assert.assertEquals(1, partition.partitions.size());
     }
+
+    @Test
+    public void testCreatePartitionWithSchemaChange() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        ((OlapTable) table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    @Test
+    public void testCreatePartitionWithRollup() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        ((OlapTable) table).setState(OlapTable.OlapTableState.ROLLUP);
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+
 
     @Test
     public void testCreatePartitionExceedLimit() throws TException {
@@ -592,7 +653,7 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testAutomaticPartitionLimitExceed() throws TException {
-        Config.max_automatic_partition_number = 1;
+        Config.max_partition_number_per_table = 1;
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_slice");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -610,8 +671,44 @@ public class FrontendServiceImplTest {
         TCreatePartitionResult partition = impl.createPartition(request);
 
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
-        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_automatic_partition_number"));
-        Config.max_automatic_partition_number = 4096;
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_partition_number_per_table"));
+        Config.max_partition_number_per_table = 100000;
+    }
+
+    @Test
+    public void testAutomaticPartitionPerLoadLimitExceed() throws TException {
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1999-04-29");
+        partitionValues.add(values);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1999-03-28");
+        partitionValues.add(values2);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+        Assert.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
+
+        Config.max_partitions_in_one_batch = 1;
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_partitions_in_one_batch"));
+
+        Config.max_partitions_in_one_batch = 4096;
     }
 
     private TGetTablesParams buildListTableStatusParam() {
@@ -640,7 +737,7 @@ public class FrontendServiceImplTest {
         params.setCurrent_user_ident(tUserIdentity);
 
         TGetTablesResult result = impl.getTableNames(params);
-        Assert.assertEquals(16, result.tables.size());
+        Assert.assertEquals(17, result.tables.size());
     }
 
     @Test
@@ -1026,8 +1123,8 @@ public class FrontendServiceImplTest {
         List<String> errMsg = status.getError_msgs();
         Assert.assertEquals(1, errMsg.size());
         Assert.assertEquals(
-                "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
-                        "No matching function with signature: str_to_date(varchar).",
+                "Expr 'str_to_date(`col1`)' analyze error: No matching function with signature: str_to_date(varchar), " +
+                        "derived column is 'event_day'",
                 errMsg.get(0));
     }
 
@@ -1043,7 +1140,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException {
+    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1059,7 +1156,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitTimeout() throws UserException, TException {
+    public void testLoadTxnCommitTimeout() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1073,7 +1170,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testLoadTxnCommitFailed() throws UserException, TException {
+    public void testLoadTxnCommitFailed() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
         request.db = "test";
@@ -1087,7 +1184,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testStreamLoadPutTimeout() throws UserException, TException {
+    public void testStreamLoadPutTimeout() throws UserException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
@@ -1100,7 +1197,35 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testMetaNotFound() throws UserException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "foo";
+        request.txnId = 1001L;
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setLoadId(new TUniqueId(1, 2));
+
+        Exception e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("unknown table"));
+
+        request.tbl = "v";
+        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
+
+        request.tbl = "mv";
+        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("is a materialized view"));
+    }
+
+    @Test
     public void testAddListPartitionConcurrency() throws UserException, TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_list");
@@ -1131,13 +1256,13 @@ public class FrontendServiceImplTest {
                         Lists.newArrayList("1990-04-25"), Maps.newHashMap()))));
 
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDescs.get(0),
-                defaultDistributionInfo.toDistributionDesc(), Maps.newHashMap(), false);
+                defaultDistributionInfo.toDistributionDesc(table.getIdToColumn()), Maps.newHashMap(), false);
 
         List<Partition> partitionList = Lists.newArrayList();
         partitionList.add(p19910425);
 
         currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
-                addPartitionClause, partitionInfo, partitionList, Sets.newSet("p19900425"));
+                addPartitionClause.isTempPartition(), partitionInfo, partitionList, Sets.newSet("p19900425"));
 
     }
 

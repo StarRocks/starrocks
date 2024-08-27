@@ -47,6 +47,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -144,15 +145,11 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         String metaUrl;
                         String compactionUrl;
                         if (backend != null) {
-                            metaUrl = String.format("http://%s:%d/api/meta/header/%d",
-                                    hideIpPort ? "*" : backend.getHost(),
-                                    hideIpPort ? 0 : backend.getHttpPort(),
-                                    tabletId);
+                            String hostPort = hideIpPort ? "*:0" :
+                                    NetUtils.getHostPortInAccessibleFormat(backend.getHost(), backend.getHttpPort());
+                            metaUrl = String.format("http://" + hostPort + "/api/meta/header/%d", tabletId);
                             compactionUrl = String.format(
-                                    "http://%s:%d/api/compaction/show?tablet_id=%d",
-                                    hideIpPort ? "*" : backend.getHost(),
-                                    hideIpPort ? 0 : backend.getHttpPort(),
-                                    tabletId);
+                                    "http://" + hostPort + "/api/compaction/show?tablet_id=%d", tabletId);
                         } else {
                             metaUrl = "N/A";
                             compactionUrl = "N/A";

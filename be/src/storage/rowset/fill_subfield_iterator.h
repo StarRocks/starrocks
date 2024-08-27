@@ -36,23 +36,19 @@ public:
 
     ColumnId column_id() const { return _cid; }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    [[nodiscard]] Status seek_to_first() override;
+    Status seek_to_first() override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord);
+    Status seek_to_ordinal(ordinal_t ord) override;
 
     ordinal_t get_current_ordinal() const override;
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override {
-        return Status::NotSupported("");
-    }
+    ordinal_t num_rows() const override;
 
 private:
     ColumnId _cid;

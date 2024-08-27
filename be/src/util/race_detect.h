@@ -20,6 +20,8 @@
 
 #include <atomic>
 
+#include "gutil/macros.h"
+
 namespace starrocks {
 
 class RaceDetector {
@@ -40,6 +42,27 @@ public:
 private:
     std::atomic_uint64_t _running{};
 };
+
+class CallOnceDetector {
+public:
+    class Guard {
+    public:
+        Guard(std::atomic_uint64_t& ref_) : ref(ref_) {
+            ref++;
+            CHECK_EQ(ref, 1) << "not expected called";
+        }
+
+    private:
+        std::atomic_uint64_t& ref;
+    };
+    Guard guard() { return {_running}; }
+
+    void reset() { _running = 0; }
+
+private:
+    std::atomic_uint64_t _running{};
+};
+
 } // namespace starrocks
 
 #ifndef NDEBUG
@@ -48,8 +71,14 @@ private:
 
 #ifdef ENABLE_RACE_DETECTOR
 #define DECLARE_RACE_DETECTOR(name) RaceDetector name;
-#define RACE_DETECT(name, var) auto var = name.guard()
+#define RACE_DETECT(name) [[maybe_unused]] RaceDetector::Guard VARNAME_LINENUM(race) = name.guard()
+#define DECLARE_ONCE_DETECTOR(name) CallOnceDetector name;
+#define ONCE_DETECT(name) [[maybe_unused]] CallOnceDetector::Guard VARNAME_LINENUM(once) = name.guard()
+#define ONCE_RESET(name) name.reset()
 #else
 #define DECLARE_RACE_DETECTOR(name)
-#define RACE_DETECT(name, var)
+#define RACE_DETECT(name)
+#define DECLARE_ONCE_DETECTOR(name)
+#define ONCE_DETECT(name)
+#define ONCE_RESET(name)
 #endif

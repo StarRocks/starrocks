@@ -127,6 +127,10 @@ public class MysqlCapability {
         return sb.toString();
     }
 
+    public boolean isDeprecateEof() {
+        return (flags & Flag.CLIENT_DEPRECATE_EOF.getFlagBit()) != 0;
+    }
+
     public boolean isProtocol41() {
         return (flags & Flag.CLIENT_PROTOCOL_41.getFlagBit()) != 0;
     }

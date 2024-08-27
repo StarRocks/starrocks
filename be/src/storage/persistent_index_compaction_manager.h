@@ -20,33 +20,37 @@
 #include <vector>
 
 #include "storage/olap_common.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
+using TabletAndScore = std::pair<int64_t, double>;
 class ThreadPool;
 
 class PersistentIndexCompactionManager {
 public:
     PersistentIndexCompactionManager() {}
-    ~PersistentIndexCompactionManager();
+    virtual ~PersistentIndexCompactionManager();
     Status init();
-    void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo);
+    virtual void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo);
     // Mark tablet is running and increase disk concurrency
-    void mark_running(Tablet* tablet);
+    void mark_running(int64_t tablet_id, DataDir* data_dir);
     // Mark tablet is no running and decrease disk concurrency
-    void unmark_running(Tablet* tablet);
+    void unmark_running(int64_t tablet_id, DataDir* data_dir);
     // change the thread pool thread count
     Status update_max_threads(int max_threads);
     // Call pick algo function, and refresh ready tablet queue
     void update_ready_tablet_queue(const std::function<std::vector<TabletAndScore>()>& pick_algo);
     // Is tablet in running state
-    bool is_running(Tablet* tablet);
+    bool is_running(int64_t tablet_id);
     // Is tablet's disk out of concurrency limit
-    bool disk_limit(Tablet* tablet);
+    bool disk_limit(DataDir* data_dir);
 
-private:
+protected:
     std::mutex _mutex;
     // Sorted by prority
     std::vector<TabletAndScore> _ready_tablets_queue;

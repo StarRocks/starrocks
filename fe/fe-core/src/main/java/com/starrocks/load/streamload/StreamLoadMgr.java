@@ -33,12 +33,14 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
@@ -97,8 +99,14 @@ public class StreamLoadMgr implements MemoryTrackable {
         lock = new ReentrantReadWriteLock(true);
     }
 
-    public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
+    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
                               int channelNum, int channelId, TransactionResult resp) throws UserException {
+        beginLoadTask(dbName, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, resp,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
+    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
+                              int channelNum, int channelId, TransactionResult resp, long warehouseId) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -124,7 +132,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxn(channelId, channelNum, resp);
                 return;
             }
-            task = createLoadTask(db, tableName, label, timeoutMillis, channelNum, channelId);
+            task = createLoadTask(db, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
@@ -139,15 +147,15 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     // for sync stream load task
-    public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
-                              TransactionResult resp, boolean isRoutineLoad) throws UserException {
+    public void beginLoadTask(String dbName, String tableName, String label, String user, String clientIp, long timeoutMillis,
+                              TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
 
         writeLock();
         try {
-            task = createLoadTask(db, tableName, label, timeoutMillis, isRoutineLoad);
+            task = createLoadTask(db, tableName, label, user, clientIp, timeoutMillis, isRoutineLoad, warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
@@ -159,7 +167,8 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     // for sync stream load
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis, boolean isRoutineLoad)
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
+                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId)
             throws UserException {
         Table table;
         Locker locker = new Locker();
@@ -174,12 +183,23 @@ public class StreamLoadMgr implements MemoryTrackable {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, timeoutMillis, System.currentTimeMillis(), isRoutineLoad);
+                label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
         return streamLoadTask;
     }
 
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
-                                         int channelNum, int channelId) throws UserException {
+    public StreamLoadTask createLoadTaskWithoutLock(Database db, String tableName, String label, String user, String clientIp,
+                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId)
+            throws UserException {
+        // init stream load task
+        long id = GlobalStateMgr.getCurrentState().getNextId();
+        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) db.getTable(tableName),
+                label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
+        return streamLoadTask;
+    }
+
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, String user, String clientIp,
+                                         long timeoutMillis, int channelNum,
+                                         int channelId, long warehouseId) throws UserException {
         Table table;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
@@ -193,7 +213,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, timeoutMillis, channelNum, channelId, System.currentTimeMillis());
+                label, user, clientIp, timeoutMillis, channelNum, channelId, System.currentTimeMillis(), warehouseId);
         return streamLoadTask;
     }
 
@@ -402,7 +422,6 @@ public class StreamLoadMgr implements MemoryTrackable {
                 if (streamLoadTask.checkNeedRemove(currentMs, isForce)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
-                    idToStreamLoadTask.remove(streamLoadTask.getId());
                     if (streamLoadTask.isSyncStreamLoad()) {
                         txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
                     }
@@ -453,9 +472,11 @@ public class StreamLoadMgr implements MemoryTrackable {
         long dbId = streamLoadTask.getDBId();
         String label = streamLoadTask.getLabel();
 
-        dbToLabelToStreamLoadTask.get(dbId).remove(label);
-        if (dbToLabelToStreamLoadTask.get(dbId).isEmpty()) {
-            dbToLabelToStreamLoadTask.remove(dbId);
+        if (dbToLabelToStreamLoadTask.containsKey(dbId)) {
+            dbToLabelToStreamLoadTask.get(dbId).remove(label);
+            if (dbToLabelToStreamLoadTask.get(dbId).isEmpty()) {
+                dbToLabelToStreamLoadTask.remove(dbId);
+            }
         }
     }
 
@@ -619,10 +640,10 @@ public class StreamLoadMgr implements MemoryTrackable {
         return streamLoadManager;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToStreamLoadTask.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STREAM_LOAD_MGR, numJson);
-        writer.writeJson(idToStreamLoadTask.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.STREAM_LOAD_MGR, numJson);
+        writer.writeInt(idToStreamLoadTask.size());
         for (StreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
             writer.writeJson(streamLoadTask);
         }

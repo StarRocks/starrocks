@@ -21,6 +21,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -34,7 +35,6 @@ import com.starrocks.thrift.TTableReplicationRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +87,15 @@ public class ReplicationMgr extends FrontendDaemon {
             throw new RuntimeException(
                     "The replication jobs exceeds the replication_max_parallel_table_count: "
                             + Config.replication_max_parallel_table_count);
+        }
+
+        // Limit replication replica count
+        long replicationReplicaCount = getReplicatingReplicaCount();
+        if (replicationReplicaCount >= Config.replication_max_parallel_replica_count) {
+            throw new RuntimeException("The replicating replica count in all running replication jobs "
+                    + replicationReplicaCount
+                    + " exceeds replication_max_parallel_replica_count: "
+                    + Config.replication_max_parallel_replica_count);
         }
 
         // Limit replication data size
@@ -178,6 +187,14 @@ public class ReplicationMgr extends FrontendDaemon {
         }
     }
 
+    private long getReplicatingReplicaCount() {
+        long replicatingReplicaCount = 0;
+        for (ReplicationJob job : runningJobs.values()) {
+            replicatingReplicaCount += job.getReplicationReplicaCount();
+        }
+        return replicatingReplicaCount;
+    }
+
     private long getReplicatingDataSize() {
         long replicatingDataSize = 0;
         for (ReplicationJob job : runningJobs.values()) {
@@ -186,8 +203,8 @@ public class ReplicationMgr extends FrontendDaemon {
         return replicatingDataSize;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.REPLICATION_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.REPLICATION_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

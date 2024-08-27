@@ -43,6 +43,8 @@ public:
             const Schema& pkey_schema,
             const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) override;
 
+    void set_write_amp_score(double score) override;
+
 private:
     Tablet* _tablet;
 };

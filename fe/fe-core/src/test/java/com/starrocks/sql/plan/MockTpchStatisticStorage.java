@@ -15,9 +15,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,6 +33,7 @@ import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -316,11 +319,15 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         // S_COMMENT   VARCHAR(101)
         tableSupplier.put("s_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 101, 10000));
         tableStatistics.put("supplier", tableSupplier);
+
+        tableStatistics.put("lineorder_new_l", ImmutableMap.of("P_SIZE", new ColumnStatistic(1, 5, 0, 1, 5)));
+        tableStatistics.put("skew_table", ImmutableMap.of("id", new ColumnStatistic(1, 1, 0, 1, 1)));
+
     }
 
     @Override
-    public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
-        return rowCountStats.get(tableId);
+    public Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> rowCountStats.get(tableId)));
     }
 
     @Override

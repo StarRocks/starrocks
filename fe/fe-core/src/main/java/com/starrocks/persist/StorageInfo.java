@@ -34,36 +34,33 @@
 
 package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
+
 /**
  * This class is designed for sending storage information from master to standby master.
  * StorageInfo is easier to serialize to a Json String than class Storage
  */
 public class StorageInfo {
-    private int clusterID;
+    @SerializedName("imageJournalId")
     private long imageJournalId;
 
+    @SerializedName("imageFormatVersion")
+    private ImageFormatVersion imageFormatVersion;
+
     public StorageInfo() {
-        this(-1, 0);
+        this(0, ImageFormatVersion.v1);
     }
 
-    public StorageInfo(int clusterID, long imageJournalId) {
-        this.clusterID = clusterID;
+    public StorageInfo(long imageJournalId, ImageFormatVersion imageFormatVersion) {
         this.imageJournalId = imageJournalId;
-    }
-
-    public int getClusterID() {
-        return clusterID;
-    }
-
-    public void setClusterID(int clusterID) {
-        this.clusterID = clusterID;
+        this.imageFormatVersion = imageFormatVersion;
     }
 
     public long getImageJournalId() {
         return imageJournalId;
     }
 
-    public void setImageJournalId(long imageJournalId) {
-        this.imageJournalId = imageJournalId;
+    public ImageFormatVersion getImageFormatVersion() {
+        return imageFormatVersion;
     }
 }

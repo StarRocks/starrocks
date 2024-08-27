@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
+description: Partition and bucket data
 ---
 
 # Data distribution
@@ -13,15 +15,15 @@ Configuring appropriate partitioning and bucketing at table creation can help to
 >
 > - After the data distribution is specified at table creation and query patterns or data characteristics in the business scenario evolves, since v3.2 StarRocks supports [modifying certain data distribution-related properties after table creation](#optimize-data-distribution-after-table-creation-since-32) to meet the requirements for query performance in the latest business scenarios.
 > - Since v3.1, you do not need to specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding a partition. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
-> - Since v2.5.7, you can choose not to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#set-the-number-of-buckets).
+> - Since v2.5.7, you can choose not to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets, and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#set-the-number-of-buckets).
 
-## Distribution methods
+## Introduction
 
 ### Distribution methods in general
 
 Modern distributed database systems generally use the following basic distribution methods: Round-Robin, Range, List, and Hash.
 
-![Data distribution method](../assets/3.3.2-1.png)
+![Data distribution method](../_assets/3.3.2-1.png)
 
 - **Round-Robin**: distributes data across different nodes in a cyclic.
 - **Range**: distributes data across different nodes based on the ranges of partitioning column values. As shown in the diagram, the ranges [1-3] and [4-6] correspond to different nodes.
@@ -155,7 +157,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 
 #### Partitioning
 
-The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management units (partitions) based on the partition key. You can set a storage strategy for each partition, including the number of buckets, the strategy of storing hot and cold data, the type of storage medium, and the number of replicas. StarRocks allows you to use different types of storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSDs) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
+The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management units (partitions) based on the partitioning key. You can set a storage strategy for each partition, including the number of buckets, the strategy of storing hot and cold data, the type of storage medium, and the number of replicas. StarRocks allows you to use different types of storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSDs) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
 
 | **Partitioning method**                   | **Scenarios**                                                    | **Methods to create partitions**               |
 | ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
@@ -165,8 +167,8 @@ The partitioning method divides a table into multiple partitions. Partitioning p
 
 ##### How to choose partitioning columns and granularity
 
-- Selecting a proper partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly adopted to resolve certain issues caused by the deletion of expired data and facilitate management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on enum values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
-- When choosing the partitioning granularity, you need to consider factors data volume, query patterns, and data management granularity.
+- **The partitioning key is composed of one or more partitioning columns**. Selecting a proper partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly adopted to resolve certain issues caused by the deletion of expired data and facilitate the management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on ENUM values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
+- When choosing the partitioning granularity, you need to consider data volume, query patterns, and data management granularity.
   - Example 1: If the monthly data volume in a table is small, partitioning by month can reduce the amount of metadata compared to partitioning by day, thereby reducing the resource consumption of metadata management and scheduling.
   - Example 2: If the monthly data volume in a table is large and queries mostly request data of certain days, partitioning by day can effectively reduce the amount of data scanned during queries.
   - Example 3: If the data needs to expire on a daily basis, partitioning by day is recommended.
@@ -181,7 +183,7 @@ The supported bucketing methods are [random bucketing](#random-bucketing-since-v
 
 - Hash Bucketing: When creating a table or adding partitions, you need to specify a bucketing key. Data within the same partition is divided into buckets based on the values of the bucketing key, and rows with the same value in the bucketing key are distributed to the corresponding and unique bucket.
 
-The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). And you can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#set-the-number-of-buckets).
+The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). You can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#set-the-number-of-buckets).
 
 ## Create and manage partitions
 
@@ -191,17 +193,133 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 
 > **NOTICE**
 >
-> Since v3.1,  StarRocks's [shared-data mode](../deployment/shared_data/s3.md) supports the time function expression and does not support the column expression.
+> Since v3.1, StarRocks's shared-data mode supports the time function expression and does not support the column expression.
 
-Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy-to-use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or enum values.
+Since v3.0, StarRocks has supported [expression partitioning](./expression_partitioning.md)](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy to use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or ENUM values.
 
 You only need to configure a partition expression (a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
 
 #### Range partitioning
 
-Range partitioning is suitable for storing simple, contiguous data, such as time series data (dates or timestamps), or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
+Range partitioning is suitable for storing simple contiguous data, such as time series data, or continuous numerical data. Range partitioning is appropriate for frequently queried data based on continuous date/numerical ranges. Additionally, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
 
-StarRocks stores data in the corresponding partitions based on the explicit mapping of the explicitly defined range for each partition.
+You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the ranges to which the data partitioning column values belong.
+
+As for the data type of the partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, three specific time functions can be used as partition columns. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use a specific time function to convert partitioning column values of timestamps or strings into date values, and then divide the partitions based on the converted date values.
+
+:::info
+
+- If the partitioning column value is a timestamp, you need to use the from_unixtime or from_unixtime_ms function to convert a timestamp to a date value when dividing the partitions. When the from_unixtime function is used, the partitioning column only supports INT and BIGINT types. When the from_unixtime_ms function is used, the partitioning column only supports BIGINT type.
+- If the partitioning column value is a string (STRING, VARCHAR, or CHAR type), you need to use the str2date function to convert the string to a date value when dividing the partitions.
+
+:::
+
+##### Manually create partitions
+
+Define the mapping relationship between each partition and the range of partitioning column values.
+
+- **The partitioning column is of date type.**
+
+    ```SQL
+    CREATE TABLE site_access(
+        event_day DATE,
+        site_id INT,
+        city_code VARCHAR(100),
+        user_name VARCHAR(32),
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(event_day, site_id, city_code, user_name)
+    PARTITION BY RANGE(event_day)(
+        PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+        PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+        PARTITION p3 VALUES LESS THAN ("2020-03-31")
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+- **The partitioning column is of integer type.**
+
+    ```SQL
+    CREATE TABLE site_access(
+        datekey INT,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        PARTITION p1 VALUES LESS THAN ("20200131"),
+        PARTITION p2 VALUES LESS THAN ("20200229"),
+        PARTITION p3 VALUES LESS THAN ("20200331")
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+- **Three specific time functions can be used as partitioning columns (supported since v3.3.0).**
+  
+  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific time function to convert the partition column values of timestamps or strings into date values, and then divide the partitions based on the converted date values.
+
+  <Tabs groupId="manual partitioning">
+  <TabItem value="example1" label="The partition column values are timestamps" default>
+
+  ```SQL
+  -- A 10-digit timestamp accurate to the second, for example, 1703832553.
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT SUM DEFAULT '0'
+    )
+  AGGREGATE KEY(event_time, site_id, city_code, user_name)
+  PARTITION BY RANGE(from_unixtime(event_time)) (
+      PARTITION p1 VALUES LESS THAN ("2021-01-01"),
+      PARTITION p2 VALUES LESS THAN ("2021-01-02"),
+      PARTITION p3 VALUES LESS THAN ("2021-01-03")
+  )
+  DISTRIBUTED BY HASH(site_id)
+  ;
+  
+  -- A 13-digit timestamp accurate to the millisecond, for example, 1703832553219.
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT SUM DEFAULT '0'
+    )
+  AGGREGATE KEY(event_time, site_id, city_code, user_name)
+  PARTITION BY RANGE(from_unixtime_ms(event_time))(
+      PARTITION p1 VALUES LESS THAN ("2021-01-01"),
+      PARTITION p2 VALUES LESS THAN ("2021-01-02"),
+      PARTITION p3 VALUES LESS THAN ("2021-01-03")
+  )
+  DISTRIBUTED BY HASH(site_id);
+  ```
+
+  </TabItem>
+  <TabItem value="example2" label="The partition column values are strings">
+
+    ```SQL
+    CREATE TABLE site_access (
+         event_time  varchar(100),
+         site_id INT,
+         city_code SMALLINT,
+         user_name VARCHAR(32),
+         pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(event_time, site_id, city_code, user_name)
+    PARTITION BY RANGE(str2date(event_time, '%Y-%m-%d'))(
+        PARTITION p1 VALUES LESS THAN ("2021-01-01"),
+        PARTITION p2 VALUES LESS THAN ("2021-01-02"),
+        PARTITION p3 VALUES LESS THAN ("2021-01-03")
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+  </TabItem>
+  </Tabs>
 
 ##### Dynamic partitioning
 
@@ -209,160 +327,205 @@ StarRocks stores data in the corresponding partitions based on the explicit mapp
 
 Different from the automatic partition creation ability provided by the expression partitioning, dynamic partitioning can only periodically create new partitions based on the properties. If the new data does not belong to these partitions, an error is returned for the load job. However, the automatic partition creation ability provided by the expression partitioning can always create corresponding new partitions based on the loaded data.
 
-##### Manually create partitions
-
-Using a proper partition key can effectively reduce the amount of data scanned during queries. Currently, only columns of date or integer types can be selected as partitioning columns to comprise a partition key. In business scenarios, partition keys are typically selected from a data management perspective. Common partitioning columns include columns that represent dates or locations.
-
-```SQL
-CREATE TABLE site_access(
-    event_day DATE,
-    site_id INT DEFAULT '10',
-    city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
-)
-AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day)(
-    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
-    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
-    PARTITION p3 VALUES LESS THAN ("2020-03-31")
-)
-DISTRIBUTED BY HASH(site_id);
-```
-
 ##### Create multiple partitions in batch
 
-Multiple partitions can be created  in batch at and after table creation. You can specify the start and end time for all the partitions created in batch in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is right hand half open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
+Multiple partitions can be created in batch at and after table creation. You can specify the start and end time for all the partitions created in batch in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is left-closed and right-open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
 
-- **Partition a table on a date-type column (DATE and DATETIME) at table creation**
+- **The partitioning column is of date type.**
 
-  When the partitioning column is of date type, at table creation, you can use `START()` and `END()` to specify the start date and end date for all the partitions created in batch, and `EVERY(INTERVAL xxx)` to specify the incremental interval between two partitions. Currently the interval granularity supports `HOUR` (since v3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
+  When the partitioning column is of date type, at table creation, you can use `START()` and `END()` to specify the start date and end date for all the partitions created in batch, and `EVERY(INTERVAL xxx)` to specify the incremental interval between two partitions. Currently, the interval granularity supports `HOUR` (since v3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
 
-  In the following example, the date range of all the partitions created in batch starts from 2021-01-01 and ends on 2021-01-04, with an incremental interval of one day:
-
-    ```SQL
-  CREATE TABLE site_access (
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (
-      START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES ("replication_num" = "3" );
-    ```
-
-  It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+  <Tabs groupId="batch partitioning(date)">
+  <TabItem value="example1" label="with the same date interval" default>
+  
+  In the following example, the partitions created in a batch start from `2021-01-01` and end on `2021-01-04`, with a partition increment of one day:  
 
     ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
-  PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
-  PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
-  )
+    CREATE TABLE site_access (
+        datekey DATE,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id);
     ```
 
-- **Partition a table on a date-type column (DATE and DATETIME) with different date intervals at table creation**
+    It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+
+    ```SQL
+    PARTITION BY RANGE (datekey) (
+        PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
+        PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
+        PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
+    )
+    ```
+
+  </TabItem>
+  <TabItem value="example2" label="with different date intervals">
 
   You can create batches of date partitions with different incremental intervals by specifying different incremental intervals in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
 
     ```SQL
-  CREATE TABLE site_access(
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) 
-  (
-      START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
-      START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
-      START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES(
-      "replication_num" = "3"
-  );
+    CREATE TABLE site_access (
+        datekey DATE,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
+        START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
+        START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id);
     ```
 
-  It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+    It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
     ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-  PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-  PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-  PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-  PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-  PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-  PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-  PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-  PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-  )
+    PARTITION BY RANGE (datekey) (
+        PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
+        PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
+        PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
+        PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
+        PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
+        PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
+        PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
+        PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
+        PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
+    )
     ```
 
-- **Partition a table on an integer-type column at table creation**
+    </TabItem>
+    </Tabs>
+
+- **The partitioning column is of integer type.**
 
   When the data type of the partitioning column is INT, you specify the range of partitions in `START` and `END` and define the incremental value in `EVERY`. Example:
 
   > **NOTE**
   >
-  > The partition column values in **START()** and **END()** need to be wrapped in double quotation marks, while the incremental value in the **EVERY()** does not need to be wrapped in double quotation marks.
+  > The partitioning column values in **START()** and **END()** need to be wrapped in double quotation marks, while the incremental value in the **EVERY()** does not need to be wrapped in double quotation marks.
+
+  <Tabs groupId="batch partitioning(integer)">
+  <TabItem value="example1" label="with the same numerical interval" default>
 
   In the following example, the range of all the partition starts from `1` and ends at `5`, with a partition increment of `1`:
 
     ```SQL
-  CREATE TABLE site_access (
-      datekey INT,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES ("replication_num" = "3");
+    CREATE TABLE site_access (
+        datekey INT,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("1") END ("5") EVERY (1)
+    )
+    DISTRIBUTED BY HASH(site_id);
     ```
 
   It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
     ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-  PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-  PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-  PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-  PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-  PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-  PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-  PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-  PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-  )
+    PARTITION BY RANGE (datekey) (
+        PARTITION p1 VALUES [("1"), ("2")),
+        PARTITION p2 VALUES [("2"), ("3")),
+        PARTITION p3 VALUES [("3"), ("4")),
+        PARTITION p4 VALUES [("4"), ("5"))
+    )
     ```
 
-##### Create multiple partitions in batch after a table is created
+  </TabItem>
+  <TabItem value="example2" label="with different numerical intervals">
 
-  After a table is created, you can use the ALTER TABLE statement to add partitions in. The syntax is similar to that of creating multiple partitions in batch at table creation. You need to configure `START`, `END`, and `EVERY` in the `ADD PARTITIONS` clause.
+  You can create batches of numerical partitions with different incremental intervals by specifying different incremental intervals in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
+
+    ```SQL
+    CREATE TABLE site_access (
+        datekey INT,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("1") END ("10") EVERY (1),
+        START ("10") END ("100") EVERY (10)
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+  </TabItem>
+  </Tabs>
+
+- **Three specific time functions can be used as partitioning columns (supported since v3.3.0).**
+  
+  When explicitly defining the mapping relationship between partitions and the ranges of partition column values, you can use a specific time function to convert the partition column values of timestamps or strings into date values, and then divide the partitions based on the converted date values.
+
+  <Tabs groupId="batch partitioning(timestamp and string)">
+  <TabItem value="example1" label="The partitioning column values are timestamps" default>
 
   ```SQL
-  ALTER TABLE site_access 
-  ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
+  -- A 10-digit timestamp accurate to the second, for example, 1703832553.
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+    )
+  PARTITION BY RANGE(from_unixtime(event_time)) (
+      START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+  )
+  DISTRIBUTED BY HASH(site_id);
+  -- A 13-digit timestamp accurate to the milliseconds, for example, 1703832553219.
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  PARTITION BY RANGE(from_unixtime_ms(event_time))(
+      START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+  )
+  DISTRIBUTED BY HASH(site_id);
   ```
+
+  </TabItem>
+  <TabItem value="example2" label="The partitioning column values are strings">
+
+    ```SQL
+    CREATE TABLE site_access (
+         event_time  varchar(100),
+         site_id INT,
+         city_code SMALLINT,
+         user_name VARCHAR(32),
+         pv BIGINT DEFAULT '0'
+  )
+    PARTITION BY RANGE(str2date(event_time, '%Y-%m-%d'))(
+        START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+  </TabItem>
+  </Tabs>
 
 #### List partitioning (since v3.1)
 
-[List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on enum values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data of various cities belonging to one country.
+[List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on enum values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data for various cities belonging to one country.
 
 StarRocks stores data in the corresponding partitions based on the explicit mapping of the predefined value list for each partition.
 
@@ -386,7 +549,7 @@ The following statement deletes partition `p1` from table `site_access`.
 
 > **NOTE**
 >
-> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command to restore the partition and its data.
+> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) command to restore the partition and its data.
 
 ```SQL
 ALTER TABLE site_access
@@ -413,7 +576,7 @@ SHOW PARTITIONS FROM site_access;
 
 ### Random bucketing (since v3.1)
 
-StarRocks distributes the data in a partition randomly across all buckets. It is suitable for scenarios with small data sizes and relatively low requirement for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets.
+StarRocks distributes the data in a partition randomly across all buckets. It is suitable for scenarios with small data sizes and relatively low requirements for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets.
 
 However, note that if you query massive amounts of data and frequently use certain columns as filter conditions, the query performance provided by random bucketing may not be optimal. In such scenarios, it is recommended to use [hash bucketing](#hash-bucketing). When these columns are used as filter conditions for queries, only data in a small number of buckets that the query hits need to be scanned and computed, which can significantly improve query performance.
 
@@ -462,7 +625,7 @@ StarRocks can use hash bucketing to subdivide data in a partition into buckets b
 
 #### How to choose the bucketing columns
 
-We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
+We recommend that you choose the column that satisfies the following two requirements as the bucketing column.
 
 - high cardinality column such as ID
 - column that often used in a filter for queries
@@ -570,7 +733,7 @@ Buckets reflect how data files are actually organized in StarRocks.
   :::warning
 
   - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
-  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
 
   :::
 
@@ -683,7 +846,7 @@ Buckets reflect how data files are actually organized in StarRocks.
   :::warning
 
   - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
-  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
 
   :::
 
@@ -755,7 +918,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 #### View the number of buckets
 
-After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. As for a table configured with hash bucketing, the number of buckets for each partitions is fixed.
+After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
 
 :::info
 
@@ -768,7 +931,7 @@ After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-s
 
 > **NOTICE**
 >
-> StarRocks's [shared-data mode](../deployment/shared_data/s3.md) currently does not support this feature.
+> StarRocks's shared-data mode currently does not support this feature.
 
 As query patterns and data volume evolve in business scenarios, the configurations specified at table creation, such as the bucketing method, the number of buckets, and the sort key, may no longer be suitable for the new business scenario and even may cause query performance to decrease. At this point, you can use `ALTER TABLE` to modify the bucketing method, the number of buckets, and the sort key to optimize data distribution. For example:
 

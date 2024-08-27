@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # microseconds_sub
 
-## 功能
+
 
 从 `expr1` 中减去指定的时间间隔，单位为微秒。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # atan
 
-## Description
+
 
 Computes the arc tangent of the argument.
 

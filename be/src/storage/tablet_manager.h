@@ -61,6 +61,7 @@ namespace starrocks {
 class Tablet;
 class DataDir;
 struct TabletBasicInfo;
+class MetadataCache;
 
 // RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
 class RowsetsAcqRel;
@@ -79,7 +80,7 @@ private:
 };
 
 using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>, RowsetsAcqRelPtr>;
-using TabletAndScore = std::pair<TabletSharedPtr, double>;
+using TabletAndScore = std::pair<int64_t, double>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -266,6 +267,10 @@ private:
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
     int64_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
+
+    // make sure use this function to add shutdown tablets
+    // caller should acquire _shutdown_tablets_lock
+    void _add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info);
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);

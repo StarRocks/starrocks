@@ -29,4 +29,8 @@ public class AddBackendClause extends BackendClause {
         super(hostPorts, pos);
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddBackendClause(this, context);
+    }
 }

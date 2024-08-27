@@ -11,6 +11,10 @@
 #   image: copy the artifacts from a artifact docker image.
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
+# The default run_as user when starting the container
+ARG RUN_AS_USER=root
+# The precreated non-privileged user account, the owner of the starrocks assets
+ARG USER=starrocks
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-centos7:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
@@ -27,7 +31,7 @@ FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
 FROM registry.access.redhat.com/ubi8/ubi:8.7
 ARG STARROCKS_ROOT=/opt/starrocks
 
-RUN yum install -y java-11-openjdk-devel tzdata openssl curl vim ca-certificates fontconfig gzip tar less hostname procps-ng lsof && \
+RUN yum install -y java-11-openjdk-devel tzdata openssl curl vim ca-certificates fontconfig gzip tar less hostname procps-ng lsof nc && \
     rpm -ivh https://repo.mysql.com/mysql80-community-release-el8-7.noarch.rpm && \
     yum -y install mysql-community-client --nogpgcheck && \
     yum remove -y mysql80-community-release
@@ -38,21 +42,23 @@ RUN touch /.dockerenv
 WORKDIR $STARROCKS_ROOT
 
 # Run as starrocks user
-ARG USER=starrocks
+ARG USER
+ARG RUN_AS_USER
 ARG GROUP=starrocks
+
 RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
              --shell /usr/sbin/nologin $USER && \
     chown -R $USER:$GROUP $STARROCKS_ROOT
 USER $USER
 
 # Copy all artifacts to the runtime container image
-COPY --from=artifacts --chown=starrocks:starrocks /release/fe_artifacts/ $STARROCKS_ROOT/
+COPY --from=artifacts --chown=$USER:$GROUP /release/fe_artifacts/ $STARROCKS_ROOT/
 
 # Copy fe k8s scripts to the runtime container image
-COPY --chown=starrocks:starrocks docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
+COPY --chown=$USER:$GROUP docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
 RUN mkdir -p /opt/starrocks/fe/meta
 
 # run as root by default
-USER root
+USER $RUN_AS_USER

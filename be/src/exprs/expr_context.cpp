@@ -35,6 +35,7 @@
 #include "exprs/expr_context.h"
 
 #include <fmt/format.h>
+#include <storage/chunk_helper.h>
 
 #include <memory>
 #include <sstream>
@@ -163,6 +164,14 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(!_closed);
+    ChunkPtr dummy_chunk;
+    // this may happen if expr is constant, which means it doesn't need any input chunk
+    // but some expr can not handle situation that input chunk is nullptr or empty correctly
+    // so we create chunk with one column and one raw
+    if (chunk == nullptr) {
+        dummy_chunk = ChunkHelper::createDummyChunk();
+        chunk = dummy_chunk.get();
+    }
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();
@@ -177,7 +186,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
             ASSIGN_OR_RETURN(ptr, e->evaluate_with_filter(this, chunk, filter));
         }
         DCHECK(ptr != nullptr);
-        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
+        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant() && (dummy_chunk.get() == nullptr)) {
             ptr->resize(chunk->num_rows());
         }
         return ptr;
@@ -186,8 +195,37 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     }
 }
 
+bool ExprContext::ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) {
+    return _root->ngram_bloom_filter(this, bf, reader_options);
+}
+
+bool ExprContext::support_ngram_bloom_filter() {
+    return _root->support_ngram_bloom_filter(this);
+}
+
+bool ExprContext::is_index_only_filter() const {
+    return _root->is_index_only_filter();
+}
+
 bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
+}
+
+Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
+    if (_runtime_state == nullptr || !_runtime_state->is_jit_enabled()) {
+        return Status::OK();
+    }
+    bool replaced = false;
+    auto st = _root->replace_compilable_exprs(&_root, pool, _runtime_state, replaced);
+    if (!st.ok()) {
+        LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (root())->debug_string();
+        // Fall back to the non-JIT path.
+        return Status::OK();
+    }
+    if (replaced) { // only prepare jit_expr
+        WARN_IF_ERROR(_root->prepare_jit_expr(_runtime_state, this), "prepare rewritten expr failed");
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

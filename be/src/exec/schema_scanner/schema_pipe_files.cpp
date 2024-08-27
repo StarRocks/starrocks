@@ -24,30 +24,32 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablePipeFiles::_s_columns[] = {
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PIPE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PIPE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PIPE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PIPE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"FILE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"FILE_VERSION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"FILE_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
-        {"FILE_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LAST_MODIFIED", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"FILE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FILE_VERSION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FILE_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"FILE_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LAST_MODIFIED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"LOAD_STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STAGED_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"START_LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"FINISH_LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LOAD_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STAGED_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"START_LOAD_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FINISH_LOAD_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ERROR_COUNT", TYPE_BIGINT, sizeof(int64_t), false},
-        {"ERROR_LINE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ERROR_COUNT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"ERROR_LINE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaTablePipeFiles::SchemaTablePipeFiles()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaTablePipeFiles::start(RuntimeState* state) {
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     return SchemaScanner::start(state);
 }
 
@@ -58,7 +60,7 @@ Status SchemaTablePipeFiles::_list_pipe_files() {
     if (_param->current_user_ident) {
         params.__set_user_ident(*_param->current_user_ident);
     }
-    return SchemaHelper::list_pipe_files(*(_param->ip), _param->port, params, &_pipe_files_result);
+    return SchemaHelper::list_pipe_files(_ss_state, params, &_pipe_files_result);
 }
 
 Status SchemaTablePipeFiles::get_next(ChunkPtr* chunk, bool* eos) {

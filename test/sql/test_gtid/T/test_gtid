@@ -1,0 +1,167 @@
+-- name: test_query_by_timestamp
+create table t(k int);
+select * from t before '2024-01-01 00:00:00';
+insert into t values(1);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t1=date '+%Y-%m-%d %H:%M:%S';
+select * from t before '${t1[1]}';
+select * from t before '2024-01-01 00:00:00';
+select sleep(1);
+
+insert into t values(2);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t2=date '+%Y-%m-%d %H:%M:%S';
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select sleep(1);
+
+insert into t values(3);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t3=date '+%Y-%m-%d %H:%M:%S';
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select * from t before '${t3[1]}';
+select * from t before '2024-01-01 00:00:00';
+
+-- name: test_query_by_timestamp_pk
+create table t(k int) primary key(k) distributed by hash(k) buckets 3;
+select * from t before '2024-01-01 00:00:00';
+insert into t values(1);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t1=date '+%Y-%m-%d %H:%M:%S';
+select * from t before '${t1[1]}';
+select * from t before '2024-01-01 00:00:00';
+select sleep(1);
+
+insert into t values(2);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t2=date '+%Y-%m-%d %H:%M:%S';
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select sleep(1);
+
+insert into t values(3);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t3=date '+%Y-%m-%d %H:%M:%S';
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select * from t before '${t3[1]}';
+
+-- name: test_query_by_timestamp_schema_change
+create table t(k int);
+select * from t before '2024-01-01 00:00:00';
+insert into t values(1);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t1=date '+%Y-%m-%d %H:%M:%S';
+select * from t before '${t1[1]}';
+select sleep(1);
+
+insert into t values(2);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t2=date '+%Y-%m-%d %H:%M:%S';
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select sleep(1);
+
+alter table t add column (v INTEGER DEFAULT "100");
+function: wait_alter_table_finish()
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+
+-- name: test_query_by_timestamp_schema_change_pk
+create table t(k int) primary key(k) distributed by hash(k) buckets 3;
+insert into t values(1);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t1=date '+%Y-%m-%d %H:%M:%S';
+select * from t before '${t1[1]}';
+select sleep(1);
+
+insert into t values(2);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t2=date '+%Y-%m-%d %H:%M:%S';
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select sleep(1);
+
+alter table t add column (v INTEGER DEFAULT "100");
+function: wait_alter_table_finish()
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+
+-- name: test_query_after_compact
+create table t(k int);
+insert into t values(1);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t1=date '+%Y-%m-%d %H:%M:%S';
+insert into t values(2);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t2=date '+%Y-%m-%d %H:%M:%S';
+insert into t values(3);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t3=date '+%Y-%m-%d %H:%M:%S';
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select * from t before '${t3[1]}';
+select * from t before '2024-01-01 00:00:00';
+
+alter table t compact;
+select sleep(2);
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select * from t before '${t3[1]}';
+select * from t before '2024-01-01 00:00:00';
+
+-- name: test_query_after_compact_pk
+create table t(k int) primary key(k) distributed by hash(k) buckets 3 properties('replication_num'='1');
+insert into t values(1);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t1=date '+%Y-%m-%d %H:%M:%S';
+
+insert into t values(2);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t2=date '+%Y-%m-%d %H:%M:%S';
+
+insert into t values(3);
+select sleep(1);
+[UC]shell: export TZ=Asia/Shanghai 
+[UC]shell: t3=date '+%Y-%m-%d %H:%M:%S';
+
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select * from t before '${t3[1]}';
+select * from t before '2024-01-01 00:00:00';
+
+alter table t base compact;
+select sleep(2);
+select * from t;
+select * from t before '${t1[1]}';
+select * from t before '${t2[1]}';
+select * from t before '${t3[1]}';
+select * from t before '2024-01-01 00:00:00';
+

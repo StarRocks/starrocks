@@ -36,10 +36,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 
 public class SharedNothingStorageVolumeMgrTest {
     @Mocked

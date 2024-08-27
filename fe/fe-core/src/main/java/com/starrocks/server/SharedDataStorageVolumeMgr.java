@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.base.Strings;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.catalog.Database;
@@ -21,16 +22,19 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
-import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,6 +43,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
@@ -115,7 +121,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                throw new DdlException("Default storage volume not exists, it should be created first");
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -129,6 +135,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     // In replay phase, the check of storage volume existence can be skipped.
     // Because it has been checked when creating db.
     private boolean bindDbToStorageVolume(String svId, long dbId, boolean isReplay) {
+        if (svId == null) {
+            return false;
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
                 return false;
@@ -179,24 +188,15 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (dbStorageVolumeId != null) {
                 return getStorageVolume(dbStorageVolumeId);
             } else {
-                sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+                sv = getDefaultStorageVolume();
                 if (sv == null) {
-                    if (Config.enable_load_volume_from_conf) {
-                        LOG.error("Failed to get builtin storage volume, svName: {}, dbId: {}, current stack trace: {}",
-                                svName, dbId, LogUtil.getCurrentStackTrace());
-                        throw new DdlException(String.format("Failed to get builtin storage volume, svName: %s, dbId: %d",
-                                svName, dbId));
-                    } else {
-                        throw new DdlException("Cannot find a suitable storage volume. " +
-                                "Try setting 'enable_load_volume_from_conf' to true " +
-                                "and ensure the related storage volume settings are correct");
-                    }
+                    throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                throw new DdlException("Default storage volume not exists, it should be created first");
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -226,6 +226,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     // In replay phase, the check of storage volume existence can be skipped.
     // Because it has been checked when creating table.
     private boolean bindTableToStorageVolume(String svId, long tableId, boolean isReplay) {
+        if (svId == null) {
+            return false;
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) &&
                     !storageVolumeToTables.containsKey(svId) &&
@@ -288,13 +291,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     public void validateStorageVolumeConfig() throws InvalidConfException {
         switch (Config.cloud_native_storage_type.toLowerCase()) {
             case "s3":
-                String[] bucketAndPrefix = getBucketAndPrefix();
-                String bucket = bucketAndPrefix[0];
-                if (bucket.isEmpty()) {
-                    throw new InvalidConfException(
-                            String.format("The configuration item \"aws_s3_path = %s\" is invalid, s3 bucket is empty.",
-                                    Config.aws_s3_path));
-                }
+                // validate aws_s3_path configuration.
+                normalizeConfigPath(Config.aws_s3_path, "s3", "Config.aws_s3_path", true);
                 if (Config.aws_s3_region.isEmpty() && Config.aws_s3_endpoint.isEmpty()) {
                     throw new InvalidConfException(
                             "Both configuration item \"aws_s3_region\" and \"aws_s3_endpoint\" are empty");
@@ -305,17 +303,15 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 }
                 break;
             case "hdfs":
-                if (Config.cloud_native_hdfs_url.isEmpty()) {
-                    throw new InvalidConfException("The configuration item \"cloud_native_hdfs_url\" is empty.");
-                }
+                // validate cloud_native_hdfs_url configuration
+                normalizeConfigPath(Config.cloud_native_hdfs_url, "hdfs", "Config.cloud_native_hdfs_url", false);
                 break;
             case "azblob":
                 if (Config.azure_blob_endpoint.isEmpty()) {
                     throw new InvalidConfException("The configuration item \"azure_blob_endpoint\" is empty.");
                 }
-                if (Config.azure_blob_path.isEmpty()) {
-                    throw new InvalidConfException("The configuration item \"azure_blob_path\" is empty.");
-                }
+                // validate azure_blob_path configuration
+                normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
                 break;
             default:
                 throw new InvalidConfException(String.format(
@@ -329,7 +325,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<List<Long>> bindings = new ArrayList<>();
         List<Long> tableBindings = new ArrayList<>();
         List<Long> dbBindings = new ArrayList<>();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin().stream()
+                .filter(dbid -> dbid > NEXT_ID_INIT_VALUE).collect(Collectors.toList());
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();
@@ -355,14 +352,35 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         return bindings;
     }
 
-    private String[] getBucketAndPrefix() {
-        int index = Config.aws_s3_path.indexOf('/');
-        if (index < 0) {
-            return new String[] {Config.aws_s3_path, ""};
+    private static URI normalizeConfigPath(String uriStr, String defaultScheme, String configNameInErrMsg, boolean matchScheme)
+            throws InvalidConfException {
+        try {
+            URI uri = new URI(uriStr);
+            if (!uri.isAbsolute()) {
+                uri = new URI(defaultScheme + "://" + uriStr);
+            }
+            if (Strings.isNullOrEmpty(uri.getAuthority()) || uri.getPort() != -1) {
+                // no bucket or bucket name contains ':'
+                throw new InvalidConfException("");
+            }
+            if (matchScheme && !uri.getScheme().equals(defaultScheme)) {
+                throw new InvalidConfException("");
+            }
+            return uri;
+        } catch (URISyntaxException | InvalidConfException err) {
+            throw new InvalidConfException(
+                    String.format("The configuration item \"%s = %s\" is invalid.", configNameInErrMsg, uriStr));
         }
+    }
 
-        return new String[] {Config.aws_s3_path.substring(0, index),
-                Config.aws_s3_path.substring(index + 1)};
+    private static String[] getBucketAndPrefix() throws InvalidConfException {
+        URI uri = normalizeConfigPath(Config.aws_s3_path, "s3", "Config.aws_s3_path", true);
+        String path = uri.getPath();
+        if (path.startsWith("/")) {
+            // remove leading '/' for backwards compatibility
+            path = path.substring(1);
+        }
+        return new String[] {uri.getAuthority(), path};
     }
 
     private String getAwsCredentialType() {
@@ -391,17 +409,22 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         return null;
     }
 
-    private List<String> parseLocationsFromConfig() {
+    public static List<String> parseLocationsFromConfig() throws InvalidConfException {
         List<String> locations = new ArrayList<>();
+        URI uri;
         switch (Config.cloud_native_storage_type.toLowerCase()) {
             case "s3":
-                locations.add("s3://" + Config.aws_s3_path);
+                uri = normalizeConfigPath(Config.aws_s3_path, "s3", "Config.aws_s3_path", true);
+                locations.add(uri.toString());
                 break;
             case "hdfs":
-                locations.add(Config.cloud_native_hdfs_url);
+                // no need to validate the scheme, it can be hdfs compatible filesystem with customer defined scheme such as: viewfs, webhdfs, ...
+                uri = normalizeConfigPath(Config.cloud_native_hdfs_url, "hdfs", "Config.cloud_native_hdfs_url", false);
+                locations.add(uri.toString());
                 break;
             case "azblob":
-                locations.add("azblob://" + Config.azure_blob_path);
+                uri = normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
+                locations.add(uri.toString());
                 break;
             default:
                 return locations;
@@ -438,7 +461,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         return params;
     }
 
-    private String parseBuiltinFsKeyFromConfig() {
+    public static String parseBuiltinFsKeyFromConfig() throws InvalidConfException {
         switch (Config.cloud_native_storage_type.toLowerCase()) {
             case "s3":
                 String[] bucketAndPrefix = getBucketAndPrefix();

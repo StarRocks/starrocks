@@ -24,7 +24,7 @@ create table ice_hadoop${uuid0}.ice_hadoop_db2.test (
 
 select SCHEMA_NAME from ice_hadoop${uuid0}.information_schema.schemata;
 
-select TABLE_SCHEMA, TABLE_NAME, ENGINE from ice_hadoop${uuid0}.information_schema.tables;
+select TABLE_SCHEMA, TABLE_NAME from ice_hadoop${uuid0}.information_schema.tables;
 
 select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from ice_hadoop${uuid0}.information_schema.columns;
 

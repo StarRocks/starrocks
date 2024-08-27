@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 5
 ---
 
 # Paimon catalog
@@ -10,7 +11,7 @@ A Paimon catalog is a kind of external catalog that enables you to query data fr
 
 Also, you can directly transform and load data from Paimon by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Paimon catalogs.
 
-To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster must be able to access the storage system and metastore of your Paimon cluster. StarRocks supports the following storage systems and metastores:
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or or other S3-compatible storage system (for example, MinIO)
 - Metastore like your file system or Hive metastore
@@ -35,16 +36,16 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
-- When you query Paimon data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
-  - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
-  - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE or CN processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE or the **cn/conf/hadoop_env.sh** file of each CN. After you set the username in these files, restart each FE and each BE or CN to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- When you query Paimon data, the FEs and BEs or CNs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
+  - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
+  - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
 
 > **NOTE**
 >
@@ -54,8 +55,8 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
 If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
 
-- Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
-- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
+- Run the `kinit -kt keytab_path principal` command on each FE and each BE or CN to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
+- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE or the **$CN_HOME/conf/cn.conf** file of each CN. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
 
 ## Create a Paimon catalog
 
@@ -121,7 +122,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
@@ -129,7 +130,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.iam_role_arn" = "<iam_role_arn>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
@@ -138,7 +139,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
   "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -147,7 +148,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
 | aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. |
-| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.endpoint             | Yes      | The endpoint that is used to connect to your AWS S3 bucket. For example, `https://s3.us-west-2.amazonaws.com`. |
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
@@ -375,7 +376,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "paimon.catalog.type" = "filesystem",
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -390,7 +391,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -406,7 +407,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 

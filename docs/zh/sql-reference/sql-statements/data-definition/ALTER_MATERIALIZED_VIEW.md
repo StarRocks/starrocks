@@ -1,4 +1,5 @@
 ---
+keywords: ['xiugai'] 
 displayed_sidebar: "Chinese"
 ---
 
@@ -39,7 +40,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
     { RENAME [db_name.]<new_mv_name> 
     | REFRESH <new_refresh_scheme_desc> 
     | ACTIVE | INACTIVE 
-    | SWAP WITH [db_name.]<mv2_name>
+    | SWAP WITH <mv2_name>
     | SET ( "<key>" = "<value>"[,...]) }
 ```
 
@@ -70,13 +71,10 @@ ALTER MATERIALIZED VIEW lo_mv1 RENAME lo_mv1_new_name;
 ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
 ```
 
-示例三：修改物化视图属性
+示例三：修改物化视图属性，调整物化视图刷新 Timeout 为一小时（默认）。
 
 ```SQL
--- 修改 mv1 的 query_timeout 为 40000 秒。
-ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "40000");
--- 修改 mv1 的 mv_rewrite_staleness_second 为 600 秒。
-ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
+ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "3600");
 ```
 
 示例四：修改物化视图状态为 Active。
@@ -89,4 +87,31 @@ ALTER MATERIALIZED VIEW order_mv ACTIVE;
 
 ```SQL
 ALTER MATERIALIZED VIEW order_mv SWAP WITH order_mv1;
+```
+
+示例六：为物化视图刷新开启 Profile（默认开启）。
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("session.enable_profile" = "true");
+```
+
+示例七：为物化视图刷新开启中间结果落盘（自 v3.1 起默认开启），并设置落盘模式为 `force`。
+
+```SQL
+-- 为物化视图刷新开启中间结果落盘。
+ALTER MATERIALIZED VIEW mv1 SET ("session.enable_spill" = "true");
+-- 设置落盘模式为 `force`。
+ALTER MATERIALIZED VIEW mv1 SET ("session.spill_mode" = "force");
+```
+
+示例八：调整 Optimizer Timeout 为 30 秒（自 v3.3 起为默认值），适用于物化视图查询包含外表或多个 Join。
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("session.new_planner_optimize_timeout" = "30000");
+```
+
+示例九：调整物化视图查询改写 Staleness 时间为 600 秒。
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
 ```

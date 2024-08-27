@@ -43,22 +43,24 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        <jprotobuf.version>2.4.12</jprotobuf.version>
+        <jprotobuf.version>2.4.23</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
-        <spark.version>3.4.1</spark.version>
+        <spark.version>3.4.3</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>3.3.6</hadoop.version>
+        <parquet.version>1.14.0</parquet.version>
+        <hadoop.version>3.4.0</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
-        <hudi.version>0.12.2</hudi.version>
-        <hive-apache.version>3.1.2-13</hive-apache.version>
+        <hudi.version>0.15.0</hudi.version>
+        <hive-apache.version>3.1.2-22</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-        <odps.version>0.45.5-public</odps.version>
+        <odps.version>0.48.7-public</odps.version>
+        <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
+        <kafka-clients.version>3.4.0</kafka-clients.version>
     </properties>
 
     <profiles>
@@ -111,43 +113,38 @@ under the License.
             </activation>
 
             <repositories>
+                <!-- keep the central repository the first one among all repositories -->
+                <repository>
+                    <id>central</id>
+                    <name>central maven repo https</name>
+                    <url>https://repo.maven.apache.org/maven2/</url>
+                </repository>
+                <!-- for java-cup -->
+                <repository>
+                    <id>cloudera-public</id>
+                    <url>https://repository.cloudera.com/repository/public/</url>
+                </repository>
+                <repository>
+                    <id>cloudera</id>
+                    <url>https://repository.cloudera.com/repository/cloudera-repos/</url>
+                </repository>
                 <!-- for leveldbjni-all-1.8.jar,commons-crypto-1.0.0.jar on aarch64-->
                 <repository>
                     <id>kunpeng</id>
                     <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
                 </repository>
 
-                <repository>
-                    <id>central</id>
-                    <name>central maven repo https</name>
-                    <url>https://repo.maven.apache.org/maven2</url>
-                </repository>
-
-                <!-- for java-cup -->
-                <repository>
-                    <id>cloudera-public</id>
-                    <url>https://repository.cloudera.com/artifactory/public/</url>
-                </repository>
-                <repository>
-                    <id>cloudera</id>
-                    <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-                </repository>
-                <!-- for bdb je -->
-                <repository>
-                    <id>oracleReleases</id>
-                    <url>https://download.oracle.com/maven</url>
-                </repository>
             </repositories>
 
             <pluginRepositories>
                 <pluginRepository>
-                    <id>spring-plugins</id>
-                    <url>https://repo.spring.io/plugins-release/</url>
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2/</url>
                 </pluginRepository>
                 <!-- for cup-maven-plugin -->
                 <pluginRepository>
                     <id>cloudera-public</id>
-                    <url>https://repository.cloudera.com/artifactory/public/</url>
+                    <url>https://repository.cloudera.com/repository/public/</url>
                 </pluginRepository>
             </pluginRepositories>
         </profile>
@@ -215,11 +212,18 @@ under the License.
                 <version>2.3</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
+            <!-- https://mvnrepository.com/artifact/org.apache.kudu/kudu-client -->
             <dependency>
-                <groupId>commons-net</groupId>
-                <artifactId>commons-net</artifactId>
-                <version>3.9.0</version>
+                <groupId>org.apache.kudu</groupId>
+                <artifactId>kudu-client</artifactId>
+                <version>${kudu.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
+            <dependency>
+                <groupId>com.github.seancfoley</groupId>
+                <artifactId>ipaddress</artifactId>
+                <version>5.4.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -295,7 +299,7 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starrocks-bdb-je</artifactId>
-                <version>18.3.16</version>
+                <version>18.3.18</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -319,7 +323,17 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf</artifactId>
                 <version>${jprotobuf.version}</version>
+            </dependency>
+
+            <!--Only used to compile protobuf-->
+            <!--jar-with-dependencies contains CVE problems, so set scope with provided to download it.-->
+            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
+            <dependency>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf</artifactId>
+                <version>${jprotobuf.version}</version>
                 <classifier>jar-with-dependencies</classifier>
+                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
@@ -332,7 +346,7 @@ under the License.
             <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
-                <version>2.7</version>
+                <version>2.16.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
@@ -367,7 +381,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.13.0</version>
+                <version>0.20.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->
@@ -391,6 +405,12 @@ under the License.
                 <version>${log4j.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-layout-template-json</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-1.2-api -->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
@@ -402,7 +422,8 @@ under the License.
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
-                <version>4.1.61.Final</version>
+                <!--same with hadoop 3.4.0-->
+                <version>4.1.100.Final</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
@@ -447,11 +468,17 @@ under the License.
                 <version>6.2.1</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka-clients</artifactId>
+                <version>${kafka-clients.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.jboss.xnio/xnio-nio -->
             <dependency>
                 <groupId>org.jboss.xnio</groupId>
                 <artifactId>xnio-nio</artifactId>
-                <version>3.8.10.Final</version>
+                <version>3.8.16.Final</version>
             </dependency>
 
             <!-- support jdk9 -->
@@ -532,6 +559,16 @@ under the License.
                 <groupId>io.trino.hive</groupId>
                 <artifactId>hive-apache</artifactId>
                 <version>${hive-apache.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.avro</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
@@ -559,14 +596,6 @@ under the License.
                 </exclusions>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
-            <dependency>
-                <groupId>org.apache.parquet</groupId>
-                <artifactId>parquet-column</artifactId>
-                <version>${parquet.version}</version>
-                <scope>provided</scope>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
             <dependency>
                 <groupId>org.apache.parquet</groupId>
@@ -579,6 +608,22 @@ under the License.
             <dependency>
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-common</artifactId>
+                <version>${parquet.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-column</artifactId>
+                <version>${parquet.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-avro -->
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-avro</artifactId>
                 <version>${parquet.version}</version>
                 <scope>provided</scope>
             </dependency>
@@ -631,10 +676,29 @@ under the License.
                 </exclusions>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-client-api</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-client-runtime</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-aliyun</artifactId>
                 <version>${hadoop.version}</version>
             </dependency>
 
@@ -688,6 +752,13 @@ under the License.
                 <version>${hudi.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-io -->
+            <dependency>
+                <groupId>org.apache.hudi</groupId>
+                <artifactId>hudi-io</artifactId>
+                <version>${hudi.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
             <dependency>
                 <groupId>org.apache.hudi</groupId>
@@ -714,7 +785,36 @@ under the License.
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
-                <version>42.4.3</version>
+                <version>42.4.4</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
+            <!-- we need clickhouse driver for jdbc connector -->
+            <dependency>
+                <groupId>com.clickhouse</groupId>
+                <artifactId>clickhouse-jdbc</artifactId>
+                <version>0.4.6</version>
+            </dependency>
+			
+			<!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
+            <dependency>
+                <groupId>com.oracle.database.jdbc</groupId>
+                <artifactId>ojdbc10</artifactId>
+                <version>19.18.0.0</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.oracle.database.nls/orai18n -->
+            <dependency>
+                <groupId>com.oracle.database.nls</groupId>
+                <artifactId>orai18n</artifactId>
+                <version>19.18.0.0</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc/12.4.2.jre11 -->
+            <dependency>
+                <groupId>com.microsoft.sqlserver</groupId>
+                <artifactId>mssql-jdbc</artifactId>
+                <version>12.4.2.jre11</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->

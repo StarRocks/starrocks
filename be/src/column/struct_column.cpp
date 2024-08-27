@@ -353,7 +353,7 @@ int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return xor_checksum;
 }
 
-void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
     for (size_t i = 0; i < _fields.size(); ++i) {

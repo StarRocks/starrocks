@@ -70,10 +70,12 @@ static Status get_orc_type_from_scalar_type(const orc::Type* typ, TypeDescriptor
         break;
 
     case orc::TypeKind::STRING:
+        // orc STRING type's length is 0, so we use VARCHAR(MAX_VARCHAR_LENGTH).
         *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         break;
 
     case orc::TypeKind::BINARY:
+        // orc BINARY type's length is 0, so we use VARCHAR(MAX_VARCHAR_LENGTH).
         *desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         break;
 

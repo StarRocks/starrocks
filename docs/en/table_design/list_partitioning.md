@@ -10,7 +10,7 @@ Since v3.1, StarRocks supports list partitioning. Data is partitioned based on a
 
 You need to explicitly specify the column values list in each partition. These values do not need to be continuous, unlike the continuous time or numeric range required in Range Partitioning. During data loading, StarRocks will store the data in the corresponding partition based on the mapping between the data's partitioning column values and the predefined column values for each partition.
 
-![list_partitioning](../assets/list_partitioning.png)
+![list_partitioning](../_assets/list_partitioning.png)
 
 List partitioning is suitable for storing data whose columns contain a small number of enum values, and you often query and manage data based on these enum values. For example, columns represent geographical locations, states, and categories. Each value in a column represents an independent category. By partitioning data based on enum values, you can improve query performance and facilitate data management.
 
@@ -24,7 +24,7 @@ The main difference between list partitioning and expression partitioning (recom
 
 | Partitioning method                                      | **List partitioning**                                        | **Expression partitioning**                                  |
 | -------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Syntax                                                   | `PARTITION BY LIST (partition_columns)（    PARTITION <partition_name> VALUES IN (value_list)    [, ...] )` | `PARTITION BY <partition_columns>`                           |
+| Syntax                                                   | `PARTITION BY LIST (partition_columns)(    PARTITION <partition_name> VALUES IN (value_list)    [, ...] )` | `PARTITION BY <partition_columns>`                           |
 | Multiple values for each partitioning column in a partition | Supported. A partition can store data with different values in each partitioning column. In the following example, when the loaded data contains values `Los Angeles`, `San Francisco`, and `San Diego` in the `city` column, all the data is stored in one partition. `pCalifornia`.`PARTITION BY LIST (city) (    PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego")    [, ...] )` | Not supported. A partition stores data with the same value in  the partitioning column For example, the expression `PARTITION BY (city)` is used in expression partitioning. When the loaded data contains values `Los Angeles`, `San Francisco`, and `San Diego` in the `city` column, StarRocks will automatically create three partitions `pLosAngeles`, `pSanFrancisco`, and `pSanDiego`. The three partitions respectively store data with values `Los Angeles,` `San Francisco`, and `San Diego` in the `city` column. |
 | Create partitions before data loading                    | Supported. Partitions need to be created at table creation.  | No need to do so. Partitions can be automatically created during data loading. |
 | Automatically create List partitions during data loading | Not supported. If a partition corresponding to the data does not exist during data loading, an error is returned. | Supported. If a partition corresponding to the data does not exist during data loading, StarRocks automatically creates the partition to store the data. Each partition can only contain data with the same value for the partitioning column. |
@@ -35,7 +35,7 @@ The main difference between list partitioning and expression partitioning (recom
 ### Syntax
 
 ```sql
-PARTITION BY LIST (partition_columns)（
+PARTITION BY LIST (partition_columns) (
     PARTITION <partition_name> VALUES IN (value_list)
     [, ...]
 )
@@ -54,7 +54,7 @@ value_item ::=
 
 | **Parameters**      | **Parameters** | **Description**                                              |
 | ------------------- | -------------- | ------------------------------------------------------------ |
-| `partition_columns` | YES            | the ames of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partitioning column allows `NULL` values. |
+| `partition_columns` | YES            | the ames of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partitioning column does not allow `NULL` values. |
 | `partition_name`    | YES            | Partition name. It is recommended to set appropriate partition names based on the business scenario to differentiate the data in different partitions. |
 | `value_list`        | YES            | A list of partitioning column values in a partition.            |
 
@@ -108,8 +108,8 @@ DISTRIBUTED BY HASH(`id`);
 
 ## Limits
 
-- List partitioning does support dynamic partitoning and creating multiple partitions at a time.
-- Currently, StarRocks's [shared-data mode](../deployment/shared_data/s3.md) does not support this feature.
+- List partitioning does support dynamic partitioning and creating multiple partitions at a time.
+- Currently, StarRocks's shared-data mode does not support this feature.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` statement is used to delete a partition created by using list partitioning, data in the partition is directly removed and cannot be recovered.
-- Currently you cannot [backup and restore](../administration/Backup_and_restore.md) partitions created by the list partitioning.
+- Currently you cannot [backup and restore](../administration/management/management.mdx) partitions created by the list partitioning.
 - Currently, StarRocks does not support creating [asynchronous materialized views](../using_starrocks/Materialized_view.md) with base tables created with the list partitioning strategy.

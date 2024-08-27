@@ -20,11 +20,11 @@ import com.starrocks.connector.PartitionInfo;
 public class Partition implements PartitionInfo {
 
     private final String partitionName;
-    private final long version;
+    private final long lastUpdateTime;
 
-    public Partition(String name, long version) {
+    public Partition(String name, long lastUpdateTime) {
         this.partitionName = name;
-        this.version = version;
+        this.lastUpdateTime = lastUpdateTime;
     }
 
     public String getPartitionName() {
@@ -33,14 +33,14 @@ public class Partition implements PartitionInfo {
 
     @Override
     public long getModifiedTime() {
-        return version;
+        return lastUpdateTime;
     }
 
     @Override
     public String toString() {
         return "PaimonPartitionInfo{" +
                 "partitionName='" + partitionName + '\'' +
-                ", version=" + version +
+                ", lastUpdateTime=" + lastUpdateTime +
                 '}';
     }
 }

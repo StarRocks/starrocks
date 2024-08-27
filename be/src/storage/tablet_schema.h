@@ -162,7 +162,18 @@ public:
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
-    const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
+    const TabletColumn& subcolumn(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            throw std::out_of_range("Index i is out of range");
+        }
+        return _extra_fields->sub_columns[i];
+    }
+    const TabletColumn* subcolumn_ptr(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            return nullptr;
+        }
+        return &(_extra_fields->sub_columns[i]);
+    }
 
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
@@ -179,6 +190,8 @@ public:
         }
         return mem_usage;
     }
+
+    bool is_support_checksum() const;
 
 private:
     inline static const std::string kEmptyDefaultValue;
@@ -237,15 +250,18 @@ class TabletIndex;
 class TabletSchema {
 public:
     using SchemaId = int64_t;
+    using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
     using TabletSchemaCSPtr = std::shared_ptr<const TabletSchema>;
 
-    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb);
-    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
-    static std::shared_ptr<TabletSchema> create(const TabletSchemaCSPtr& tablet_schema,
-                                                const std::vector<int32_t>& column_indexes);
-    static std::shared_ptr<TabletSchema> create_with_uid(const TabletSchemaCSPtr& tablet_schema,
-                                                         const std::vector<uint32_t>& unique_column_ids);
-    static std::unique_ptr<TabletSchema> copy(const std::shared_ptr<const TabletSchema>& tablet_schema);
+    static TabletSchemaSPtr create(const TabletSchemaPB& schema_pb);
+    static TabletSchemaSPtr create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
+    static TabletSchemaSPtr create(const TabletSchemaCSPtr& tablet_schema, const std::vector<int32_t>& column_indexes);
+    static TabletSchemaSPtr create_with_uid(const TabletSchemaCSPtr& tablet_schema,
+                                            const std::vector<ColumnUID>& unique_column_ids);
+    static StatusOr<TabletSchemaSPtr> create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
+                                             const POlapTableColumnParam& column_param);
+    static TabletSchemaSPtr copy(const TabletSchema& tablet_schema);
+    static TabletSchemaCSPtr copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
@@ -255,6 +271,7 @@ public:
     explicit TabletSchema(const TabletSchemaPB& schema_pb);
     // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
     TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
+    TabletSchema(const TabletSchema& tablet_schema);
 
     ~TabletSchema();
 
@@ -268,7 +285,6 @@ public:
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
-    void generate_sort_key_idxes();
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
 
     size_t num_columns() const { return _cols.size(); }
@@ -281,12 +297,11 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
+    int compression_level() const { return _compression_level; }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
     void set_schema_version(int32_t version) { _schema_version = version; }
-    void clear_columns();
-    void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
     // Please call the following function with caution. Most of the time,
     // the following two functions should not be called explicitly.
@@ -318,9 +333,6 @@ public:
 
     Schema* schema() const;
 
-    Status build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
-                                       const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
-
     const std::vector<TabletIndex>* indexes() const { return &_indexes; }
     Status get_indexes_for_column(int32_t col_unique_id, std::unordered_map<IndexType, TabletIndex>* res) const;
     Status get_indexes_for_column(int32_t col_unique_id, IndexType index_type, std::shared_ptr<TabletIndex>& res) const;
@@ -333,6 +345,11 @@ private:
 
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
+
+    void _generate_sort_key_idxes();
+    void _clear_columns();
+    Status _build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
+                                        const TabletSchema& ori_tablet_schema);
 
     void _init_from_pb(const TabletSchemaPB& schema);
 
@@ -360,6 +377,8 @@ private:
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
+    // only use for zstd compression type
+    int _compression_level = -1;
 
     std::unordered_map<int32_t, int32_t> _unique_id_to_index;
 

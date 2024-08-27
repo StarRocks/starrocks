@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # from_unixtime
 
-## Description
+
 
 Converts a UNIX timestamp into the required time format. The default format is `yyyy-MM-dd HH:mm:ss`. It also supports the formats in [date_format](./date_format.md).
 

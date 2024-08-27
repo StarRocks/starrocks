@@ -66,6 +66,7 @@ Status CompactionState::load_segments(Rowset* rowset, uint32_t segment_id) {
 static const size_t large_compaction_memory_threshold = 1000000000;
 
 Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
+    CHECK_MEM_LIMIT("CompactionState::_load_segments");
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
@@ -75,9 +76,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
@@ -87,13 +86,14 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     }
 
     auto& itrs = res.value();
-    CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
 
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tracker = update_manager->compaction_state_mem_tracker();
 
     // only hold pkey, so can use larger chunk size
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
+    ChunkUniquePtr chunk_shared_ptr;
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = itrs[segment_id].get();
@@ -113,14 +113,14 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
             } else if (!st.ok()) {
                 return st;
             } else {
-                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
             }
         }
         itr->close();
-        CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
+        RETURN_ERROR_IF_FALSE(col->size() == num_rows, "read segment: iter rows != num rows");
     }
     dest = std::move(col);
-    dest->raw_data();
+    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest->memory_usage();
     tracker->consume(dest->memory_usage());
 

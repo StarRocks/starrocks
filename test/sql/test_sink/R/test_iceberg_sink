@@ -1,0 +1,104 @@
+-- name: testIcebergSinkNullPartition
+shell: ossutil64 mkdir oss://${oss_bucket}/test_sink/test_iceberg_sink_null_partition/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_sink/test_iceberg_sink_null_partition/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (
+    c0 int, 
+    c1 string
+) partition by (c1);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test values (1, "A");
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test values (2, NULL);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test select 3, NULL;
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test partition(c1=NULL) values (4);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test partition(c1=NULL) select 5;
+-- result:
+-- !result
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+-- result:
+1	A
+3	None
+2	None
+4	None
+5	None
+-- !result
+drop catalog ice_hadoop${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_sink_null_partition/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: testIcebergSinkCaseInsensitive
+shell: ossutil64 mkdir oss://${oss_bucket}/test_sink/test_iceberg_sink_case_insensitive/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_sink/test_iceberg_sink_case_insensitive/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (
+    C0 int, 
+    C1 string
+) partition by (C1);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (C0, C1) values (1, "A");
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (C0, c1) values (2, NULL);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (c0, C1) select 3, NULL;
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (c0, c1) select 4, "B";
+-- result:
+-- !result
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+-- result:
+2	None
+1	A
+3	None
+4	B
+-- !result
+drop catalog ice_hadoop${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_sink_case_insensitive/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

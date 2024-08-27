@@ -1,0 +1,66 @@
+
+-- name: test_mv_increment_refresh_on_hive
+
+create external catalog mv_hive_${uuid0}
+properties
+(
+    "type" = "hive",
+    "hive.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+
+-- create hive table
+set catalog mv_hive_${uuid0};
+create database mv_hive_db_${uuid0};
+use mv_hive_db_${uuid0};
+
+shell: hadoop fs -test -d ${hdfs_path}/tbl_for_refresh && hadoop fs -rm -r ${hdfs_path}/tbl_for_refresh >/dev/null || echo "exit 0" >/dev/null
+
+CREATE EXTERNAL TABLE tbl_for_refresh (
+  num int,
+  dt date
+)
+PARTITION BY (dt);
+
+set enable_write_hive_external_table = true;
+
+INSERT OVERWRITE tbl_for_refresh VALUES
+  (2,"2020-07-01"),(3,"2020-07-02"),(4,"2020-07-03"),(5,"2020-07-04");
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL AS 
+  SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.tbl_for_refresh;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+set catalog mv_hive_${uuid0};
+use mv_hive_db_${uuid0};
+drop table tbl_for_refresh;
+
+CREATE EXTERNAL TABLE tbl_for_refresh (
+  num int,
+  dt date
+)
+PARTITION BY (dt);
+
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200701 VALUES in ('2020-07-01');
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200702 VALUES in ('2020-07-02');
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200703 VALUES in ('2020-07-03');
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200704 VALUES in ('2020-07-04');
+
+set catalog default_catalog;
+use db_${uuid0};
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+select * from test_mv1 order by dt;
+
+drop database db_${uuid0} force;
+-- drop external catalog & db
+drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.tbl_for_refresh;
+drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;

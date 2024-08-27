@@ -15,6 +15,7 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -83,11 +84,25 @@ public class DbPEntryObject implements PEntryObject {
             return new DbPEntryObject(catalogId, PrivilegeBuiltinConstants.ALL_DATABASES_UUID);
         }
 
-        Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
-        if (database == null) {
-            throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
+        return new DbPEntryObject(catalogId, getDatabaseUUID(mgr, catalogName, tokens.get(0)));
+    }
+
+    /**
+     * for internal database, use {@link Database#getUUID()} as privilege id.
+     * for external database, use database name as privilege id.
+     */
+    public static String getDatabaseUUID(GlobalStateMgr mgr, String catalogName, String dbToken) throws PrivObjNotFoundException {
+        Preconditions.checkArgument(!dbToken.equals("*"));
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Database database = mgr.getMetadataMgr().getDb(catalogName, dbToken);
+            if (database == null) {
+                throw new PrivObjNotFoundException("cannot find db: " + dbToken);
+            }
+            return database.getUUID();
         }
-        return new DbPEntryObject(catalogId, database.getUUID());
+
+        // for database in external catalog, return database name directly without validation
+        return dbToken;
     }
 
     /**
@@ -109,7 +124,8 @@ public class DbPEntryObject implements PEntryObject {
         if (Objects.equals(other.uuid, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
             return this.catalogId == other.catalogId;
         }
-        return this.catalogId == other.catalogId && Objects.equals(other.uuid, this.uuid);
+        return this.catalogId == other.catalogId &&
+                Objects.equals(Catalog.getCompatibleDbUUID(this.uuid), Catalog.getCompatibleDbUUID(other.uuid));
     }
 
     @Override
@@ -168,12 +184,13 @@ public class DbPEntryObject implements PEntryObject {
             return false;
         }
         DbPEntryObject that = (DbPEntryObject) o;
-        return this.catalogId == that.catalogId && Objects.equals(uuid, that.uuid);
+        return this.catalogId == that.catalogId &&
+                Objects.equals(Catalog.getCompatibleDbUUID(this.uuid), Catalog.getCompatibleDbUUID(that.uuid));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogId, uuid);
+        return Objects.hash(catalogId, Catalog.getCompatibleDbUUID(uuid));
     }
 
     @Override

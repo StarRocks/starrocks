@@ -104,7 +104,6 @@ Status DataDir::init(bool read_only) {
 
 void DataDir::stop_bg_worker() {
     _stop_bg_worker = true;
-    _cv.notify_one();
 }
 
 Status DataDir::_init_data_dir() {
@@ -487,8 +486,7 @@ Status DataDir::load() {
 // gc unused tablet schemahash dir
 void DataDir::perform_path_gc_by_tablet() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_tablet_schemahash_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_tablet_schemahash_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by tablet schema hash.";
@@ -573,8 +571,7 @@ static bool is_delta_column_file(const std::string& path) {
 
 void DataDir::perform_delta_column_files_gc() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_dcg_files.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_dcg_files.empty()) {
         return;
     }
     LOG(INFO) << "start to do delta column files gc.";
@@ -606,8 +603,7 @@ void DataDir::perform_path_gc_by_rowsetid() {
     // init the set of valid path
     // validate the path in data dir
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by rowsetid.";
@@ -643,6 +639,63 @@ void DataDir::perform_path_gc_by_rowsetid() {
     }
     _all_check_paths.clear();
     LOG(INFO) << "finished one time path gc by rowsetid.";
+}
+
+void DataDir::perform_crm_gc(int32_t unused_crm_file_threshold_sec) {
+    // init the set of valid path
+    // validate the path in data dir
+    std::unique_lock<std::mutex> lck(_check_path_mutex);
+    if (_stop_bg_worker || _all_check_crm_files.empty()) {
+        return;
+    }
+    LOG(INFO) << "start to crm file gc.";
+    int counter = 0;
+    for (auto& path : _all_check_crm_files) {
+        ++counter;
+        if (config::path_gc_check_step > 0 && counter % config::path_gc_check_step == 0) {
+            SleepFor(MonoDelta::FromMilliseconds(config::path_gc_check_step_interval_ms));
+        }
+        auto now = time(nullptr);
+        auto mtime_or = FileSystem::Default()->get_file_modified_time(path);
+        if (!mtime_or.ok() || (*mtime_or) <= 0) {
+            continue;
+        }
+        if (now >= unused_crm_file_threshold_sec + (*mtime_or)) {
+            _process_garbage_path(path);
+        }
+    }
+    _all_check_crm_files.clear();
+    LOG(INFO) << "finished one time crm file gc.";
+}
+
+void DataDir::perform_tmp_path_scan() {
+    std::unique_lock<std::mutex> lck(_check_path_mutex);
+    if (!_all_check_crm_files.empty()) {
+        LOG(INFO) << "_all_check_crm_files is not empty when tmp path scan.";
+        return;
+    }
+    LOG(INFO) << "start to scan tmp dir path.";
+    std::string tmp_path_str = _path + TMP_PREFIX;
+    std::filesystem::path tmp_path(tmp_path_str.c_str());
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(tmp_path)) {
+            if (entry.is_regular_file()) {
+                const auto& filename = entry.path().string();
+                if (filename.ends_with(".crm")) {
+                    _all_check_crm_files.insert(filename);
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& ex) {
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Filesystem error: " << ex.what();
+        // do nothing
+    } catch (const std::exception& ex) {
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Standard error: " << ex.what();
+        // do nothing
+    } catch (...) {
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Unknown exception occurred.";
+        // do nothing
+    }
 }
 
 // path producer
@@ -705,7 +758,6 @@ void DataDir::perform_path_scan() {
         LOG(INFO) << "scan data dir path:" << _path << " finished. path size:" << _all_check_paths.size()
                   << " dcg file size: " << _all_check_dcg_files.size();
     }
-    _cv.notify_one();
 }
 
 void DataDir::_process_garbage_path(const std::string& path) {

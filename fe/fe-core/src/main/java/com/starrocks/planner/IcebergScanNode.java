@@ -16,9 +16,10 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -32,11 +33,13 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.connector.iceberg.IcebergRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -62,7 +65,6 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -89,6 +91,7 @@ public class IcebergScanNode extends ScanNode {
     private CloudConfiguration cloudConfiguration = null;
     private final List<Integer> deleteColumnSlotIds = new ArrayList<>();
     private final TupleDescriptor equalityDeleteTupleDesc;
+    private Optional<Long> snapshotId;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TupleDescriptor equalityDeleteTupleDesc) {
         super(id, desc, planNodeName);
@@ -127,6 +130,10 @@ public class IcebergScanNode extends ScanNode {
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return result;
+    }
+
+    public void setSnapshotId(Optional<Long> snapshotId) {
+        this.snapshotId = snapshotId;
     }
 
     public static BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec) {
@@ -172,17 +179,16 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
-        Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
-        if (snapshot.isEmpty()) {
+        Preconditions.checkNotNull(snapshotId, "snapshot id is null");
+        if (snapshotId.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getRemoteTableName()));
             return;
         }
 
-        String catalogName = icebergTable.getCatalogName();
-        long snapshotId = snapshot.get().snapshotId();
-
-        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, icebergTable, null, snapshotId, predicate, null, -1);
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(snapshotId))
+                        .setPredicate(predicate).build();
+        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, params);
 
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
@@ -190,7 +196,7 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-        RemoteFileDesc remoteFileDesc = splits.get(0).getFiles().get(0);
+        IcebergRemoteFileDesc remoteFileDesc = (IcebergRemoteFileDesc) splits.get(0).getFiles().get(0);
         if (remoteFileDesc == null) {
             LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), predicate);
@@ -302,6 +308,10 @@ public class IcebergScanNode extends ScanNode {
             result.add(scanRangeLocations);
         }
 
+        if (!currentEqualityIds.isEmpty()) {
+            icebergTable.setIdentifierFieldIds(ImmutableSet.copyOf(currentEqualityIds));
+        }
+
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
     }
 
@@ -367,6 +377,8 @@ public class IcebergScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -378,7 +390,8 @@ public class IcebergScanNode extends ScanNode {
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(icebergTable.getCatalogName())) {
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
+                    icebergTable.getRemoteTableName(), TableVersionRange.withEnd(snapshotId));
 
             output.append(prefix).append(
                     String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -387,11 +400,6 @@ public class IcebergScanNode extends ScanNode {
         }
 
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return result.size();
     }
 
     @Override
@@ -412,6 +420,7 @@ public class IcebergScanNode extends ScanNode {
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
     }
 
     @Override

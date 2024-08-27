@@ -14,27 +14,46 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "common/status.h"
-#include "formats/parquet/column_converter.h"
+#include "common/statusor.h"
+#include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
+#include "types/logical_type.h"
+
+namespace tparquet {
+class ColumnChunk;
+class OffsetIndex;
+class RowGroup;
+} // namespace tparquet
 
 namespace starrocks {
 class RandomAccessFile;
 struct HdfsScanStats;
+class ColumnPredicate;
+class ExprContext;
+class NullableColumn;
+class TIcebergSchemaField;
+
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
+struct TypeDescriptor;
 } // namespace starrocks
 
 namespace starrocks::parquet {
-struct ColumnReaderContext {
-    Buffer<uint8_t>* filter = nullptr;
-    size_t next_row = 0;
-    size_t rows_to_skip = 0;
-
-    void advance(size_t num_rows) { next_row += num_rows; }
-};
 
 struct ColumnReaderOptions {
     std::string timezone;
@@ -44,7 +63,6 @@ struct ColumnReaderOptions {
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
-    ColumnReaderContext* context = nullptr;
 };
 
 class StoredColumnReader;
@@ -89,24 +107,11 @@ public:
 
     virtual ~ColumnReader() = default;
 
-    virtual Status prepare_batch(size_t* num_records, Column* column) = 0;
-    virtual Status finish_batch() = 0;
-
-    Status next_batch(size_t* num_records, Column* column) {
-        RETURN_IF_ERROR(prepare_batch(num_records, column));
-        return finish_batch();
-    }
-
-    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) = 0;
+    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) = 0;
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
     virtual void set_need_parse_levels(bool need_parse_levels) = 0;
-
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                                   Column* column) {
-        return Status::NotSupported("get_dict_values is not supported");
-    }
 
     virtual bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                         const std::vector<std::string>& sub_field_path, const size_t& layer) {
@@ -119,15 +124,14 @@ public:
         return Status::OK();
     }
 
-    virtual void init_dict_column(ColumnPtr& column, const std::vector<std::string>& sub_field_path,
-                                  const size_t& layer) {}
+    virtual void set_can_lazy_decode(bool can_lazy_decode) {}
 
     virtual Status filter_dict_column(const ColumnPtr& column, Filter* filter,
                                       const std::vector<std::string>& sub_field_path, const size_t& layer) {
         return Status::OK();
     }
 
-    virtual Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) {
+    virtual Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         dst->swap_column(*src);
         return Status::OK();
     }
@@ -145,7 +149,9 @@ public:
 
     virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
 
-    std::unique_ptr<ColumnConverter> converter;
+private:
+    static bool _has_valid_subfield_column_reader(
+            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
 };
 
 } // namespace starrocks::parquet

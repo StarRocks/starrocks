@@ -1,0 +1,113 @@
+-- name: test_timetravel
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (k1 int);
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1; 
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 2; 
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} create branch test_branch;
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 3;
+-- result:
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} create tag test_tag;
+-- result:
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 4;
+-- result:
+-- !result
+refresh external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0};
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "test_branch" order by k1;
+-- result:
+1
+2
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "test_tag" order by k1;
+-- result:
+1
+2
+3
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} timestamp as of "2099-01-01 01:01:01" order by k1;
+-- result:
+1
+2
+3
+4
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} for system_time as of date_add(now(), INTERVAL 2 DAY) order by k1;
+-- result:
+1
+2
+3
+4
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+-- result:
+1
+2
+3
+4
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_branch select 55;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+-- result:
+1
+2
+3
+4
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "test_branch" order by k1;
+-- result:
+1
+2
+55
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of not_exist_branch select 55;
+-- result:
+E: (1064, 'Cannot find snapshot with reference name: not_exist_branch')
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_tag select 55;
+-- result:
+E: (1064, 'test_tag is a tag, not a branch')
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+-- result:
+1
+2
+3
+4
+-- !result
+insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of test_branch select 111;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+-- result:
+1
+2
+3
+4
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "test_branch" order by k1;
+-- result:
+111
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

@@ -129,4 +129,15 @@ public class MetricsTest {
             Assert.assertTrue(jvmProcDirResultRowsContains(rows, metricName));
         }
     }
+
+    @Test
+    public void testAddLabel() {
+        LongCounterMetric m = new LongCounterMetric("test_metric", Metric.MetricUnit.BYTES, "test");
+        m.addLabel(new MetricLabel("k1", "v0"));
+        m.addLabel(new MetricLabel("k2", "v2"));
+        m.addLabel(new MetricLabel("k1", "v1"));
+        Assert.assertEquals(m.getLabels().size(), 2);
+        Assert.assertEquals(m.getLabels().get(0).getValue(), "v1");
+        Assert.assertEquals(m.getLabels().get(1).getValue(), "v2");
+    }
 }

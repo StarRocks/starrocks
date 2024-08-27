@@ -247,15 +247,22 @@ Status StorageEngine::start_bg_threads() {
 
     _clear_expired_replcation_snapshots_thread =
             std::thread([this]() { _clear_expired_replication_snapshots_callback(nullptr); });
-    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expiired_replication_snapshots");
+    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expired_replication_snapshots");
 
     if (!config::disable_storage_page_cache) {
         _adjust_cache_thread = std::thread([this] { _adjust_pagecache_callback(nullptr); });
         Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
     }
 
+    start_schedule_apply_thread();
+
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
+}
+
+void StorageEngine::start_schedule_apply_thread() {
+    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
+    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
 }
 
 void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
@@ -411,6 +418,12 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
             _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
+#ifdef USE_STAROS
+            auto update_manager = ExecEnv::GetInstance()->lake_update_manager();
+            _local_pk_index_manager->schedule([&]() {
+                return _local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(update_manager);
+            });
+#endif
         }
     }
 
@@ -437,9 +450,6 @@ void* StorageEngine::_pk_dump_thread_callback(void* arg) {
 
 #ifdef USE_STAROS
 void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* arg) {
-    if (is_as_cn()) {
-        return nullptr;
-    }
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
@@ -823,8 +833,12 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         LOG(INFO) << "try to perform path gc by rowsetid!";
         // perform path gc by rowset id
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
+
+        LOG(INFO) << "try to perform path gc by dcg files!";
         // perform dcg files gc
         ((DataDir*)arg)->perform_delta_column_files_gc();
+        // perform crm files gc
+        ((DataDir*)arg)->perform_crm_gc(config::unused_crm_file_threshold_second);
 
         int32_t interval = config::path_gc_check_interval_second;
         if (interval <= 0) {
@@ -851,6 +865,7 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path scan!";
         ((DataDir*)arg)->perform_path_scan();
+        ((DataDir*)arg)->perform_tmp_path_scan();
 
         int32_t interval = config::path_scan_interval_second;
         if (interval <= 0) {
@@ -873,9 +888,9 @@ void* StorageEngine::_clear_expired_replication_snapshots_callback(void* arg) {
         LOG(INFO) << "try to clear expired replication snapshots!";
         replication_txn_manager()->clear_expired_snapshots();
 
-        int32_t interval = config::clear_expired_replcation_snapshots_interval_seconds;
+        int32_t interval = config::clear_expired_replication_snapshots_interval_seconds;
         if (interval <= 0) {
-            LOG(WARNING) << "clear expired replcation snapshots interval seconds config is illegal:" << interval
+            LOG(WARNING) << "clear expired replication snapshots interval seconds config is illegal:" << interval
                          << "will be forced set to one hour";
             interval = 3600; // 1 hour
         }
@@ -902,6 +917,42 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
         }
     }
 
+    return nullptr;
+}
+
+void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        {
+            auto wait_timeout = std::chrono::seconds(1);
+            std::unique_lock<std::mutex> ul(_schedule_apply_mutex);
+            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume)) {
+                _apply_tablet_changed_cv.wait_for(ul, wait_timeout);
+            }
+
+            if (_bg_worker_stopped.load(std::memory_order_consume)) {
+                break;
+            }
+
+            auto time_point = std::chrono::steady_clock::now();
+            while (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty() &&
+                   _schedule_apply_tasks.top().first <= time_point) {
+                _schedule_apply_tasks.pop();
+                auto tablet_id = _schedule_apply_tasks.top().second;
+                auto tablet = _tablet_manager->get_tablet(tablet_id);
+                if (tablet == nullptr || tablet->updates() == nullptr) {
+                    continue;
+                }
+                tablet->updates()->check_for_apply();
+            }
+
+            if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
+                _apply_tablet_changed_cv.wait_until(ul, _schedule_apply_tasks.top().first);
+            }
+        }
+    }
     return nullptr;
 }
 

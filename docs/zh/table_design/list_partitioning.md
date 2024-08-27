@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 您需要显式列出每个 List 分区所包含的枚举值列表，并且值不需要连续，区别于包含连续日期或者数值范围的 Range 分区。当新数据导入表中时，StarRocks 会根据数据的分区列值与分区的映射关系将数据分配到相应的分区中。
 
-![list_partitioning](../assets/list_partitioning.png)
+![list_partitioning](../_assets/list_partitioning.png)
 
 List 分区适用于存储具有少量枚举值列的数据、并且经常按列的枚举值来查询和管理数据的场景。例如表示地理位置、状态、类别的列。列的每个值都代表一种独立的类别。按照列的枚举值对数据进行分区，可以提高查询性能和方便数据管理。
 
@@ -109,7 +109,7 @@ DISTRIBUTED BY HASH(`id`);
 ## 使用限制
 
 - 不支持[动态](./dynamic_partitioning.md)和[批量创建](./Data_distribution.md#range-分区) List 分区。
-- StarRocks [存算分离模式](../deployment/shared_data/s3.md)从 3.1.1 版本开始支持该功能。
+- StarRocks 存算分离模式 从 3.1.1 版本开始支持该功能。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` 分区直接被删除并且不能被恢复。
-- List 分区暂时不支持[备份与恢复](../administration/Backup_and_restore.md)。
+- List 分区暂时不支持[备份与恢复](../administration/management/Backup_and_restore.md)。
 - [异步物化视图](../using_starrocks/Materialized_view.md)暂不支持基于使用 List 分区的基表创建。

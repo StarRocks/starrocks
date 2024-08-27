@@ -17,10 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
@@ -73,7 +69,9 @@ set(RUNTIME_FILES
     http_result_writer.cpp
     file_result_writer.cpp
     statistic_result_writer.cpp
+    metadata_result_writer.cpp
     variable_result_writer.cpp
+    memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
@@ -97,6 +95,8 @@ set(RUNTIME_FILES
     table_function_table_sink.cpp
     blackhole_table_sink.cpp
     dictionary_cache_sink.cpp
+    type_pack.cpp
+    customized_result_writer.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

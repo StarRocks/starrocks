@@ -50,6 +50,10 @@ public class ConnectorTableInfo {
         return CollectionUtils.isEmpty(relatedMaterializedViews);
     }
 
+    public Set<MvId> getRelatedMaterializedViews() {
+        return relatedMaterializedViews;
+    }
+
     @Override
     public String toString() {
         return "ConnectorTableInfo {" +

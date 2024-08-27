@@ -235,7 +235,11 @@ Status DictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst
         _dict_decoder->at_index(codewords[i], &value);
         numbers[i] = value;
     }
-    dst->append_numbers(numbers.data(), numbers.size() * SIZE_OF_TYPE);
+    size_t nappend = dst->append_numbers(numbers.data(), numbers.size() * SIZE_OF_TYPE);
+    if (UNLIKELY(nappend != numbers.size())) {
+        return Status::InternalError(
+                fmt::format("append_numbers failed, expected rows[{}], actual rows[{}]", numbers.size(), nappend));
+    }
     return Status::OK();
 }
 

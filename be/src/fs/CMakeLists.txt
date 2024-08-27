@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
 # where to put generated binaries
@@ -24,6 +20,8 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 set(EXEC_FILES
     fd_cache.cpp
     fs.cpp
+    encrypt_file.cpp
+    key_cache.cpp
     fs_posix.cpp
     fs_broker.cpp
     fs_memory.cpp

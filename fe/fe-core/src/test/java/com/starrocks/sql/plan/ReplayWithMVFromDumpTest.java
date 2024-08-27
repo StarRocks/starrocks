@@ -14,21 +14,18 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.Set;
 
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
@@ -39,27 +36,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-
-        new MockUp<MaterializedView>() {
-            /**
-             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
-             */
-            @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            /**
-             * {@link UtFrameUtils#isPrintPlanTableNames()}
-             */
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
     }
 
     @Before
@@ -87,7 +65,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/mock_join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        assertContains(replayPair.second, "table: tbl_mock_001, rollup: tbl_mock_001");
+        // Rewrite OK when enhance rule based mv rewrite.
+        assertContains(replayPair.second, "table: test_mv0, rollup: test_mv0");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -152,7 +131,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
-        assertContains("test_mv2");
+        assertContains(replayPair.second, "test_mv2");
     }
 
     @Test
@@ -160,7 +139,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains("TEST_MV_2");
+        assertContains(replayPair.second, "TEST_MV_2");
     }
 
     @Test
@@ -168,7 +147,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains("TEST_MV_2");
+        assertContains(replayPair.second, "TEST_MV_2");
     }
 
     @Test
@@ -184,7 +163,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains(replayPair.second, "tbl_mock_021");
+        // Rewrite OK since rule based mv is enhanced
+        assertContains(replayPair.second, "test_mv2");
     }
 
     @Test
@@ -230,5 +210,35 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         //        "nmock_032, nmock_033, nmock_034, nmock_035, nmock_036, nmock_037, nmock_038, nmock_039, " +
         //        "nmock_040, nmock_041 from tbl_mock_001 order by nmock_002;";
         assertNotContains(replayPair.second, "mv_tbl_mock_001");
+    }
+
+    @Test
+    public void testViewDeltaRewriter() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+    }
+
+    @Test
+    public void testMV_CountStarRewrite() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/count_star_rewrite"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        assertContains(replayPair.second, "tbl_mock_067");
+        // NOTE: OUTPUT EXPRS must refer to coalesce column ref
+        assertContains(replayPair.second, " OUTPUT EXPRS:59: count\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 59> : coalesce(80: count, 0)");
     }
 }

@@ -43,12 +43,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 public class SlotDescriptor {
 
@@ -195,6 +194,12 @@ public class SlotDescriptor {
 
     public void setIsNullable(boolean value) {
         isNullable = value;
+        // NullIndicatorBit is deprecated in BE, we mock bit to avoid BE crash
+        if (isNullable) {
+            nullIndicatorBit = 0;
+        } else {
+            nullIndicatorBit = -1;
+        }
     }
 
     public void setStats(ColumnStats stats) {
@@ -259,8 +264,8 @@ public class SlotDescriptor {
             type = type.isNull() ? ScalarType.BOOLEAN : type;
             tSlotDescriptor.setSlotType(type.toThrift());
             if (column != null) {
-                LOG.debug("column physical name:{}, column unique id:{}",
-                        column.getPhysicalName(), column.getUniqueId());
+                LOG.debug("column id:{}, column unique id:{}",
+                        column.getColumnId(), column.getUniqueId());
                 tSlotDescriptor.setCol_unique_id(column.getUniqueId());
             }
         }
@@ -268,7 +273,11 @@ public class SlotDescriptor {
         tSlotDescriptor.setByteOffset(-1);
         tSlotDescriptor.setNullIndicatorByte(-1);
         tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
-        tSlotDescriptor.setColName(((column != null) ? column.getPhysicalName() : ""));
+        String colName = "";
+        if (column != null) {
+            colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
+        }
+        tSlotDescriptor.setColName(colName);
         tSlotDescriptor.setSlotIdx(-1);
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);

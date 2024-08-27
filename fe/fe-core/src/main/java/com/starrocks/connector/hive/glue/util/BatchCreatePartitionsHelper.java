@@ -15,9 +15,6 @@
 
 package com.starrocks.connector.hive.glue.util;
 
-import com.amazonaws.services.glue.model.EntityNotFoundException;
-import com.amazonaws.services.glue.model.Partition;
-import com.amazonaws.services.glue.model.PartitionError;
 import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.glue.converters.CatalogToHiveConverter;
 import com.starrocks.connector.hive.glue.converters.GlueInputConverter;
@@ -27,6 +24,9 @@ import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
+import software.amazon.awssdk.services.glue.model.Partition;
+import software.amazon.awssdk.services.glue.model.PartitionError;
 
 import java.util.Collection;
 import java.util.List;
@@ -92,9 +92,9 @@ public final class BatchCreatePartitionsHelper {
                 partitionErrors.size(), partitionMap.size()));
 
         for (PartitionError partitionError : partitionErrors) {
-            Partition partitionFailed = partitionMap.remove(new PartitionKey(partitionError.getPartitionValues()));
+            Partition partitionFailed = partitionMap.remove(new PartitionKey(partitionError.partitionValues()));
 
-            TException exception = CatalogToHiveConverter.errorDetailToHiveException(partitionError.getErrorDetail());
+            TException exception = CatalogToHiveConverter.errorDetailToHiveException(partitionError.errorDetail());
             if (ifNotExists && exception instanceof AlreadyExistsException) {
                 // AlreadyExistsException is allowed, so we shouldn't add the partition to partitionsFailed list
                 continue;
@@ -119,14 +119,14 @@ public final class BatchCreatePartitionsHelper {
     private boolean partitionExists(Partition partition) {
 
         try {
-            Partition partitionReturned = glueClient.getPartition(databaseName, tableName, partition.getValues());
+            Partition partitionReturned = glueClient.getPartition(databaseName, tableName, partition.values());
             return partitionReturned != null; //probably always true here
         } catch (EntityNotFoundException e) {
             // here we assume namespace and table exist. It is assured by calling "isInvalidUserInputException" method above
             return false;
         } catch (Exception e) {
             LOGGER.error(String.format("Get partition request %s failed. ",
-                    StringUtils.join(partition.getValues(), "/")), e);
+                    StringUtils.join(partition.values(), "/")), e);
             // partition status unknown, we assume that the partition was not created
             return false;
         }

@@ -30,6 +30,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -71,7 +72,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             String driverName = getDriverName();
             Class.forName(driverName);
         } catch (ClassNotFoundException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
         if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
@@ -80,6 +81,12 @@ public class JDBCMetadata implements ConnectorMetadata {
             schemaResolver = new PostgresSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
             schemaResolver = new MysqlSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
+            schemaResolver = new ClickhouseSchemaResolver(properties);
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
+            schemaResolver = new OracleSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
+            schemaResolver = new SqlServerSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
@@ -101,11 +108,11 @@ public class JDBCMetadata implements ConnectorMetadata {
         return driverName;
     }
 
-    private String getJdbcUrl() {
+    String getJdbcUrl() {
         String jdbcUrl = properties.get(JDBCResource.URI);
         // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
-        if (jdbcUrl.contains("mysql")) {
-            jdbcUrl = jdbcUrl.replace("mysql", "mariadb");
+        if (jdbcUrl.startsWith("jdbc:mysql")) {
+            jdbcUrl = jdbcUrl.replaceFirst("jdbc:mysql", "jdbc:mariadb");
         }
         return jdbcUrl;
     }
@@ -140,6 +147,11 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     public Connection getConnection() throws SQLException {
         return dataSource.getConnection();
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.JDBC;
     }
 
     @Override
@@ -208,7 +220,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {

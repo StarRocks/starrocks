@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # dayofyear
 
-## Description
+
 
 Returns the day of the year for a given date.
 

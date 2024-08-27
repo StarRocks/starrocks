@@ -1,10 +1,11 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # GRANT
 
-import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
 
 ## Description
 
@@ -12,7 +13,7 @@ Grants one or more privileges on specific objects to a user or a role.
 
 Grants roles to users or other roles.
 
-For more information about the privileges that can be granted, see [Privilege items](../../../administration/privilege_item.md).
+For more information about the privileges that can be granted, see [Privilege items](../../../administration/user_privs/privilege_item.md).
 
 After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
 
@@ -105,13 +106,13 @@ GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
        | ALL TABLES} IN 
-           { { DATABASE <database_name> [, <database_name>,...] } | ALL DATABASES }
+           { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
 * You must first run SET CATALOG before you run this command.
 * You can also use `<db_name>.<table_name>` to represent a table.
-* You can grant the SELECT privilege on all tables in Internal and External Catalogs to read data from these tables. For tables in Hive and Iceberg Catalogs，you can grant the INSERT privilege to write data into such tables (supported since v3.1 for Iceberg and v3.2 for Hive)
+* You can grant the SELECT privilege on all tables in Internal and External Catalogs to read data from these tables. For tables in Hive and Iceberg Catalogs, you can grant the INSERT privilege to write data into such tables (supported since v3.1 for Iceberg and v3.2 for Hive)
 
   ```SQL
   GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -124,7 +125,7 @@ GRANT
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
-           { { DATABASE <database_name> [, <database_name>,...] } | ALL DATABASES }
+           { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -143,7 +144,7 @@ GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
-           { { DATABASE <database_name> [, <database_name>,...] } | ALL DATABASES }
+           { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -161,12 +162,12 @@ GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
        ｜ ALL FUNCTIONS} IN 
-           { { DATABASE <database_name> [, <database_name>,...] } | ALL DATABASES }
+           { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-* You must first run SET CATALOG before you run this command.
-* You can also use `<db_name>.<function_name>` to represent a function.
+- You must first run SET CATALOG before you run this command.
+- You can also use `<db_name>.<function_name>` to represent a function.
 
   ```SQL
   GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
@@ -249,7 +250,7 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 Example 9: Allow user `jack` to perform operations as user `rose`.
 
 ```SQL
-GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
+GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 ```
 
 ## Best practices
@@ -258,4 +259,4 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 
 <UserPrivilegeCase />
 
-For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).
+For the best practices of multi-service access control, see [Multi-service access control](../../../administration/user_privs/User_privilege.md#multi-service-access-control).

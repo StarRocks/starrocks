@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # negative
 
-## 功能
+
 
 对参数 `x` 取其负数作为结果输出。
 

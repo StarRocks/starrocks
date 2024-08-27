@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_subset_limit
 
-## Description
+
 
 Intercepts a specified number of elements from a BITMAP value with element value starting from `start range`. The output elements are a subset of `src`.
 

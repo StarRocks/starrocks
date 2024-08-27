@@ -90,7 +90,15 @@ public:
 
     int64_t end_version() const { return _rowset_meta_pb->end_version(); }
 
+    bool has_gtid() const { return _rowset_meta_pb->has_gtid(); }
+
+    int64_t gtid() const { return _rowset_meta_pb->gtid(); }
+
+    void set_gtid(int64_t gtid) { _rowset_meta_pb->set_gtid(gtid); }
+
     int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
+
+    int64_t num_rows_upt() const { return _rowset_meta_pb->num_rows_upt(); }
 
     void set_num_rows(int64_t num_rows) { _rowset_meta_pb->set_num_rows(num_rows); }
 
@@ -234,18 +242,15 @@ public:
     // new rowset.
     // Before calling it, please confirm if you need a complete `rowset_meta` that includes `tablet_schema_pb`.
     // If not, perhaps `get_meta_pb_without_schema()` is enough.
-    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb) const {
+    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb, const TabletSchemaCSPtr& tablet_schema = nullptr) const {
         *rs_meta_pb = *_rowset_meta_pb;
-        if (_schema != nullptr) {
+        const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
+
+        if (target_schema != nullptr) {
             rs_meta_pb->clear_tablet_schema();
             TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
-            _schema->to_schema_pb(ts_pb);
+            target_schema->to_schema_pb(ts_pb);
         }
-    }
-
-    void get_tablet_schema_pb(TabletSchemaPB* tablet_schema_pb) {
-        DCHECK(_schema != nullptr);
-        _schema->to_schema_pb(tablet_schema_pb);
     }
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
@@ -255,7 +260,9 @@ public:
         if (ts_pb.has_id() && ts_pb.id() != TabletSchema::invalid_id()) {
             _schema = GlobalTabletSchemaMap::Instance()->emplace(ts_pb).first;
         } else {
-            _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+            // Only for compatible, in very old versions, there is no schema id.
+            // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
+            _schema = TabletSchema::copy(*tablet_schema_ptr);
         }
         _has_tablet_schema_pb = true;
     }

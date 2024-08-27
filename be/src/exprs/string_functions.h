@@ -29,6 +29,7 @@
 #include "util/url_parser.h"
 
 namespace starrocks {
+class RegexpSplit;
 
 struct PadState {
     bool is_const;
@@ -348,8 +349,16 @@ public:
     * @paramType: [ArrayBinaryColumn, BinaryColumn]
     * @return: MapColumn map<string,string>
     */
+    DEFINE_VECTORIZED_FN(str_to_map_v1);
 
+    /**
+    * @param: [string, delimiter, map_delimiter]
+    * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
     DEFINE_VECTORIZED_FN(str_to_map);
+    static Status str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, delimiter, field]
@@ -394,6 +403,13 @@ public:
 
     static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns);
     static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
+
+    /**
+     * @param: [string_value, pattern, max_split]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_split);
 
     /**
      * @param: [string_value, pattern_value, replace_value]

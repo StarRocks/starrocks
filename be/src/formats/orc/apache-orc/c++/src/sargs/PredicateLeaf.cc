@@ -93,6 +93,17 @@ PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string co
     validate();
 }
 
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
+                             const std::vector<Literal>& literals)
+        : mOperator(op),
+          mType(type),
+          mHasColumnName(false),
+          mColumnId(columnId),
+          mLiterals(literals.begin(), literals.end()) {
+    mHashCode = hashCode();
+    validate();
+}
+
 void PredicateLeaf::validateColumn() const {
     if (mHasColumnName && mColumnName.empty()) {
         throw std::invalid_argument("column name should not be empty");

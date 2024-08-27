@@ -42,7 +42,7 @@ public class CatalogAnalyzer {
         new CatalogAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class CatalogAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class CatalogAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

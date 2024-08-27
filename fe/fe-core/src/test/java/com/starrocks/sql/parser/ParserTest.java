@@ -39,6 +39,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.atn.PredictionMode;
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -70,6 +71,15 @@ class ParserTest {
     }
 
     @Test
+    void test() {
+        String sql = "@`a` = 1";
+        SessionVariable sessionVariable = new SessionVariable();
+        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
+        System.out.println();
+
+    }
+
+    @Test
     void sqlParseErrorInfoTest() {
         String sql = "select 1 form tbl";
         SessionVariable sessionVariable = new SessionVariable();
@@ -89,20 +99,13 @@ class ParserTest {
     @Test
     void sqlParseTemporalQueriesTest() {
         String[] temporalQueries = new String[] {
-                // DoltDB temporal query syntax
-                // https://docs.dolthub.com/sql-reference/version-control/querying-history
-                "SELECT * FROM t AS OF 'kfvpgcf8pkd6blnkvv8e0kle8j6lug7a';",
-                "SELECT * FROM t AS OF 'myBranch';",
-                "SELECT * FROM t AS OF 'HEAD^2';",
-                "SELECT * FROM t AS OF TIMESTAMP('2020-01-01');",
-                "SELECT * from `mydb/ia1ibijq8hq1llr7u85uivsi5lh3310p`.myTable;",
-
                 // MariaDB temporal query syntax
                 // https://mariadb.com/kb/en/system-versioned-tables/
-                "SELECT * FROM t FOR SYSTEM_TIME AS OF TIMESTAMP '2016-10-09 08:07:06';",
+                "SELECT * FROM t FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06';",
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",
+                "SELECT * FROM t FOR VERSION AS OF 123345456321;",
         };
 
         for (String query : temporalQueries) {
@@ -412,6 +415,77 @@ class ParserTest {
         List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
         String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
         assertEquals("SELECT 100 % 2", newSql);
+    }
+
+    @Test
+    void testComplexExpr() {
+        String exprString = " not X1 + 1  >  X2 and not X3 + 2 > X4 and not X5 + 3 > X6  and not X7 + 1 = X8 " +
+                "and not X9 + X10 < X11 + X12 ";
+        StringBuilder builder = new StringBuilder();
+        builder.append(exprString);
+        for (int i = 0; i < 500; i++) {
+            builder.append("or");
+            builder.append(exprString);
+        }
+
+        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT);
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(builder.toString())));
+        lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+        long start = System.currentTimeMillis();
+        StarRocksParser.ExpressionContext context1 = parser.expression();
+        Expr expr1 = (Expr) astBuilder.visit(context1);
+        long end = System.currentTimeMillis();
+        long timeOfLL = end - start;
+
+        parser.getTokenStream().seek(0);
+        parser.reset();
+        parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+        start = System.currentTimeMillis();
+        StarRocksParser.ExpressionContext context2 = parser.expression();
+        Expr expr2 = (Expr) astBuilder.visit(context2);
+        end = System.currentTimeMillis();
+        long timeOfSLL = end - start;
+
+        Assert.assertEquals(expr1, expr2);
+        Assert.assertTrue(timeOfLL > timeOfSLL);
+    }
+
+    @Test
+    void testPivot() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from t pivot (sum(v1) for v2 in (1, 2, 3))");
+        sqls.add("select * from t pivot (sum(v1) as s1 for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+        sqls.add("select * from t " +
+                "pivot (sum(v1) as s1, count(v2) as c1, avg(v3) as c3 " +
+                "for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+
+
+        List<String> expects = Lists.newArrayList();
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1)\n" +
+                "FOR v2 IN (1, 2, 3)\n" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1\n" +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3\n" +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                ")");
+        for (String sql : sqls) {
+            try {
+                StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+                String newSql = AstToSQLBuilder.toSQL(stmt);
+                assertEquals(expects.get(sqls.indexOf(sql)), newSql);
+            } catch (Exception e) {
+                e.printStackTrace();
+                fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
     }
 
     private static Stream<Arguments> keyWordSqls() {

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # pi
 
-## 功能
+
 
 返回圆周率。
 

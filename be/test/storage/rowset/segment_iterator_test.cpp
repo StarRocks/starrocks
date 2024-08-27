@@ -224,7 +224,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
 
     std::unique_ptr<ColumnPredicate> predicate;
     predicate.reset(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, "prefix"));
-    seg_opts.predicates[1].push_back(predicate.get());
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
@@ -308,7 +310,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
 
-    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(tablet_schema->column(1), nullptr));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
@@ -332,7 +334,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     seg_opts.global_dictmaps = &dict_map;
     std::unique_ptr<ColumnPredicate> predicate;
     predicate.reset(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, values[0].c_str()));
-    seg_opts.predicates[1].push_back(predicate.get());
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
@@ -494,7 +498,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
-    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(tablet_schema->column(1), nullptr));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 

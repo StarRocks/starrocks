@@ -1,16 +1,17 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 4
 ---
 
 # GRANT
 
-import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
 
 ## 功能
 
 该语句用于将一个或多个权限授予给角色或用户，以及将角色授予给用户或其他角色。
 
-有关权限项的详细信息，参见[权限项](../../../administration/privilege_item.md)。
+有关权限项的详细信息，参见[权限项](../../../administration/user_privs/privilege_item.md)。
 
 授权后，您可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 来查看权限授予的信息；通过 [REVOKE](REVOKE.md) 来撤销权限或角色。
 
@@ -106,7 +107,7 @@ GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
        | ALL TABLES IN 
-           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }}
+           { { DATABASE <database_name> } | ALL DATABASES }}
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -126,7 +127,7 @@ GRANT
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
+           { { DATABASE <database_name> }| ALL DATABASES }}
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -146,7 +147,7 @@ GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
+           { { DATABASE <database_name> }| ALL DATABASES }}
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -163,7 +164,7 @@ GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
        ｜ ALL FUNCTIONS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
+           { { DATABASE <database_name> }| ALL DATABASES }}
     TO { ROLE | USER } {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -254,11 +255,11 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 示例九：授予用户 `jack` 以用户 `rose` 的身份执行操作的权限。
 
 ```SQL
-GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
+GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 ```
 
 ## 最佳实践 - 基于使用场景创建自定义角色
 
 <UserPrivilegeCase />
 
-有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/User_privilege.md#多业务线权限管理)。
+有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/user_privs/User_privilege.md#多业务线权限管理)。

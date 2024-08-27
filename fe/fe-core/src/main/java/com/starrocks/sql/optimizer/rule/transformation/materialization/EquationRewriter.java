@@ -70,7 +70,20 @@ public class EquationRewriter {
         this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
     }
 
-
+    public boolean isColWithOnlyGroupByKeys(ScalarOperator expr) {
+        if (expr.getChildren().isEmpty()) {
+            return expr.isConstant() || equationMap.containsKey(expr);
+        }
+        for (ScalarOperator e : expr.getChildren()) {
+            if (expr.isConstant() || equationMap.containsKey(e)) {
+                continue;
+            }
+            if (!isColWithOnlyGroupByKeys(e)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     private final class EquivalentShuttle extends BaseScalarOperatorShuttle {
         private final EquivalentShuttleContext shuttleContext;
@@ -108,7 +121,7 @@ public class EquationRewriter {
 
         private ScalarOperator rewriteByEquivalent(ScalarOperator input,
                                                    IRewriteEquivalent.RewriteEquivalentType type) {
-            if (!rewriteEquivalents.containsKey(type)) {
+            if (!shuttleContext.isUseEquivalent() || !rewriteEquivalents.containsKey(type)) {
                 return null;
             }
             for (RewriteEquivalent equivalent : rewriteEquivalents.get(type)) {
@@ -193,14 +206,16 @@ public class EquationRewriter {
         }
     }
 
-    private final EquivalentShuttle shuttle = new EquivalentShuttle(new EquivalentShuttleContext(false));
+    private final EquivalentShuttle shuttle = new EquivalentShuttle(new EquivalentShuttleContext(null, false, true));
 
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
         return expr.accept(shuttle, null);
     }
 
-    protected Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithRollup(ScalarOperator expr) {
-        final EquivalentShuttleContext shuttleContext = new EquivalentShuttleContext(true);
+    protected Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithRollup(RewriteContext rewriteContext,
+                                                                                   ScalarOperator expr) {
+        final EquivalentShuttleContext shuttleContext = new EquivalentShuttleContext(rewriteContext,
+                true, true);
         final EquivalentShuttle shuttle = new EquivalentShuttle(shuttleContext);
         return Pair.create(expr.accept(shuttle, null), shuttleContext);
     }

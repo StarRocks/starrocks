@@ -137,12 +137,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const C
         }
 
         auto src_value = src_viewer.value(row);
+        auto limit = config::max_length_for_to_base64;
         if (src_value.size == 0) {
             result.append_null();
             continue;
-        } else if (src_value.size > config::max_length_for_to_base64) {
+        } else if (src_value.size > limit) {
             std::stringstream ss;
-            ss << "to_base64 not supported length > " << config::max_length_for_to_base64;
+            ss << "to_base64 not supported length > " << limit;
             throw std::runtime_error(ss.str());
         }
 

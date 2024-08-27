@@ -22,6 +22,8 @@
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/ListObjectsRequest.h>
+#include <aws/s3/model/ListObjectsResult.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
@@ -33,9 +35,11 @@
 
 #include "common/config.h"
 #include "common/s3_uri.h"
+#include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
+#include "io/direct_s3_output_stream.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
 #include "util/hdfs_util.h"
@@ -76,6 +80,14 @@ public:
         return obj;
     }
 
+    // Indicates the different S3 operation of using the client.
+    // This class is used to set different configuration for clients
+    // with different purposes.
+    enum class OperationType {
+        UNKNOWN,
+        RENAME_FILE,
+    };
+
     ~S3ClientFactory() = default;
 
     S3ClientFactory(const S3ClientFactory&) = delete;
@@ -83,7 +95,8 @@ public:
     S3ClientFactory(S3ClientFactory&&) = delete;
     void operator=(S3ClientFactory&&) = delete;
 
-    S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
+    S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration,
+                           S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
 
     void close();
@@ -96,6 +109,12 @@ public:
         // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
         static ClientConfiguration instance;
         return instance;
+    }
+
+    // Only use for UT
+    bool find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
+                                               AWSCloudConfiguration* cloud_config = nullptr) {
+        return _find_client_cache_keys_by_config_TEST(config);
     }
 
 private:
@@ -115,6 +134,17 @@ private:
     };
 
     constexpr static int kMaxItems = 8;
+
+    // Only use for UT
+    bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
+                                                AWSCloudConfiguration* cloud_config = nullptr) {
+        for (size_t i = 0; i < _items; i++) {
+            if (_client_cache_keys[i] ==
+                ClientCacheKey{config, cloud_config == nullptr ? AWSCloudConfiguration{} : *cloud_config})
+                return true;
+        }
+        return false;
+    }
 
     std::mutex _lock;
     int _items{0};
@@ -167,7 +197,8 @@ void S3ClientFactory::close() {
     }
 }
 
-S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
+S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration,
+                                                         S3ClientFactory::OperationType operation_type) {
     const AWSCloudConfiguration aws_cloud_configuration = CloudConfigurationFactory::create_aws(t_cloud_configuration);
 
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
@@ -190,7 +221,12 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
     if (config::object_storage_connect_timeout_ms > 0) {
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
-    if (config::object_storage_request_timeout_ms >= 0) {
+
+    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
+        config::object_storage_rename_file_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (config::object_storage_request_timeout_ms >= 0) {
+        // 0 is meaningful for object_storage_request_timeout_ms
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
 
@@ -276,7 +312,9 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 }
 
 // If you find yourself change this code, see also `bool operator==(const Aws::Client::ClientConfiguration&, const Aws::Client::ClientConfiguration&)`
-static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
+static std::shared_ptr<Aws::S3::S3Client> new_s3client(
+        const S3URI& uri, const FSOptions& opts,
+        S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
     // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
@@ -287,7 +325,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
         const TCloudConfiguration& tCloudConfiguration = (opts.cloud_configuration != nullptr)
                                                                  ? *opts.cloud_configuration
                                                                  : hdfs_properties->cloud_configuration;
-        return S3ClientFactory::instance().new_client(tCloudConfiguration);
+        return S3ClientFactory::instance().new_client(tCloudConfiguration, operation_type);
     } else if (hdfs_properties != nullptr) {
         DCHECK(hdfs_properties->__isset.end_point);
         if (hdfs_properties->__isset.end_point) {
@@ -322,10 +360,15 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
     if (config::object_storage_connect_timeout_ms > 0) {
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
-    // 0 is meaningful for object_storage_request_timeout_ms
-    if (config::object_storage_request_timeout_ms >= 0) {
+
+    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
+        config::object_storage_rename_file_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (config::object_storage_request_timeout_ms >= 0) {
+        // 0 is meaningful for object_storage_request_timeout_ms
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
+
     return S3ClientFactory::instance().new_client(config, opts);
 }
 
@@ -372,7 +415,7 @@ public:
 
     Status delete_file(const std::string& path) override;
 
-    Status delete_files(const std::vector<std::string>& paths) override;
+    Status delete_files(std::span<const std::string> paths) override;
 
     Status create_dir(const std::string& dirname) override;
 
@@ -409,6 +452,13 @@ public:
     StatusOr<SpaceInfo> space(const std::string& path) override;
 
 private:
+    Status iterate_dir_v1(const std::string& dir, const std::function<bool(std::string_view)>& cb);
+    Status iterate_dir2_v1(const std::string& dir, const std::function<bool(DirEntry)>& cb);
+    StatusOr<bool> is_directory_v1(const std::string& path);
+    Status delete_dir_v1(const std::string& dirname);
+    Status delete_dir_recursive_v1(const std::string& dirname);
+
+private:
     FSOptions _options;
 };
 
@@ -419,8 +469,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
-    return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
+    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    return RandomAccessFile::from(std::move(input_stream), path, false, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
@@ -430,23 +480,22 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
     if (file_info.size.has_value()) {
         input_stream->set_size(file_info.size.value());
     }
-    return std::make_unique<RandomAccessFile>(std::move(input_stream), file_info.path);
+    return RandomAccessFile::from(std::move(input_stream), file_info.path, false, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,
                                                                             const std::string& path) {
-    (void)opts;
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
-    return std::make_unique<SequentialFile>(std::move(input_stream), path);
+    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    return SequentialFile::from(std::move(input_stream), path, opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const std::string& fname) {
@@ -470,10 +519,16 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
         return Status::NotSupported(fmt::format("S3FileSystem does not support open mode {}", opts.mode));
     }
     auto client = new_s3client(uri, _options);
-    auto ostream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
-                                                        config::experimental_s3_max_single_part_size,
-                                                        config::experimental_s3_min_upload_part_size);
-    return std::make_unique<OutputStreamAdapter>(std::move(ostream), fname);
+    std::unique_ptr<io::OutputStream> output_stream;
+    if (opts.direct_write) {
+        output_stream = std::make_unique<io::DirectS3OutputStream>(std::move(client), uri.bucket(), uri.key());
+    } else {
+        output_stream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
+                                                             config::experimental_s3_max_single_part_size,
+                                                             config::experimental_s3_min_upload_part_size);
+    }
+
+    return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(output_stream), fname), opts.encryption_info);
 }
 
 Status S3FileSystem::rename_file(const std::string& src, const std::string& target) {
@@ -485,7 +540,7 @@ Status S3FileSystem::rename_file(const std::string& src, const std::string& targ
     if (!dest_uri.parse(target)) {
         return Status::InvalidArgument(fmt::format("Invalid target S3 URI: {}", target));
     }
-    auto client = new_s3client(src_uri, _options);
+    auto client = new_s3client(src_uri, _options, S3ClientFactory::OperationType::RENAME_FILE);
     Aws::S3::Model::CopyObjectRequest copy_request;
     copy_request.WithCopySource(src_uri.bucket() + "/" + src_uri.key());
     copy_request.WithBucket(dest_uri.bucket());
@@ -519,6 +574,10 @@ StatusOr<SpaceInfo> S3FileSystem::space(const std::string& path) {
 }
 
 Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+    if (config::s3_use_list_objects_v1) {
+        return iterate_dir_v1(dir, cb);
+    }
+
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -577,7 +636,70 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     return directory_exist ? Status::OK() : Status::NotFound(dir);
 }
 
+Status S3FileSystem::iterate_dir_v1(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
+    }
+    if (!uri.key().empty() && !HasSuffixString(uri.key(), "/")) {
+        uri.key().reserve(uri.key().size() + 1);
+        uri.key().push_back('/');
+    }
+    // `uri.key().empty()` is true means this is a root directory.
+    bool directory_exist = uri.key().empty() ? true : false;
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
+#ifdef BE_TEST
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
+#endif
+    do {
+        auto outcome = client->ListObjects(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dir, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        request.SetMarker(result.GetNextMarker());
+        directory_exist |= !result.GetCommonPrefixes().empty();
+        directory_exist |= !result.GetContents().empty();
+        for (auto&& cp : result.GetCommonPrefixes()) {
+            DCHECK(HasPrefixString(cp.GetPrefix(), uri.key())) << cp.GetPrefix() << " " << uri.key();
+            DCHECK(HasSuffixString(cp.GetPrefix(), "/")) << cp.GetPrefix();
+            const auto& full_name = cp.GetPrefix();
+            std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
+            if (!cb(name)) {
+                return Status::OK();
+            }
+        }
+        for (auto&& obj : result.GetContents()) {
+            if (obj.GetKey() == uri.key()) {
+                continue;
+            }
+            DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
+            std::string_view obj_key(obj.GetKey());
+            if (obj_key.back() == '/') {
+                obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+            }
+            std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            if (!cb(name)) {
+                return Status::OK();
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dir);
+}
+
 Status S3FileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+    if (config::s3_use_list_objects_v1) {
+        return iterate_dir2_v1(dir, cb);
+    }
+
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -600,6 +722,75 @@ Status S3FileSystem::iterate_dir2(const std::string& dir, const std::function<bo
         }
         result = outcome.GetResultWithOwnership();
         request.SetContinuationToken(result.GetNextContinuationToken());
+        directory_exist |= !result.GetCommonPrefixes().empty();
+        directory_exist |= !result.GetContents().empty();
+        for (auto&& cp : result.GetCommonPrefixes()) {
+            DCHECK(HasPrefixString(cp.GetPrefix(), uri.key())) << cp.GetPrefix() << " " << uri.key();
+            DCHECK(HasSuffixString(cp.GetPrefix(), "/")) << cp.GetPrefix();
+            const auto& full_name = cp.GetPrefix();
+
+            std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
+            DirEntry entry{.name = name, .is_dir = {true}};
+            if (!cb(entry)) {
+                return Status::OK();
+            }
+        }
+        for (auto&& obj : result.GetContents()) {
+            if (obj.GetKey() == uri.key()) {
+                continue;
+            }
+            DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
+
+            std::string_view obj_key(obj.GetKey());
+            DirEntry entry;
+            if (obj.LastModifiedHasBeenSet()) {
+                entry.mtime = obj.GetLastModified().Seconds();
+            }
+            if (obj_key.back() == '/') {
+                obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+                entry.is_dir = true;
+            } else {
+                DCHECK(obj.SizeHasBeenSet());
+                entry.is_dir = false;
+                if (obj.SizeHasBeenSet()) {
+                    entry.size = obj.GetSize();
+                }
+            }
+
+            std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            entry.name = name;
+
+            if (!cb(entry)) {
+                return Status::OK();
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dir);
+}
+
+Status S3FileSystem::iterate_dir2_v1(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
+    }
+    if (!uri.key().empty() && !HasSuffixString(uri.key(), "/")) {
+        uri.key().reserve(uri.key().size() + 1);
+        uri.key().push_back('/');
+    }
+    // `uri.key().empty()` is true means this is a root directory.
+    bool directory_exist = uri.key().empty() ? true : false;
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
+
+    do {
+        auto outcome = client->ListObjects(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dir, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        request.SetMarker(result.GetNextMarker());
         directory_exist |= !result.GetCommonPrefixes().empty();
         directory_exist |= !result.GetContents().empty();
         for (auto&& cp : result.GetCommonPrefixes()) {
@@ -692,6 +883,10 @@ Status S3FileSystem::create_dir_recursive(const std::string& dirname) {
 }
 
 StatusOr<bool> S3FileSystem::is_directory(const std::string& path) {
+    if (config::s3_use_list_objects_v1) {
+        return is_directory_v1(path);
+    }
+
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
@@ -709,6 +904,36 @@ StatusOr<bool> S3FileSystem::is_directory(const std::string& path) {
     }
     result = outcome.GetResultWithOwnership();
     request.SetContinuationToken(result.GetNextContinuationToken());
+    std::string dirname = uri.key() + "/";
+    for (auto&& obj : result.GetContents()) {
+        if (HasPrefixString(obj.GetKey(), dirname)) {
+            return true;
+        }
+        if (obj.GetKey() == uri.key()) {
+            return false;
+        }
+    }
+    return Status::NotFound(path);
+}
+
+StatusOr<bool> S3FileSystem::is_directory_v1(const std::string& path) {
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
+    }
+    if (uri.key().empty()) { // root directory '/'
+        return true;
+    }
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithMaxKeys(1);
+    auto outcome = client->ListObjects(request);
+    if (!outcome.IsSuccess()) {
+        return Status::IOError(fmt::format("fail to list {}: {}", path, outcome.GetError().GetMessage()));
+    }
+    result = outcome.GetResultWithOwnership();
+    request.SetMarker(result.GetNextMarker());
     std::string dirname = uri.key() + "/";
     for (auto&& obj : result.GetContents()) {
         if (HasPrefixString(obj.GetKey(), dirname)) {
@@ -742,7 +967,7 @@ Status S3FileSystem::delete_file(const std::string& path) {
     }
 }
 
-Status S3FileSystem::delete_files(const std::vector<std::string>& paths) {
+Status S3FileSystem::delete_files(std::span<const std::string> paths) {
     if (paths.empty()) {
         return Status::OK();
     }
@@ -803,6 +1028,10 @@ Status S3FileSystem::delete_files(const std::vector<std::string>& paths) {
 }
 
 Status S3FileSystem::delete_dir(const std::string& dirname) {
+    if (config::s3_use_list_objects_v1) {
+        return delete_dir_v1(dirname);
+    }
+
     S3URI uri;
     if (!uri.parse(dirname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
@@ -846,6 +1075,50 @@ Status S3FileSystem::delete_dir(const std::string& dirname) {
     }
 }
 
+Status S3FileSystem::delete_dir_v1(const std::string& dirname) {
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
+    }
+    if (uri.key().empty()) {
+        return Status::NotSupported("Cannot delete root directory of S3");
+    }
+    if (!HasSuffixString(uri.key(), "/")) {
+        uri.key().push_back('/');
+    }
+
+    auto client = new_s3client(uri, _options);
+
+    // Check if the directory is empty
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/").WithMaxKeys(2);
+    auto outcome = client->ListObjects(request);
+    if (!outcome.IsSuccess()) {
+        return to_status(outcome.GetError().GetErrorType(), outcome.GetError().GetMessage());
+    }
+    result = outcome.GetResultWithOwnership();
+    if (!result.GetCommonPrefixes().empty()) {
+        return Status::IOError(fmt::format("directory {} not empty", dirname));
+    }
+    if (result.GetContents().empty()) {
+        return Status::NotFound(fmt::format("directory {} not exist", dirname));
+    }
+    if (result.GetContents().size() > 1 || result.GetContents()[0].GetKey() != uri.key()) {
+        return Status::IOError(fmt::format("directory {} not empty", dirname));
+    }
+
+    // The directory is empty, delete it now
+    Aws::S3::Model::DeleteObjectRequest del_request;
+    del_request.WithBucket(uri.bucket()).WithKey(uri.key());
+    auto del_outcome = client->DeleteObject(del_request);
+    if (del_outcome.IsSuccess()) {
+        return Status::OK();
+    } else {
+        return to_status(del_outcome.GetError().GetErrorType(), del_outcome.GetError().GetMessage());
+    }
+}
+
 Status S3FileSystem::sync_dir(const std::string& dirname) {
     // The only thing we need to do is check whether the directory exist or not.
     ASSIGN_OR_RETURN(const bool is_dir, is_directory(dirname));
@@ -854,6 +1127,10 @@ Status S3FileSystem::sync_dir(const std::string& dirname) {
 }
 
 Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
+    if (config::s3_use_list_objects_v1) {
+        return delete_dir_recursive_v1(dirname);
+    }
+
     S3URI uri;
     if (!uri.parse(dirname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dirname));
@@ -882,6 +1159,63 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     delete_request.SetBucket(uri.bucket());
     do {
         auto outcome = client->ListObjectsV2(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dirname, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        directory_exist |= !result.GetContents().empty();
+        Aws::Vector<Aws::S3::Model::ObjectIdentifier> objects;
+        objects.reserve(result.GetContents().size());
+        for (auto&& obj : result.GetContents()) {
+            objects.emplace_back().SetKey(obj.GetKey());
+        }
+        if (!objects.empty()) {
+            Aws::S3::Model::Delete d;
+            d.WithObjects(std::move(objects)).WithQuiet(true);
+            delete_request.SetDelete(std::move(d));
+            auto delete_outcome = client->DeleteObjects(delete_request);
+            if (!delete_outcome.IsSuccess()) {
+                return Status::IOError(
+                        fmt::format("fail to batch delete {}: {}", dirname, delete_outcome.GetError().GetMessage()));
+            }
+            if (!delete_outcome.GetResult().GetErrors().empty()) {
+                auto&& e = delete_outcome.GetResult().GetErrors()[0];
+                return Status::IOError(fmt::format("fail to delete {}: {}", e.GetKey(), e.GetMessage()));
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dirname);
+}
+
+Status S3FileSystem::delete_dir_recursive_v1(const std::string& dirname) {
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dirname));
+    }
+    if (uri.key().empty()) {
+        return Status::NotSupported(fmt::format("S3 URI with an empty key: {}", dirname));
+    }
+    if (uri.key().back() != '/') {
+        uri.key().push_back('/');
+    }
+    bool directory_exist = false;
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsResult result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key());
+#ifdef BE_TEST
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
+#endif
+
+    Aws::S3::Model::DeleteObjectsRequest delete_request;
+    delete_request.SetBucket(uri.bucket());
+    do {
+        auto outcome = client->ListObjects(request);
         if (!outcome.IsSuccess()) {
             return Status::IOError(fmt::format("S3: fail to list {}: {}", dirname, outcome.GetError().GetMessage()));
         }

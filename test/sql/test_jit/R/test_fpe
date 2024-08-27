@@ -27,7 +27,7 @@ INSERT INTO jit_fpe
 (6, -2147483648, -9223372036854775808, 612, 7623634, 23648.1234);
 -- result:
 -- !result
-set enable_jit = true;
+set jit_level = -1;
 -- result:
 -- !result
 SELECT v1 DIV v3 + 233 as result FROM jit_fpe ORDER BY result;

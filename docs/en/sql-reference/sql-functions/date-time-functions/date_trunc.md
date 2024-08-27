@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # date_trunc
 
-## Description
+
 
 Truncates a time value based on the specified date part, such as year, day, hour, or minute.
 
@@ -24,7 +24,7 @@ DATETIME|DATE date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 
   `fmt` must be set to a value listed in the following table. If the value is incorrect, an error will be returned.
 
-  If `datetime` is a DATE value, `fmt` can only be `year`，`quarter`，`month`，`week`，or `day`. If you set `fmt` to other date units, for example `hour`, an error is reported. See Example 8.
+  If `datetime` is a DATE value, `fmt` can only be `year`, `quarter`, `month`, `week`, or `day`. If you set `fmt` to other date units, for example `hour`, an error is reported. See Example 8.
 
 | Value   | Description                                                  |
 | ------- | ------------------------------------------------------------ |

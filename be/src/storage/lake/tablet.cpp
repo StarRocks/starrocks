@@ -71,33 +71,44 @@ StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
-                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool) {
+                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool,
+                                                           bool is_compaction) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
+            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool,
+                                                              is_compaction);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
-                                                            flush_pool);
+                                                            flush_pool, is_compaction);
         }
     } else {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
+            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, is_compaction,
+                                                                   flush_pool);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
-                                                                 flush_pool);
+                                                                 is_compaction, flush_pool);
         }
     }
+}
+
+const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
+    auto tablet_schema_or = _mgr->get_tablet_schema(_id, nullptr);
+    if (!tablet_schema_or.ok()) {
+        return nullptr;
+    }
+    return tablet_schema_or.value();
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
-StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_index_id(int64_t index_id) {
-    return _mgr->get_tablet_schema_by_index_id(_id, index_id);
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
+    return _mgr->get_tablet_schema_by_id(_id, schema_id);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -141,12 +152,16 @@ std::string Tablet::delvec_location(std::string_view delvec_name) const {
     return _mgr->delvec_location(_id, delvec_name);
 }
 
+std::string Tablet::sst_location(std::string_view sst_name) const {
+    return _mgr->sst_location(_id, sst_name);
+}
+
 std::string Tablet::root_location() const {
     return _mgr->tablet_root_location(_id);
 }
 
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
-    auto txn_log = std::make_shared<lake::TxnLog>();
+    auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
@@ -174,6 +189,18 @@ int64_t Tablet::data_size() {
         return size.value();
     } else {
         LOG(WARNING) << "failed to get tablet " << _id << " data size: " << size.status();
+        return 0;
+    }
+}
+
+size_t Tablet::num_rows() const {
+    // set_version_hint should be called before to avoid list tablet metadata
+    DCHECK(_version_hint != 0);
+    auto num_rows = _mgr->get_tablet_num_rows(_id, _version_hint);
+    if (num_rows.ok()) {
+        return num_rows.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet rows num" << _id << "num rows: " << num_rows.status();
         return 0;
     }
 }

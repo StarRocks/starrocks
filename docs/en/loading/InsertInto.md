@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data using INSERT
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
@@ -26,7 +26,7 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 - You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md).
 - As for the current version of StarRocks, the INSERT transaction fails by default if the data of any rows does not comply with the schema of the table. For example, the INSERT transaction fails if the length of a field in any row exceeds the length limit for the mapping field in the table. You can set the session variable `enable_insert_strict` to `false` to allow the transaction to continue by filtering out the rows that mismatch the table.
 - If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. If your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via [Routine Load](../loading/RoutineLoad.md).
-- If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#use-a-temporary-partition-to-replace-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
+- If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#use-a-temporary-partition-to-replace-the-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
 
 ## Preparation
 
@@ -119,7 +119,7 @@ You can append one or more rows to a specific table by using INSERT INTO VALUES 
 
 > **CAUTION**
 >
-> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](../loading/Loading_intro.md) for other options that suit your scenarios.
+> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/Loading_intro.md) for other options that suit your scenarios.
 
 The following example inserts two rows into the data source table `source_wiki_edit` with the label `insert_load_wikipedia`. Label is the unique identification label for each data load transaction within the database.
 
@@ -192,6 +192,10 @@ WITH LABEL insert_load_wikipedia_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+:::note
+From v3.3.1, specifying a column list in the INSERT INTO statement on a Primary Key table will perform Partial Updates (instead of Full Upsert in earlier versions). If the column list is not specified, the system will perform Full Upsert.
+:::
+
 ### Insert data directly from files in an external source using FILES()
 
 From v3.1 onwards, StarRocks supports directly loading data from files on cloud storage using the INSERT command and the [FILES()](../sql-reference/sql-functions/table-functions/files.md) function, thereby you do not need to create an external catalog or file external table first. Besides, FILES() can automatically infer the table schema of the files, greatly simplifying the process of data loading.
@@ -215,7 +219,7 @@ You can overwrite a specific table with one or more rows by using INSERT OVERWRI
 
 > **CAUTION**
 >
-> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](../loading/Loading_intro.md) for other options that suit your scenarios.
+> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/Loading_intro.md) for other options that suit your scenarios.
 
 Query the source table and the target table to make sure there is data in them.
 
@@ -317,6 +321,28 @@ Query OK, 0 rows affected (0.01 sec)
 MySQL > select * from insert_wiki_edit;
 Empty set (0.00 sec)
 ```
+
+:::note
+For tables that use the `PARTITION BY column` strategy, INSERT OVERWRITE supports creating new partitions in the destination table by specifying the value of the partition key. Existing partitions are overwritten as usual.
+
+The following example creates the partitioned table `activity`, and creates a new partition in the table while inserting data into it:
+
+```SQL
+CREATE TABLE activity (
+id INT          NOT NULL,
+dt VARCHAR(10)  NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+PARTITION BY (`id`, `dt`)
+DISTRIBUTED BY HASH(`id`);
+
+INSERT OVERWRITE activity
+PARTITION(id='4', dt='2022-01-01')
+WITH LABEL insert_activity_auto_partition
+VALUES ('4', '2022-01-01');
+```
+
+:::
 
 - The following example overwrites the target table `insert_wiki_edit` with the `event_time` and `channel` columns from the source table. The default value is assigned to the columns into which no data is overwritten.
 

@@ -56,7 +56,8 @@ enum TDataSinkType {
     HIVE_TABLE_SINK,
     TABLE_FUNCTION_TABLE_SINK,
     BLACKHOLE_TABLE_SINK,
-    DICTIONARY_CACHE_SINK
+    DICTIONARY_CACHE_SINK,
+    MULTI_OLAP_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -64,7 +65,9 @@ enum TResultSinkType {
     FILE,
     STATISTIC,
     VARIABLE,
-    HTTP_PROTOCAL
+    HTTP_PROTOCAL,
+    METADATA_ICEBERG,
+    CUSTOMIZED
 }
 
 enum TResultSinkFormatType {
@@ -227,6 +230,9 @@ struct TOlapTableSink {
     // enable colocated for sync mv 
     27: optional bool enable_colocate_mv_index 
     28: optional i64 automatic_bucket_size
+    29: optional bool write_txn_log
+    30: optional bool ignore_out_of_partition
+    31: optional binary encryption_meta;
 }
 
 struct TSchemaTableSink {
@@ -241,6 +247,7 @@ struct TIcebergTableSink {
     4: optional Types.TCompressionType compression_type
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    7: optional i64 target_max_file_size
 }
 
 struct THiveTableSink {
@@ -251,6 +258,8 @@ struct THiveTableSink {
     5: optional Types.TCompressionType compression_type
     6: optional bool is_static_partition_sink
     7: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    8: optional i64 target_max_file_size
+    9: optional Descriptors.TTextFileDesc text_file_desc // for textfile format
 }
 
 struct TTableFunctionTableSink {
@@ -272,4 +281,6 @@ struct TDataSink {
   12: optional THiveTableSink hive_table_sink
   13: optional TTableFunctionTableSink table_function_table_sink
   14: optional TDictionaryCacheSink dictionary_cache_sink
+  15: optional list<TDataSink> multi_olap_table_sinks
+  16: optional i64 sink_id
 }

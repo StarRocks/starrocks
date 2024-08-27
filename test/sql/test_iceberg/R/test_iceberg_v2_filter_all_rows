@@ -1,0 +1,11 @@
+-- name: test_iceberg_v2_filter_all_rows
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_eq_all_row_filter order by k1 limit 1;
+-- result:
+1	6
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

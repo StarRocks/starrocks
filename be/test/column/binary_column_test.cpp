@@ -34,7 +34,7 @@ PARALLEL_TEST(BinaryColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
+GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
     // small column
     auto column = BinaryColumn::create();
     for (size_t i = 0; i < 10; i++) {
@@ -44,7 +44,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
 
-#ifdef NDEBUG
     // offset overflow
     column = BinaryColumn::create();
     size_t count = 1 << 30;
@@ -60,7 +59,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
         ASSERT_EQ(ret.value()->get(i).get_slice().to_string(), std::to_string(i));
     }
 
-    /*
     // row size overflow
     // the case will allocate a lot of memory, so temp remove it
     count = Column::MAX_CAPACITY_LIMIT + 5;
@@ -71,12 +69,10 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
     }
     ret = column->upgrade_if_overflow();
     ASSERT_TRUE(!ret.ok());
-    */
-#endif
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
+GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
     auto column = BinaryColumn::create();
     column->append_string("test");
     ASSERT_FALSE(column->has_large_column());
@@ -97,7 +93,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
         ASSERT_EQ(ret.value()->get(i).get_slice(), Slice(std::to_string(i)));
     }
 
-#ifdef NDEBUG
     large_column = LargeBinaryColumn::create();
     size_t count = 1 << 29;
     for (size_t i = 0; i < count; i++) {
@@ -105,7 +100,6 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
     }
     ret = large_column->downgrade();
     ASSERT_FALSE(ret.ok());
-#endif
 }
 
 // NOLINTNEXTLINE

@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 CloudCanal Community Edition is a free data migration and synchronization platform published by [ClouGence Co., Ltd](https://www.cloudcanalx.com) that integrates Schema Migration, Full Data Migration, verification, Correction, and real-time Incremental Synchronization.
 CloudCanal help users build a modern data stack in a simple way.
-![image.png](../../assets/3.11-1.png)
+![image.png](../../_assets/3.11-1.png)
 
 ## Download
 
@@ -23,7 +23,7 @@ CloudCanal help users build a modern data stack in a simple way.
 - In the current community edition with a maximum memory configuration of 2GB, if DataJobs encounter OOM exceptions or significant GC pauses, it is recommended to reduce the batch size to minimize memory usage.
   - For Full DataTask, you can adjust the `fullBatchSize` and `fullRingBufferSize` parameters.
   - For Incremental DataTask, the `increBatchSize` and `increRingBufferSize` parameters can be adjusted accordingly.
-- Supported Source endpoints and features：
+- Supported Source endpoints and features:
 
   | Source Endpoints \ Feature | Schema Migration | Full Data | Incremental | Verification |
     | --- | --- | --- | --- | --- |
@@ -50,7 +50,7 @@ First, refer to the [CloudCanal Quick Start](https://www.cloudcanalx.com/us/cc-d
 - Go to **DataSource Management** -> **Add DataSource**
 - Select **StarRocks** from the options for self-built databases
 
-![image.png](../../assets/3.11-2.png)
+![image.png](../../_assets/3.11-2.png)
 
 > Tips:
 >
@@ -66,29 +66,29 @@ Once the DataSource has been added successfully, you can follow these steps to c
 - Select the source and target databases for the DataJob
 - Click Next Step
 
-![image.png](../../assets/3.11-3.png)
+![image.png](../../_assets/3.11-3.png)
 
 - Choose **Incremental** and enable **Full Data**
 - Select DDL Sync
 - Click Next Step
 
-![image.png](../../assets/3.11-4.png)
+![image.png](../../_assets/3.11-4.png)
 
 - Select the source tables you want to subscribe to. Please note that the target StarRocks tables automatically after Schema Migration are Primary Key tables, so source tables without a primary key are not currently supported**
 
 - Click Next Step
 
-![image.png](../../assets/3.11-5.png)
+![image.png](../../_assets/3.11-5.png)
 
 - Configure the column mapping
 - Click Next Step
 
-![image.png](../../assets/3.11-6.png)
+![image.png](../../_assets/3.11-6.png)
 
 - Create DataJob
 
-![image.png](../../assets/3.11-7.png)
+![image.png](../../_assets/3.11-7.png)
 
 - Check the status of DataJob. The DataJob will automatically go through the stages of Schema Migration, Full Data, and Incremental after it has been created
 
-![image.png](../../assets/3.11-8.png)
+![image.png](../../_assets/3.11-8.png)

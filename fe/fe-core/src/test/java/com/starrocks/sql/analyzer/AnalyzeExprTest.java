@@ -500,6 +500,10 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby('[a,b]','[1,2]')");
         analyzeFail("select array_sum('[1,2]')");
         analyzeFail("select array_to_bitmap('[1,2]')");
+        analyzeFail("select array_sortby([1, 2, 3])");
+        analyzeFail("select array_sortby([1, 2, 3], [1, 2, 3], 'a')");
+        analyzeFail("select array_sortby([map{'a':1, 'b':2, 'c':3}], " +
+                "[map{'a':1, 'b':2, 'c':3}], [map{'c':4, 'd':5, 'e':6}])");
     }
 
     @Test
@@ -509,6 +513,28 @@ public class AnalyzeExprTest {
         analyzeSuccess("select coalesce(struct(to_date(\"2020-02-02 00:00:00\")), NULL)");
         analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
         analyzeSuccess("select map_from_arrays([1, 2], NULL)");
+    }
+
+    @Test
+    public void testMapInvalidKeyType() {
+        analyzeSuccess("select map(1, 2)");
+        analyzeSuccess("select map(1, [])");
+        analyzeSuccess("select map('a', row(1, 2))");
+        analyzeSuccess("select map('abc', row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as date), row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as datetime), row(1, 2))");
+
+        analyzeFail("select map([], 123)");
+        analyzeFail("select map(row(1,2,3), 123)");
+        analyzeFail("select map(map(1,2), 123)");
+        analyzeFail("select map(parse_json('{\"a\": 1}'), map(1,2))");
+    }
+
+    @Test
+    public void testNgramSearch() {
+        analyzeFail("select ngram_search('abc', 'a')");
+        analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
+        analyzeFail("select ngram_search(th,th,4) from tall;");
     }
 
 }

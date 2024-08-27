@@ -15,6 +15,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -34,6 +36,9 @@ public class StmtExecutorTest {
                 times = 1;
                 result = true;
 
+                state.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+
                 state.isLeader();
                 times = 2;
                 result = false;
@@ -41,7 +46,7 @@ public class StmtExecutorTest {
             }
         };
 
-        Assert.assertFalse(new StmtExecutor(new ConnectContext(), new OriginStatement("show frontends"), false)
-                .isForwardToLeader());
+        Assert.assertFalse(new StmtExecutor(new ConnectContext(),
+                SqlParser.parseSingleStatement("show frontends", SqlModeHelper.MODE_DEFAULT)).isForwardToLeader());
     }
 }

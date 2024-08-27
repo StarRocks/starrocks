@@ -17,7 +17,9 @@
 #include <orc/OrcFile.hh>
 
 #include "exec/hdfs_scanner.h"
+#include "formats/disk_range.hpp"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_input_stream.h"
 
 namespace starrocks {
 
@@ -33,11 +35,11 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     void do_update_counter(HdfsScanProfile* profile) override;
-
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 
 private:
     StatusOr<size_t> _do_get_next(ChunkPtr* chunk);
+    StatusOr<size_t> _do_get_next_count(ChunkPtr* chunk);
 
     // it means if we can skip this file without reading.
     // Normally it happens when we peek file column statistics,
@@ -49,6 +51,13 @@ private:
     // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file
     std::unordered_map<SlotId, std::vector<ExprContext*>> _eval_conjunct_ctxs_by_materialized_slot{};
 
+    Status build_iceberg_delete_builder();
+    Status build_paimon_delete_file_builder();
+    Status build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes);
+    Status build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes);
+    Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
+    Status resolve_columns(orc::Reader* reader);
+
     // disable orc search argument would be much easier for
     // writing unittest of customized filter
     bool _use_orc_sargs;
@@ -59,6 +68,7 @@ private:
     Filter _dict_filter;
     Filter _chunk_filter;
     std::set<int64_t> _need_skip_rowids;
+    std::unique_ptr<ORCHdfsFileStream> _input_stream;
 };
 
 } // namespace starrocks

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['suoyin']
 ---
 
 # Bloom filter 索引

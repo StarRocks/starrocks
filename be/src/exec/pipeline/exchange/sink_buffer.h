@@ -33,6 +33,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/disposable_closure.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::pipeline {
@@ -49,7 +50,7 @@ struct TransmitChunkInfo {
     // a same exchange source fragment instance, so we should use fragment_instance_id
     // of the destination as the key of destination instead of channel_id.
     TUniqueId fragment_instance_id;
-    PInternalService_Stub* brpc_stub;
+    std::shared_ptr<PInternalService_RecoverableStub> brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;
@@ -111,7 +112,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    [[nodiscard]] Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
+    Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // send by rpc or http
     Status _send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, const TransmitChunkInfo& req);

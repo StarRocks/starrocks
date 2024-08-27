@@ -1,0 +1,44 @@
+-- name: test_mv_meta_functions
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'a', 1);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'b', 2);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'c', 3);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'd', 4);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'e', 5);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 2, 'e', 5);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;
+-- result:
+-- !result
+refresh materialized view user_tags_mv1 with sync mode;
+select inspect_mv_plan('user_tags_mv1');
+-- result:
+[REGEX]plan 0.*
+
+-- !result
+select inspect_mv_plan('user_tags_mv1', true);
+-- result:
+[REGEX]plan 0.*
+
+-- !result
+select inspect_mv_plan('user_tags_mv1', false);
+-- result:
+[REGEX]plan 0:.* 
+
+-- !result

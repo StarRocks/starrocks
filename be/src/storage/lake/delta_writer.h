@@ -18,7 +18,9 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "storage/lake/delta_writer_finish_mode.h"
 
 namespace starrocks {
 class MemTracker;
@@ -27,6 +29,7 @@ class Chunk;
 class TabletSchema;
 class ThreadPool;
 struct FileInfo;
+class TxnLogPB;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -39,10 +42,7 @@ class DeltaWriter {
     friend class DeltaWriterBuilder;
 
 public:
-    enum FinishMode {
-        kWriteTxnLog,
-        kDontWriteTxnLog,
-    };
+    using TxnLogPtr = std::shared_ptr<const TxnLogPB>;
 
     // Return the thread pool used for performing write IO.
     static ThreadPool* io_threads();
@@ -54,21 +54,24 @@ public:
     DISALLOW_COPY_AND_MOVE(DeltaWriter);
 
     // NOTE: It's ok to invoke this method in a bthread, there is no I/O operation in this method.
-    [[nodiscard]] Status open();
+    Status open();
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status finish(FinishMode mode = kWriteTxnLog);
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush();
+    Status flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
-    [[nodiscard]] Status flush_async();
+    Status flush_async();
 
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
@@ -169,8 +172,13 @@ public:
         return *this;
     }
 
-    DeltaWriterBuilder& set_index_id(int64_t index_id) {
-        _index_id = index_id;
+    DeltaWriterBuilder& set_schema_id(int64_t schema_id) {
+        _schema_id = schema_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
         return *this;
     }
 
@@ -181,7 +189,7 @@ private:
     int64_t _txn_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
-    int64_t _index_id{0};
+    int64_t _schema_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     std::string _merge_condition{};
@@ -189,6 +197,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
 };
 
 } // namespace starrocks::lake

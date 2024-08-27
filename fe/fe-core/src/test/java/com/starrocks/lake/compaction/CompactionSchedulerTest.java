@@ -14,25 +14,39 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.Assert.assertEquals;
 
 public class CompactionSchedulerTest {
-
-    private final long dbId = 9000L;
-    private final long transactionId = 12345L;
 
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
@@ -43,18 +57,64 @@ public class CompactionSchedulerTest {
 
     @Test
     public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
+        long dbId = 9000L;
+        long transactionId = 12345L;
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         new Expectations() {
             {
                 try {
                     dbTransactionMgr.beginTransaction(
                             (List<Long>) any, anyString, (TUniqueId) any, (TransactionState.TxnCoordinator) any,
-                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong
+                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong
                     );
                 } catch (Exception e) {
                     // skip
                 }
                 result = transactionId;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                return Lists.newArrayList(1L);
+            }
+
+            @Mock
+            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
+                return null;
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
             }
         };
 
@@ -66,12 +126,97 @@ public class CompactionSchedulerTest {
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
                 new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
         try {
             assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));
         } catch (Exception e) {
             Assert.fail("Transaction failed for lake compaction");
         }
+    }
+
+    @Test
+    public void testDisableTableCompaction() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "12345");
+
+        Assert.assertTrue(compactionScheduler.isTableDisabled(12345L));
+
+        compactionScheduler.disableTables("23456;34567;45678");
+
+        Assert.assertFalse(compactionScheduler.isTableDisabled(12345L));
+        Assert.assertTrue(compactionScheduler.isTableDisabled(23456L));
+        Assert.assertTrue(compactionScheduler.isTableDisabled(34567L));
+        Assert.assertTrue(compactionScheduler.isTableDisabled(45678L));
+
+        compactionScheduler.disableTables("");
+        Assert.assertFalse(compactionScheduler.isTableDisabled(23456L));
+    }
+
+    @Test
+    public void testGetHistory() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+                ConcurrentHashMap<PartitionIdentifier, CompactionJob> r = new ConcurrentHashMap<>();
+                Database db = new Database();
+                Table table = new LakeTable();
+                PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
+                PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
+                PhysicalPartition partition1 = new Partition(123, "aaa", null, null);
+                PhysicalPartition partition2 = new Partition(124, "bbb", null, null);
+                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false);
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                }
+                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false);
+                r.put(partitionIdentifier1, job1);
+                r.put(partitionIdentifier2, job2);
+                return r;
+            }
+        };
+
+        List<CompactionRecord> list = compactionScheduler.getHistory();
+        Assert.assertEquals(2, list.size());
+        Assert.assertTrue(list.get(0).getStartTs() >= list.get(1).getStartTs());
+    }
+
+    @Test
+    public void testCompactionTaskLimit() {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(null, null, null, null, "");
+
+        int defaultValue = Config.lake_compaction_max_tasks;
+        // explicitly set config to a value bigger than default -1
+        Config.lake_compaction_max_tasks = 10;
+        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit());
+
+        // reset config to default value
+        Config.lake_compaction_max_tasks = defaultValue;
+
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10001L, "192.168.0.3", 9050);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+                return Arrays.asList(b1, c1, c2);
+            }
+
+            @Mock
+            public Warehouse getCompactionWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
     }
 }

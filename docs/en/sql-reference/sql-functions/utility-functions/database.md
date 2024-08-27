@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # database
 
-## Description
+
 
 Returns the name of the current database. If no database is selected, an empty value is returned.
 

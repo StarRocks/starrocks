@@ -4,9 +4,7 @@ displayed_sidebar: "English"
 
 # CREATE TABLE
 
-## Description
-
-Creates a new table in StarRocks.
+Create a new table in StarRocks.
 
 :::tip
 This operation requires the CREATE TABLE privilege on the destination database.
@@ -14,8 +12,8 @@ This operation requires the CREATE TABLE privilege on the destination database.
 
 ## Syntax
 
-```plaintext
-CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
+```SQL
+CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
 [ENGINE = [olap|mysql|elasticsearch|hive|hudi|iceberg|jdbc]]
@@ -48,7 +46,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **col_name**: column name.
 
-Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
+Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
 
 **col_type**: Column type. Specific column information, such as types and ranges:
 
@@ -72,7 +70,7 @@ Note that normally you cannot create a column whose name is initiated with `__op
 - DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
 - CHAR[(length)]: Fixed length string. Range: 1 ~ 255. Default value: 1.
 - VARCHAR[(length)]: A variable-length string. The default value is 1. Unit: bytes. In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533. [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
-- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md).
+- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/scalar-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
 **agg_type**: aggregation type. If not specified, this column is key column.
@@ -88,7 +86,7 @@ If specified, it is value column. The aggregation types supported are as follows
 > - When the column of aggregation type BITMAP_UNION is imported, its original data types must be TINYINT, SMALLINT, INT, and BIGINT.
 > - If NOT NULL is specified by REPLACE_IF_NOT_NULL column when the table was created, StarRocks will still convert the data to NULL without sending an error report to the user. With this, the user can import selected columns.
 
-This aggregation type applies ONLY to the Aggregate table whose key_desc type is AGGREGATE KEY.
+This aggregation type applies ONLY to the Aggregate table whose key_desc type is AGGREGATE KEY. Since v3.1.9, `REPLACE_IF_NOT_NULL` newly supports the columns of the BITMAP type.
 
 **NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate, or Unique Key table. In a table that uses the Primary Key table, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
 
@@ -108,7 +106,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
-For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-a-bitmap-index).
+For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-an-index).
 
 ### ENGINE type
 
@@ -120,7 +118,7 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
 **From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../data-manipulation/INSERT.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
 
-**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and you can insert data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). See [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table).**
+**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using [INSERT INTO](../data-manipulation/INSERT.md). For more information, see [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table) and [Sink data to a Hive table](../../../data_source/catalog/hive_catalog.md#sink-data-to-a-hive-table).**
 
 - For MySQL, specify the following properties:
 
@@ -258,7 +256,7 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - For the naming conventions of partitions, see [System limits](../../../reference/System_limit.md).
-- Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
@@ -329,7 +327,7 @@ Description
 
 You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- The partitioning column can be of a date or integer type.
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
 For more information, see [Data distribution](../../../table_design/Data_distribution.md).
@@ -385,11 +383,17 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 
 ### ORDER BY
 
-Since version 3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
-> **NOTICE**
->
-> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+For more descriptions of sort keys, see [Sort keys and prefix indexes](../../../table_design/indexes/Prefix_index_sort_key.md).
+
+### TEMPORARY
+
+Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table).
+
+:::note
+When creating a temporary table, you must set `ENGINE` to `olap`.
+:::
 
 ### PROPERTIES
 
@@ -429,7 +433,7 @@ PROPERTIES (
 
   **Parameter**
 
-  - `storage_cooldown_ttl`：the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
+  - `storage_cooldown_ttl`: the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
 
   The supported values are `<num> YEAR`, `<num> MONTH`, `<num> DAY`, and `<num> HOUR`. `<num>` is a non-negative integer. The default value is null, indicating that storage cooldown is not automatically performed.
 
@@ -520,7 +524,7 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
 | dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
-#### Specify the bucket size for tables configured with random bucketing
+#### Specify the bucket size (`bucket_size`) for tables configured with random bucketing
 
 Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation to enable the on-demand and dynamic increase of the number of buckets. Unit: B.
 
@@ -540,6 +544,22 @@ The valid values of `compression` are:
 - `ZSTD`: the Zstandard algorithm.
 - `ZLIB`: the zlib algorithm.
 - `SNAPPY`: the Snappy algorithm.
+
+From v3.3.2 onwards, StarRocks supports specifying the compression level for zstd compression format during table creation.
+
+Syntax:
+
+```sql
+PROPERTIES ("compression" = "zstd(<compression_level>)")
+```
+
+`compression_level`: the compression level for ZSTD compression format. Type: Integer. Range: [1,22]. Default: `3` (Recommended). The greater the number, the higher the compression ratio. The higher the compression level, the more time consumption for compression and decompression.
+
+Example:
+
+```sql
+PROPERTIES ("compression" = "zstd(3)")
+```
 
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 
@@ -616,15 +636,18 @@ PROPERTIES (
 
 #### Create cloud-native tables for StarRocks Shared-data cluster
 
-To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
+To use your StarRocks Shared-data cluster, you must create cloud-native tables with the following properties:
 
 ```SQL
 PROPERTIES (
+    "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
     "datacache.partition_duration" = "<string_value>",
     "enable_async_write_back" = "{ true | false }"
 )
 ```
+
+- `storage_volume`: The name of the storage volume used to store the cloud-native table you want to create. If this property is not specified, the default storage volume is used. This property is supported from v3.1 onwards.
 
 - `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
 
@@ -633,7 +656,7 @@ PROPERTIES (
 
   > **NOTE**
   >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/BE_configuration.md).
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/management/BE_configuration.md).
 
 - `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
@@ -648,11 +671,11 @@ PROPERTIES (
 
 #### Set fast schema evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation. This parameter is supported since v3.2.0.
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation.
   > **NOTE**
   >
-  > - StarRocks shared-data clusters do not support this parameter.
-  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/FE_configuration.md#enable_fast_schema_evolution).
+  > - This parameter is supported for shared-nothing clusters since v3.2.0, and shared-data clusters since v3.3.0.
+  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution).
 
 ## Examples
 
@@ -992,6 +1015,28 @@ PROPERTIES(
     "replication_num" = "3",
     "enable_persistent_index" = "true"
 );
+```
+
+### Create a partitioned temporary table
+
+```SQL
+CREATE TEMPORARY TABLE example_db.temp_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    v1 VARCHAR(2048),
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
+)
+ENGINE=olap
+DUPLICATE KEY(k1, k2, k3)
+PARTITION BY RANGE (k1)
+(
+    PARTITION p1 VALUES LESS THAN ("2014-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2014-06-01"),
+    PARTITION p3 VALUES LESS THAN ("2014-12-01")
+)
+DISTRIBUTED BY HASH(k2);
 ```
 
 ## References

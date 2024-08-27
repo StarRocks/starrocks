@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -33,6 +34,8 @@ import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -43,7 +46,9 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -97,7 +102,8 @@ public class LocalMetaStoreTest {
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
-                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds, null);
+                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
+                null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
         Assert.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);
@@ -154,9 +160,9 @@ public class LocalMetaStoreTest {
                 GlobalStateMgr.getCurrentState().getColocateTableIndex());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        localMetaStore.save(image.getDataOutputStream());
+        localMetaStore.save(image.getImageWriter());
 
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         localMetaStore.load(reader);
         reader.close();
 
@@ -177,7 +183,7 @@ public class LocalMetaStoreTest {
                 index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getId()).getStorageMedium());
         index.addTablet(new LocalTablet(0), tabletMeta);
         PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
-                db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, p.getId(), 0, index));
+                db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, "", p.getId(), 0, index));
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.replayAddSubPartition(info);
@@ -257,4 +263,52 @@ public class LocalMetaStoreTest {
             Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
+
+    @Test
+    public void testRenameColumnException() throws Exception {
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        try {
+            Table table = new HiveTable();
+            localMetastore.renameColumn(null, table, null);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
+        }
+
+        Database db = localMetastore.getDb("test");
+        Table table = db.getTable("t1");
+        try {
+            localMetastore.renameColumn(new Database(1, "_statistics_"), table, null);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB);
+        }
+
+        try {
+            OlapTable olapTable = new OlapTable();
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            localMetastore.renameColumn(db, olapTable, null);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE);
+        }
+
+        try {
+            ColumnRenameClause columnRenameClause = new ColumnRenameClause("k4", "k5");
+            localMetastore.renameColumn(db, table, columnRenameClause);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_BAD_FIELD_ERROR);
+        }
+
+        try {
+            ColumnRenameClause columnRenameClause = new ColumnRenameClause("k3", "k2");
+            localMetastore.renameColumn(db, table, columnRenameClause);
+            Assert.fail("should not happen");
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
+        }
+    }
+
 }

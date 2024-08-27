@@ -16,6 +16,8 @@ CREATE [OR REPLACE] PIPE [db_name.]<pipe_name>
 AS <INSERT_SQL>
 ```
 
+StarRocks supports CREATE [OR REPLACE] PIPE from v3.2.3 onwards. When you use CREATE [OR REPLACE] PIPE to create a pipe and the pipe name specified in `pipe_name` is the same as the name of an existing pipe in the current database, the existing database is replaced by the new pipe.
+
 ## Parameters
 
 ### db_name
@@ -43,7 +45,7 @@ A set of optional parameters that specify how to execute the pipe. Format: `"key
 | Property      | Default value | Description                                                  |
 | :------------ | :------------ | :----------------------------------------------------------- |
 | AUTO_INGEST   | `TRUE`        | Whether to enable automatic incremental data loads. Valid values: `TRUE` and `FALSE`. If you set this parameter to `TRUE`, automatic incremental data loads are enabled. If you set this parameter to `FALSE`, the system loads only the source data file content specified at job creation and subsequent new or updated file content will not be loaded. For a bulk load, you can set this parameter to `FALSE`. |
-| POLL_INTERVAL | `10` (second) | The polling interval for automatic incremental data loads.   |
+| POLL_INTERVAL | `300` second | The polling interval for automatic incremental data loads.   |
 | BATCH_SIZE    | `1GB`         | The size of data to be loaded as a batch. If you do not include a unit in the parameter value, the default unit byte is used. |
 | BATCH_FILES   | `256`         | The number of source data files to be loaded as a batch.     |
 

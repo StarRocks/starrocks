@@ -14,6 +14,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.DecommissionType;
@@ -29,8 +30,10 @@ import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,8 +73,11 @@ public class ComputeNode implements IComputable, Writable {
     private volatile int beRpcPort; // be rpc port
     @SerializedName("brpcPort")
     private volatile int brpcPort = -1;
+
     @SerializedName("cpuCores")
     private volatile int cpuCores = 0; // Cpu cores of node
+    @SerializedName("mlb")
+    private volatile long memLimitBytes = 0;
 
     @SerializedName("lastUpdateMs")
     private volatile long lastUpdateMs;
@@ -105,19 +111,42 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
 
+    @SerializedName("workerGroupId")
+    private long workerGroupId = 0;
+
+    @SerializedName("warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     // Indicate there is whether storage_path or not with CN node
     // It must be true for Backend
     @SerializedName("isSetStoragePath")
     private volatile boolean isSetStoragePath = false;
 
+    // Tracking the heartbeat status, CONNECTING/ALIVE/SHUTDOWN/DISCONNECTED
+    @SerializedName("status")
+    private Status status;
+
     private volatile DataCacheMetrics dataCacheMetrics = null;
 
     private volatile int numRunningQueries = 0;
-    private volatile long memLimitBytes = 0;
     private volatile long memUsedBytes = 0;
     private volatile int cpuUsedPermille = 0;
     private volatile long lastUpdateResourceUsageMs = 0;
     private final AtomicReference<Map<Long, ResourceGroupUsage>> groupIdToUsage = new AtomicReference<>(new HashMap<>());
+
+    /**
+     * Other similar status might be confusing with this one.
+     * - HeartbeatResponse.HbStatus: {OK, BAD}
+     * - HeartbeatResponse.AliveStatus: {ALIVE, NOT_ALIVE}
+     * - Backend.BackendState: {using, offline, free}
+     * NOTE: The status will be serialized along with the ComputeNode object,
+     *   so be cautious changing the enum name.
+     */
+    public enum Status {
+        CONNECTING,         // New added node, no heartbeat probing yet
+        OK,                 // Heartbeat OK
+        SHUTDOWN,           // Heartbeat response code indicating shutdown in progress
+        DISCONNECTED,       // Heartbeat failed consecutively for `n` times
+    }
 
     public ComputeNode() {
         this.host = "";
@@ -134,6 +163,7 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = Backend.BackendState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        this.status = Status.CONNECTING;
     }
 
     public ComputeNode(long id, String host, int heartbeatPort) {
@@ -152,6 +182,7 @@ public class ComputeNode implements IComputable, Writable {
 
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        this.status = Status.CONNECTING;
     }
 
     public void setLastWriteFail(boolean lastWriteFail) {
@@ -173,6 +204,11 @@ public class ComputeNode implements IComputable, Writable {
 
     public boolean isSetStoragePath() {
         return isSetStoragePath;
+    }
+
+    // for test only
+    public void setIsStoragePath(boolean isSetStoragePath) {
+        this.isSetStoragePath = isSetStoragePath;
     }
 
     public long getId() {
@@ -232,7 +268,24 @@ public class ComputeNode implements IComputable, Writable {
         return heartbeatErrMsg;
     }
 
-    // for test only
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
+
+    public void setWorkerGroupId(long workerGroupId) {
+        this.workerGroupId = workerGroupId;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    // For TEST ONLY
+    @VisibleForTesting
     public void updateOnce(int bePort, int httpPort, int beRpcPort) {
         if (this.bePort != bePort) {
             this.bePort = bePort;
@@ -248,12 +301,11 @@ public class ComputeNode implements IComputable, Writable {
 
         long currentTime = System.currentTimeMillis();
         this.lastUpdateMs = currentTime;
-        if (!isAlive.get()) {
+        if (!isAlive()) {
             this.lastStartTime = currentTime;
             LOG.info("{} is alive,", this.toString());
-            this.isAlive.set(true);
         }
-
+        setAlive(true);
         heartbeatErrMsg = "";
     }
 
@@ -283,6 +335,7 @@ public class ComputeNode implements IComputable, Writable {
 
     public void setAlive(boolean isAlive) {
         this.isAlive.set(isAlive);
+        this.status = isAlive ? Status.OK : Status.DISCONNECTED;
     }
 
     public void setBePort(int agentPort) {
@@ -325,20 +378,12 @@ public class ComputeNode implements IComputable, Writable {
         return this.isAlive.get();
     }
 
-    public void setIsAlive(boolean isAlive) {
-        this.isAlive.set(isAlive);
-    }
-
     public boolean isDecommissioned() {
         return this.isDecommissioned.get();
     }
 
-    public void setIsDecommissioned(boolean isDecommissioned) {
-        this.isDecommissioned.set(isDecommissioned);
-    }
-
     public boolean isAvailable() {
-        return this.isAlive.get() && !this.isDecommissioned.get();
+        return this.status == Status.OK && !this.isDecommissioned.get();
     }
 
     public int getNumRunningQueries() {
@@ -364,11 +409,9 @@ public class ComputeNode implements IComputable, Writable {
         return cpuUsedPermille;
     }
 
-    public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
-                                    int cpuUsedPermille) {
-
+    public void updateResourceUsage(int numRunningQueries, long memUsedBytes, int cpuUsedPermille) {
         this.numRunningQueries = numRunningQueries;
-        this.memLimitBytes = memLimitBytes;
+        // memLimitBytes is set by heartbeats instead of reports.
         this.memUsedBytes = memUsedBytes;
         this.cpuUsedPermille = cpuUsedPermille;
         this.lastUpdateResourceUsageMs = System.currentTimeMillis();
@@ -420,7 +463,7 @@ public class ComputeNode implements IComputable, Writable {
     @Override
     public String toString() {
         return "ComputeNode [id=" + id + ", host=" + host + ", heartbeatPort=" + heartbeatPort + ", alive=" +
-                isAlive.get() + "]";
+                isAlive.get() + ", status=" + status + "]";
     }
 
     public Backend.BackendState getBackendState() {
@@ -446,10 +489,6 @@ public class ComputeNode implements IComputable, Writable {
         return isAlive;
     }
 
-    public void setIsAlive(AtomicBoolean isAlive) {
-        this.isAlive = isAlive;
-    }
-
     public void setDecommissionType(int decommissionType) {
         this.decommissionType = decommissionType;
     }
@@ -469,13 +508,24 @@ public class ComputeNode implements IComputable, Writable {
         return cpuCores;
     }
 
+    @VisibleForTesting
+    public void setCpuCores(int cpuCores) {
+        this.cpuCores = cpuCores;
+    }
+
+    @VisibleForTesting
+    public void setMemLimitBytes(long memLimitBytes) {
+        this.memLimitBytes = memLimitBytes;
+    }
+
     /**
      * handle Compute node's heartbeat response.
      * return true if any port changed, or alive state is changed.
      */
     public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
-        boolean becomeDead = false;
         boolean isChanged = false;
+        boolean changedToShutdown = false;
+        boolean becomeDead = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
             if (this.version == null) {
                 return false;
@@ -517,7 +567,7 @@ public class ComputeNode implements IComputable, Writable {
                 // This line to set 'lastStartTime' will be removed in due time
                 this.lastStartTime = hbResponse.getHbTime();
                 LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
-                this.isAlive.set(true);
+                setAlive(true);
             } else if (this.lastStartTime <= 0) {
                 this.lastStartTime = hbResponse.getHbTime();
             }
@@ -537,22 +587,57 @@ public class ComputeNode implements IComputable, Writable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                    BackendResourceStat.getInstance().setNumHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                }
+            }
+
+            if (this.memLimitBytes != hbResponse.getMemLimitBytes()) {
+                isChanged = true;
+                this.memLimitBytes = hbResponse.getMemLimitBytes();
+
+                // BackendCoreStat is a global state, checkpoint should not modify it.
+                if (!GlobalStateMgr.isCheckpointThread()) {
+                    BackendResourceStat.getInstance().setMemLimitBytesOfBe(hbResponse.getBeId(), hbResponse.getMemLimitBytes());
                 }
             }
 
             heartbeatErrMsg = "";
             this.heartbeatRetryTimes = 0;
         } else {
-            if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
-                this.heartbeatRetryTimes++;
+            boolean isShutdown = (hbResponse.getStatusCode() == TStatusCode.SHUTDOWN);
+            String deadMessage = "";
+            boolean needSetAlive = false;
+            if (isShutdown) {
+                heartbeatRetryTimes = 0;
+                lastUpdateMs = hbResponse.getHbTime();
+                deadMessage = "the target node is in shutting down";
+                needSetAlive = true;
             } else {
+                this.heartbeatRetryTimes++;
+                if (this.heartbeatRetryTimes >= Config.heartbeat_retry_times) {
+                    deadMessage = "exceed heartbeatRetryTimes";
+                    needSetAlive = true;
+                    lastMissingHeartbeatTime = System.currentTimeMillis();
+                }
+            }
+
+            if (needSetAlive) {
                 if (isAlive.compareAndSet(true, false)) {
-                    becomeDead = true;
-                    LOG.info("{} is dead due to exceed heartbeatRetryTimes", this);
+                    LOG.info("{} is dead due to {}", this, deadMessage);
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
-                lastMissingHeartbeatTime = System.currentTimeMillis();
+                Status targetStatus = isShutdown ? Status.SHUTDOWN : Status.DISCONNECTED;
+                if (status != targetStatus) {
+                    status = targetStatus;
+                    switch (targetStatus) {
+                        case SHUTDOWN:
+                            changedToShutdown = true;
+                            break;
+                        case DISCONNECTED:
+                            becomeDead = true;
+                            break;
+                    }
+                }
             }
             // When the master receives an error heartbeat info which status not ok, 
             // this heartbeat info also need to be synced to follower.
@@ -570,18 +655,23 @@ public class ComputeNode implements IComputable, Writable {
                 // in which case the alive status needs to be handled according to the original logic
                 boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
                 if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
-                    becomeDead = !newIsAlive;
                     LOG.info("{} alive status is changed to {}", this, newIsAlive);
                 }
-                heartbeatRetryTimes = 0;
             }
         }
 
-        if (becomeDead && !GlobalStateMgr.isCheckpointThread()) {
-            CoordinatorMonitor.getInstance().addDeadBackend(id);
-            GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            if (changedToShutdown) {
+                // only notify the resource usage changed when the node turns to SHUTDOWN status
+                // Don't add it to CoordinatorMonitor, otherwise FE will proactively cancel queries
+                // where the node is still trying to complete.
+                GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
+            }
+            if (becomeDead) {
+                // the node is firmly dead.
+                CoordinatorMonitor.getInstance().addDeadBackend(id);
+            }
         }
-
         return isChanged;
     }
 
@@ -631,6 +721,10 @@ public class ComputeNode implements IComputable, Writable {
         ResourceGroupUsage usage = currGroupIdToUsage.get(groupId);
         return usage.group.isMaxCpuCoresEffective() && usage.isCpuCoreUsagePermilleEffective() &&
                 usage.cpuCoreUsagePermille >= usage.group.getMaxCpuCores() * 1000;
+    }
+
+    public Status getStatus() {
+        return status;
     }
 
     public static class ResourceGroupUsage {

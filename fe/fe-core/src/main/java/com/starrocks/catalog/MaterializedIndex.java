@@ -45,7 +45,6 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -174,7 +173,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public List<Long> getTabletIdsInOrder() {
-        List<Long> tabletIds = Lists.newArrayList();
+        List<Long> tabletIds = Lists.newArrayListWithCapacity(tablets.size());
         for (Tablet tablet : tablets) {
             tabletIds.add(tablet.getId());
         }
@@ -289,32 +288,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
         out.writeLong(-1L); // For rollback compatibility of field rollupIndexId
         out.writeLong(-1L); // For rollback compatibility of field rollupFinishedVersion
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        id = in.readLong();
-
-        state = IndexState.valueOf(Text.readString(in));
-        rowCount = in.readLong();
-
-        int tabletCount = in.readInt();
-        for (int i = 0; i < tabletCount; ++i) {
-            // LakeTablet uses json serialization.
-            Tablet tablet = LocalTablet.read(in);
-            tablets.add(tablet);
-            idToTablets.put(tablet.getId(), tablet);
-        }
-
-        in.readLong(); // For backward compatibility of field rollupIndexId
-        in.readLong(); // For backward compatibility of field rollupFinishedVersion
-    }
-
-    public static MaterializedIndex read(DataInput in) throws IOException {
-        MaterializedIndex materializedIndex = new MaterializedIndex();
-        materializedIndex.readFields(in);
-        return materializedIndex;
     }
 
     @Override

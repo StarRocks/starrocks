@@ -16,6 +16,7 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.common.UserException;
 
@@ -32,13 +33,14 @@ public abstract class AlterJobV2Builder {
     protected long startTime = 0;
     protected long timeoutMs = 0;
     protected boolean bloomFilterColumnsChanged = false;
-    protected Set<String> bloomFilterColumns;
+    protected Set<ColumnId> bloomFilterColumns;
     protected double bloomFilterFpp;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
     protected Map<Long, List<Column>> newIndexSchema = new HashMap<>();
     protected Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
     protected List<Integer> sortKeyIdxes;
+    protected long warehouseId;
     protected List<Integer> sortKeyUniqueIds;
 
     public AlterJobV2Builder() {
@@ -69,7 +71,7 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withBloomFilterColumns(@Nullable Set<String> bfColumns, double bfFpp) {
+    public AlterJobV2Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
         this.bloomFilterColumns = bfColumns;
         this.bloomFilterFpp = bfFpp;
         return this;
@@ -103,6 +105,11 @@ public abstract class AlterJobV2Builder {
 
     public AlterJobV2Builder withSortKeyIdxes(@Nullable List<Integer> sortKeyIdxes) {
         this.sortKeyIdxes = sortKeyIdxes;
+        return this;
+    }
+
+    public AlterJobV2Builder withWarehouse(@Nullable long warehouseId) {
+        this.warehouseId = warehouseId;
         return this;
     }
 

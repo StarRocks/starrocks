@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Modifies an existing table, including:
 
-- [Rename table, partition, index](#rename)
+- [Rename table, partition, index, or column](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
@@ -32,8 +32,8 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
-- rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- comment: modifies the table comment (supported from **v3.1 onwards**). Currently, column comments cannot be modified.
+- rename: renames a table, rollup index, partition, or column (supported from **v3.3.2 onwards**).
+- comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
 - column: adds, drops, or reorders columns, or modifies column type.
@@ -42,12 +42,13 @@ alter_clause1[, alter_clause2, ...]
 - swap: atomic exchange of two tables.
 - compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
-:::note
+## Limits and usage notes
 
-- Operations on partition, column and rollup index cannot be performed in one ALTER TABLE statement.
+- Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
+- Column comments cannot be modified.
+- One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
 - Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](../data-definition/CANCEL_ALTER_TABLE.md) command to cancel the operation.
 - Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
-:::
 
 ### Rename
 
@@ -73,6 +74,22 @@ ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>
 ```
 
+#### Rename a column
+
+From v3.3.2 onwards, StarRocks supports renaming columns.
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- After renaming a column from A to B, adding a new column named A is not supported.
+- Materialized views built on a renamed column will not take effect. You must rebuild them upon the column with the new name.
+
+:::
+
 ### Alter table comment (from v3.1)
 
 Syntax:
@@ -87,49 +104,135 @@ Currently, column comments cannot be modified.
 
 ### Modify partition
 
-#### Add a partition
+#### ADD PARTITION(S)
 
-Syntax:
+You can choose to add range partitions or list partitions.
 
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
-[DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
-```
+Syntax：
 
-Note:
+- Range partitions
 
-1. Partition_desc supports the following two expressions:
+    ```SQL
+    ALTER TABLE
+        ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
 
-    ```plain
-    VALUES LESS THAN [MAXVALUE|("value1", ...)]
-    VALUES ("value1", ...), ("value1", ...)
+    single_range_partition ::=
+        PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
+
+    partition_key_desc ::=
+        { LESS THAN { MAXVALUE | value_list }
+        | [ value_list , value_list ) } -- Note that [ represents a left-closed interval.
+
+    value_list ::=
+        ( <value> [, ...] )
+
+    multi_range_partitions ::=
+        { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
     ```
 
-2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
-3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
-4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
+- List partitions
 
-#### Drop a partition
+    ```SQL
+    ALTER TABLE
+        ADD PARTITION <partition_name> VALUES IN (value_list) [distribution_desc] ["key"="value"];
 
-Syntax:
+    value_list ::=
+        value_item [, ...]
+
+    value_item ::=
+        { <value> | ( <value> [, ...] ) }
+    ```
+
+Parameters:
+
+- Partition-related parameters:
+
+  - For range partitions, you can add a single range partition (`single_range_partition`) or multiple range partitions in batch (`multi_range_partitions`).
+  - For list partitions, you can only add a single list partition.
+
+- `distribution_desc`:
+
+   You can set the number of buckets for the new partition separately, but you cannot set the bucketing method separately.
+
+- `"key"="value"`:
+
+   You can set properties for the new partition. For details, see [CREATE TABLE](./CREATE_TABLE.md#properties).
+
+Examples:
+
+- Range partitions
+
+  - If the partition column is specified as `event_day` at table creation, for example `PARTITION BY RANGE(event_day)`, and a new partition needs to be added after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
+    ```
+
+  - If the partition column is specified as `datekey` at table creation, for example `PARTITION BY RANGE (datekey)`, and multiple partitions need to be added in batch after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE site_access
+        ADD PARTITIONS START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
+    ```
+
+- List partitions
+
+  - If a single partition column is specified at table creation, for example `PARTITION BY LIST (city)`, and a new partition needs to be added after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE t_recharge_detail2
+    ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
+    ```
+
+  - If multiple partition columns are specified at table creation, for example `PARTITION BY LIST (dt,city)`, and a new partition needs to be added after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE t_recharge_detail4 
+    ADD PARTITION p202204_California VALUES IN
+    (
+        ("2022-04-01", "Los Angeles"),
+        ("2022-04-01", "San Francisco"),
+        ("2022-04-02", "Los Angeles"),
+        ("2022-04-02", "San Francisco")
+    );
+    ```
+
+#### DROP PARTITION(S)
+
+- Drop a single partition:
 
 ```sql
--- Before 2.0
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS | FORCE] <partition_name>
--- 2.0 or later
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
-Note:
+- Drop partitions in batch (Supported from v3.3.1):
 
-1. Keep at least one partition for partitioned tables.
-2. After executing DROP PARTITION for a while, the dropped partition can be recovered by the RECOVER statement. See the RECOVER statement for details.
-3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally this operation is not recommended.
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
+```
+
+Notes for `multi_range_partitions`:
+
+- It only appiles to Range Partitioning.
+- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+- It only supports partitions with a single Partition Key.
+
+:::note
+
+- Keep at least one partition for partitioned tables.
+- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](./backup_restore/RECOVER.md) command within a specified period (1 day by default).
+- If FORCE is specified, the partitions will be deleted directly regardless of whether there are any unfinished operations on the partitions, and they cannot be recovered. Thus, generally, this operation is not recommended.
+
+:::
 
 #### Add a temporary partition
 
@@ -142,7 +245,7 @@ partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
 ```
 
-#### Use a temporary partition to replace current partition
+#### Use a temporary partition to replace the current partition
 
 Syntax:
 
@@ -248,7 +351,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY RANDOM;
   ```
 
-- The keys for hash bucketing is modified to `user_id, event_time` from `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
+- The keys for hash bucketing are modified to `user_id, event_time` from `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
@@ -296,7 +399,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 
 ### Modify columns (add/delete columns, change the order of columns)
 
-#### Add a column to specified location of specified index
+#### Add a column to the specified location of the specified index
 
 Syntax:
 
@@ -393,8 +496,8 @@ Note:
 5. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
    - Convert TINYINT/SMALLINT/INT/BIGINT to TINYINT/SMALLINT/INT/BIGINT/DOUBLE.
-   - Convert TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
-   - Convert VARCHAR to TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
+   - Convert TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
+   - Convert VARCHAR to TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
    - Convert VARCHAR to DATE (currently support six formats: "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d")
    - Convert DATETIME to DATE(only year-month-day information is retained, i.e.  `2019-12-09 21:47:05` `<-->` `2019-12-09`)
    - Convert DATE to DATETIME (set hour, minute, second to zero, For example: `2019-12-09` `<-->` `2019-12-09 00:00:00`)
@@ -419,9 +522,11 @@ Note:
 - All columns in the index must be written.
 - The value column is listed after the key column.
 
-#### Modify columns of the sort key in a Primary Key table
+#### Modify the sort key
 
-<!--Supported Versions-->
+Since v3.0, the sort keys for the Primary Key tables can be modified. v3.3 extends this support to Duplicate Key tables, Aggregate tables, and Unique Key tables.
+
+The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of the columns does not need to be same as the key columns.
 
 Syntax:
 
@@ -433,9 +538,9 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
-Example:
+Example: modify the sort keys in Primary Key tables.
 
-For example, the original table is a Primary Key table where the sort key and  the primary key are coupled, which is `dt, order_id`.
+For example, the original table is a Primary Key table where the sort key and the primary key are coupled, which is `dt, order_id`.
 
 ```SQL
 create table orders (
@@ -459,6 +564,40 @@ Decouple the sort key from the primary key, and modify the sort key to `dt, reve
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
+
+#### Modify a STRUCT column to add or drop a field
+
+From v3.2.10 and v3.3.2 onwards, StarRocks supports modifying a STRUCT column to add or drop a field, which can be nested or within an ARRAY type.
+
+Syntax:
+
+```sql
+-- Add a field
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
+
+-- Drop a field
+ALTER TABLE [<db_name>.]<tbl_name>
+MODIFY COLUMN <column_name> DROP FIELD <field_name>
+```
+
+Parameters:
+
+- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
+- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
+
+For more usage instructions, see [Example - Column -14](#column).
+
+:::note
+
+- Currently, this feature is only supported in shared-nothing clusters.
+- The table must have the `fast_schema_evolution` property enabled.
+- Adding or dropping fields in the STRUCT type within a MAP type is not supported.
+- Newly added fields cannot have default values or attributes such as Nullable specified. They default to being Nullable, with a default value of null.
+- After this feature is used, downgrading the cluster directly to a version that does not support this feature is not allowed.
+
+:::
+
 
 ### Modify rollup index
 
@@ -612,9 +751,12 @@ Before v3.1, compaction is performed in two ways:
 
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
+Shared-data clusters support this feature from v3.3.0 onwards.
+
 Syntax:
+
 ```SQL
-ALTER TABLE <tbl_name> [ BASE | COMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+ALTER TABLE <tbl_name> [ BASE | CUMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
 ```
 
 That is:
@@ -861,6 +1003,128 @@ The `be_compactions` table in the `information_schema` database records compacti
      DROP COLUMN col2
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
+
+13. Modify the data type of multiple columns in a single statement.
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    MODIFY COLUMN k1 VARCHAR(100) KEY NOT NULL,
+    MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
+    ```
+
+14. Add and drop fields in STRUCT-type data.
+
+    **Prerequisites**: Create a table and insert a row of data.
+
+    ```sql
+    CREATE TABLE struct_test(
+        c0 INT,
+        c1 STRUCT<v1 INT, v2 STRUCT<v4 INT, v5 INT>, v3 INT>,
+        c2 STRUCT<v1 INT, v2 ARRAY<STRUCT<v3 INT, v4 STRUCT<v5 INT, v6 INT>>>>
+    )
+    DUPLICATE KEY(c0)
+    DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+    PROPERTIES (
+        "fast_schema_evolution" = "true"
+    );
+    INSERT INTO struct_test VALUES (
+        1, 
+        ROW(1, ROW(2, 3), 4), 
+        ROW(5, [ROW(6, ROW(7, 8)), ROW(9, ROW(10, 11))])
+    );
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a STRUCT-type column.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v4 INT AFTER v2;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a nested STRUCT type.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v2.v6 INT FIRST;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Add a new field to a STRUCT type in an array.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 ADD FIELD v2.[*].v7 INT AFTER v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null,"v3":4}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a STRUCT-type column.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a nested STRUCT type.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v2.v4;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
+
+    - Drop a field from a STRUCT type in an array.
+
+    ```sql
+    ALTER TABLE struct_test MODIFY COLUMN c2 DROP FIELD v2.[*].v3;
+    ```
+
+    ```plain
+    mysql> SELECT * FROM struct_test\G
+    *************************** 1. row ***************************
+    c0: 1
+    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c2: {"v1":5,"v2":[{"v7":null,"v4":{"v5":7,"v6":8}},{"v7":null,"v4":{"v5":10,"v6":11}}]}
+    ```
 
 ### Table property
 

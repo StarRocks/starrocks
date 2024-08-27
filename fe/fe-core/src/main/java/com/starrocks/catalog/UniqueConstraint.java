@@ -18,11 +18,15 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
+import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -35,22 +39,47 @@ import java.util.stream.Collectors;
 // a table may have multi unique constraints.
 public class UniqueConstraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
-    // here id is preferred, but meta of column does not have id.
-    // have to use name here, so column rename is not supported
-    private final List<String> uniqueColumns;
+    private final List<ColumnId> uniqueColumns;
 
-    private final String catalogName;
-    private final String dbName;
-    private final String tableName;
+    private String catalogName;
+    private String dbName;
+    private String tableName;
 
-    public UniqueConstraint(String catalogName, String dbName, String tableName, List<String> uniqueColumns) {
+    private Table referencedTable;
+
+    public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
         this.uniqueColumns = uniqueColumns;
     }
 
-    public List<String> getUniqueColumns() {
+    // Used for primaryKey/uniqueKey table to create default uniqueConstraints.
+    public UniqueConstraint(Table referencedTable, List<ColumnId> uniqueColumns) {
+        this.referencedTable = referencedTable;
+        this.uniqueColumns = uniqueColumns;
+    }
+
+    public List<String> getUniqueColumnNames() {
+        Table targetTable;
+        if (referencedTable != null) {
+            targetTable = referencedTable;
+        } else {
+            targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        }
+        List<String> result = new ArrayList<>(uniqueColumns.size());
+        for (ColumnId columnId : uniqueColumns) {
+            Column column = targetTable.getColumn(columnId);
+            if (column == null) {
+                LOG.warn("Can not find column by column id: {}, the column may have been dropped", columnId);
+                continue;
+            }
+            result.add(column.getName());
+        }
+        return result;
+    }
+
+    public List<ColumnId> getUniqueColumns() {
         return uniqueColumns;
     }
 
@@ -66,7 +95,8 @@ public class UniqueConstraint {
                 return false;
             }
         }
-        Set<String> uniqueColumnSet = uniqueColumns.stream().map(String::toLowerCase).collect(Collectors.toSet());
+        Set<String> uniqueColumnSet = getUniqueColumnNames().stream().map(String::toLowerCase)
+                .collect(Collectors.toSet());
         return uniqueColumnSet.equals(foreignKeys);
     }
 
@@ -81,8 +111,28 @@ public class UniqueConstraint {
         if (tableName != null) {
             sb.append(tableName).append(".");
         }
-        sb.append(Joiner.on(",").join(uniqueColumns));
+        sb.append(Joiner.on(",").join(getUniqueColumns()));
         return sb.toString();
+    }
+
+    public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints) {
+        List<String> constraintStrs = Lists.newArrayList();
+        for (UniqueConstraint constraint : constraints) {
+            StringBuilder constraintSb = new StringBuilder();
+            if (constraint.catalogName != null) {
+                constraintSb.append(constraint.catalogName).append(".");
+            }
+            if (constraint.dbName != null) {
+                constraintSb.append(constraint.dbName).append(".");
+            }
+            if (constraint.tableName != null) {
+                constraintSb.append(constraint.tableName).append(".");
+            }
+            constraintSb.append(Joiner.on(",").join(constraint.getUniqueColumnNames()));
+            constraintStrs.add(constraintSb.toString());
+        }
+
+        return Joiner.on(";").join(constraintStrs);
     }
 
     public String getCatalogName() {
@@ -97,7 +147,8 @@ public class UniqueConstraint {
         return tableName;
     }
 
-    public static List<UniqueConstraint> parse(String constraintDescs) {
+    public static List<UniqueConstraint> parse(String defaultCatalogName, String defaultDbName,
+                                               String defaultTableName, String constraintDescs) {
         if (Strings.isNullOrEmpty(constraintDescs)) {
             return null;
         }
@@ -107,15 +158,20 @@ public class UniqueConstraint {
             if (Strings.isNullOrEmpty(constraintDesc)) {
                 continue;
             }
-            String[] uniqueColumns = constraintDesc.split(",");
-            List<String> columnNames =
-                    Arrays.stream(uniqueColumns).map(String::trim).collect(Collectors.toList());
-            parseUniqueConstraintColumns(columnNames, uniqueConstraints);
+            Pair<TableName, List<String>> descResult = parseUniqueConstraintDesc(
+                    defaultCatalogName, defaultDbName, defaultTableName, constraintDesc);
+            uniqueConstraints.add(new UniqueConstraint(descResult.first.getCatalog(),
+                    descResult.first.getDb(), descResult.first.getTbl(),
+                    descResult.second.stream().map(ColumnId::create).collect(Collectors.toList())));
         }
         return uniqueConstraints;
     }
 
-    private static void parseUniqueConstraintColumns(List<String> columnNames, List<UniqueConstraint> uniqueConstraints) {
+    // result if a pair, the fist value is TableName(catalogName, dbName, tableName), the second value is columns
+    public static Pair<TableName, List<String>> parseUniqueConstraintDesc(String defaultCatalogName, String defaultDbName,
+                                                                          String defaultTableName, String constraintDesc) {
+        String[] uniqueColumns = constraintDesc.split(",");
+        List<String> columnNames = Arrays.stream(uniqueColumns).map(String::trim).collect(Collectors.toList());
         String catalogName = null;
         String dbName = null;
         String tableName = null;
@@ -159,6 +215,16 @@ public class UniqueConstraint {
             }
         }
 
-        uniqueConstraints.add(new UniqueConstraint(catalogName, dbName, tableName, uniqueConstraintColumns));
+        if (catalogName == null) {
+            catalogName = defaultCatalogName;
+        }
+        if (dbName == null) {
+            dbName = defaultDbName;
+        }
+        if (tableName == null) {
+            tableName = defaultTableName;
+        }
+
+        return Pair.create(new TableName(catalogName, dbName, tableName), uniqueConstraintColumns);
     }
 }

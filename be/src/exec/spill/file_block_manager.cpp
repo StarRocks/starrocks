@@ -14,6 +14,9 @@
 
 #include "exec/spill/file_block_manager.h"
 
+#include <utility>
+
+#include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
@@ -26,7 +29,7 @@ class FileBlockContainer {
 public:
     FileBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                        int32_t plan_node_id, std::string plan_node_name, uint64_t id)
-            : _dir(dir),
+            : _dir(std::move(dir)),
               _query_id(query_id),
               _fragment_instance_id(fragment_instance_id),
               _plan_node_id(plan_node_id),
@@ -37,7 +40,7 @@ public:
         // @TODO we need add a gc thread to delete file
         TRACE_SPILL_LOG << "delete spill container file: " << path();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
-        _dir->dec_size(_data_size);
+        _dir->dec_size(_acquired_data_size);
         // try to delete related dir, only the last one can success, we ignore the error
         (void)(_dir->fs()->delete_dir(parent_path()));
     }
@@ -65,10 +68,20 @@ public:
 
     Status flush();
 
+    bool pre_allocate(size_t allocate_size) {
+        if (_dir->inc_size(allocate_size)) {
+            _acquired_data_size += allocate_size;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable();
 
-    static StatusOr<FileBlockContainerPtr> create(DirPtr dir, TUniqueId query_id, TUniqueId fragment_instance_id,
-                                                  int32_t plan_node_id, const std::string& plan_node_name, uint64_t id);
+    static StatusOr<FileBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
+                                                  const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+                                                  const std::string& plan_node_name, uint64_t id);
 
 private:
     DirPtr _dir;
@@ -79,7 +92,10 @@ private:
     uint64_t _id;
     std::unique_ptr<WritableFile> _writable_file;
     bool _has_open = false;
+    // data size in this container
     size_t _data_size = 0;
+    // acquired data size from Dir
+    size_t _acquired_data_size = 0;
 };
 
 Status FileBlockContainer::open() {
@@ -116,8 +132,8 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> FileBlockContainer::get_readab
     return f;
 }
 
-StatusOr<FileBlockContainerPtr> FileBlockContainer::create(DirPtr dir, TUniqueId query_id,
-                                                           TUniqueId fragment_instance_id, int32_t plan_node_id,
+StatusOr<FileBlockContainerPtr> FileBlockContainer::create(const DirPtr& dir, const TUniqueId& query_id,
+                                                           const TUniqueId& fragment_instance_id, int32_t plan_node_id,
                                                            const std::string& plan_node_name, uint64_t id) {
     auto container =
             std::make_shared<FileBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id, plan_node_name, id);
@@ -127,19 +143,13 @@ StatusOr<FileBlockContainerPtr> FileBlockContainer::create(DirPtr dir, TUniqueId
 
 class FileBlockReader final : public BlockReader {
 public:
-    FileBlockReader(const Block* block) : BlockReader(block), _length(block->size()) {}
-    ~FileBlockReader() override = default;
+    FileBlockReader(const Block* block, const BlockReaderOptions& options = {}) : BlockReader(block, options) {}
 
-    Status read_fully(void* data, int64_t count) override;
+    ~FileBlockReader() override = default;
 
     std::string debug_string() override { return _block->debug_string(); }
 
     const Block* block() const override { return _block; }
-
-private:
-    std::unique_ptr<io::InputStreamWrapper> _readable;
-    size_t _length = 0;
-    size_t _offset = 0;
 };
 
 class FileBlock : public Block {
@@ -160,9 +170,13 @@ public:
 
     Status flush() override { return _container->flush(); }
 
-    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const { return _container->get_readable(); }
+    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const override {
+        return _container->get_readable();
+    }
 
-    std::shared_ptr<BlockReader> get_reader() override { return std::make_shared<FileBlockReader>(this); }
+    std::shared_ptr<BlockReader> get_reader(const BlockReaderOptions& options) override {
+        return std::make_shared<FileBlockReader>(this, options);
+    }
 
     std::string debug_string() const override {
 #ifndef BE_TEST
@@ -172,36 +186,14 @@ public:
 #endif
     }
 
+    bool preallocate(size_t write_size) override { return _container->pre_allocate(write_size); }
+
 private:
     FileBlockContainerPtr _container;
 };
 
-Status FileBlockReader::read_fully(void* data, int64_t count) {
-    if (_readable == nullptr) {
-        auto file_block = down_cast<const FileBlock*>(_block);
-        ASSIGN_OR_RETURN(_readable, file_block->get_readable());
-    }
-
-    if (_offset + count > _length) {
-        return Status::EndOfFile("no more data in this block");
-    }
-
-    ASSIGN_OR_RETURN(auto read_len, _readable->read(data, count));
-    RETURN_IF(read_len == 0, Status::EndOfFile("no more data in this block"));
-    RETURN_IF(read_len != count, Status::InternalError(fmt::format(
-                                         "block's length is mismatched, expected: {}, actual: {}", count, read_len)));
-    _offset += count;
-    return Status::OK();
-}
-
 FileBlockManager::FileBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
         : _query_id(query_id), _dir_mgr(dir_mgr) {}
-
-FileBlockManager::~FileBlockManager() {
-    for (auto& container : _containers) {
-        container.reset();
-    }
-}
 
 Status FileBlockManager::open() {
     return Status::OK();
@@ -220,16 +212,16 @@ StatusOr<BlockPtr> FileBlockManager::acquire_block(const AcquireBlockOptions& op
     return res;
 }
 
-Status FileBlockManager::release_block(const BlockPtr& block) {
+Status FileBlockManager::release_block(BlockPtr block) {
     auto file_block = down_cast<FileBlock*>(block.get());
     auto container = file_block->container();
     TRACE_SPILL_LOG << "release block: " << block->debug_string();
     RETURN_IF_ERROR(container->close());
-    _containers.emplace_back(std::move(container));
     return Status::OK();
 }
 
-StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(DirPtr dir, TUniqueId fragment_instance_id,
+StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(const DirPtr& dir,
+                                                                          const TUniqueId& fragment_instance_id,
                                                                           int32_t plan_node_id,
                                                                           const std::string& plan_node_name) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "

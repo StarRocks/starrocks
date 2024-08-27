@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <atomic>
+
+#include "block_cache/disk_space_monitor.h"
 #include "block_cache/kv_cache.h"
 #include "common/status.h"
 
@@ -27,6 +30,8 @@ public:
     // Return a singleton block cache instance
     static BlockCache* instance();
 
+    ~BlockCache();
+
     // Init the block cache instance
     Status init(const CacheOptions& options);
 
@@ -39,7 +44,7 @@ public:
 
     // Write object to cache, the `ptr` is the object pointer.
     Status write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
-                        CacheHandle* handle, WriteCacheOptions* options = nullptr);
+                        DataCacheHandle* handle, WriteCacheOptions* options = nullptr);
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned. The offset and size must be aligned by block size.
@@ -52,10 +57,21 @@ public:
     // Read object from cache, the `handle` wraps the object pointer.
     // As long as the handle object is not destroyed and the user does not manully call the `handle->release()`
     // function, the corresponding pointer will never be freed by the cache system.
-    Status read_object(const CacheKey& cache_key, CacheHandle* handle, ReadCacheOptions* options = nullptr);
+    Status read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options = nullptr);
+
+    bool exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const;
 
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
+
+    // Update the datacache memory quota.
+    Status update_mem_quota(size_t quota_bytes, bool flush_to_disk);
+
+    // Update the datacache disk space infomation, such as disk quota or disk path.
+    Status update_disk_spaces(const std::vector<DirSpace>& spaces);
+
+    // Adjust the disk spaces, the space quota will be adjusted based on current disk usage before updating.
+    Status adjust_disk_spaces(const std::vector<DirSpace>& spaces);
 
     void record_read_remote(size_t size, int64_t lateny_us);
 
@@ -68,7 +84,15 @@ public:
 
     size_t block_size() const { return _block_size; }
 
-    bool is_initialized() { return _initialized.load(std::memory_order_relaxed); }
+    bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
+
+    bool has_mem_cache() const { return _mem_quota.load(std::memory_order_relaxed) > 0; }
+
+    bool has_disk_cache() const { return _disk_quota.load(std::memory_order_relaxed) > 0; }
+
+    bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
+
+    DataCacheEngineType engine_type();
 
     static const size_t MAX_BLOCK_SIZE;
 
@@ -76,10 +100,14 @@ private:
 #ifndef BE_TEST
     BlockCache() = default;
 #endif
+    void _refresh_quota();
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;
+    std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
     std::atomic<bool> _initialized = false;
+    std::atomic<size_t> _mem_quota = 0;
+    std::atomic<size_t> _disk_quota = 0;
 };
 
 } // namespace starrocks

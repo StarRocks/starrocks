@@ -44,7 +44,7 @@ void DelVector::_add_dels(const std::vector<uint32_t>& dels) {
 
 void DelVector::add_dels_as_new_version(const std::vector<uint32_t>& dels, int64_t version,
                                         std::shared_ptr<DelVector>* pdelvec) const {
-    CHECK(this != pdelvec->get());
+    DCHECK(this != pdelvec->get());
     DelVectorPtr tmp(new DelVector());
     if (_roaring) {
         tmp->_roaring = std::make_unique<Roaring>(*_roaring);

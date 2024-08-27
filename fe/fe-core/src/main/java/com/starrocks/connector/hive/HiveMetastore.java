@@ -26,6 +26,7 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.connector.metastore.MetastoreTable;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -92,7 +93,7 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public Database getDb(String dbName) {
         org.apache.hadoop.hive.metastore.api.Database db = client.getDb(dbName);
-        return HiveMetastoreApiConverter.toDatabase(db);
+        return HiveMetastoreApiConverter.toDatabase(db, dbName);
     }
 
     @Override
@@ -106,6 +107,12 @@ public class HiveMetastore implements IHiveMetastore {
         client.dropTable(dbName, tableName);
     }
 
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
+        return HiveMetastoreApiConverter.toMetastoreTable(table);
+    }
+
     public Table getTable(String dbName, String tableName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
         StorageDescriptor sd = table.getSd();
@@ -113,20 +120,21 @@ public class HiveMetastore implements IHiveMetastore {
             throw new StarRocksConnectorException("Table is missing storage descriptor");
         }
 
-        if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
+        if (HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
+            return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
+        } else if (HiveMetastoreApiConverter.isKuduTable(table.getSd().getInputFormat())) {
+            return HiveMetastoreApiConverter.toKuduTable(table, catalogName);
+        } else {
             validateHiveTableType(table.getTableType());
             if (AcidUtils.isFullAcidTable(table)) {
-                throw new StarRocksConnectorException(
-                        String.format("%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName,
-                                tableName));
+                throw new StarRocksConnectorException(String.format(
+                        "%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName, tableName));
             }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
             } else {
                 return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
             }
-        } else {
-            return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
         }
     }
 
@@ -231,6 +239,16 @@ public class HiveMetastore implements IHiveMetastore {
                 .map(FieldSchema::getName)
                 .collect(toImmutableList());
         List<ColumnStatisticsObj> statisticsObjs = client.getTableColumnStats(dbName, tblName, dataColumns);
+        if (statisticsObjs.isEmpty() && Config.enable_reuse_spark_column_statistics) {
+            // Try to use spark unpartitioned table column stats
+            try {
+                if (table.getParameters().keySet().stream().anyMatch(k -> k.startsWith("spark.sql.statistics.colStats."))) {
+                    statisticsObjs = HiveMetastoreApiConverter.getColStatsFromSparkParams(table);
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to get column stats from table [{}.{}]", dbName, tblName);
+            }
+        }
         Map<String, HiveColumnStats> columnStatistics =
                 HiveMetastoreApiConverter.toSinglePartitionColumnStats(statisticsObjs, totalRowNums);
         return new HivePartitionStats(commonStats, columnStatistics);

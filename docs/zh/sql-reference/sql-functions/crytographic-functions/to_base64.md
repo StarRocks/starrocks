@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # to_base64
 
-## 功能
+
 
 将字符串 `str` 进行 Base64 编码。反向函数为 [from_base64](from_base64.md)。
 

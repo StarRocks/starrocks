@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # multiply
 
-## 功能
+
 
 计算参数 `arg1` 与 `arg2` 的乘积。
 

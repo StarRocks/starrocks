@@ -26,7 +26,11 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 ]
 ```
 
-Parameters in brackets [] is optional.
+:::note
+
+Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_runs if a refresh task consists of multiple partitions/task_runs to refresh. Only when all task_runs are success, `last_refresh_state` will return `SUCCESS`.
+
+:::
 
 ## Parameters
 
@@ -106,7 +110,7 @@ REFRESH MATERIALIZED VIEW customer_mv;
 Example 1: Show a specific materialized view.
 
 ```Plain
-mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G;
+mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv
@@ -137,7 +141,7 @@ GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
 Example 2: Show materialized views by matching the name.
 
 ```Plain
-mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G;
+mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv

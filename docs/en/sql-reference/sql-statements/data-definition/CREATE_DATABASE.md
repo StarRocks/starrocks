@@ -18,17 +18,31 @@ This operation requires the CREATE DATABASE privilege on the target catalog. You
 
 ```sql
 CREATE DATABASE [IF NOT EXISTS] <db_name>
+[PROPERTIES ("key"="value", ...)]
 ```
+
+## Parameters
 
 `db_name`: the name of the database to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
+**PROPERTIES (Optional)**
+
+`storage_volume`: Specifies the name of the storage volume that is used to store the database in a shared-data cluster.
+
 ## Examples
 
-1. Create database `db_test`.
+1. Create the database `db_test`.
 
-    ```sql
-    CREATE DATABASE db_test;
-    ```
+   ```sql
+   CREATE DATABASE db_test;
+   ```
+
+2. Create the cloud-native database `cloud_db` with the storage volume `s3_storage_volume`.
+
+   ```sql
+   CREATE DATABASE cloud_db
+   PROPERTIES ("storage_volume"="s3_storage_volume");
+   ```
 
 ## References
 

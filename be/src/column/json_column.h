@@ -16,10 +16,12 @@
 
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "column/column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/logical_type.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -40,6 +42,7 @@ public:
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {
         _flat_columns = std::move(rhs._flat_columns);
         _flat_column_paths = std::move(rhs._flat_column_paths);
+        _flat_column_types = std::move(rhs._flat_column_types);
     }
 
     MutableColumnPtr clone() const override;
@@ -47,8 +50,10 @@ public:
     ColumnPtr clone_shared() const override;
 
     void append_datum(const Datum& datum) override;
-    void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,
+                              bool is_binary_protocol = false) const override;
     std::string get_name() const override;
+    bool is_json() const override { return true; }
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
     uint32_t serialize_size(size_t idx) const override;
@@ -64,6 +69,8 @@ public:
 
     void resize(size_t n) override;
 
+    void reserve(size_t n) override{};
+
     void assign(size_t n, size_t idx) override;
 
     void append(const JsonValue* object);
@@ -75,6 +82,8 @@ public:
     void append(const Column& src, size_t offset, size_t count) override;
 
     void append_value_multiple_times(const void* value, size_t count) override;
+
+    void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     void append_default() override;
 
@@ -96,32 +105,46 @@ public:
     void check_or_die() const override;
 
     // support flat json on storage
-    bool is_flat_json() const { return !_flat_column_paths.empty(); }
+    bool is_flat_json() const { return !_flat_columns.empty(); }
 
     ColumnPtr& get_flat_field(const std::string& path);
 
     const ColumnPtr& get_flat_field(const std::string& path) const;
 
+    LogicalType get_flat_field_type(const std::string& path) const;
+
     Columns& get_flat_fields() { return _flat_columns; };
+
+    const Columns& get_flat_fields() const { return _flat_columns; };
 
     ColumnPtr& get_flat_field(int index);
 
     const ColumnPtr& get_flat_field(int index) const;
 
+    ColumnPtr& get_remain();
+
+    const ColumnPtr& get_remain() const;
+
     const std::vector<std::string>& flat_column_paths() const { return _flat_column_paths; }
+
+    const std::vector<LogicalType>& flat_column_types() const { return _flat_column_types; }
 
     bool has_flat_column(const std::string& path) const;
 
-    void init_flat_columns(const std::vector<std::string>& paths);
+    bool has_remain() const { return _flat_columns.size() == (_flat_column_paths.size() + 1); }
+
+    void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
+                          const Columns& flat_columns);
 
     std::string debug_flat_paths() const;
 
 private:
-    // flat-columns
+    // flat-columns[sub_columns, remain_column]
     Columns _flat_columns;
 
-    // flat-column paths
+    // flat-column paths, doesn't contains remain column
     std::vector<std::string> _flat_column_paths;
+    std::vector<LogicalType> _flat_column_types;
     std::unordered_map<std::string, int> _path_to_index;
 };
 

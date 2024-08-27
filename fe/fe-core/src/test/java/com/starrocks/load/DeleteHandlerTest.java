@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
@@ -30,15 +29,22 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.load.DeleteJob.DeleteState;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
@@ -126,6 +132,8 @@ public class DeleteHandlerTest {
             }
         };
 
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+
         new Expectations() {
             {
                 globalStateMgr.getDb(anyString);
@@ -176,6 +184,10 @@ public class DeleteHandlerTest {
                 AgentTaskQueue.addTask((AgentTask) any);
                 minTimes = 0;
                 result = true;
+
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+                minTimes = 0;
             }
         };
     }
@@ -470,6 +482,54 @@ public class DeleteHandlerTest {
         Assert.assertEquals(1, jobs.size());
         for (DeleteJob job : jobs) {
             Assert.assertEquals(job.getState(), DeleteState.FINISHED);
+        }
+    }
+
+    @Test
+    public void testLockTimeout(@Mocked MarkedCountDownLatch countDownLatch) throws DdlException, QueryStateException {
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
+                new IntLiteral(3));
+
+        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
+                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+
+        Set<Replica> finishedReplica = Sets.newHashSet();
+        finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
+        finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
+        finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
+
+        new MockUp<OlapDeleteJob>() {
+            @Mock
+            public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
+                return Lists.newArrayList(tabletDeleteInfo);
+            }
+        };
+
+        new MockUp<Locker>() {
+            @Mock
+            public void lock(long rid, LockType lockType, long timeout) throws LockException {
+                throw new NotSupportLockException("");
+            }
+        };
+
+        new Expectations() {
+            {
+                AgentTaskExecutor.submit((AgentBatchTask) any);
+                minTimes = 0;
+            }
+        };
+
+        try {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        try {
+            deleteHandler.process(deleteStmt);
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_LOCK_ERROR);
         }
     }
 

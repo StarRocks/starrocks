@@ -13,6 +13,9 @@ Creates an external catalog. You can use external catalogs to query data in exte
 - [Hudi catalog](../../../data_source/catalog/hudi_catalog.md): used for querying data from Apache Hudi.
 - [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md): used to query data from Delta Lake.
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
+- [Elasticsearch catalog](../../../data_source/catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
+- [Paimon catalog](../../../data_source/catalog/paimon_catalog.md): used to query data from Apache Paimon. Paimon catalogs are supported from v3.1 onwards.
+- [Unified catalog](../../../data_source/catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
 
 > **NOTE**
 >
@@ -22,7 +25,7 @@ Creates an external catalog. You can use external catalogs to query data in exte
 ## Syntax
 
 ```SQL
-CREATE EXTERNAL CATALOG <catalog_name>
+CREATE EXTERNAL CATALOG [IF NOT EXISTS] <catalog_name>
 [COMMENT <comment>]
 PROPERTIES ("key"="value", ...)
 ```

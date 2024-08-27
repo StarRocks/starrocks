@@ -14,14 +14,16 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -29,13 +31,16 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -55,13 +60,21 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
 
+        // any aggregate function is distinct and constant, we replace it to any_value
+        if (isComplexConstantCountDistinct(input)) {
+            return true;
+        }
+
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
 
         // all distinct function use the same distinct columns, we use the split rule to rewrite
-        return !distinctCols.isPresent();
+        return distinctCols.isEmpty();
     }
 
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        if (isComplexConstantCountDistinct(input)) {
+            return rewriteComplexConstantDistinct(input);
+        }
         if (useCteToRewrite(input, context)) {
             MultiDistinctByCTERewriter rewriter = new MultiDistinctByCTERewriter();
             return rewriter.transformImpl(input, context);
@@ -69,6 +82,40 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             MultiDistinctByMultiFuncRewriter rewriter = new MultiDistinctByMultiFuncRewriter();
             return rewriter.transformImpl(input, context);
         }
+    }
+
+    private boolean isComplexConstantCountDistinct(OptExpression input) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        // sr support count(distinct constant array/struct/map) in four-phase aggregate,
+        // but doesn't support in two-phase aggregate, we replace it to any_value
+        return agg.getAggregations().values().stream()
+                .anyMatch(c -> c.isDistinct() && c.isConstant() && FunctionSet.COUNT.equalsIgnoreCase(c.getFnName()) &&
+                        (c.getChildren().size() == 1) && c.getChild(0).getType().isComplexType());
+    }
+
+    private List<OptExpression> rewriteComplexConstantDistinct(OptExpression input) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+
+        agg.getAggregations().forEach((k, v) -> {
+            if (v.isDistinct() && v.isConstant() && FunctionSet.COUNT.equalsIgnoreCase(v.getFnName()) &&
+                    (v.getChildren().size() == 1) && v.getChild(0).getType().isComplexType()) {
+                Preconditions.checkState(v.getType() == Type.BIGINT);
+                IsNullPredicateOperator isNull = new IsNullPredicateOperator(true, v.getChild(0));
+                CastOperator cast = new CastOperator(Type.BIGINT, isNull);
+                Function fn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {Type.BIGINT},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                CallOperator anyValue =
+                        new CallOperator(FunctionSet.ANY_VALUE, v.getType(), Lists.newArrayList(cast), fn, false);
+                newAggregations.put(k, anyValue);
+            } else {
+                newAggregations.put(k, v);
+            }
+        });
+
+        LogicalAggregationOperator newAgg =
+                LogicalAggregationOperator.builder().withOperator(agg).setAggregations(newAggregations).build();
+        return Lists.newArrayList(OptExpression.create(newAgg, input.getInputs()));
     }
 
     private boolean useCteToRewrite(OptExpression input, OptimizerContext context) {
@@ -130,9 +177,13 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         if (aggOp.hasLimit()) {
             return false;
         }
-        calculateStatistics(input, context);
+        Utils.calculateStatistics(input, context);
 
         Statistics inputStatistics = input.inputAt(0).getStatistics();
+        // inputStatistics may be null if it's a cte consumer operator
+        if (inputStatistics == null) {
+            return false;
+        }
         List<ColumnRefOperator> neededCols = Lists.newArrayList(aggOp.getGroupingKeys());
         distinctAggOperatorList.stream().forEach(e -> neededCols.addAll(e.getColumnRefs()));
 
@@ -164,22 +215,5 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             return false;
         }
         return true;
-    }
-
-    private void calculateStatistics(OptExpression expr, OptimizerContext context) {
-        // Avoid repeated calculate
-        if (expr.getStatistics() != null) {
-            return;
-        }
-
-        for (OptExpression child : expr.getInputs()) {
-            calculateStatistics(child, context);
-        }
-
-        ExpressionContext expressionContext = new ExpressionContext(expr);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                expressionContext, context.getColumnRefFactory(), context);
-        statisticsCalculator.estimatorStats();
-        expr.setStatistics(expressionContext.getStatistics());
     }
 }

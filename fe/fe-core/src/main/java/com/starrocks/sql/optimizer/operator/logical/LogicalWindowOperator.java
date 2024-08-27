@@ -30,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -113,6 +115,14 @@ public class LogicalWindowOperator extends LogicalOperator {
             columnOutputInfoList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
         }
         return new RowOutputInfo(columnOutputInfoList);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
     }
 
     @Override

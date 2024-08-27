@@ -246,6 +246,16 @@ public class JDBCMetadataTest {
     }
 
     @Test
+    public void testGetJdbcUrl() {
+        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        Assert.assertEquals("jdbc:mariadb://127.0.0.1:3306", jdbcMetadata.getJdbcUrl());
+        properties.put(JDBCResource.URI, "jdbc:mysql://abc.mysql.com:3306");
+        jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        Assert.assertEquals("jdbc:mariadb://abc.mysql.com:3306", jdbcMetadata.getJdbcUrl());
+    }
+
+    @Test
     public void testCreateHikariDataSource() {
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");

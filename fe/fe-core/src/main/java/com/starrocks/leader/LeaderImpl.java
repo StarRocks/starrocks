@@ -59,6 +59,7 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -69,10 +70,13 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
@@ -80,10 +84,13 @@ import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.memory.MemoryUsageTracker;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentTask;
@@ -397,6 +404,8 @@ public class LeaderImpl {
                                     tabletId, task.getBackendId(), replica.getId());
                         }
                     }
+                } else if (!RunMode.isSharedDataMode()) { // finish_tablet_infos will not be set in shared data mode
+                    LOG.warn("tablet_info is not set in finishTaskRequest");
                 }
 
                 // this should be called before 'countDownLatch()'
@@ -404,8 +413,8 @@ public class LeaderImpl {
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}",
-                        tabletId, task.getBackendId(), request.getReport_version());
+                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
+                        tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
             }
 
             if (createReplicaTask.getRecoverySource() == RecoverySource.SCHEDULER) {
@@ -535,12 +544,12 @@ public class LeaderImpl {
                 throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
             }
 
-            Partition partition = olapTable.getPartition(partitionId);
-            if (partition == null) {
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+            if (physicalPartition == null) {
                 throw new MetaNotFoundException("cannot find partition[" + partitionId + "] when push finished");
             }
 
-            MaterializedIndex pushIndex = partition.getIndex(pushIndexId);
+            MaterializedIndex pushIndex = physicalPartition.getIndex(pushIndexId);
             if (pushIndex == null) {
                 // yiguolei: if index is dropped during load, it is not a failure.
                 // throw exception here and cause the job to cancel the task
@@ -572,7 +581,7 @@ public class LeaderImpl {
                 for (int i = 0; i < tabletMetaList.size(); i++) {
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     long tabletId = tabletIds.get(i);
-                    Replica replica = findRelatedReplica(olapTable, partition,
+                    Replica replica = findRelatedReplica(olapTable, physicalPartition,
                             backendId, tabletId, tabletMeta.getIndexId());
                     if (replica != null) {
                         olapDeleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
@@ -591,7 +600,7 @@ public class LeaderImpl {
                     checkReplica(finishTabletInfos.get(i), tabletMeta);
                     long tabletId = tabletIds.get(i);
                     Replica replica =
-                            findRelatedReplica(olapTable, partition, backendId, tabletId, tabletMeta.getIndexId());
+                            findRelatedReplica(olapTable, physicalPartition, backendId, tabletId, tabletMeta.getIndexId());
                     // if the replica is under schema change, could not find the replica with aim schema hash
                     if (replica != null) {
                         ((SparkLoadJob) job).addFinishedReplica(replica.getId(), pushTabletId, backendId);
@@ -635,7 +644,7 @@ public class LeaderImpl {
         }
     }
 
-    private Replica findRelatedReplica(OlapTable olapTable, Partition partition,
+    private Replica findRelatedReplica(OlapTable olapTable, PhysicalPartition physicalPartition,
                                        long backendId, long tabletId, long indexId)
             throws MetaNotFoundException {
         // both normal index and rolling up index are in inverted index
@@ -644,7 +653,7 @@ public class LeaderImpl {
             LOG.warn("tablet[{}] may be dropped. push index[{}]", tabletId, indexId);
             return null;
         }
-        MaterializedIndex index = partition.getIndex(indexId);
+        MaterializedIndex index = physicalPartition.getIndex(indexId);
         if (index == null) {
             if (olapTable.getState() == OlapTableState.ROLLUP) {
                 // this happens when:
@@ -918,11 +927,10 @@ public class LeaderImpl {
             tableMeta.setTable_type(TableType.serialize(table.getType()));
             tableMeta.setDb_id(db.getId());
             tableMeta.setDb_name(dbName);
-            tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId());
             tableMeta.setState(olapTable.getState().name());
             tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
-            if (olapTable.getCopiedBfColumns() != null) {
-                for (String bfColumn : olapTable.getCopiedBfColumns()) {
+            if (olapTable.getBfColumnNames() != null) {
+                for (String bfColumn : olapTable.getBfColumnNames()) {
                     tableMeta.addToBloomfilter_columns(bfColumn);
                 }
             }
@@ -967,7 +975,7 @@ public class LeaderImpl {
             if (partitionInfo.isRangePartition()) {
                 TRangePartitionDesc rangePartitionDesc = new TRangePartitionDesc();
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                for (Column column : rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())) {
                     TColumnMeta columnMeta = new TColumnMeta();
                     columnMeta.setColumnName(column.getName());
                     columnMeta.setColumnType(column.getType().toThrift());
@@ -1015,7 +1023,7 @@ public class LeaderImpl {
                 indexInfo.setIndex_name(index.getIndexName());
                 indexInfo.setIndex_type(index.getIndexType().name());
                 indexInfo.setComment(index.getComment());
-                for (String column : index.getColumns()) {
+                for (String column : MetaUtils.getColumnNamesByColumnIds(olapTable, index.getColumns())) {
                     indexInfo.addToColumns(column);
                 }
                 tableMeta.addToIndex_infos(indexInfo);
@@ -1090,7 +1098,7 @@ public class LeaderImpl {
                 }
             }
 
-            List<TBackendMeta> backends = getBackendMetas();
+            List<TBackendMeta> backends = getNodeMetas();
             response.setStatus(new TStatus(TStatusCode.OK));
             response.setTable_meta(tableMeta);
             response.setBackends(backends);
@@ -1117,20 +1125,22 @@ public class LeaderImpl {
     }
 
     @NotNull
-    private static List<TBackendMeta> getBackendMetas() {
-        List<TBackendMeta> backends = new ArrayList<>();
-        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
-            TBackendMeta backendMeta = new TBackendMeta();
-            backendMeta.setBackend_id(backend.getId());
-            backendMeta.setHost(backend.getHost());
-            backendMeta.setBe_port(backend.getBePort());
-            backendMeta.setRpc_port(backend.getBrpcPort());
-            backendMeta.setHttp_port(backend.getHttpPort());
-            backendMeta.setAlive(backend.isAlive());
-            backendMeta.setState(backend.getBackendState().ordinal());
-            backends.add(backendMeta);
-        }
-        return backends;
+    private static List<TBackendMeta> getNodeMetas() {
+        List<TBackendMeta> nodeMetas = new ArrayList<>();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream().forEach(node -> {
+            if (RunMode.isSharedDataMode() || node instanceof Backend) {
+                TBackendMeta nodeMeta = new TBackendMeta();
+                nodeMeta.setBackend_id(node.getId());
+                nodeMeta.setHost(node.getHost());
+                nodeMeta.setBe_port(node.getBePort());
+                nodeMeta.setRpc_port(node.getBrpcPort());
+                nodeMeta.setHttp_port(node.getHttpPort());
+                nodeMeta.setAlive(node.isAlive());
+                nodeMeta.setState(node.getBackendState().ordinal());
+                nodeMetas.add(nodeMeta);
+            }
+        });
+        return nodeMetas;
     }
 
     @NotNull
@@ -1142,7 +1152,8 @@ public class LeaderImpl {
             THashDistributionInfo tHashDistributionInfo = new THashDistributionInfo();
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             tHashDistributionInfo.setBucket_num(hashDistributionInfo.getBucketNum());
-            for (Column column : hashDistributionInfo.getDistributionColumns()) {
+            for (Column column : MetaUtils.getColumnsByColumnIds(
+                    olapTable, hashDistributionInfo.getDistributionColumns())) {
                 tHashDistributionInfo.addToDistribution_columns(column.getName());
             }
             distributionDesc.setHash_distribution(tHashDistributionInfo);
@@ -1189,9 +1200,9 @@ public class LeaderImpl {
             try {
                 LOG.info("beginRemoteTxn as follower, forward it to master. Label: {}, master: {}",
                         request.getLabel(), addr.toString());
-                response = FrontendServiceProxy.call(addr,
-                        Config.thrift_rpc_timeout_ms,
-                        Config.thrift_rpc_retry_times,
+                response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
                         client -> client.beginRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during beginRemoteTxn, label: {}, exception: {}",
@@ -1218,7 +1229,8 @@ public class LeaderImpl {
             txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second(),
+                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
         } catch (Exception e) {
             LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1245,10 +1257,11 @@ public class LeaderImpl {
             try {
                 LOG.info("commitRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
                         request.getTxn_id(), addr.toString());
-                response = FrontendServiceProxy.call(addr,
+                response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
                         // commit txn might take a while, so add transaction timeout
                         Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
-                        Config.thrift_rpc_retry_times,
                         client -> client.commitRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during commitRemoteTxn, txn_id: {}, exception: {}",
@@ -1292,6 +1305,8 @@ public class LeaderImpl {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
             return response;
+        } catch (LockTimeoutException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
 
         TStatus status = new TStatus(TStatusCode.OK);
@@ -1310,9 +1325,9 @@ public class LeaderImpl {
             try {
                 LOG.info("abortRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
                         request.getTxn_id(), addr.toString());
-                response = FrontendServiceProxy.call(addr,
-                        Config.thrift_rpc_timeout_ms,
-                        Config.thrift_rpc_retry_times,
+                response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
                         client -> client.abortRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during abortRemoteTxn, txn_id: {}, exception: {}",
@@ -1361,9 +1376,9 @@ public class LeaderImpl {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("startTableReplication as follower, forward it to master. master: {}", addr.toString());
-                return FrontendServiceProxy.call(addr,
-                        Config.thrift_rpc_timeout_ms,
-                        Config.thrift_rpc_retry_times,
+                return ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        addr,
                         client -> client.startTableReplication(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during startTableReplication, exception: ", e);

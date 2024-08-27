@@ -17,8 +17,10 @@
 #include <algorithm>
 #include <utility>
 
+#include "common/logging.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
@@ -41,6 +43,10 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
+    // some pipeline may have multiple limit operators with same plan_node_id, so add operator id to profile name
+    if (upper_name == "LIMIT") {
+        profile_name += " (operator id=" + std::to_string(id) + ")";
+    }
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
@@ -90,7 +96,13 @@ void Operator::set_prepare_time(int64_t cost_ns) {
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
+    _runtime_in_filters = _factory->get_colocate_runtime_in_filters(_driver_sequence);
     _factory->prepare_runtime_in_filters(state);
+    const auto& instance_runtime_filters = _factory->get_runtime_in_filters();
+    _runtime_in_filters.insert(_runtime_in_filters.end(), instance_runtime_filters.begin(),
+                               instance_runtime_filters.end());
+    VLOG_QUERY << "plan_node_id:" << _plan_node_id << " sequence:" << _driver_sequence
+               << " local in runtime filter num:" << _runtime_in_filters.size() << " op:" << this->get_raw_name();
 }
 
 const LocalRFWaitingSet& Operator::rf_waiting_set() const {
@@ -136,7 +148,7 @@ void Operator::close(RuntimeState* state) {
 }
 
 std::vector<ExprContext*>& Operator::runtime_in_filters() {
-    return _factory->get_runtime_in_filters();
+    return _runtime_in_filters;
 }
 
 RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
@@ -183,6 +195,30 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         RETURN_IF_ERROR(
                 starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter, apply_filter));
         auto after = chunk->num_rows();
+        _conjuncts_output_counter->update(after);
+    }
+
+    return Status::OK();
+}
+
+Status Operator::eval_no_eq_join_runtime_in_filters(Chunk* chunk) {
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
+    _init_conjuct_counters();
+    {
+        SCOPED_TIMER(_conjuncts_timer);
+        auto& in_filters = runtime_in_filters();
+        std::vector<ExprContext*> selected_vector;
+        for (ExprContext* in_filter : in_filters) {
+            if (in_filter->build_from_only_in_filter()) {
+                selected_vector.push_back(in_filter);
+            }
+        }
+        size_t before = chunk->num_rows();
+        _conjuncts_input_counter->update(before);
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(selected_vector, chunk, nullptr));
+        size_t after = chunk->num_rows();
         _conjuncts_output_counter->update(after);
     }
 
@@ -243,6 +279,7 @@ void Operator::_init_rf_counters(bool init_bloom) {
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
+        _bloom_filter_eval_context.driver_sequence = _driver_sequence;
     }
 }
 
@@ -268,10 +305,10 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     _state = state;
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
-        RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
+        RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
         auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
         for (auto& [filter_id, desc] : descriptors) {
-            if (desc->is_local() || desc->runtime_filter() != nullptr) {
+            if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
                 continue;
             }
             auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
@@ -297,7 +334,12 @@ void OperatorFactory::close(RuntimeState* state) {
 }
 
 void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
-    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set, -1, true);
+    _prepare_runtime_holders(holders, &_runtime_in_filters);
+}
+
+void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
+                                               std::vector<ExprContext*>* runtime_in_filters) {
     for (auto& holder : holders) {
         DCHECK(holder->is_ready());
         auto* collector = holder->get_collector();
@@ -306,11 +348,18 @@ void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            WARN_IF_ERROR(filter->prepare(state), "prepare filter expression failed");
-            WARN_IF_ERROR(filter->open(state), "open filter expression failed");
-            _runtime_in_filters.push_back(filter);
+            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
+            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            runtime_in_filters->push_back(filter);
         }
     }
+}
+
+std::vector<ExprContext*> OperatorFactory::get_colocate_runtime_in_filters(size_t driver_sequence) {
+    std::vector<ExprContext*> runtime_in_filter;
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set, driver_sequence, true);
+    _prepare_runtime_holders(holders, &runtime_in_filter);
+    return runtime_in_filter;
 }
 
 bool OperatorFactory::has_runtime_filters() const {

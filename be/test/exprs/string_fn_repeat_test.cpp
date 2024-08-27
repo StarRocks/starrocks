@@ -53,7 +53,7 @@ TEST_F(StringFunctionRepeatTest, repeatLargeTest) {
     auto times = Int32Column::create();
 
     str->append(std::to_string(1));
-    times->append(OLAP_STRING_MAX_LENGTH + 100);
+    times->append(get_olap_string_max_length() + 100);
 
     columns.emplace_back(str);
     columns.emplace_back(times);
@@ -73,7 +73,7 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
         str->append(std::string(1, 'x'));
     }
 
-    int32_t repeat_times = OLAP_STRING_MAX_LENGTH / 100 + 10;
+    int32_t repeat_times = get_olap_string_max_length() / 100 + 10;
     times->append(repeat_times);
 
     columns.emplace_back(str);
@@ -89,7 +89,7 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
         auto si = str->get_slice(i);
         auto so = v.value(i);
 
-        if (si.size * repeat_times < OLAP_STRING_MAX_LENGTH) {
+        if (si.size * repeat_times < get_olap_string_max_length()) {
             ASSERT_EQ(so.size, si.size * repeat_times);
         } else {
             ASSERT_TRUE(v.is_null(i));

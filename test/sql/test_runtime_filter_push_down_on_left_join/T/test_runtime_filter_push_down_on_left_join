@@ -1,0 +1,60 @@
+-- name: test_runtime_filter_push_down_on_left_join
+CREATE TABLE `t1` (
+  c1 string,
+  c2 string,
+  c3 string
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 48
+PROPERTIES (
+  "replication_num" = "1"
+);
+CREATE TABLE `t2` (
+  c1 string,
+  c2 string,
+  c3 string
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 48
+PROPERTIES (
+  "replication_num" = "1"
+);
+CREATE TABLE `t3` (
+  c1 string,
+  c2 string,
+  c3 string
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 48
+PROPERTIES (
+  "replication_num" = "1"
+);
+insert into t3 select 'c1-1', 'unknown', 'c3';
+insert into t2 select 'c1-1', 'c2-1', 'c3';
+insert into t1 select 'c1-1', 'c2-1', 'c3';
+-- Q1
+with 
+  w2 as (
+    select 
+      t1.c1, 
+      coalesce(t2.c2, 'unknown') as c2
+    from t1 left join [broadcast] t2 on t1.c3 = t2.c3
+  )
+select 
+  w2.*
+from
+  w2
+  join [bucket] t3 on w2.c1 = t3.c1 and w2.c2 = t3.c2;
+-- Q2
+with 
+  w2 as (
+    select 
+      t1.c1, 
+      coalesce(t2.c2, 'unknown') as c2
+    from t1 left join [shuffle] t2 on t1.c3 = t2.c3
+  )
+select 
+  w2.*
+from
+  w2
+  join [shuffle] t3 on w2.c1 = t3.c1 and w2.c2 = t3.c2;

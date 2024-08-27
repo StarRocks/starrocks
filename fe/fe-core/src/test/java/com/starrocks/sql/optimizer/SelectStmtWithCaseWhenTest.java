@@ -20,6 +20,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -99,6 +100,28 @@ class SelectStmtWithCaseWhenTest {
     @MethodSource("caseInvolvingNull")
     void testCaseInvolvingNull(String sql, List<String> patterns) throws Exception {
         test(sql, patterns);
+    }
+
+    @Test
+    void testConstantWhen() throws Exception {
+        /// WHEN TRUE
+        starRocksAssert.query("select case when random() > 10.0 then 1 when true then 2 else 10 end")
+                .explainContains("if(random() > 10.0, 1, 2)");
+        starRocksAssert.query("select case when random() > 10.0 then 1 " +
+                        "   when true then 2 " +
+                        "   when true then 3 " +
+                        "   when random() <5 then 4 " +
+                        "else 10 end")
+                .explainContains("if(random() > 10.0, 1, 2)");
+
+        // WHEN FALSE
+        starRocksAssert.query("select case when random() > 10 then 1 when false then 2 else 10 end")
+                .explainContains(" if(random() > 10.0, 1, 10)");
+        starRocksAssert.query("select case when random() > 10 then 1 " +
+                        "when false then 2 " +
+                        "when false then 3 " +
+                        "else 10 end")
+                .explainContains(" if(random() > 10.0, 1, 10)");
     }
 
     private static Stream<Arguments> caseWhenWithCaseClauses() {

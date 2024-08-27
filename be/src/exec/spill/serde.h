@@ -22,18 +22,19 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
-#include "gen_cpp/types.pb.h"
+#include "exec/spill/data_stream.h"
+#include "exec/spill/spill_fwd.h"
 #include "gutil/macros.h"
 #include "util/raw_container.h"
 
 namespace starrocks::spill {
-class ChunkBuilder;
 
 enum class SerdeType {
     BY_COLUMN,
 };
 
 struct AlignedBuffer {
+    static constexpr int PAGE_SIZE = 4096;
     AlignedBuffer() = default;
 
     ~AlignedBuffer() noexcept {
@@ -59,10 +60,9 @@ struct AlignedBuffer {
     uint8_t* data() const { return (uint8_t*)_data; }
 
     void resize(size_t size) {
-        const size_t BLOCKSIZE = 4096;
         if (_capacity < size) {
             void* new_data = nullptr;
-            if (UNLIKELY(posix_memalign(&new_data, BLOCKSIZE, size) != 0)) {
+            if (UNLIKELY(posix_memalign(&new_data, PAGE_SIZE, size) != 0)) {
                 throw ::std::bad_alloc();
             }
             if (_data != nullptr) {
@@ -84,10 +84,8 @@ private:
 };
 
 struct SerdeContext {
-    AlignedBuffer aligned_buffer;
-    std::string serialize_buffer;
+    raw::RawString serialize_buffer;
 };
-class Spiller;
 // Serde is used to serialize and deserialize spilled data.
 class Serde;
 using SerdePtr = std::shared_ptr<Serde>;
@@ -98,11 +96,15 @@ public:
 
     virtual Status prepare() = 0;
     // serialize chunk and append the serialized data into block
-    virtual Status serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
+    virtual Status serialize(RuntimeState* state, SerdeContext& ctx, const ChunkPtr& chunk,
+                             const SpillOutputDataStreamPtr& output, bool aligned) = 0;
+
     // deserialize data from block, return the chunk after deserialized
     virtual StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) = 0;
 
     static StatusOr<SerdePtr> create_serde(Spiller* parent);
+
+    Spiller* parent() const { return _parent; }
 
 protected:
     Spiller* _parent = nullptr;

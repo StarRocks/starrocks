@@ -67,7 +67,7 @@ public:
 
     Status append_json(const char* data, size_t size, char row_delimiter) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-        auto buf = ByteBuffer::allocate(size + simdjson::SIMDJSON_PADDING);
+        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(size + simdjson::SIMDJSON_PADDING));
         buf->put_bytes(data, size);
         buf->flip();
         return append(std::move(buf));

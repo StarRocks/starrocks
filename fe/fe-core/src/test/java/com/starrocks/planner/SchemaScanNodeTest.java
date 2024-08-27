@@ -17,16 +17,33 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
-import java.util.ArrayList;
-import java.util.List;
+import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class SchemaScanNodeTest {
+    @Mocked
+    private ConnectContext connectContext;
+
+    public SchemaScanNodeTest() {
+        connectContext = new ConnectContext(null);
+        connectContext.setThreadLocalInfo();
+    }
+
     @Test
     public void testComputeFeNodes(@Mocked GlobalStateMgr globalStateMgr) {
         List<Frontend> frontends = new ArrayList<>();
@@ -52,5 +69,56 @@ public class SchemaScanNodeTest {
         scanNode.computeFeNodes();
 
         Assert.assertNotNull(scanNode.getFrontends());
+    }
+
+    @Test
+    public void testComputeBeScanRanges() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                return Lists.newArrayList(1L);
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode computeNode = new ComputeNode(1L, "127.0.0.1", 9030);
+                computeNode.setAlive(true);
+                return computeNode;
+            }
+        };
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        SystemTable table = new SystemTable(0, "fe_metrics", null, null, null);
+        desc.setTable(table);
+        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc);
+        scanNode.computeBeScanRanges();
+    }
+
+    @Test
+    public void testComputeNodeScanRanges() {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<ComputeNode> getComputeNodes() {
+                ComputeNode computeNode = new ComputeNode(1L, "127.0.0.1", 9030);
+                computeNode.setAlive(true);
+                return List.of(computeNode);
+            }
+        };
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        SystemTable table = new SystemTable(0, "be_datacache_metrics", null, null, null);
+        desc.setTable(table);
+        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc);
+        scanNode.computeBeScanRanges();
+        Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
     }
 }

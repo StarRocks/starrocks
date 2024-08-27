@@ -21,6 +21,7 @@ import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -117,7 +118,8 @@ public class HudiMetadataTest {
 
     @Test
     public void testGetPartitionKeys() {
-        Assert.assertEquals(Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1"));
+        Assert.assertEquals(
+                Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1", TableVersionRange.empty()));
     }
 
     @Test

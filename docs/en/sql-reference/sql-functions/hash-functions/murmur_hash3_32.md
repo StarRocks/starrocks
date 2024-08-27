@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # murmur_hash3_32
 
-## Description
+
 
 Returns the 32-bit murmur3 hash value of the input string.
 

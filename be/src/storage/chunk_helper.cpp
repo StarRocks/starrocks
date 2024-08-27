@@ -476,6 +476,13 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, Chunk
     original_chunk.swap_chunk(reordered_chunk);
 }
 
+ChunkPtr ChunkHelper::createDummyChunk() {
+    ChunkPtr dummyChunk = std::make_shared<Chunk>();
+    auto col = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
+    dummyChunk->append_column(std::move(col), 0);
+    return dummyChunk;
+}
+
 ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}
 
 void ChunkAccumulator::set_desired_size(size_t desired_size) {
@@ -545,7 +552,7 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
         _in_chunk = chunk;
         _mem_usage = chunk->bytes_usage();
     } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size ||
-               _in_chunk->owner_info() != chunk->owner_info()) {
+               _in_chunk->owner_info() != chunk->owner_info() || _in_chunk->owner_info().is_last_chunk()) {
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
         _mem_usage = chunk->bytes_usage();

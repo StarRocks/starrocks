@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # log
 
-## 功能
+
 
 返回以 `base` 为底数的 `x` 的对数。如果未指定 `base`，则该函数等同于 [ln()](./ln.md)。
 

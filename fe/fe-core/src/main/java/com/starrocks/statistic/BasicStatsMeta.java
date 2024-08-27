@@ -58,6 +58,9 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("updateRows")
     private long updateRows;
 
+    @SerializedName("deltaRows")
+    private long deltaRows;
+
     public BasicStatsMeta(long dbId, long tableId, List<String> columns,
                           StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
@@ -128,12 +131,15 @@ public class BasicStatsMeta implements Writable {
         long cachedTableRowCount = 1L;
         long updatePartitionRowCount = 0L;
         long updatePartitionCount = 0L;
+
+        Map<Long, TableStatistic> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getTableStatistics(table.getId(), table.getPartitions());
+
         for (Partition partition : table.getPartitions()) {
             tableRowCount += partition.getRowCount();
-            TableStatistic tableStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                    .getTableStatistic(table.getId(), partition.getId());
-            if (tableStatistic != null) {
-                cachedTableRowCount += tableStatistic.getRowCount();
+            TableStatistic statistic = tableStatistics.getOrDefault(partition.getId(), TableStatistic.unknown());
+            if (!statistic.equals(TableStatistic.unknown())) {
+                cachedTableRowCount += statistic.getRowCount();
             }
             LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
@@ -141,18 +147,18 @@ public class BasicStatsMeta implements Writable {
                 updatePartitionCount++;
             }
         }
-        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount, updateRows) - cachedTableRowCount);
+        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount + deltaRows, updateRows) - cachedTableRowCount);
 
         double updateRatio;
         // 1. If none updated partitions, health is 1
         // 2. If there are few updated partitions, the health only to calculated on rows
         // 3. If there are many updated partitions, the health needs to be calculated based on partitions
-        if (updatePartitionRowCount == 0 || updatePartitionCount == 0) {
+        if (updatePartitionCount == 0) {
             return 1;
         } else if (updatePartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
-            updateRatio = (updateRows * 1.0) / updatePartitionRowCount;
+            updateRatio = (updatePartitionRowCount * 1.0) / tableRowCount;
         } else {
-            double rowUpdateRatio = (updateRows * 1.0) / updatePartitionRowCount;
+            double rowUpdateRatio = (updatePartitionRowCount * 1.0) / tableRowCount;
             double partitionUpdateRatio = (updatePartitionCount * 1.0) / totalPartitionCount;
             updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
         }
@@ -167,8 +173,9 @@ public class BasicStatsMeta implements Writable {
         this.updateRows = updateRows;
     }
 
-    public void increaseUpdateRows(Long delta) {
+    public void increaseDeltaRows(Long delta) {
         updateRows += delta;
+        deltaRows += delta;
     }
 
     public boolean isInitJobMeta() {

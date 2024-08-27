@@ -38,10 +38,13 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule FILE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final MergeLimitDirectRule PAIMON_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_PAIMON_SCAN);
     public static final MergeLimitDirectRule ODPS_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ODPS_SCAN);
+    public static final MergeLimitDirectRule KUDU_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_KUDU_SCAN);
     public static final MergeLimitDirectRule SCHEMA_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
     public static final MergeLimitDirectRule JDBC_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_JDBC_SCAN);
+    public static final MergeLimitDirectRule ICEBERG_METADATA_SCAN = new MergeLimitDirectRule(
+            OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
     public static final MergeLimitDirectRule WINDOW = new MergeLimitDirectRule(OperatorType.LOGICAL_WINDOW);
     public static final MergeLimitDirectRule INTERSECT = new MergeLimitDirectRule(OperatorType.LOGICAL_INTERSECT);
     public static final MergeLimitDirectRule EXCEPT = new MergeLimitDirectRule(OperatorType.LOGICAL_EXCEPT);

@@ -21,8 +21,10 @@ thirdparty/installed
 core.*
 extension/spark-doris-connector/.classpath
 extension/spark-doris-connector/target
+contrib/trino-connector/target/
 fe/log
 **/ut_ports
+venv/
 custom_env.sh
 ut_dir
 log/
@@ -70,6 +72,7 @@ StarRocksLex.tokens
 /Default/
 be/cmake-build*
 be/.vscode
+be/src/gen_cpp/cmake-build*
 be/src/gen_cpp/*.cc
 be/src/gen_cpp/*.cpp
 be/src/gen_cpp/*.h

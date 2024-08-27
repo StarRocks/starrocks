@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # sleep
 
-## 功能
+
 
 将当前正在执行的线程休眠 `x` 秒。返回 BOOLEAN 类型的值，`1` 表示正常休眠，`0` 表示休眠失败。
 

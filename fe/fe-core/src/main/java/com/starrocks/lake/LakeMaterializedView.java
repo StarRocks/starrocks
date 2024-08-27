@@ -19,7 +19,6 @@ import com.google.common.base.Strings;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
-import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -39,7 +38,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -103,21 +101,23 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        // write type first
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    public boolean isDeleteRetryable() {
+        return true;
     }
 
     @Override
-    public Runnable delete(boolean replay) {
-        onErase(replay);
-        return replay ? null : new DeleteLakeTableTask(this);
+    public boolean delete(long dbId, boolean replay) {
+        return LakeTableHelper.deleteTable(dbId, this, replay);
+    }
+
+    @Override
+    public boolean deleteFromRecycleBin(long dbId, boolean replay) {
+        return LakeTableHelper.deleteTableFromRecycleBin(dbId, this, replay);
     }
 
     @Override
     public AlterJobV2Builder alterTable() {
-        return new LakeTableAlterJobV2Builder(this);
+        return LakeTableHelper.alterTable(this);
     }
 
     @Override
@@ -175,5 +175,13 @@ public class LakeMaterializedView extends MaterializedView {
             return CatalogUtils.addEscapeCharacter(comment);
         }
         return TableType.MATERIALIZED_VIEW.name();
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        if (getMaxColUniqueId() <= 0) {
+            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
+        }
     }
 }

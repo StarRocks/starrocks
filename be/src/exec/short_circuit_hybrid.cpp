@@ -34,6 +34,11 @@ Status ShortCircuitHybridScanNode::set_scan_ranges(const std::vector<TScanRangeP
     return Status::OK();
 }
 
+Status ShortCircuitHybridScanNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::prepare(state));
+    return Status::OK();
+}
+
 Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     _t_desc_tbl = &_common_request.desc_tbl;
     _key_literal_exprs = &_common_request.key_literal_exprs;
@@ -55,9 +60,6 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     DCHECK(_tuple_desc != nullptr);
 
-    // skips runtime filters in ScanNode::open
-    RETURN_IF_ERROR(ScanNode::init(_tnode, state));
-    RETURN_IF_ERROR(ScanNode::prepare(state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
@@ -106,18 +108,26 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
             }
         }
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+        if (result_chunk->num_rows() == 0) {
+            *eos = true;
+        }
     } else {
         *eos = true;
     }
     *chunk = std::move(result_chunk);
+    _num_rows_returned += (*chunk)->num_rows();
+    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     return Status::OK();
 }
 
 Status ShortCircuitHybridScanNode::_process_key_chunk() {
     DCHECK(_tablets.size() > 0);
     _tablet_schema = _tablets[0]->tablet_schema();
-    auto& key_column_cids = _tablet_schema->sort_key_idxes();
-    auto key_schema = ChunkHelper::convert_schema(_tablet_schema, key_column_cids);
+    vector<uint32_t> pk_columns;
+    for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+        pk_columns.push_back((uint32_t)i);
+    }
+    auto key_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
 
     _key_chunk = ChunkHelper::new_chunk(key_schema, _num_rows);
     _key_chunk->reset();

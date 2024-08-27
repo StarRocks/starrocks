@@ -43,6 +43,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "block_cache/block_cache.h"
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -97,6 +98,25 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
         });
+        _config_callback.emplace("datacache_mem_size", [&]() {
+            int64_t mem_limit = MemInfo::physical_mem();
+            if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
+                mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+            }
+            size_t mem_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
+            (void)BlockCache::instance()->update_mem_quota(mem_size, true);
+        });
+        _config_callback.emplace("datacache_disk_size", [&]() {
+            std::vector<DirSpace> spaces;
+            Status st = parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
+                                                         config::ignore_broken_disk, &spaces);
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to update datacache disk spaces";
+                return;
+            }
+            (void)BlockCache::instance()->adjust_disk_spaces(spaces);
+        });
+        _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
         _config_callback.emplace("max_compaction_concurrency", [&]() {
             (void)StorageEngine::instance()->compaction_manager()->update_max_threads(
                     config::max_compaction_concurrency);
@@ -109,6 +129,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::flush_thread_num_per_store * dir_cnt);
             (void)StorageEngine::instance()->segment_flush_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
+        });
+        _config_callback.emplace("lake_flush_thread_num_per_store", [&]() {
+            (void)StorageEngine::instance()->lake_memtable_flush_executor()->update_max_threads(
+                    MemTableFlushExecutor::calc_max_threads_for_lake_table(StorageEngine::instance()->get_stores()));
         });
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
             StorageEngine::instance()->increase_update_compaction_thread(
@@ -141,6 +165,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             (void)thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
+        _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+            (void)thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                           config::transaction_publish_version_thread_pool_num_min));
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
@@ -158,6 +187,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_use_star_cache", [&]() { update_staros_starcache(); });
+        _config_callback.emplace("starlet_star_cache_mem_size_percent", [&]() { update_staros_starcache(); });
+        _config_callback.emplace("starlet_star_cache_mem_size_bytes", [&]() { update_staros_starcache(); });
 #endif
         _config_callback.emplace("transaction_apply_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
@@ -165,6 +196,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
             (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+        _config_callback.emplace("transaction_apply_thread_pool_num_min", [&]() {
+            int min_thread_cnt = config::transaction_apply_thread_pool_num_min;
+            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
         });
         _config_callback.emplace("get_pindex_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
@@ -209,6 +244,35 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
         });
+
+        _config_callback.emplace("default_mv_resource_group_memory_limit", [&]() {
+            LOG(INFO) << "set default_mv_resource_group_memory_limit:"
+                      << config::default_mv_resource_group_memory_limit;
+            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
+            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
+            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
+        });
+        _config_callback.emplace("default_mv_resource_group_cpu_limit", [&]() {
+            LOG(INFO) << "set default_mv_resource_group_cpu_limit:" << config::default_mv_resource_group_cpu_limit;
+            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
+            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
+            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
+        });
+        _config_callback.emplace("default_mv_resource_group_concurrency_limit", [&]() {
+            LOG(INFO) << "set default_mv_resource_group_concurrency_limit:"
+                      << config::default_mv_resource_group_concurrency_limit;
+            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
+            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
+            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
+        });
+        _config_callback.emplace("default_mv_resource_group_spill_mem_limit_threshold", [&]() {
+            LOG(INFO) << "set default_mv_resource_group_spill_mem_limit_threshold:"
+                      << config::default_mv_resource_group_spill_mem_limit_threshold;
+            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
+            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
+            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
+        });
+
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_cache_thread_num", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size", value).empty()) {
@@ -273,6 +337,17 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
                         .empty()) {
                 LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
+            }
+        });
+        _config_callback.emplace("s3_use_list_objects_v1", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_use_list_objects_v1", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_use_list_objects_v1";
+            }
+        });
+        _config_callback.emplace("starlet_delete_files_max_key_in_batch", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("delete_files_max_key_in_batch", value).empty()) {
+                LOG(WARNING) << "Failed to update delete_files_max_key_in_batch";
             }
         });
 #endif // USE_STAROS

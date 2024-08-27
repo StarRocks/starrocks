@@ -20,9 +20,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -40,6 +42,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.iceberg.SnapshotRef;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,14 +56,33 @@ import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
-    public static void analyze(InsertStmt insertStmt, ConnectContext session) {
-        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
+    /**
+     * Normal path of analyzer
+     */
+    public static void analyze(InsertStmt insertStmt, ConnectContext session) {
+        analyzeWithDeferredLock(insertStmt, session, () -> {
+        });
+    }
+
+    /**
+     * An optimistic path of analyzer for INSERT-SELECT, whose SELECT doesn't need a lock
+     * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
+     */
+    public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         List<Table> tables = new ArrayList<>();
-        AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-        tables.stream().map(table -> (HiveTable) table)
-                .forEach(table -> table.useMetadataCache(false));
+        try {
+            new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+
+            AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+            tables.stream().map(table -> (HiveTable) table)
+                    .forEach(table -> table.useMetadataCache(false));
+        } finally {
+            // Take the PlannerMetaLock
+            takeLock.run();
+        }
+
 
         /*
          *  Target table
@@ -135,7 +157,8 @@ public class InsertAnalyzer {
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
-                    if (!insertStmt.getTargetColumnNames().contains(partitionColName)) {
+                    // case-insensitive match. refer to AstBuilder#getColumnNames
+                    if (!insertStmt.getTargetColumnNames().contains(partitionColName.toLowerCase())) {
                         throw new SemanticException("Must include partition column %s", partitionColName);
                     }
                 }
@@ -163,7 +186,7 @@ public class InsertAnalyzer {
                 targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
                 mentionedColumns =
                         ((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream()
-                            .map(Column::getName).collect(Collectors.toSet());
+                                .map(Column::getName).collect(Collectors.toSet());
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
                 mentionedColumns =
@@ -171,6 +194,9 @@ public class InsertAnalyzer {
             }
         } else {
             targetColumns = new ArrayList<>();
+            Set<String> requiredKeyColumns = table.getBaseSchema().stream().filter(Column::isKey)
+                    .filter(c -> c.getDefaultValueType() == Column.DefaultValueType.NULL)
+                    .filter(c -> !c.isAutoIncrement()).map(c -> c.getName().toLowerCase()).collect(Collectors.toSet());
             for (String colName : insertStmt.getTargetColumnNames()) {
                 Column column = table.getColumn(colName);
                 if (column == null) {
@@ -182,21 +208,36 @@ public class InsertAnalyzer {
                 if (!mentionedColumns.add(colName)) {
                     throw new SemanticException("Column '%s' specified twice", colName);
                 }
+                requiredKeyColumns.remove(colName.toLowerCase());
                 targetColumns.add(column);
+            }
+            if (table.isNativeTable()) {
+                OlapTable olapTable = (OlapTable) table;
+                if (olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)) {
+                    if (!requiredKeyColumns.isEmpty()) {
+                        String missingKeyColumns = String.join(",", requiredKeyColumns);
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_MISSING_KEY_COLUMNS, missingKeyColumns);
+                    }
+                    if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size()) {
+                        insertStmt.setUsePartialUpdate();
+                    }
+                }
             }
         }
 
-        for (Column column : table.getBaseSchema()) {
-            Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-            if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
-                    !column.isAutoIncrement() && !column.isGeneratedColumn() &&
-                    !mentionedColumns.contains(column.getName())) {
-                StringBuilder msg = new StringBuilder();
-                for (String s : mentionedColumns) {
-                    msg.append(" ").append(s).append(" ");
+        if (!insertStmt.usePartialUpdate()) {
+            for (Column column : table.getBaseSchema()) {
+                Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
+                        !column.isAutoIncrement() && !column.isGeneratedColumn() &&
+                        !mentionedColumns.contains(column.getName())) {
+                    StringBuilder msg = new StringBuilder();
+                    for (String s : mentionedColumns) {
+                        msg.append(" ").append(s).append(" ");
+                    }
+                    throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
+                            column.getName(), msg.toString());
                 }
-                throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
-                        column.getName(), msg.toString());
             }
         }
 
@@ -207,7 +248,8 @@ public class InsertAnalyzer {
         }
 
         if (query.getRelationFields().size() != mentionedColumnSize) {
-            throw new SemanticException("Column count doesn't match value count");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INSERTED_COLUMN_MISMATCH, mentionedColumnSize,
+                    query.getRelationFields().size());
         }
         // check default value expr
         if (query instanceof ValuesRelation) {
@@ -229,7 +271,6 @@ public class InsertAnalyzer {
         }
 
         insertStmt.setTargetTable(table);
-        insertStmt.setTargetColumns(targetColumns);
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
         }
@@ -273,14 +314,11 @@ public class InsertAnalyzer {
                 throw new SemanticException("partition value should be literal expression");
             }
 
-            if (partitionValue instanceof NullLiteral) {
-                throw new SemanticException("partition value can't be null");
-            }
-
             LiteralExpr literalExpr = (LiteralExpr) partitionValue;
             Column column = table.getColumn(actualName);
             try {
-                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
+                Type type = literalExpr.isConstantNull() ? Type.NULL : column.getType();
+                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), type);
                 insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
@@ -300,13 +338,13 @@ public class InsertAnalyzer {
         String dbName = insertStmt.getTableName().getDb();
         String tableName = insertStmt.getTableName().getTbl();
 
-        try {
-            MetaUtils.checkCatalogExistAndReport(catalogName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-        }
+        MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -338,6 +376,21 @@ public class InsertAnalyzer {
         if ((table.isHiveTable() || table.isIcebergTable()) && CatalogMgr.isInternalCatalog(catalogName)) {
             throw unsupportedException(String.format("Doesn't support %s table sink in the internal catalog. " +
                     "You need to use %s catalog.", table.getType(), table.getType()));
+        }
+
+        if (insertStmt.getTargetBranch() != null) {
+            if (!table.isIcebergTable()) {
+                throw unsupportedException("Only support insert iceberg table with branch");
+            }
+            String targetBranch = insertStmt.getTargetBranch();
+            SnapshotRef snapshotRef = ((IcebergTable) table).getNativeTable().refs().get(targetBranch);
+            if (snapshotRef == null) {
+                throw unsupportedException("Cannot find snapshot with reference name: " + targetBranch);
+            }
+
+            if (!snapshotRef.isBranch()) {
+                throw unsupportedException(String.format("%s is a tag, not a branch", targetBranch));
+            }
         }
 
         return table;

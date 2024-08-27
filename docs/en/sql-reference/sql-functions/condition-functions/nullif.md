@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # nullif
 
-## Description
+
 
 Returns NULL if `expr1` is equal to `expr2`. Otherwise, returns `expr1`.
 

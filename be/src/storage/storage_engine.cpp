@@ -59,9 +59,11 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/dictionary_cache_manager.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
@@ -131,12 +133,21 @@ StorageEngine::StorageEngine(const EngineOptions& options)
         return _unused_rowsets.size();
     })
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
+#ifdef USE_STAROS
+    _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
+#endif
+#ifndef BE_TEST
+    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
+    MetadataCache::create_cache(lru_cache_limit);
+    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
+                                    [&]() { return MetadataCache::instance()->get_memory_usage(); });
+#endif
 }
 
 StorageEngine::~StorageEngine() {
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
-    _update_manager.reset();
     _tablet_manager.reset();
 #ifdef BE_TEST
     if (_s_instance == this) {
@@ -185,6 +196,7 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
         Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
+        DCHECK(thread.joinable());
         thread.join();
     }
 }
@@ -220,30 +232,32 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-    REGISTER_GAUGE_STARROCKS_METRIC(async_delta_writer_queue_count, [this]() {
-        return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
-                ->get_thread_pool()
-                ->num_queued_tasks();
-    })
+    REGISTER_THREAD_POOL_METRICS(
+            async_delta_writer,
+            static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_queue_count, [this]() {
-        return _memtable_flush_executor->get_thread_pool()->num_queued_tasks();
-    })
+    REGISTER_THREAD_POOL_METRICS(memtable_flush, _memtable_flush_executor->get_thread_pool());
+
+    _lake_memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_lake_memtable_flush_executor->init_for_lake_table(dirs),
+                              "init lake MemTableFlushExecutor failed");
+    REGISTER_THREAD_POOL_METRICS(lake_memtable_flush, _lake_memtable_flush_executor->get_thread_pool());
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count,
-                                    [this]() { return _segment_flush_executor->get_thread_pool()->num_queued_tasks(); })
+    REGISTER_THREAD_POOL_METRICS(segment_flush, _segment_flush_executor->get_thread_pool());
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_queue_count, [this]() {
-        return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
-    })
+    REGISTER_THREAD_POOL_METRICS(segment_replicate, _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
+
+#ifdef USE_STAROS
+    RETURN_IF_ERROR_WITH_WARN(_local_pk_index_manager->init(), "init LocalPkIndexManager failed");
+#endif
 
     return Status::OK();
 }
@@ -278,6 +292,7 @@ Status StorageEngine::_init_store_map() {
         Thread::set_thread_name(threads.back(), "init_store_path");
     }
     for (auto& thread : threads) {
+        DCHECK(thread.joinable());
         thread.join();
     }
 
@@ -535,6 +550,18 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
+bool StorageEngine::enable_light_pk_compaction_publish() {
+    if (!config::enable_light_pk_compaction_publish) {
+        return false;
+    }
+    // Skip light pk compaction if there is no local disk to store temp rows mapper files.
+    auto stores = get_stores<false>();
+    if (stores.empty()) {
+        return false;
+    }
+    return true;
+}
+
 // maybe nullptr if as cn
 DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
     auto stores = get_stores<false>();
@@ -610,7 +637,9 @@ void StorageEngine::stop() {
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
     wake_finish_publish_vesion_thread();
+    wake_schedule_apply_thread();
     JOIN_THREAD(_finish_publish_version_thread)
+    JOIN_THREAD(_schedule_apply_thread)
 
     JOIN_THREADS(_base_compaction_threads)
     JOIN_THREADS(_cumulative_compaction_threads)
@@ -971,6 +1000,12 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
                 fmt::format("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id()));
     }
 
+    auto tablet_id = best_tablet->tablet_id();
+    auto new_tablet = _tablet_manager->get_tablet(tablet_id);
+    if (new_tablet != nullptr && new_tablet->data_dir()->path_hash() != data_dir->path_hash()) {
+        return Status::InternalError(fmt::format("tablet has been migrated, tablet_id: {}", tablet_id));
+    }
+
     Status res;
     int64_t duration_ns = 0;
     {
@@ -1040,7 +1075,7 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
 
     // clear expire incremental rowset, move deleted tablet to trash
-    CHECK(_tablet_manager->start_trash_sweep().ok());
+    RETURN_IF_ERROR(_tablet_manager->start_trash_sweep());
 
     // clean rubbish transactions
     _clean_unused_txns();
@@ -1542,8 +1577,7 @@ void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) 
         std::vector<DeltaColumnGroupKey> dcg_keys;
         dcg_keys.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
-            dcg_keys.emplace_back(
-                    DeltaColumnGroupKey(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i));
+            dcg_keys.emplace_back(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i);
         }
         return dcg_keys;
     }());
@@ -1581,6 +1615,15 @@ void StorageEngine::decommission_disks(const std::vector<string>& decommission_d
             }
         }
     }
+}
+
+void StorageEngine::add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point) {
+    LOG(INFO) << "add tablet:" << tablet_id << ", next apply time:";
+    {
+        std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+        _schedule_apply_tasks.emplace(time_point, tablet_id);
+    }
+    _apply_tablet_changed_cv.notify_one();
 }
 
 } // namespace starrocks

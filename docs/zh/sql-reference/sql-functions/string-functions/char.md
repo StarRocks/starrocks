@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # char
 
-## 功能
+
 
 根据输入的 ASCII 值返回对应的字符。
 

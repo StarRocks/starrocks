@@ -16,15 +16,9 @@
 
 #include <fmt/format.h>
 
-#include <filesystem>
-
-#ifdef WITH_CACHELIB
-#include "block_cache/cachelib_wrapper.h"
-#endif
 #ifdef WITH_STARCACHE
 #include "block_cache/starcache_wrapper.h"
 #endif
-#include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
@@ -33,8 +27,6 @@ namespace starrocks {
 
 namespace fs = std::filesystem;
 
-// The cachelib doesn't support a item (key+valueu+attribute) larger than 4 MB without chain.
-// So, we check and limit the block_size configured by users to avoid unexpected errors.
 // For starcache, in theory we doesn't have a hard limitation for block size, but a very large
 // block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
@@ -44,44 +36,31 @@ BlockCache* BlockCache::instance() {
     return &cache;
 }
 
+BlockCache::~BlockCache() {
+    (void)shutdown();
+}
+
 Status BlockCache::init(const CacheOptions& options) {
-    for (auto& dir : options.disk_spaces) {
-        if (dir.size == 0) {
-            continue;
-        }
-        fs::path dir_path(dir.path);
-        if (fs::exists(dir_path)) {
-            if (!fs::is_directory(dir_path)) {
-                LOG(ERROR) << "the block cache disk path already exists but not a directory, path: " << dir.path;
-                return Status::InvalidArgument("invalid block cache disk path");
-            }
-        } else {
-            std::error_code ec;
-            if (!fs::create_directory(dir_path, ec)) {
-                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path << ", reason: " << ec.message();
-                return Status::InvalidArgument("invalid block cache disk path");
-            }
-        }
-    }
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
-#ifdef WITH_CACHELIB
-    if (options.engine == "cachelib") {
-        _kv_cache = std::make_unique<CacheLibWrapper>();
-        LOG(INFO) << "init cachelib engine, block_size: " << _block_size;
-    }
-#endif
+    auto cache_options = options;
 #ifdef WITH_STARCACHE
-    if (options.engine == "starcache") {
+    if (cache_options.engine == "starcache") {
         _kv_cache = std::make_unique<StarCacheWrapper>();
+        _disk_space_monitor = std::make_unique<DiskSpaceMonitor>(this);
+        _disk_space_monitor->adjust_spaces(&cache_options.disk_spaces);
         LOG(INFO) << "init starcache engine, block_size: " << _block_size;
     }
 #endif
     if (!_kv_cache) {
-        LOG(ERROR) << "unsupported block cache engine: " << options.engine;
+        LOG(ERROR) << "unsupported block cache engine: " << cache_options.engine;
         return Status::NotSupported("unsupported block cache engine");
     }
-    RETURN_IF_ERROR(_kv_cache->init(options));
+    RETURN_IF_ERROR(_kv_cache->init(cache_options));
+    _refresh_quota();
     _initialized.store(true, std::memory_order_relaxed);
+    if (_disk_space_monitor) {
+        _disk_space_monitor->start();
+    }
     return Status::OK();
 }
 
@@ -114,7 +93,7 @@ Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, size_t 
 }
 
 Status BlockCache::write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
-                                CacheHandle* handle, WriteCacheOptions* options) {
+                                DataCacheHandle* handle, WriteCacheOptions* options) {
     if (!ptr) {
         return Status::InvalidArgument("invalid object pointer");
     }
@@ -140,8 +119,17 @@ StatusOr<size_t> BlockCache::read_buffer(const CacheKey& cache_key, off_t offset
     return buffer.size();
 }
 
-Status BlockCache::read_object(const CacheKey& cache_key, CacheHandle* handle, ReadCacheOptions* options) {
+Status BlockCache::read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options) {
     return _kv_cache->read_object(cache_key, handle, options);
+}
+
+bool BlockCache::exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const {
+    if (size == 0) {
+        return true;
+    }
+    size_t index = offset / _block_size;
+    std::string block_key = fmt::format("{}/{}", cache_key, index);
+    return _kv_cache->exist(block_key);
 }
 
 Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) {
@@ -160,6 +148,27 @@ Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) 
     return _kv_cache->remove(block_key);
 }
 
+Status BlockCache::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
+    Status st = _kv_cache->update_mem_quota(quota_bytes, flush_to_disk);
+    _refresh_quota();
+    return st;
+}
+
+Status BlockCache::update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    Status st = _kv_cache->update_disk_spaces(spaces);
+    _refresh_quota();
+    return st;
+}
+
+Status BlockCache::adjust_disk_spaces(const std::vector<DirSpace>& spaces) {
+    if (_disk_space_monitor) {
+        auto adjusted_spaces = spaces;
+        _disk_space_monitor->adjust_spaces(&adjusted_spaces);
+        return _disk_space_monitor->adjust_cache_quota(adjusted_spaces);
+    }
+    return update_disk_spaces(spaces);
+}
+
 void BlockCache::record_read_remote(size_t size, int64_t lateny_us) {
     _kv_cache->record_read_remote(size, lateny_us);
 }
@@ -173,10 +182,25 @@ const DataCacheMetrics BlockCache::cache_metrics(int level) const {
 }
 
 Status BlockCache::shutdown() {
+    if (!_initialized.load(std::memory_order_relaxed)) {
+        return Status::OK();
+    }
     Status st = _kv_cache->shutdown();
-    _kv_cache = nullptr;
+    if (_disk_space_monitor) {
+        _disk_space_monitor->stop();
+    }
     _initialized.store(false, std::memory_order_relaxed);
     return st;
+}
+
+DataCacheEngineType BlockCache::engine_type() {
+    return _kv_cache->engine_type();
+}
+
+void BlockCache::_refresh_quota() {
+    auto metrics = _kv_cache->cache_metrics(0);
+    _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
+    _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
 }
 
 } // namespace starrocks

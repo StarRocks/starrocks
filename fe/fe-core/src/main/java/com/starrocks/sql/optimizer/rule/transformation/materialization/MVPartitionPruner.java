@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptDistributionPruner;
@@ -50,57 +51,77 @@ public class MVPartitionPruner {
         return queryExpression.getOp().accept(new MVPartitionPrunerVisitor(), queryExpression, null);
     }
 
+    /**
+     * For input query expression, reset/clear pruned partitions and return new query expression to be pruned again.
+     */
+    public static LogicalOlapScanOperator resetSelectedPartitions(LogicalOlapScanOperator olapScanOperator) {
+        final LogicalOlapScanOperator.Builder mvScanBuilder = OperatorBuilderFactory.build(olapScanOperator);
+        // reset original partition predicates to prune partitions/tablets again
+        mvScanBuilder.withOperator(olapScanOperator)
+                .setSelectedPartitionId(null)
+                .setPrunedPartitionPredicates(Lists.newArrayList())
+                .setSelectedTabletId(Lists.newArrayList());
+        return mvScanBuilder.build();
+    }
+
     private class MVPartitionPrunerVisitor extends OptExpressionVisitor<OptExpression, Void> {
+        private boolean isAddMVPrunePredicate(LogicalOlapScanOperator olapScanOperator) {
+            if (mvRewriteContext == null) {
+                return false;
+            }
+            return olapScanOperator.getTable().isMaterializedView()
+                    && olapScanOperator.getTable().getId() == mvRewriteContext.getMaterializationContext().getMv().getId()
+                    && mvRewriteContext.getMvPruneConjunct() != null;
+        }
+
+        private ScalarOperator getMVPrunePredicate(LogicalOlapScanOperator scanOperator) {
+            ScalarOperator originPredicate = scanOperator.getPredicate();
+            if (mvRewriteContext == null) {
+                return originPredicate;
+            }
+            return Utils.compoundAnd(originPredicate, mvRewriteContext.getMvPruneConjunct());
+        }
+
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
 
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                // NOTE: need clear original partition predicates before,
-                // original partition predicates if cannot be rewritten may contain wrong slot refs.
-                // MV   : select c1, c3, c2 from test_base_part where c2 < 2000
-                // Query: select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000
-                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) (scanOperator);
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
-                builder.withOperator(olapScanOperator)
-                        .setPrunedPartitionPredicates(Lists.newArrayList())
-                        .setSelectedPartitionId(Lists.newArrayList())
-                        .setSelectedTabletId(Lists.newArrayList());
-
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) (scanOperator);
+                builder.withOperator(olapScanOperator);
                 // for mv: select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1,
                 // which c3 is partition column and c1 is distribution column.
                 // we should add predicate c3 < 2000 and c1 = 1 into scan operator to do pruning
-                boolean isAddMvPrunePredicate = scanOperator.getTable().isMaterializedView()
-                        && scanOperator.getTable().getId() == mvRewriteContext.getMaterializationContext().getMv().getId()
-                        && mvRewriteContext.getMvPruneConjunct() != null;
+                boolean isAddMvPrunePredicate = isAddMVPrunePredicate(olapScanOperator);
                 if (isAddMvPrunePredicate) {
-                    ScalarOperator originPredicate = scanOperator.getPredicate();
-                    ScalarOperator newPredicate = Utils.compoundAnd(originPredicate, mvRewriteContext.getMvPruneConjunct());
-                    builder.setPredicate(newPredicate);
+                    builder.setPredicate(getMVPrunePredicate(olapScanOperator));
                 }
-                LogicalOlapScanOperator copiedOlapScanOperator = builder.build();
+                LogicalOlapScanOperator newOlapScanOperator = builder.build();
 
                 // prune partition
-                final LogicalOlapScanOperator prunedOlapScanOperator =
-                        OptOlapPartitionPruner.prunePartitions(copiedOlapScanOperator);
+                List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
+                if (selectedPartitionIds == null || selectedPartitionIds.isEmpty()) {
+                    newOlapScanOperator =  OptOlapPartitionPruner.prunePartitions(newOlapScanOperator);
+                }
 
                 // prune distribution key
-                copiedOlapScanOperator.buildColumnFilters(prunedOlapScanOperator.getPredicate());
-                List<Long> selectedTabletIds = OptDistributionPruner.pruneTabletIds(copiedOlapScanOperator,
-                        prunedOlapScanOperator.getSelectedPartitionId());
+                newOlapScanOperator.buildColumnFilters(newOlapScanOperator.getPredicate());
+                List<Long> selectedTabletIds = OptDistributionPruner.pruneTabletIds(newOlapScanOperator,
+                        newOlapScanOperator.getSelectedPartitionId());
 
-                ScalarOperator scanPredicate = prunedOlapScanOperator.getPredicate();
+                ScalarOperator scanPredicate = newOlapScanOperator.getPredicate();
                 if (isAddMvPrunePredicate) {
                     List<ScalarOperator> originConjuncts = Utils.extractConjuncts(scanOperator.getPredicate());
                     List<ScalarOperator> pruneConjuncts = Utils.extractConjuncts(mvRewriteContext.getMvPruneConjunct());
                     pruneConjuncts.removeAll(originConjuncts);
-                    List<ScalarOperator> currentConjuncts = Utils.extractConjuncts(prunedOlapScanOperator.getPredicate());
+                    List<ScalarOperator> currentConjuncts = Utils.extractConjuncts(newOlapScanOperator.getPredicate());
                     currentConjuncts.removeAll(pruneConjuncts);
                     scanPredicate = Utils.compoundAnd(currentConjuncts);
                 }
 
                 LogicalOlapScanOperator.Builder rewrittenBuilder = new LogicalOlapScanOperator.Builder();
-                scanOperator = rewrittenBuilder.withOperator(prunedOlapScanOperator)
+                scanOperator = rewrittenBuilder.withOperator(newOlapScanOperator)
                         .setPredicate(MvUtils.canonizePredicate(scanPredicate))
                         .setSelectedTabletId(selectedTabletIds)
                         .build();
@@ -109,7 +130,8 @@ public class MVPartitionPruner {
                     scanOperator instanceof LogicalIcebergScanOperator ||
                     scanOperator instanceof LogicalDeltaLakeScanOperator ||
                     scanOperator instanceof LogicalFileScanOperator ||
-                    scanOperator instanceof LogicalEsScanOperator) {
+                    scanOperator instanceof LogicalEsScanOperator ||
+                    scanOperator instanceof LogicalPaimonScanOperator) {
                 Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
                 LogicalScanOperator copiedScanOperator =
                         (LogicalScanOperator) builder.withOperator(scanOperator).build();

@@ -12,7 +12,6 @@ DUPLICATE KEY(`date`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"

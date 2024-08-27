@@ -26,7 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -57,6 +57,7 @@ public class ReplayFromDumpTestBase {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
+        Config.show_execution_groups = false;
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
@@ -80,7 +81,7 @@ public class ReplayFromDumpTestBase {
 
     @Before
     public void before() throws Exception {
-        BackendCoreStat.reset();
+        BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));

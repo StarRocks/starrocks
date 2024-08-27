@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # reverse
 
-## 功能
+
 
 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。
 

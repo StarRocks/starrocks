@@ -1,8 +1,8 @@
 -- name: test_mv_swap
-create database db_test_mv_swap;
+create database db_${uuid0};
 -- result:
 -- !result
-use db_test_mv_swap;
+use db_${uuid0};
 -- result:
 -- !result
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
@@ -87,15 +87,15 @@ SELECT * FROM mv2 ORDER BY event_day;
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH ss;
 -- result:
-E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+E: (1064, 'Materialized view can only SWAP WITH materialized view')
 -- !result
 ALTER TABLE ss SWAP WITH mv1;
 -- result:
-E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+E: (1064, 'Materialized view can only SWAP WITH materialized view')
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
 -- result:
-E: (1064, 'Unexpected exception: New name conflicts with rollup index name: mv1')
+E: (1064, 'New name conflicts with rollup index name: mv1')
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
@@ -123,11 +123,11 @@ false	base-mv inactive: mv_on_mv_1
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv_on_mv_1` (`sum_sum_pv`)\nDISTRIBUTED BY RANDOM\nREFRESH ASYNC\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT sum(`db_test_mv_swap`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_test_mv_swap`.`mv1`;\n\nCause an error: Column \'`db_test_mv_swap`.`mv1`.`sum_pv`\' cannot be resolved.')
+[REGEX].*Can not active materialized view.*
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_2] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv_on_mv_2` (`sum_sum_pv + 1`)\nDISTRIBUTED BY RANDOM\nREFRESH ASYNC\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT `db_test_mv_swap`.`mv_on_mv_1`.`sum_sum_pv` + 1 AS `sum_sum_pv + 1`\nFROM `db_test_mv_swap`.`mv_on_mv_1`;\n\nCause an error: Create/Rebuild materialized view from inactive materialized view: mv_on_mv_1.')
+[REGEX].*Can not active materialized view.*
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 -- result:
@@ -135,7 +135,7 @@ false	base-table swapped: mv1
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
 -- result:
-false	base mv is not active: mv_on_mv_1
+false	base-mv inactive: mv_on_mv_1
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
@@ -174,4 +174,7 @@ ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
 -- result:
 true	
+-- !result
+[UC]drop database db_${uuid0} force;
+-- result:
 -- !result

@@ -21,6 +21,7 @@
 #include "common/greplog.h"
 #include "common/logging.h"
 #include "common/prof/heap_prof.h"
+#include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
@@ -135,7 +136,7 @@ std::string exec(const std::string& cmd) {
     std::string ret;
 
     FILE* fp = popen(cmd.c_str(), "r");
-    if (fp == NULL) {
+    if (fp == nullptr) {
         ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
         return ret;
     }
@@ -158,7 +159,7 @@ std::string exec(const std::string& cmd) {
 }
 
 static std::string exec_whitelist(const std::string& cmd) {
-    static std::regex legal_cmd("(ls|cat|head|tail|grep|free|echo)[^<>\\|;`\\\\]*");
+    static std::regex legal_cmd(R"((ls|cat|head|tail|grep|free|echo)[^<>\|;`\\]*)");
     std::cmatch m;
     if (!std::regex_match(cmd.c_str(), m, legal_cmd)) {
         return "illegal cmd";
@@ -225,6 +226,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, schema_change_mem_tracker);
         REG_METHOD(GlobalEnv, column_pool_mem_tracker);
         REG_METHOD(GlobalEnv, page_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
         REG_METHOD(GlobalEnv, update_mem_tracker);
         REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
         REG_METHOD(GlobalEnv, clone_mem_tracker);
@@ -256,6 +258,13 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(HeapProf, snapshot);
         REG_METHOD(HeapProf, to_dot_format);
         REG_METHOD(HeapProf, dump_dot_snapshot);
+    }
+    {
+        auto& cls = m.klass<VLogCntl>("VLogCntl");
+        REG_STATIC_METHOD(VLogCntl, getInstance);
+        REG_METHOD(VLogCntl, enable);
+        REG_METHOD(VLogCntl, disable);
+        REG_METHOD(VLogCntl, setLogLevel);
     }
 }
 
@@ -486,6 +495,7 @@ public:
             REG_VAR(EditVersionInfo, creation_time);
             REG_VAR(EditVersionInfo, rowsets);
             REG_VAR(EditVersionInfo, deltas);
+            REG_VAR(EditVersionInfo, gtid);
             REG_METHOD(EditVersionInfo, get_compaction);
         }
         {
@@ -568,7 +578,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

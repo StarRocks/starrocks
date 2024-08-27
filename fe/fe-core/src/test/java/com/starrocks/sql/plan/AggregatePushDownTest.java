@@ -106,6 +106,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  analytic partition by: 4: t1d\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
@@ -128,6 +129,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC, <slot 5> 5: t1e ASC\n" +
+                "  |  analytic partition by: 4: t1d, 5: t1e\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
@@ -166,6 +168,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  analytic partition by: 4: t1d\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  1:EXCHANGE");
@@ -217,5 +220,19 @@ public class AggregatePushDownTest extends PlanTestBase {
                         "  |  group by: 2: L_PARTKEY\n" +
                         "  |  \n" +
                         "  2:EXCHANGE");
+    }
+
+    @Test
+    public void testPruneDistinctWindow() throws Exception {
+        String sql = "select distinct t1c, t1d, t1g, amount " +
+                " from (" +
+                " select  t1b, t1c, t1d, t1g, id_date, \n" +
+                "     sum(id_decimal)over(partition by t1c) as amount\n" +
+                "from test_all_type_not_null) tt";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:ANALYTIC\n" +
+                "  |  functions: [, sum[([12: sum, DECIMAL128(38,2), true]);" +
+                " args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true], ]");
+        assertContains(plan, "2:AGGREGATE (update finalize)");
     }
 }

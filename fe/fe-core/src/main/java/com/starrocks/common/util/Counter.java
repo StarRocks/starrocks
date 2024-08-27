@@ -115,8 +115,12 @@ public class Counter {
     }
 
     public static TCounterStrategy createStrategy(TUnit type) {
-        TCounterStrategy strategy = new TCounterStrategy();
         TCounterAggregateType aggregateType = isTimeType(type) ? TCounterAggregateType.AVG : TCounterAggregateType.SUM;
+        return createStrategy(aggregateType);
+    }
+
+    public static TCounterStrategy createStrategy(TCounterAggregateType aggregateType) {
+        TCounterStrategy strategy = new TCounterStrategy();
         TCounterMergeType mergeType = TCounterMergeType.MERGE_ALL;
         strategy.aggregate_type = aggregateType;
         strategy.merge_type = mergeType;

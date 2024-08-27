@@ -25,22 +25,20 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TXN_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"VERSION", TYPE_BIGINT, sizeof(int64_t), false},
-        {"SKIPPED", TYPE_BOOLEAN, sizeof(bool), false},
-        {"RUNS", TYPE_INT, sizeof(int), false},
-        {"START_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"PROGRESS", TYPE_INT, sizeof(int32_t), false},
-        {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false}};
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"SKIPPED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
+        {"RUNS", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int), false},
+        {"START_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"PROGRESS", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false}};
 
 SchemaBeCloudNativeCompactionsScanner::SchemaBeCloudNativeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

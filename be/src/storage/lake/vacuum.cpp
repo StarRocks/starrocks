@@ -88,7 +88,7 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
         return true;
     }
     auto message = st.message();
-    return MatchPattern(message, config::lake_vacuum_retry_pattern);
+    return MatchPattern(message, config::lake_vacuum_retry_pattern.value());
 }
 
 int64_t calculate_retry_delay(int64_t attempted_retries) {
@@ -96,7 +96,7 @@ int64_t calculate_retry_delay(int64_t attempted_retries) {
     return min_delay * (1 << attempted_retries);
 }
 
-Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& paths) {
+Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> paths) {
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
@@ -115,29 +115,40 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
         return Status::OK();
     }
 
-    auto wait_duration = config::experimental_lake_wait_per_delete_ms;
-    if (wait_duration > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
-    }
-
-    if (config::lake_print_delete_log) {
-        for (size_t i = 0, n = paths.size(); i < n; i++) {
-            LOG(INFO) << "Deleting " << paths[i] << "(" << (i + 1) << '/' << n << ')';
+    auto delete_single_batch = [fs](std::span<const std::string> batch) -> Status {
+        auto wait_duration = config::experimental_lake_wait_per_delete_ms;
+        if (wait_duration > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
         }
-    }
 
-    auto t0 = butil::gettimeofday_us();
-    auto st = delete_files_with_retry(fs, paths);
-    if (st.ok()) {
-        auto t1 = butil::gettimeofday_us();
-        g_del_file_latency << (t1 - t0);
-        g_deleted_files << paths.size();
-        VLOG(5) << "Deleted " << paths.size() << " files cost " << (t1 - t0) << "us";
-    } else {
-        g_del_fails << 1;
-        LOG(WARNING) << "Fail to delete: " << st;
+        if (config::lake_print_delete_log) {
+            for (size_t i = 0, n = batch.size(); i < n; i++) {
+                LOG(INFO) << "Deleting " << batch[i] << "(" << (i + 1) << '/' << n << ')';
+            }
+        }
+
+        auto t0 = butil::gettimeofday_us();
+        auto st = delete_files_with_retry(fs, batch);
+        if (st.ok()) {
+            auto t1 = butil::gettimeofday_us();
+            g_del_file_latency << (t1 - t0);
+            g_deleted_files << batch.size();
+            VLOG(5) << "Deleted " << batch.size() << " files cost " << (t1 - t0) << "us";
+        } else {
+            g_del_fails << 1;
+            LOG(WARNING) << "Fail to delete: " << st;
+        }
+        return st;
+    };
+
+    auto batch_size = int64_t{config::lake_vacuum_min_batch_delete_size};
+    auto batch_count = static_cast<int64_t>((paths.size() + batch_size - 1) / batch_size);
+    for (auto i = int64_t{0}; i < batch_count; i++) {
+        auto begin = paths.begin() + (i * batch_size);
+        auto end = std::min(begin + batch_size, paths.end());
+        RETURN_IF_ERROR(delete_single_batch(std::span<const std::string>(begin, end)));
     }
-    return st;
+    return Status::OK();
 }
 
 // AsyncFileDeleter
@@ -173,7 +184,11 @@ private:
     // Wait for all submitted deletion tasks to finish and return task execution results.
     Status wait() {
         if (_prev_task_status.valid()) {
-            return _prev_task_status.get();
+            try {
+                return _prev_task_status.get();
+            } catch (const std::exception& e) {
+                return Status::InternalError(e.what());
+            }
         } else {
             return Status::OK();
         }
@@ -247,6 +262,9 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
         for (const auto& segment : rowset.segments()) {
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
         }
+        for (const auto& del_file : rowset.del_files()) {
+            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
+        }
         *garbage_data_size += rowset.data_size();
     }
     for (const auto& file : metadata.orphan_files()) {
@@ -271,8 +289,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
     while (version > 0) {
-        auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
-        auto res = tablet_mgr->get_tablet_metadata(path, false);
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
             break;
@@ -288,7 +305,15 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
                     compare_time = metadata->commit_time();
                 } else {
-                    ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
+                    /*
+                    * The path is not available since we get tablet metadata by tablet_id and version.
+                    * We remove the code which is to get file modified time by path.
+                    * This change will break some compatibility when upgraded from a old version which have no commit time.
+                    * In that case, the compare_time is 0, making a result that the vacuum will keep the latest version.
+                    * The incompatibility will be vanished after a few versions ingestion/compaction/GC.
+                    */
+
+                    // ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
                     TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &compare_time);
                 }
 
@@ -391,6 +416,11 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
             if (txn_id >= min_active_txn_id) {
                 return true;
             }
+        } else if (is_combined_txn_log(entry.name)) {
+            auto txn_id = parse_combined_txn_log_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
         } else {
             return true;
         }
@@ -398,8 +428,12 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
         *vacuumed_files += 1;
         *vacuumed_file_size += entry.size.value_or(0);
 
-        ret.update(deleter.delete_file(join_path(log_dir, entry.name)));
-        return ret.ok(); // Stop list if delete failed
+        auto st = deleter.delete_file(join_path(log_dir, entry.name));
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to delete " << join_path(log_dir, entry.name) << ": " << st;
+            ret.update(st);
+        }
+        return st.ok(); // Stop list if delete failed
     }));
     ret.update(iter_st);
     ret.update(deleter.finish());
@@ -559,12 +593,12 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
         // Find metadata files that has garbage data files and delete all those files
         for (int64_t garbage_version = *versions.rbegin(), min_v = *versions.begin(); garbage_version >= min_v; /**/) {
-            auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
-            auto res = tablet_mgr->get_tablet_metadata(path, false);
+            auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
             if (res.status().is_not_found()) {
                 break;
             } else if (!res.ok()) {
-                LOG(ERROR) << "Fail to read " << path << ": " << res.status();
+                LOG(ERROR) << "Fail to read tablet_id=" << tablet_id << ", version=" << garbage_version << ": "
+                           << res.status();
                 return res.status();
             } else {
                 auto metadata = std::move(res).value();
@@ -620,14 +654,20 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
     DCHECK(response != nullptr);
 
     std::vector<std::string> files_to_delete;
-    files_to_delete.reserve(request.tablet_ids_size() * request.txn_ids_size());
+    files_to_delete.reserve(request.tablet_ids_size() * (request.txn_ids_size() + request.txn_infos_size()));
 
     for (auto tablet_id : request.tablet_ids()) {
+        // For each DeleteTxnLogRequest, FE will only set one of txn_ids and txn_infos, here we don't want
+        // to bother with determining which one is set, just iterate through both.
         for (auto txn_id : request.txn_ids()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
             files_to_delete.emplace_back(log_path);
-
             tablet_mgr->metacache()->erase(log_path);
+        }
+        for (auto&& info : request.txn_infos()) {
+            auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
+                                                    : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
+            files_to_delete.emplace_back(log_path);
         }
     }
 
@@ -657,7 +697,7 @@ static StatusOr<std::list<std::string>> list_meta_files(FileSystem* fs, const st
     std::list<std::string> meta_files;
     RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir(metadata_root_location,
                                                                [&](std::string_view name) {
-                                                                   if (is_tablet_metadata(name)) {
+                                                                   if (!is_tablet_metadata(name)) {
                                                                        return true;
                                                                    }
                                                                    meta_files.emplace_back(name);
@@ -723,7 +763,9 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
         }
     };
 
-    audit_ostream << "Total meta files: " << meta_files.size() << std::endl;
+    if (audit_ostream) {
+        audit_ostream << "Total meta files: " << meta_files.size() << std::endl;
+    }
     LOG(INFO) << "Start to filter with metadatas, count: " << meta_files.size();
 
     int64_t progress = 0;
@@ -742,8 +784,10 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
             check_rowset(rowset);
         }
         ++progress;
-        audit_ostream << '(' << progress << '/' << meta_files.size() << ") " << name << '\n'
-                      << proto_to_json(*metadata) << std::endl;
+        if (audit_ostream) {
+            audit_ostream << '(' << progress << '/' << meta_files.size() << ") " << name << '\n'
+                          << proto_to_json(*metadata) << std::endl;
+        }
         LOG(INFO) << "Filtered with meta file: " << name << " (" << progress << '/' << meta_files.size() << ')';
     }
 
@@ -763,20 +807,22 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
 }
 
 // root_location is a partition dir in s3
-Status datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds,
-                   bool do_delete) {
+static StatusOr<std::pair<int64_t, int64_t>> partition_datafile_gc(std::string_view root_location,
+                                                                   std::string_view audit_file_path,
+                                                                   int64_t expired_seconds, bool do_delete) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     std::ofstream audit_ostream(std::string(audit_file_path), std::ofstream::app);
-    if (!audit_ostream) {
-        LOG(WARNING) << "Cannot open " << audit_file_path;
-        return Status::InternalError("Cannot open audit file");
-    }
 
-    audit_ostream << "Audit root location: " << root_location << std::endl;
+    if (audit_ostream) {
+        audit_ostream << "Start to clean partition root location: " << root_location << std::endl;
+    }
+    LOG(INFO) << "Start to clean partition root location: " << root_location << std::endl;
     ASSIGN_OR_RETURN(auto orphan_data_files,
                      find_orphan_data_files(fs.get(), root_location, expired_seconds, audit_ostream));
 
-    audit_ostream << "Total orphan data files: " << orphan_data_files.size() << std::endl;
+    if (audit_ostream) {
+        audit_ostream << "Total orphan data files: " << orphan_data_files.size() << std::endl;
+    }
     LOG(INFO) << "Total orphan data files: " << orphan_data_files.size();
 
     std::vector<std::string> files_to_delete;
@@ -791,47 +837,122 @@ Status datafile_gc(std::string_view root_location, std::string_view audit_file_p
         auto time = entry.mtime.value_or(0);
         auto outtime = std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
         ++progress;
-        audit_ostream << '(' << progress << '/' << orphan_data_files.size() << ") " << name
-                      << ", size: " << entry.size.value_or(0) << ", time: " << outtime << std::endl;
+        if (audit_ostream) {
+            audit_ostream << '(' << progress << '/' << orphan_data_files.size() << ") " << name
+                          << ", size: " << entry.size.value_or(0) << ", time: " << outtime << std::endl;
+        }
         LOG(INFO) << '(' << progress << '/' << orphan_data_files.size() << ") " << name
                   << ", size: " << entry.size.value_or(0) << ", time: " << outtime;
     }
 
-    audit_ostream << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
-                  << std::endl;
+    if (audit_ostream) {
+        audit_ostream << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
+                      << std::endl;
+    }
     LOG(INFO) << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete;
 
-    audit_ostream << "Total transaction ids: " << transaction_ids.size() << std::endl;
+    if (audit_ostream) {
+        audit_ostream << "Total transaction ids: " << transaction_ids.size() << std::endl;
+    }
     LOG(INFO) << "Total transaction ids: " << transaction_ids.size();
 
     progress = 0;
     for (auto txn_id : transaction_ids) {
         ++progress;
-        audit_ostream << '(' << progress << '/' << transaction_ids.size() << ") "
-                      << "transaction id: " << txn_id << std::endl;
+        if (audit_ostream) {
+            audit_ostream << '(' << progress << '/' << transaction_ids.size() << ") "
+                          << "transaction id: " << txn_id << std::endl;
+        }
         LOG(INFO) << '(' << progress << '/' << transaction_ids.size() << ") "
                   << "transaction id: " << txn_id;
     }
 
-    audit_ostream << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
-                  << ", total transaction ids: " << transaction_ids.size() << std::endl;
+    if (audit_ostream) {
+        audit_ostream << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
+                      << ", total transaction ids: " << transaction_ids.size() << std::endl;
+    }
     LOG(INFO) << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
               << ", total transaction ids: " << transaction_ids.size();
 
     if (!do_delete) {
-        audit_ostream.close();
-        return Status::OK();
+        return std::pair<int64_t, int64_t>(orphan_data_files.size(), bytes_to_delete);
     }
 
-    audit_ostream << "Start to delete orphan data files: " << orphan_data_files.size()
-                  << ", total size: " << bytes_to_delete << ", total transaction ids: " << transaction_ids.size()
-                  << std::endl;
+    if (audit_ostream) {
+        audit_ostream << "Start to delete orphan data files: " << orphan_data_files.size()
+                      << ", total size: " << bytes_to_delete << ", total transaction ids: " << transaction_ids.size()
+                      << std::endl;
+    }
     LOG(INFO) << "Start to delete orphan data files: " << orphan_data_files.size()
               << ", total size: " << bytes_to_delete << ", total transaction ids: " << transaction_ids.size();
 
-    audit_ostream.close();
+    RETURN_IF_ERROR(do_delete_files(fs.get(), files_to_delete));
 
-    return do_delete_files(fs.get(), files_to_delete);
+    return std::pair<int64_t, int64_t>(orphan_data_files.size(), bytes_to_delete);
+}
+
+static StatusOr<std::pair<int64_t, int64_t>> path_datafile_gc(std::string_view root_location,
+                                                              std::string_view audit_file_path, int64_t expired_seconds,
+                                                              bool do_delete) {
+    Status status;
+    std::pair<int64_t, int64_t> total(0, 0);
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    RETURN_IF_ERROR_WITH_WARN(
+            ignore_not_found(fs->iterate_dir2(
+                    std::string(root_location),
+                    [&](DirEntry entry) {
+                        if (!entry.is_dir.value_or(false)) {
+                            return true;
+                        }
+
+                        if (entry.name == kSegmentDirectoryName || entry.name == kMetadataDirectoryName ||
+                            entry.name == kTxnLogDirectoryName) {
+                            auto pair_or =
+                                    partition_datafile_gc(root_location, audit_file_path, expired_seconds, do_delete);
+                            if (!pair_or.ok()) {
+                                status = pair_or.status();
+                                LOG(WARNING) << "Failed to gc: " << root_location << ", status: " << pair_or.status();
+                                return false;
+                            }
+                            total.first += pair_or.value().first;
+                            total.second += pair_or.value().second;
+                            return false;
+                        }
+
+                        auto pair_or = path_datafile_gc(join_path(root_location, entry.name), audit_file_path,
+                                                        expired_seconds, do_delete);
+
+                        if (!pair_or.ok()) {
+                            status = pair_or.status();
+                            LOG(WARNING) << "Failed to gc: " << root_location << ", status: " << pair_or.status();
+                            return false;
+                        }
+
+                        total.first += pair_or.value().first;
+                        total.second += pair_or.value().second;
+                        return true;
+                    })),
+            "Failed to list " + std::string(root_location));
+
+    if (!status.ok()) {
+        return status;
+    }
+    return total;
+}
+
+Status datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds,
+                   bool do_delete) {
+    auto pair_or = path_datafile_gc(root_location, audit_file_path, expired_seconds, do_delete);
+    if (!pair_or.ok()) {
+        LOG(WARNING) << "Failed to gc: " << root_location << ", status: " << pair_or.status();
+        return pair_or.status();
+    }
+
+    LOG(INFO) << "Finished to gc: " << root_location << ", total orphan data files: " << pair_or.value().first
+              << ", total size: " << pair_or.value().second;
+
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

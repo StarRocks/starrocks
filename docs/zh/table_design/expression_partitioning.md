@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['fenqu']
 ---
 
 # 表达式分区（推荐）
@@ -38,7 +39,7 @@ expression ::=
 ### 使用说明
 
 - 在导入的过程中 StarRocks 根据导入数据已经自动创建了一些分区，但是由于某些原因导入作业最终失败，则在当前版本中，已经自动创建的分区并不会由于导入失败而自动删除。
-- StarRocks 自动创建分区数量上限默认为 4096，由 FE 配置参数 `max_automatic_partition_number` 决定。该参数可以防止您由于误操作而创建大量分区。
+- StarRocks 单次导入自动创建分区数量上限默认为 4096，由 FE 配置参数 `auto_partition_max_creation_number_per_load` 决定。该参数可以防止您由于误操作而创建大量分区。
 - 分区命名规则与动态分区的命名规则一致。
 
 ### 示例
@@ -121,7 +122,6 @@ DISTRIBUTED BY HASH(event_day, site_id);
 ```bnf
 PARTITION BY expression
 ...
-[ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
 
 expression ::=
     ( <partition_columns> )
@@ -135,12 +135,11 @@ partition_columns ::=
 | 参数                    | 是否必填 | 参数                                                         |
 | ----------------------- | -------- | ------------------------------------------------------------ |
 | `partition_columns`     | 是       | 分区列。<br /><ul><li>支持为字符串（不支持 BINARY）、日期、整数和布尔值。不支持分区列的值为 `NULL`。</li><li> 导入后自动创建的一个分区中只能包含各分区列的一个值，如果需要包含各分区列的多值，请使用 [List 分区](./list_partitioning.md)。</li></ul> |
-| `partition_live_number` | 否       | 保留多少数量的分区。比较这些分区包含的值，定期删除值小的分区，保留值大的。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。<br />**说明**<br />如果分区列里是字符串类型的值，则比较分区名称的字典序，定期保留排在前面的分区，删除排在后面的分区。 |
 
 ### 使用说明
 
 - 在导入的过程中 StarRocks 根据导入数据已经自动创建了一些分区，但是由于某些原因导入作业最终失败，则在当前版本中，已经自动创建的分区并不会由于导入失败而自动删除。
-- StarRocks 自动创建分区数量上限默认为 4096，由 FE 配置参数 `max_automatic_partition_number` 决定。该参数可以防止您由于误操作而创建大量分区。
+- StarRocks 单次导入自动创建分区数量上限默认为 4096，由 FE 配置参数 `auto_partition_max_creation_number_per_load` 决定。该参数可以防止您由于误操作而创建大量分区。
 - 分区命名规则：如果存在多个分区列，则不同分区列的值以下划线（_）连接。例如：存在有两个分区列 `dt` 和 `city`，均为字符串类型，导入一条数据 `2022-04-01`, `beijing`，则自动创建的分区名称为 `p20220401_beijing`。
 
 ### 示例
@@ -196,24 +195,6 @@ LastConsistencyCheckTime: NULL
 1 row in set (0.00 sec)
 ```
 
-示例二：您也可以在建表时配置参数 `partition_live_number` 进行分区生命周期管理，例如指定该表只保留最近 3 个分区。
-
-```SQL
-CREATE TABLE t_recharge_detail2 (
-    id bigint,
-    user_id bigint,
-    recharge_money decimal(32,2), 
-    city varchar(20) not null,
-    dt varchar(20) not null
-)
-DUPLICATE KEY(id)
-PARTITION BY (dt,city)
-DISTRIBUTED BY HASH(`id`) 
-PROPERTIES(
-    "partition_live_number" = "3" -- 只保留最近 3 个分区。
-);
-```
-
 ## 管理分区
 
 ### 导入数据至分区
@@ -253,9 +234,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## 使用限制
 
-- 自 v3.1.0 起，StarRocks [存算分离模式](../deployment/shared_data/s3.md)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
+- 自 v3.1.0 起，StarRocks [存算分离模式](../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
 - 使用 CTAS 建表时暂时不支持表达式分区。
 - 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
-- 列表达式分区暂时不支持[备份与恢复](../administration/Backup_and_restore.md)。
+- 列表达式分区暂时不支持[备份与恢复](../administration/management/Backup_and_restore.md)。
 - 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。

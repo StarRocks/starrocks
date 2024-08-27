@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 通过 INSERT 语句导入数据
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
@@ -192,6 +192,10 @@ WITH LABEL insert_load_wikipedia_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+:::note
+自 v3.3.1 起，INSERT INTO 导入主键表时指定 Column List 会执行部分列更新（而在先前版本中，指定 Column List 仍然导致 Full Upsert）。如不指定 Column List，系统执行 Full Upsert。
+:::
+
 | 参数        | 说明                                                         |
 | ----------- | ------------------------------------------------------------ |
 | table_name  | 导入数据的目标表。可以为 `db_name.table_name` 形式。         |
@@ -273,7 +277,7 @@ WITH LABEL insert_load_wikipedia_ow_1
 SELECT * FROM source_wiki_edit;
 ```
 
-- 以下示例以 `insert_load_wikipedia_2` 为 Label 将源表中的数据覆盖写入至目标表的 `p06` 和 `p12` 分区中。如果不指定目标分区，数据将会覆盖写入入全表；如果指定目标分区，数据只会覆盖写入指定的分区。
+- 以下示例以 `insert_load_wikipedia_2` 为 Label 将源表中的数据覆盖写入至目标表的 `p06` 和 `p12` 分区中。如果不指定目标分区，数据将会覆盖写入全表；如果指定目标分区，数据只会覆盖写入指定的分区。
 
 ```SQL
 INSERT OVERWRITE insert_wiki_edit PARTITION(p06, p12)
@@ -299,6 +303,28 @@ Query OK, 0 rows affected (0.01 sec)
 MySQL > select * from insert_wiki_edit;
 Empty set (0.00 sec)
 ```
+
+:::note
+对于使用列表达式分区方式（`PARTITION BY column`）的表，INSERT OVERWRITE 支持通过指定分区键的值在目标表上创建不存在的分区。对于已有的分区，将正常进行覆盖写。
+
+以下示例创建了分区表 `activity`，向其中导入新数据时自动创建了先前不存在的分区：
+
+```SQL
+CREATE TABLE activity (
+id INT          NOT NULL,
+dt VARCHAR(10)  NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+PARTITION BY (`id`, `dt`)
+DISTRIBUTED BY HASH(`id`);
+
+INSERT OVERWRITE activity
+PARTITION(id='4', dt='2022-01-01')
+WITH LABEL insert_activity_auto_partition
+VALUES ('4', '2022-01-01');
+```
+
+:::
 
 - 以下示例以 `insert_load_wikipedia_ow_3` 为 Label 将源表中 `event_time` 和 `channel` 列的数据覆盖写入至目标表的对应列中。未被导入的列将被赋予默认值。
 

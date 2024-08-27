@@ -573,6 +573,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_TASK = 10085;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ARCHIVE_TASK_RUNS = 10086;
+
     // materialized view 10091 ~ 10100
     @IgnorableOnReplayFailed
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
@@ -613,13 +616,16 @@ public class OperationType {
     @Deprecated
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
 
-    // new operator for add partition 10241 ~ 10260
+    // new operator for partition 10241 ~ 10260
     public static final short OP_ADD_PARTITION_V2 = 10241;
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PARTITION_V2 = 10243;
-
     public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
+    @IgnorableOnReplayFailed
+    public static final short OP_RECOVER_PARTITION_VERSION = 10245;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_PARTITIONS = 10246;
 
     // new privilege, all ends with V2
 
@@ -639,6 +645,8 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLE_V2 = 10266;
+
+    public static final short OP_AUTH_UPGRADE_V2 = 10267;
 
     @Deprecated
     @IgnorableOnReplayFailed
@@ -671,7 +679,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
 
-
     // constraint properties
 
     @IgnorableOnReplayFailed
@@ -680,6 +687,9 @@ public class OperationType {
     // modify table property bucket size
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BUCKET_SIZE = 11140;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_MUTABLE_BUCKET_NUM = 11141;
 
     // external table analyze
 
@@ -700,6 +710,12 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_EXTERNAL_BASIC_STATS_META = 11205;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_EXTERNAL_HISTOGRAM_STATS_META = 11206;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META = 11207;
 
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
@@ -910,6 +926,14 @@ public class OperationType {
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
+    @IgnorableOnReplayFailed
+    public static final short OP_DISABLE_PARTITION_RECOVERY = 13511;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_KEY = 13512;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # aes_decrypt
 
-## 功能
+
 
 使用 AES_128_ECB 算法将字符串 `str` 解密并返回一个二进制字符串。
 

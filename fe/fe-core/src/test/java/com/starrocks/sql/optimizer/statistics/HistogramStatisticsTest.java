@@ -25,6 +25,8 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public class HistogramStatisticsTest {
     @Test
@@ -67,7 +69,7 @@ public class HistogramStatisticsTest {
         check(columnRefOperator, "GT", 48, statistics, 400);
         check(columnRefOperator, "GT", 49, statistics, 391);
         check(columnRefOperator, "GT", 99, statistics, 100);
-        check(columnRefOperator, "GT", 100, statistics, 1);
+        check(columnRefOperator, "GT", 100, statistics, 50);
         check(columnRefOperator, "GT", 105, statistics, 1);
 
         check(columnRefOperator, "GE", 0, statistics, 1000);
@@ -157,5 +159,88 @@ public class HistogramStatisticsTest {
         estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, estimated);
 
         Assert.assertEquals(rowCount, estimated.getOutputRowCount(), 0.1);
+    }
+
+    @Test
+    public void testNotHitBucketInHist() {
+        List<Bucket> bucketList = new ArrayList<>();
+        bucketList.add(new Bucket(1D, 10D, 100L, 20L));
+        bucketList.add(new Bucket(15D, 20D, 200L, 20L));
+        Histogram histogram = new Histogram(bucketList, Maps.newHashMap());
+
+        // histogram doesn't contain the predicate range
+        ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 500,
+                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+        Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
+                Optional.of(new ConstantOperator(400, Type.BIGINT)), true);
+        Assert.assertFalse(notExist.isPresent());
+
+        notExist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
+                Optional.of(new ConstantOperator(-1, Type.BIGINT)), true);
+        Assert.assertFalse(notExist.isPresent());
+
+
+        // only one bucket in histogram can cover the predicate range
+        Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
+                Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
+        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+        exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
+                Optional.of(new ConstantOperator(3, Type.BIGINT)), true);
+        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+
+        // all the two bucket in histogram can cover the predicate range
+        exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
+                Optional.of(new ConstantOperator(3, Type.BIGINT)), true);
+        Assert.assertEquals(exist.get().getBuckets().size(), 2);
+        exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
+                Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
+        Assert.assertEquals(exist.get().getBuckets().size(), 2);
+    }
+
+    @Test
+    public void testHitBucketInHist() {
+        List<Bucket> bucketList = new ArrayList<>();
+        bucketList.add(new Bucket(1D, 10D, 100L, 20L));
+        bucketList.add(new Bucket(15D, 20D, 200L, 20L));
+        bucketList.add(new Bucket(25, 30, 300L, 20L));
+
+        Map<String, Long> mcv = Maps.newHashMap();
+        mcv.put("11", 500L);
+        Histogram histogram = new Histogram(bucketList, mcv);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
+        ColumnStatistic columnStatistic = new ColumnStatistic(1, 50, 0, 4, 40,
+                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+        BinaryPredicateOperator eq10 = new BinaryPredicateOperator(
+                BinaryType.EQ,
+                columnRefOperator,
+                ConstantOperator.createBigint(10));
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100000);
+        builder.addColumnStatistic(columnRefOperator, columnStatistic);
+        Statistics statistics = builder.build();
+
+        // hit upper bound
+        Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
+                Optional.of(columnRefOperator),
+                columnStatistic, eq10, Optional.of(ConstantOperator.createBigint(10)), statistics);
+        Assert.assertEquals(20, estimated.getOutputRowCount(), 0.001);
+
+        // in second bucket
+        BinaryPredicateOperator eq15 = new BinaryPredicateOperator(
+                BinaryType.EQ,
+                columnRefOperator,
+                ConstantOperator.createBigint(15));
+        estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
+                columnStatistic, eq10, Optional.of(ConstantOperator.createBigint(15)), statistics);
+        Assert.assertEquals(16, estimated.getOutputRowCount(), 0.001);
+
+        // not in bucket
+        BinaryPredicateOperator eq35 = new BinaryPredicateOperator(
+                BinaryType.EQ,
+                columnRefOperator,
+                ConstantOperator.createBigint(35));
+        estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
+                columnStatistic, eq35, Optional.of(ConstantOperator.createBigint(35)), statistics);
+        Assert.assertEquals(961.53846, estimated.getOutputRowCount(), 0.001);
     }
 }

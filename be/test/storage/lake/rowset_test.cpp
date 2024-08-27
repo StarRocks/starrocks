@@ -35,37 +35,8 @@ using namespace starrocks;
 class LakeRowsetTest : public TestBase {
 public:
     LakeRowsetTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(DUP_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-        }
-
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -137,7 +108,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_rowset";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -227,6 +198,46 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         EXPECT_LT(sz1, sz2);
         EXPECT_EQ(ssz2 - ssz1, sz2 - sz1);
     }
+}
+
+TEST_F(LakeRowsetTest, test_add_partial_compaction_segments_info) {
+    create_rowsets_for_testing();
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    ASSERT_TRUE(rs->partial_segments_compaction());
+
+    ASSIGN_OR_ABORT(auto segments, rs->segments(false));
+
+    TxnLogPB_OpCompaction op_compaction;
+    uint64_t num_rows = 0;
+    uint64_t data_size = 0;
+    EXPECT_EQ(op_compaction.output_rowset().segments_size(), 0);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+
+    // prepare writer
+    {
+        std::vector<int> k1{40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51};
+        std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(k1.data(), k1.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        Chunk chunk0({c0, c1}, _schema);
+
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+        ASSERT_EQ(1, writer->files().size());
+    }
+
+    EXPECT_TRUE(rs->add_partial_compaction_segments_info(&op_compaction, writer.get(), num_rows, data_size).ok());
+    EXPECT_EQ(op_compaction.output_rowset().segments_size(), 2);
+    EXPECT_TRUE(num_rows > 0);
+    EXPECT_TRUE(data_size > 0);
 }
 
 } // namespace starrocks::lake

@@ -36,7 +36,7 @@ public class BinlogManagerTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

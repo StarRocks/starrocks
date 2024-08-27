@@ -100,6 +100,8 @@ struct TTextFileDesc {
     
     // escape character
     8: optional i8 escape
+
+    9: optional i32 skip_header_line_count
 }
 
 enum TSchemaTableType {
@@ -167,6 +169,8 @@ enum TSchemaTableType {
     SYS_FE_LOCKS,
     SCH_BE_DATACACHE_METRICS,
     SCH_PARTITIONS_META,
+    SYS_FE_MEMORY_USAGE,
+    SCH_TEMP_TABLES,
 }
 
 enum THdfsCompression {
@@ -181,7 +185,9 @@ enum THdfsCompression {
 
 enum TIndexType {
   BITMAP,
-  GIN
+  GIN,
+  NGRAMBF,
+  VECTOR,
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -296,8 +302,8 @@ struct TOlapTableIndex {
   4: optional string comment
   5: optional i64 index_id
 
-  // for GIN
-  // critical common properties shared for all type of GIN
+  // for standalone index
+  // critical common properties
   6: optional map<string, string> common_properties
 
   // properties to affect index building
@@ -451,10 +457,14 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
-}
 
-struct TIcebergSchema {
-    1: optional list<TIcebergSchemaField> fields
+    7: optional i64 target_max_file_size
+
+    8: optional string csv_row_delimiter
+
+    9: optional string csv_column_seperator
+
+    10: optional bool parquet_use_legacy_encoding
 }
 
 struct TIcebergSchemaField {
@@ -469,6 +479,10 @@ struct TIcebergSchemaField {
 
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
+}
+
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
 }
 
 struct TPartitionMap {
@@ -499,6 +513,9 @@ struct TIcebergTable {
 
     // if serialize partition info throws exception, then use unserialized partitions
     6: optional map<i64, THdfsPartition> partitions
+
+    // Iceberg equality delete schema, used to support schema evolution
+    7: optional TIcebergSchema iceberg_equal_delete_schema
 }
 
 struct THudiTable {

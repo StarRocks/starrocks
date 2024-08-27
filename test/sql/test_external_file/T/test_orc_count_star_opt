@@ -26,7 +26,8 @@ set enable_count_star_optimization = true;
 select count(*) from array_data_only;
 set enable_count_star_optimization = false;
 select count(*) from array_data_only;
-
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from array_data_only;
 
 CREATE EXTERNAL TABLE map_data_only
 (
@@ -42,6 +43,8 @@ set enable_count_star_optimization = true;
 select count(*) from map_data_only;
 -- set enable_count_star_optimization = false;
 -- select count(*) from map_data_only;
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from map_data_only;
 
 
 CREATE EXTERNAL TABLE struct_data_only
@@ -60,7 +63,8 @@ set enable_count_star_optimization = true;
 select count(*) from struct_data_only;
 -- set enable_count_star_optimization = false;
 -- select count(*) from struct_data_only;
-
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from struct_data_only;
 
 CREATE EXTERNAL TABLE empty_row_index
 (
@@ -76,6 +80,8 @@ PROPERTIES
 set enable_count_star_optimization = true;
 select count(*) from empty_row_index;
 set enable_count_star_optimization = false;
+select count(*) from empty_row_index;
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
 select count(*) from empty_row_index;
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

@@ -40,6 +40,13 @@
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 
+#define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
+
+#define RETURN_TRUE_IF_SPILL_TASK_ERROR(spiller) \
+    if (!(spiller)->task_status().ok()) {        \
+        return true;                             \
+    }
+
 namespace starrocks::spill {
 
 // some metrics for spill
@@ -105,6 +112,16 @@ public:
     RuntimeProfile::Counter* block_count = nullptr;
     RuntimeProfile::Counter* local_block_count = nullptr;
     RuntimeProfile::Counter* remote_block_count = nullptr;
+
+    // the number of read io count
+    RuntimeProfile::Counter* read_io_count = nullptr;
+    RuntimeProfile::Counter* local_read_io_count = nullptr;
+    RuntimeProfile::Counter* remote_read_io_count = nullptr;
+
+    // the number of compact table
+    RuntimeProfile::Counter* compact_count = nullptr;
+    RuntimeProfile::Counter* compact_block_count = nullptr;
+
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
@@ -220,10 +237,14 @@ public:
 
     Status reset_state(RuntimeState* state);
 
+    size_t max_sorted_block_cnt() const { return _max_sorted_block_cnt; }
+
 private:
     Status _acquire_input_stream(RuntimeState* state);
 
     Status _decrease_running_flush_tasks();
+
+    void _init_max_block_nums();
 
 private:
     SpillProcessMetrics _metrics;
@@ -244,8 +265,7 @@ private:
 
     std::shared_ptr<spill::Serde> _serde;
     spill::BlockManager* _block_manager = nullptr;
-    std::shared_ptr<spill::BlockGroup> _block_group;
-
+    size_t _max_sorted_block_cnt = 0;
     std::atomic_bool _is_cancel = false;
 };
 

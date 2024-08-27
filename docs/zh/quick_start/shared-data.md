@@ -2,14 +2,15 @@
 displayed_sidebar: "Chinese"
 sidebar_position: 2
 description: "存算分离"
+keywords: ['cunsuan']
 ---
 
 # 存算分离
 
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
 
 在 StarRocks 存算分离架构中，数据存储在成本更低且更可靠的远程存储系统中，例如 Amazon S3、Google Cloud Storage、Azure Blob Storage 以及其他支持 S3 协议的存储，如 MinIO。热数据会被缓存到本地，在查询命中缓存的前提下，存算分离集群的查询性能与存算一体集群相当。同时，在存算分离架构下，计算节点（CN）可以在几秒内根据需要实现扩缩容。因此，StarRocks 的存算分离架构不仅降低了存储成本，保证了资源隔离性能，还提供了计算资源的弹性和可扩展性。
@@ -115,11 +116,11 @@ minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->900
 
 ### 打开 MinIO Web UI
 
-从浏览器进入 `http://localhost:9001/access-keys`。登录用的用户名和密码已经在 Docker Compose 文件中指定，分别为 `minioadmin` 和 `minioadmin`。成功登录后，点击 **Create access key +** 创建密钥。
+从浏览器进入 `http://localhost:9001/access-keys`。登录用的用户名和密码已经在 Docker Compose 文件中指定，分别为 `miniouser` 和 `miniopassword`。成功登录后，点击 **Create access key +** 创建密钥。
 
 MinIO 将生成一对密钥，点击 **Create** 生成并下载密钥。
 
-![点击 Create](../assets/quick-start/MinIO-create.png)
+![点击 Create](../_assets/quick-start/MinIO-create.png)
 
 :::note
 系统不会自动保存密钥，所以请确认保存密钥后再离开页面。
@@ -345,7 +346,7 @@ curl --location-trusted -u root             \
 :::tip
 在导入数据时，`starrocks/shared/` 下的文件夹名称是动态生成的。您会在 `shared` 下面看到一个路径，然后在该路径下看到另外两个路径。在每个路径内，您都能看到 `data`、`metadata` 和 `schema` 路径。
 
-![MinIO Web UI](../assets/quick-start/MinIO-data.png)
+![MinIO Web UI](../_assets/quick-start/MinIO-data.png)
 :::
 
 ---

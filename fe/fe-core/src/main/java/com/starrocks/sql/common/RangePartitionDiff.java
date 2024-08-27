@@ -17,33 +17,23 @@ package com.starrocks.sql.common;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
+import com.google.common.collect.TreeRangeMap;
 import com.starrocks.catalog.PartitionKey;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-public class RangePartitionDiff {
+public class RangePartitionDiff extends PartitionDiff {
 
-    Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
+    private static final Logger LOG = LogManager.getLogger(RangePartitionDiff.class);
 
-    Map<String, Set<String>> rollupToBasePartitionMap = Maps.newHashMap();
-
-    Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
+    private Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
+    private Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
 
     public RangePartitionDiff() {
-    }
-
-    public RangePartitionDiff(Map<String, Range<PartitionKey>> adds, Map<String, Range<PartitionKey>> deletes) {
-        this.adds = adds;
-        this.deletes = deletes;
-    }
-
-    public Map<String, Set<String>> getRollupToBasePartitionMap() {
-        return rollupToBasePartitionMap;
-    }
-
-    public void setRollupToBasePartitionMap(Map<String, Set<String>> rollupToBasePartitionMap) {
-        this.rollupToBasePartitionMap = rollupToBasePartitionMap;
     }
 
     public Map<String, Range<PartitionKey>> getAdds() {
@@ -60,5 +50,45 @@ public class RangePartitionDiff {
 
     public void setDeletes(Map<String, Range<PartitionKey>> deletes) {
         this.deletes = deletes;
+    }
+
+    /**
+     * Merge multiple-diff into one diff for multi-basetable MV
+     * T1: [p0, p1, p2]
+     * T2: [p1, p2, p3]
+     * Merged => [p0, p1, p2, p3]
+     * NOTE: for intersected partitions, they must be identical
+     */
+    public static void checkRangePartitionAligned(List<RangePartitionDiff> diffList) {
+        if (diffList.size() == 1) {
+            return;
+        }
+        RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
+        for (RangePartitionDiff diff : diffList) {
+            for (Map.Entry<String, Range<PartitionKey>> add : diff.getAdds().entrySet()) {
+                Map<Range<PartitionKey>, String> intersectedRange =
+                        addRanges.subRangeMap(add.getValue()).asMapOfRanges();
+                // should either empty or exactly same
+                if (!intersectedRange.isEmpty()) {
+                    Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
+                    if (intersectedRange.size() > 1 ||
+                            !existingRange.equals(add.getValue())) {
+                        throw new IllegalArgumentException(
+                                "partitions are intersected: " + existingRange + " and " + add);
+                    }
+                }
+            }
+            diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
+        }
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("RangePartitionDiff{");
+        sb.append("adds=").append(adds);
+        sb.append(", deletes=").append(deletes);
+        sb.append('}');
+        return sb.toString();
     }
 }

@@ -179,6 +179,7 @@ private:
     TabletSchemaCSPtr _tablet_schema = nullptr;
 
     // column_with_row partial update states
+    bool _partial_update_value_column_inited = false;
     std::vector<uint32_t> _partial_update_value_column_ids;
     // only column added by reading rowset
     Schema _partial_update_value_columns_schema;

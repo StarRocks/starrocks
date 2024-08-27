@@ -53,6 +53,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -222,7 +223,7 @@ public class SparkLoadJobTest {
                 result = transactionMgr;
                 transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
                         (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
-                        anyLong, anyLong);
+                        anyLong, anyLong, anyLong);
                 result = transactionId;
                 pendingTask.init();
                 pendingTask.getSignature();
@@ -410,6 +411,8 @@ public class SparkLoadJobTest {
 
         // check update etl finished
         Assert.assertEquals(JobState.LOADING, job.getState());
+        Assert.assertEquals(JobState.LOADING, job.getAcutalState());
+        Assert.assertNotEquals(-1, job.getLoadStartTimestamp());
         Assert.assertEquals(0, job.progress);
         Map<String, Pair<String, Long>> tabletMetaToFileInfo = Deencapsulation.getField(job, "tabletMetaToFileInfo");
         Assert.assertEquals(1, tabletMetaToFileInfo.size());
@@ -485,8 +488,6 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(tablet);
                 tablet.getId();
                 result = tabletId;
-                ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
@@ -611,5 +612,22 @@ public class SparkLoadJobTest {
         if (file.exists()) {
             file.delete();
         }
+    }
+
+    @Test
+    public void testNoPartitionsHaveDataLoad(@Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
+                                             @Injectable Database db) throws Exception {
+        new Expectations() {
+            {
+                globalStateMgr.getDb(dbId);
+                result = db;
+            }
+        };
+
+        SparkLoadJob job = getEtlStateJob(originStmt);
+        job.state = JobState.LOADING;
+        Deencapsulation.setField(job, "tableToLoadPartitions", Maps.newHashMap());
+        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No partitions have data available for loading",
+                () -> Deencapsulation.invoke(job, "submitPushTasks"));
     }
 }

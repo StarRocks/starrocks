@@ -39,7 +39,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
@@ -47,9 +46,11 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 
 import java.io.DataInput;
@@ -145,12 +146,12 @@ public class BrokerMgr implements GsonPostProcessable {
         }
     }
 
-    public FsBroker getBroker(String brokerName, String host) throws AnalysisException {
+    public FsBroker getBroker(String brokerName, String host) {
         lock.lock();
         try {
             ArrayListMultimap<String, FsBroker> brokerAddsMap = brokersMap.get(brokerName);
             if (brokerAddsMap == null || brokerAddsMap.size() == 0) {
-                throw new AnalysisException("Unknown broker name(" + brokerName + ")");
+                throw new SemanticException("Unknown broker name(" + brokerName + ")");
             }
             List<FsBroker> brokers = brokerAddsMap.get(host);
             for (FsBroker fsBroker : brokers) {
@@ -168,7 +169,7 @@ public class BrokerMgr implements GsonPostProcessable {
                 }
             }
 
-            throw new AnalysisException("failed to find alive broker: " + brokerName);
+            throw new SemanticException("failed to find alive broker: " + brokerName);
         } finally {
             lock.unlock();
         }
@@ -213,7 +214,7 @@ public class BrokerMgr implements GsonPostProcessable {
                 List<FsBroker> addressList = brokerAddrsMap.get(pair.first);
                 for (FsBroker addr : addressList) {
                     if (addr.port == pair.second) {
-                        throw new DdlException("Broker(" + pair.first + ":" + pair.second
+                        throw new DdlException("Broker(" + NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second)
                                 + ") has already in brokers.");
                     }
                 }
@@ -268,7 +269,8 @@ public class BrokerMgr implements GsonPostProcessable {
                     }
                 }
                 if (!found) {
-                    throw new DdlException("Broker(" + pair.first + ":" + pair.second + ") has not in brokers.");
+                    throw new DdlException("Broker(" + NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) +
+                            ") has not in brokers.");
                 }
             }
             GlobalStateMgr.getCurrentState().getEditLog().logDropBroker(new ModifyBrokerInfo(name, dropedAddressList));

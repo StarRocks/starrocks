@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -35,10 +36,11 @@ public class SimpleSelector implements Selector {
 
     @Override
     @NotNull
-    public List<PartitionStatistics> select(Collection<PartitionStatistics> statistics) {
+    public List<PartitionStatistics> select(Collection<PartitionStatistics> statistics, Set<Long> excludeTables) {
         long now = System.currentTimeMillis();
         return statistics.stream()
                 .filter(p -> p.getNextCompactionTime() <= now)
+                .filter(p -> !excludeTables.contains(p.getPartition().getTableId()))
                 .filter(p -> isReadyForCompaction(p, now))
                 .collect(Collectors.toList());
     }

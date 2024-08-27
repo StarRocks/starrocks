@@ -280,7 +280,8 @@ public class MSchema {
                     "  `p_dt` date NULL",
                     "  `d_user` json NULL "
             )
-    ).withValues("('2020-01-01', '{'a': 1, 'gender': 'man'}')");
+    ).withValues("('2020-01-01', '{'a': 1, 'gender': 'man'}')")
+            .withValues("('2020-01-02', '{'a': 1, 'gender': 'man'}')");
 
     public static final MTable TABLE_WITH_DAY_PARTITION1 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition1");
     public static final MTable TABLE_WITH_DAY_PARTITION2 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition2");

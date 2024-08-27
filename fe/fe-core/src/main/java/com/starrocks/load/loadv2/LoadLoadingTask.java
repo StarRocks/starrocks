@@ -104,6 +104,7 @@ public class LoadLoadingTask extends LoadTask {
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
+    private long warehouseId;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -130,6 +131,7 @@ public class LoadLoadingTask extends LoadTask {
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
         this.jsonOptions = builder.jsonOptions;
+        this.warehouseId = builder.warehouseId;
     }
 
     public void prepare() throws UserException {
@@ -139,6 +141,7 @@ public class LoadLoadingTask extends LoadTask {
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
+        loadPlanner.setWarehouseId(warehouseId);
         loadPlanner.plan();
     }
 
@@ -159,6 +162,65 @@ public class LoadLoadingTask extends LoadTask {
         return new DefaultCoordinator.Factory();
     }
 
+    public RuntimeProfile buildFinishedTopLevelProfile() {
+        return buildTopLevelProfile(true);
+    }
+
+    public RuntimeProfile buildRunningTopLevelProfile() {
+        return buildTopLevelProfile(false);
+    }
+
+    public RuntimeProfile buildTopLevelProfile(boolean isFinished) {
+        RuntimeProfile profile = new RuntimeProfile("Load");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(getLoadId()));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeString(createTimestamp));
+
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimestamp;
+        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isFinished ? "Finished" : "Running");
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
+        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        summaryProfile.addInfoString("Timeout", DebugUtil.getPrettyStringMs(timeoutS * 1000));
+        summaryProfile.addInfoString("Strict Mode", String.valueOf(strictMode));
+        summaryProfile.addInfoString("Partial Update", String.valueOf(partialUpdate));
+
+        SessionVariable variables = context.getSessionVariable();
+        if (variables != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("load_parallel_instance_num=").append(Config.load_parallel_instance_num).append(",");
+            sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
+                    .append(variables.getParallelExecInstanceNum()).append(",");
+            sb.append(SessionVariable.MAX_PARALLEL_SCAN_INSTANCE_NUM).append("=")
+                    .append(variables.getMaxParallelScanInstanceNum()).append(",");
+            sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+            sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
+                    .append(variables.getEnableAdaptiveSinkDop())
+                    .append(",");
+            if (context.getResourceGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=")
+                        .append(context.getResourceGroup().getName())
+                        .append(",");
+            }
+            sb.deleteCharAt(sb.length() - 1);
+            summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+
+            summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+        }
+
+        profile.addChild(summaryProfile);
+
+        return profile;
+    }
+
     private void executeOnce() throws Exception {
         checkMeta();
 
@@ -166,65 +228,27 @@ public class LoadLoadingTask extends LoadTask {
         Coordinator curCoordinator;
         curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
         curCoordinator.setLoadJobType(loadJobType);
+        curCoordinator.setExecPlan(loadPlanner.getExecPlan());
+        curCoordinator.setTopProfileSupplier(this::buildRunningTopLevelProfile);
 
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
             long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
 
-            if (context.getSessionVariable().isEnableProfile()) {
-                RuntimeProfile profile = new RuntimeProfile("Load");
-                RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
-                summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
-                summaryProfile.addInfoString(ProfileManager.START_TIME,
-                        TimeUtils.longToTimeString(createTimestamp));
-
-                long currentTimestamp = System.currentTimeMillis();
-                long totalTimeMs = currentTimestamp - createTimestamp;
-                summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
-                summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
-
-                summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
-                summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
-                summaryProfile.addInfoString("StarRocks Version",
-                        String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
-                summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
-                summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-                summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
-
-                SessionVariable variables = context.getSessionVariable();
-                if (variables != null) {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("load_parallel_instance_num=").append(Config.load_parallel_instance_num).append(",");
-                    sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
-                            .append(variables.getParallelExecInstanceNum()).append(",");
-                    sb.append(SessionVariable.MAX_PARALLEL_SCAN_INSTANCE_NUM).append("=")
-                            .append(variables.getMaxParallelScanInstanceNum()).append(",");
-                    sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-                    sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
-                            .append(variables.getEnableAdaptiveSinkDop())
-                            .append(",");
-                    if (context.getResourceGroup() != null) {
-                        sb.append(SessionVariable.RESOURCE_GROUP).append("=")
-                                .append(context.getResourceGroup().getName())
-                                .append(",");
-                    }
-                    sb.deleteCharAt(sb.length() - 1);
-                    summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
-
-                    summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
-                }
-
-                profile.addChild(summaryProfile);
+            if (context.getSessionVariable().isEnableProfile()
+                    || ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
+                RuntimeProfile profile = buildFinishedTopLevelProfile();
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.collectProfileSync();
-                profile.addChild(curCoordinator.buildQueryProfile(context.needMergeProfile()));
+                profile.addChild(curCoordinator.buildQueryProfile(true));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
-                String profileContent = ProfileManager.getInstance().pushProfile(null, profile);
+                String profileContent = ProfileManager.getInstance().pushProfile(
+                        loadPlanner.getExecPlan().getProfilingPlan(), profile);
                 if (context.getQueryDetail() != null) {
                     context.getQueryDetail().setProfile(profileContent);
                 }
@@ -307,6 +331,7 @@ public class LoadLoadingTask extends LoadTask {
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
+        private long warehouseId;
 
         private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -427,6 +452,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setJSONOptions(LoadJob.JSONOptions options) {
             this.jsonOptions = options;
+            return this;
+        }
+
+        public Builder setWarehouseId(long warehouseId) {
+            this.warehouseId = warehouseId;
             return this;
         }
 

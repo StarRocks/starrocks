@@ -39,4 +39,9 @@ public class DropBackendClause extends BackendClause {
     public boolean isForce() {
         return force;
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropBackendClause(this, context);
+    }
 }

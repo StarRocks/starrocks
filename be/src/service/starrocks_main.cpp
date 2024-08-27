@@ -57,6 +57,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
+#include "runtime/memory/roaring_hook.h"
 #include "service/backend_options.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
@@ -173,10 +174,12 @@ int main(int argc, char** argv) {
     } else {
         conffile += "/conf/be.conf";
     }
-    if (!starrocks::config::init(conffile.c_str(), true)) {
+    if (!starrocks::config::init(conffile.c_str())) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+
+    starrocks::init_roaring_hook();
 
 #ifdef FIU_ENABLE
     if (!starrocks::failpoint::init_failpoint_from_conf(std::string(getenv("STARROCKS_HOME")) +

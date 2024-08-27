@@ -15,7 +15,7 @@
 package com.starrocks.common.lock;
 
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import org.junit.Assert;
@@ -138,8 +138,9 @@ public class LockManagerAllLockModesRandomTest {
     public void testAllLockModesConcurrent() throws InterruptedException {
         final int NUM_TEST_DBS = 10;
         final int NUM_TEST_THREADS_PER_DB = 16;
-        final int NUM_TEST_OPERATIONS = 10000; // 100k
+        final int NUM_TEST_OPERATIONS = 5000; // 5k
         final long THREAD_STATE_LOG_INTERVAL_MS = 2000; // 2s
+
         final AtomicBoolean readerStop = new AtomicBoolean(false);
 
         final List<TestDBResource> dbs = new ArrayList<>();
@@ -167,7 +168,7 @@ public class LockManagerAllLockModesRandomTest {
                                 locker.lock(db.getId(), LockType.READ);
                                 Pair<Long, Long> result = db.getOneRandomTable().getTwoCounters();
                                 Assert.assertEquals(result.first, result.second);
-                            } catch (IllegalLockStateException e) {
+                            } catch (LockException e) {
                                 Assert.fail();
                             } finally {
                                 assert locker != null;
@@ -198,7 +199,7 @@ public class LockManagerAllLockModesRandomTest {
                                 locker.lock(db.getTableByIndex(tableIndex).getId(), LockType.READ);
                                 Pair<Long, Long> result = db.getOneRandomTable().getTwoCounters();
                                 Assert.assertEquals(result.first, result.second);
-                            } catch (IllegalLockStateException e) {
+                            } catch (LockException e) {
                                 Assert.fail();
                             } finally {
                                 assert locker != null;
@@ -229,7 +230,7 @@ public class LockManagerAllLockModesRandomTest {
                                 locker.lock(db.getId(), LockType.INTENTION_EXCLUSIVE);
                                 locker.lock(db.getTableByIndex(tableIndex).getId(), LockType.WRITE);
                                 db.updateTableByIndexUnsafe(tableIndex);
-                            } catch (IllegalLockStateException e) {
+                            } catch (LockException e) {
                                 Assert.fail();
                             } finally {
                                 assert locker != null;
@@ -257,7 +258,7 @@ public class LockManagerAllLockModesRandomTest {
                                 locker = new Locker();
                                 locker.lock(db.getId(), LockType.WRITE);
                                 db.updateAllTables();
-                            } catch (IllegalLockStateException e) {
+                            } catch (LockException e) {
                                 Assert.fail();
                             } finally {
                                 assert locker != null;

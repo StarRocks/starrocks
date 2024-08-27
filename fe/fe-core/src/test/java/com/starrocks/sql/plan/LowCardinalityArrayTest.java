@@ -84,6 +84,59 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "\"compression\" = \"LZ4\"    \n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `s3` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int(11) NULL COMMENT \"\",    \n" +
+                "  `a1` array<varchar(65533)> NULL COMMENT \"\",    \n" +
+                "  `a2` array<int> NULL COMMENT \"\",    \n" +
+                "  `a3` array<varchar(65533)> NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "DUPLICATE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",       \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"false\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"light_schema_change\" = \"true\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `s4` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int NULL,    \n" +
+                "  `a1` array<string> NULL COMMENT \"\",    \n" +
+                "  `a2` array<string> NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "UNIQUE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",    \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"false\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `s5` (    \n" +
+                "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
+                "  `v2` int MAX NULL,    \n" +
+                "  `a1` array<string> REPLACE NULL COMMENT \"\",    \n" +
+                "  `a2` array<string> REPLACE NULL COMMENT \"\"    \n" +
+                ") ENGINE=OLAP    \n" +
+                "AGGREGATE KEY(`v1`)    \n" +
+                "COMMENT \"OLAP\"    \n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10    \n" +
+                "PROPERTIES (    \n" +
+                "\"replication_num\" = \"1\",    \n" +
+                "\"in_memory\" = \"false\",    \n" +
+                "\"enable_persistent_index\" = \"false\",    \n" +
+                "\"replicated_storage\" = \"false\",    \n" +
+                "\"compression\" = \"LZ4\"    \n" +
+                ");");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
@@ -208,15 +261,15 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: a2, [<place-holder>])\n" +
-                "    20: DictDefine(17: a1, [<place-holder>])\n" +
-                "    21: DictDefine(17: a1, [<place-holder>])\n" +
-                "    22: DictDefine(18: a2, [<place-holder>])\n" +
-                "    23: DictDefine(17: a1, [<place-holder>])\n" +
-                "    24: DictDefine(18: a2, [<place-holder>])\n" +
+                "    23: DictDefine(22: a2, [<place-holder>])\n" +
+                "    24: DictDefine(21: a1, [<place-holder>])\n" +
+                "    25: DictDefine(21: a1, [<place-holder>])\n" +
+                "    26: DictDefine(22: a2, [<place-holder>])\n" +
+                "    27: DictDefine(21: a1, [<place-holder>])\n" +
+                "    28: DictDefine(22: a2, [<place-holder>])\n" +
                 "\n" +
                 "  5:Decode\n" +
-                "  |  <dict id 19> : <string id 6>"));
+                "  |  <dict id 23> : <string id 6>"));
     }
 
     @Test
@@ -446,6 +499,24 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     }
 
     @Test
+    public void testCaseWhen() throws Exception {
+        String sql = "select case when S_ADDRESS[1] = '5-LOW' " +
+                "then 2 when S_ADDRESS[1] = '3-MEDIUM' then 1 else 0 end " +
+                "from supplier_nullable";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "DictDecode(10: S_ADDRESS, [CASE WHEN <place-holder> = '5-LOW' THEN 2 " +
+                "WHEN <place-holder> = '3-MEDIUM' THEN 1 ELSE 0 END], 10: S_ADDRESS[1])");
+
+        sql = "select case when S_ADDRESS[1] = '5-LOW' " +
+                "then 2 when S_ADDRESS[2] = '3-MEDIUM' then 1 else 0 end " +
+                "from supplier_nullable";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "CASE " +
+                "WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '5-LOW'], 10: S_ADDRESS[1]) THEN 2 " +
+                "WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '3-MEDIUM'], 10: S_ADDRESS[2]) THEN 1 ELSE 0 END");
+    }
+
+    @Test
     public void testArrayToStringProject() throws Exception {
         String sql = "select MIN(x2), LOWER(x1) from (" +
                 "   select HEX(ARRAY_SLICE(S_ADDRESS, 1, 2)[0]) as x1, " +
@@ -468,7 +539,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                     "from (select a1[1] x1, array_max(a2) x2 from s1) y " +
                     "group by x1;";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "is_nullable:true, is_monotonic:true)])]), " +
+            assertContains(plan, "is_nullable:true, is_monotonic:true, is_index_only_filter:false)])]), " +
                     "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B]");
             assertContains(plan, "(type:RANDOM, partition_exprs:[]), " +
                     "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B]");
@@ -488,8 +559,8 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     public void testArrayIfNullString() throws Exception {
         String sql = "select ifnull(a1[1], a2[1]), a1, a2 from s2 order by v1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "ifnull(DictDecode(8: a1, [<place-holder>], 8: a1[1]), " +
-                "DictDecode(9: a2, [<place-holder>], 9: a2[1]))");
+        assertContains(plan, "ifnull(DictDecode(10: a1, [<place-holder>], 10: a1[1]), " +
+                "DictDecode(11: a2, [<place-holder>], 11: a2[1]))");
     }
 
     @Test
@@ -498,5 +569,137 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertNotContains(plan, "DictDecode");
         assertContains(plan, "<slot 9> : array_slice(5: S_PHONE, -1, 2)");
+    }
+
+    @Test
+    public void testArrayPruneSubfield() throws Exception {
+        String sql = "select S_NAME from supplier_nullable where array_length(S_ADDRESS) = 2";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "dict_col=");
+        assertContains(plan, "ColumnAccessPath: [/S_ADDRESS/OFFSET]");
+    }
+
+    @Test
+    public void testUnnestArray() throws Exception {
+        String sql = "select S_ADDRESS[2], col.unnest from supplier_nullable, unnest(S_ADDRESS) col;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT]\n");
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> DictDecode(12: S_ADDRESS, [<place-holder>], 12: S_ADDRESS[2])\n" +
+                "  |  13 <-> [13: unnest, INT, true]");
+
+        sql = "select S_ADDRESS[2], lower(col.unnest) from supplier_nullable, unnest(S_ADDRESS) col;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT]\n");
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> DictDecode(13: S_ADDRESS, [<place-holder>], 13: S_ADDRESS[2])\n" +
+                "  |  11 <-> DictDecode(14: unnest, [lower(<place-holder>)])");
+    }
+
+    @Test
+    public void testMultiUnnestArray() throws Exception {
+        String sql = "select S_ADDRESS[2], unnest.a, unnest.b " +
+                "from supplier_nullable, unnest(S_ADDRESS, S_PHONE) as unnest(a, b) ;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, CHAR(15)]\n");
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> [10: b, CHAR(15), true]\n" +
+                "  |  11 <-> DictDecode(13: S_ADDRESS, [<place-holder>], 13: S_ADDRESS[2])\n" +
+                "  |  14 <-> [14: a, INT, true]");
+
+        sql = "select *" +
+                "from s3, unnest(a1, a2, a3) as unnest(a, b, c) ;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, INT, INT]");
+        assertContains(plan, "  2:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  <dict id 13> : <string id 5>\n" +
+                "  |  <dict id 14> : <string id 6>\n" +
+                "  |  <dict id 15> : <string id 8>");
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    14: DictDefine(12: a1, [<place-holder>])\n" +
+                "    15: DictDefine(13: a3, [<place-holder>])");
+
+        sql = "select *" +
+                "from s3, unnest(a1, a2, array_map(x -> concat(x, 'abc'), a3)) as unnest(a, b, c) ;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  |  10 <-> array_map[(" +
+                "[9, VARCHAR(65533), true] -> concat[([9, VARCHAR(65533), true], 'abc'); " +
+                "args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "DictDecode(15: a3, [<place-holder>])); " +
+                "args: FUNCTION,INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable: true]");
+        assertContains(plan, "dict_col=a1,a3");
+        assertContains(plan, "  2:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, INT, VARCHAR]");
+    }
+
+    @Test
+    public void testAggreagateOrUnique() throws Exception {
+        String sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
+                "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
+                "from s4 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
+                "    23: DictDefine(22: a2, [<place-holder>])\n" +
+                "    24: DictDefine(21: a1, [<place-holder>])\n" +
+                "    25: DictDefine(21: a1, [<place-holder>])\n" +
+                "    26: DictDefine(22: a2, [<place-holder>])\n" +
+                "    27: DictDefine(21: a1, [<place-holder>])\n" +
+                "    28: DictDefine(22: a2, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 23> : <string id 6>"));
+
+        sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
+                "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
+                "from s5 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
+                "    23: DictDefine(22: a2, [<place-holder>])\n" +
+                "    24: DictDefine(21: a1, [<place-holder>])\n" +
+                "    25: DictDefine(21: a1, [<place-holder>])\n" +
+                "    26: DictDefine(22: a2, [<place-holder>])\n" +
+                "    27: DictDefine(21: a1, [<place-holder>])\n" +
+                "    28: DictDefine(22: a2, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 23> : <string id 6>"));
+    }
+
+    @Test
+    public void testCastStringToArray() throws Exception {
+        String sql = "select cast( S_COMMENT as array<string>) from supplier_nullable";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<VARCHAR(65533)>)"));
+
+        sql = "select cast( S_COMMENT as array<string>) from supplier_nullable limit 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<VARCHAR(65533)>)\n" +
+                "  |  limit: 1"));
+
+        sql = "select cast( S_COMMENT as array<array<string>>) from supplier_nullable limit 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<ARRAY<VARCHAR(65533)>>)\n" +
+                "  |  limit: 1"));
     }
 }

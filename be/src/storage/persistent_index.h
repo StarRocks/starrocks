@@ -49,6 +49,8 @@ public:
             const Schema& pkey_schema,
             const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
 
+    virtual void set_write_amp_score(double score) = 0;
+
     size_t total_data_size() const { return _total_data_size; }
     size_t total_segments() const { return _total_segments; }
     size_t rowset_num() const { return _rowset_num; };
@@ -70,7 +72,9 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_1,
     PERSISTENT_INDEX_VERSION_2,
     PERSISTENT_INDEX_VERSION_3,
-    PERSISTENT_INDEX_VERSION_4
+    PERSISTENT_INDEX_VERSION_4,
+    PERSISTENT_INDEX_VERSION_5,
+    PERSISTENT_INDEX_VERSION_6
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -86,7 +90,8 @@ enum CommitType {
 };
 
 struct IOStat {
-    uint32_t get_in_shard_cnt = 0;
+    uint32_t read_iops = 0;
+    uint32_t filtered_kv_cnt = 0;
     uint64_t get_in_shard_cost = 0;
     uint64_t read_io_bytes = 0;
     uint64_t l0_write_cost = 0;
@@ -97,10 +102,11 @@ struct IOStat {
 
     std::string print_str() {
         return fmt::format(
-                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
+                "IOStat read_iops: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
+                "l0_write_cost: {} "
                 "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
-                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
-                compaction_cost, reload_meta_cost);
+                read_iops, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
+                flush_or_wal_cost, compaction_cost, reload_meta_cost);
     }
 };
 
@@ -111,6 +117,8 @@ struct IndexValue {
     explicit IndexValue(const uint64_t val) { UNALIGNED_STORE64(v, val); }
 
     uint64_t get_value() const { return UNALIGNED_LOAD64(v); }
+    uint32_t get_rssid() const { return (uint32_t)(get_value() >> 32); }
+    uint32_t get_rowid() const { return (uint32_t)(get_value() & 0xFFFFFFFF); }
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
@@ -163,6 +171,7 @@ struct EditVersionWithMerge {
 };
 
 struct IndexPage;
+struct LargeIndexPage;
 struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
@@ -252,7 +261,8 @@ public:
                                                                  bool with_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-                                            size_t npage_hint, size_t nbucket, bool with_null) const = 0;
+                                            size_t npage_hint, size_t page_size, size_t nbucket,
+                                            bool with_null) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
@@ -271,7 +281,8 @@ public:
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
-    static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage);
+    static std::tuple<size_t, size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage,
+                                                                        const size_t total_kv_num);
 
     static size_t estimate_nbucket(size_t key_size, size_t size, size_t nshard, size_t npage);
 };
@@ -436,7 +447,7 @@ public:
     uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
-            CHECK(res.ok()) << res.status(); // FIXME: no abort
+            DCHECK(res.ok()) << res.status(); // FIXME: no abort
             return *res;
         } else {
             return 0;
@@ -477,7 +488,9 @@ public:
     size_t memory_usage() {
         size_t mem_usage = 0;
         for (auto& bf : _bf_vec) {
-            mem_usage += bf->size();
+            if (bf != nullptr) {
+                mem_usage += bf->size();
+            }
         }
         return mem_usage;
     }
@@ -530,16 +543,18 @@ private:
     Status _get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                         KeysInfo* found_keys_info,
                                         std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
-                                        std::map<size_t, IndexPage>& pages) const;
+                                        std::map<size_t, LargeIndexPage>& pages) const;
 
     Status _get_in_varlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                         KeysInfo* found_keys_info,
                                         std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
-                                        std::map<size_t, IndexPage>& pages) const;
+                                        std::map<size_t, LargeIndexPage>& pages) const;
+
+    Status _read_page(size_t shard_idx, size_t pageid, LargeIndexPage* page, IOStat* stat) const;
 
     Status _get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
-                                 KeysInfo* found_keys_info,
-                                 std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const;
+                                 KeysInfo* found_keys_info, std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                 IOStat* stat) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
@@ -572,6 +587,8 @@ private:
         uint32_t nbucket;
         uint64_t data_size;
         uint64_t uncompressed_size;
+        uint64_t page_size;
+        std::vector<int32_t> page_off;
     };
 
     std::vector<ShardInfo> _shards;
@@ -588,7 +605,8 @@ public:
     Status init(const string& idx_file_path, const EditVersion& version, bool sync_on_close);
 
     // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
-    Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
+    Status write_shard(size_t key_size, size_t npage_hint, size_t page_size, size_t nbucket,
+                       const std::vector<KVRef>& kvs);
 
     Status write_bf();
 
@@ -654,21 +672,8 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
-    size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
-    size_t memory_usage() const {
-        // commit thread will update primary index memory usage and get index memory usage
-        // apply thread maybe clear or modify _l1_vec
-        // add lock to avoid read/write conflicts
-        std::shared_lock rdlock(_lock);
-        size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
-        for (int i = 0; i < _l1_vec.size(); i++) {
-            memory_usage += _l1_vec[i]->memory_usage();
-        }
-        for (int i = 0; i < _l2_vec.size(); i++) {
-            memory_usage += _l2_vec[i]->memory_usage();
-        }
-        return memory_usage;
-    }
+    size_t usage() const { return _usage; }
+    virtual size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
 
@@ -715,12 +720,20 @@ public:
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                           IOStat* stat = nullptr);
 
+    // batch replace without return old values
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |replace_indexes|: The index of the |keys| array that need to replace.
+    virtual Status replace(size_t n, const Slice* keys, const IndexValue* values,
+                           const std::vector<uint32_t>& replace_indexes);
+
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array
@@ -759,13 +772,11 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
-    Status major_compaction(Tablet* tablet);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
-    double get_write_amp_score() const;
-
-    static double major_compaction_score(size_t l1_count, size_t l2_count);
+    static double major_compaction_score(const PersistentIndexMetaPB& index_meta);
 
     // not thread safe, just for unit test
     size_t kv_num_in_immutable_index() {
@@ -779,15 +790,30 @@ public:
         return res;
     }
 
+    // not thread safe, just for unit test
+    std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
+        std::pair<int64_t, int64_t> res;
+        for (auto [_, stat] : _usage_and_size_by_key_length) {
+            res.first += stat.first;
+            res.second += stat.second;
+        }
+        return res;
+    }
+
+    void clear_kv_stat() { _usage_and_size_by_key_length.clear(); }
+
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
-    Status delete_pindex_files();
 
-    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
-                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+    static Status modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                     const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
+    void test_calc_memory_usage() { return _calc_memory_usage(); }
+
+    void test_force_dump();
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
@@ -854,8 +880,6 @@ private:
 
     bool _enable_minor_compaction();
 
-    void _calc_write_amp_score();
-
     size_t _get_tmp_l1_count();
 
     bool _l0_is_full(int64_t l1_l2_size = 0);
@@ -864,11 +888,10 @@ private:
 
     Status _reload_usage_and_size_by_key_length(size_t l1_idx_start, size_t l1_idx_end, bool contain_l2);
 
-protected:
-    // prevent concurrent operations
-    // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
-    mutable std::shared_mutex _lock;
+    // Calculate total memory usage after index been modified.
+    void _calc_memory_usage();
 
+protected:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -910,10 +933,10 @@ private:
     // std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
     // set if major compaction is running
     std::atomic<bool> _major_compaction_running{false};
-    // write amplification score, 0.0 means this index doesn't need major compaction
-    std::atomic<double> _write_amp_score{0.0};
     // Latest major compaction time. In second.
     int64_t _latest_compaction_time = 0;
+    // Re-calculated when commit end
+    std::atomic<size_t> _memory_usage{0};
 };
 
 } // namespace starrocks

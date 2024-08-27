@@ -14,9 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 import software.amazon.awssdk.regions.Region;
 
@@ -25,12 +25,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class IcebergAwsClientFactoryTest {
-    @Before
-    public void setup() {
-        System.setProperty("software.amazon.awssdk.http.service.impl",
-                "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
-    }
-
     @Test
     public void testAKSK() {
         Map<String, String> properties = new HashMap<>();

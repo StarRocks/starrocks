@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # json_length
 
-## Description
+
 
  Returns the length of a JSON document. If a path is specified, this function returns the length of the value identified by the path.
 

@@ -37,8 +37,6 @@
 
 namespace starrocks {
 
-const constexpr int32_t prefetch_threhold = 8192;
-
 using AggDataPtr = uint8_t*;
 
 // =====================
@@ -82,9 +80,6 @@ template <PhmapSeed seed>
 using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
-
-// This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
 #define AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, prefetch_dist)              \
@@ -464,7 +459,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                         DCHECK(not_founds);
                         (*not_founds)[i] = 1;
                     }
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);
@@ -494,7 +489,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                         DCHECK(not_founds);
                         (*not_founds)[i] = 1;
                     }
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);
@@ -544,7 +539,7 @@ struct AggHashMapWithOneStringKeyWithNullable
             if constexpr (compute_not_founds) {
                 (*not_founds)[row] = 1;
             }
-            uint8_t* pos = pool->allocate(key.size);
+            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
             AggDataPtr pv = allocate_func(pk);
@@ -601,7 +596,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
               mem_pool(std::make_unique<MemPool>()),
-              buffer(mem_pool->allocate(max_one_row_size * chunk_size)),
+              buffer(mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
@@ -658,7 +653,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                         (*not_founds)[i] = 1;
                     }
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);
@@ -702,7 +697,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                         (*not_founds)[i] = 1;
                     }
                     // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate(key.size);
+                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     Slice pk{pos, key.size};
                     AggDataPtr pv = allocate_func(pk);

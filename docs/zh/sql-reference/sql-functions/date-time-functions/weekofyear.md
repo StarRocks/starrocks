@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # weekofyear
 
-## 功能
+
 
 计算指定时间为一年中的第几周。
 

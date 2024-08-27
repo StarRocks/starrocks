@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # split_part
 
-## 功能
+
 
 根据分割符拆分字符串，返回指定的分割部分（从 1 开始计数）。
 

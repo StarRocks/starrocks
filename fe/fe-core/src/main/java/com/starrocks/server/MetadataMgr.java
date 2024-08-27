@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
@@ -24,9 +23,14 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -36,6 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -43,21 +48,36 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTableColumnStats;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,6 +88,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -77,7 +98,8 @@ public class MetadataMgr {
     public class QueryMetadatas {
         private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
 
-        public QueryMetadatas() {}
+        public QueryMetadatas() {
+        }
 
         public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
             if (metadatas.containsKey(catalogName)) {
@@ -97,6 +119,7 @@ public class MetadataMgr {
     }
 
     private final LocalMetastore localMetastore;
+    private final TemporaryTableMgr temporaryTableMgr;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
 
@@ -125,10 +148,12 @@ public class MetadataMgr {
                         }
                     });
 
-    public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
+    public MetadataMgr(LocalMetastore localMetastore, TemporaryTableMgr temporaryTableMgr, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
         Preconditions.checkNotNull(localMetastore, "localMetastore is null");
+        Preconditions.checkNotNull(temporaryTableMgr, "temporaryTableMgr is null");
         this.localMetastore = localMetastore;
+        this.temporaryTableMgr = temporaryTableMgr;
         this.connectorMgr = connectorMgr;
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
@@ -146,8 +171,10 @@ public class MetadataMgr {
         return getOptionalMetadata(queryId, catalogName);
     }
 
-    /** get ConnectorMetadata by catalog name
+    /**
+     * get ConnectorMetadata by catalog name
      * if catalog is null or empty will return localMetastore
+     *
      * @param catalogName catalog's name
      * @return ConnectorMetadata
      */
@@ -243,6 +270,23 @@ public class MetadataMgr {
         return ImmutableList.copyOf(tableNames.build());
     }
 
+    public List<String> listTemporaryTableNames(UUID sessionId, String catalogName, String dbName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+            Preconditions.checkArgument(connectorMetadata.isPresent(), "internal catalog doesn't exist");
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                Database database = connectorMetadata.get().getDb(dbName);
+                if (database != null) {
+                    return temporaryTableMgr.listTemporaryTables(sessionId, database.getId());
+                }
+            } catch (Exception e) {
+                throw e;
+            }
+        }
+        return Lists.newArrayList();
+    }
+
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -266,11 +310,75 @@ public class MetadataMgr {
             }
             return connectorMetadata.get().createTable(stmt);
         } else {
-            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
-    public void alterTable(AlterTableStmt stmt) throws UserException {
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (tableExists(catalogName, dbName, tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            }
+            connectorMetadata.get().createTableLike(stmt);
+        } else {
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
+    public boolean createTemporaryTable(CreateTemporaryTableStmt stmt) throws DdlException {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in CreateTemporaryTableStmt");
+        String catalogName = stmt.getCatalogName();
+
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (!connectorMetadata.isPresent()) {
+            throw new DdlException("Invalid catalog " + catalogName + ", ConnectorMetadata doesn't exist");
+        } else if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new DdlException("temporary table must be created under internal catalog");
+        } else {
+            String dbName = stmt.getDbName();
+            Database db = getDb(catalogName, dbName);
+            if (db == null) {
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            String tableName = stmt.getTableName();
+            UUID sessionId = stmt.getSessionId();
+
+            if (temporaryTableMgr.tableExists(sessionId, db.getId(), tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create temporary table[{}.{}] which already exists in session[{}]",
+                            dbName, tableName, sessionId);
+                    return false;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            }
+            return connectorMetadata.get().createTable(stmt);
+        }
+    }
+
+    public void createView(CreateViewStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalog();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().createView(stmt);
+        }
+    }
+
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -285,9 +393,9 @@ public class MetadataMgr {
                 throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
             }
 
-            connectorMetadata.get().alterTable(stmt);
+            connectorMetadata.get().alterTable(context, stmt);
         } else {
-            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
@@ -314,6 +422,79 @@ public class MetadataMgr {
         });
     }
 
+    public void dropTemporaryTable(DropTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        String catalogName = stmt.getCatalogName();
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new StarRocksConnectorException("temporary table must be under internal catalog");
+        }
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            String dbName = stmt.getDbName();
+            Database db = getDb(catalogName, dbName);
+            if (db == null) {
+                throw new StarRocksConnectorException(
+                        "Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            String tableName = stmt.getTableName();
+            UUID sessionId = stmt.getSessionId();
+
+            Long tableId = temporaryTableMgr.getTable(sessionId, db.getId(), tableName);
+            if (tableId == null) {
+                if (stmt.isSetIfExists()) {
+                    LOG.debug("drop temporary table[{}.{}] which doesn't exist in session[{}]",
+                            dbName, tableName, sessionId);
+                    return;
+                } else {
+                    throw new StarRocksConnectorException("Temporary table '" + tableName + "' doesn't exist");
+                }
+            }
+            try {
+                metadata.dropTemporaryTable(dbName, tableId, tableName, stmt.isSetIfExists(), stmt.isForceDrop());
+                temporaryTableMgr.dropTemporaryTable(sessionId, db.getId(), tableName);
+            } catch (DdlException e) {
+                LOG.error("Failed to drop temporary table {}.{}.{} in session {}, {}",
+                        catalogName, dbName, tableName, sessionId, e);
+                throw new StarRocksConnectorException("Failed to drop temporary table %s.%s.%s. msg: %s",
+                        catalogName, dbName, tableName, e.getMessage());
+            }
+        });
+    }
+
+    public void cleanTemporaryTables(CleanTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        cleanTemporaryTables(stmt.getSessionId());
+    }
+
+    public void cleanTemporaryTables(UUID sessionId) {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        com.google.common.collect.Table<Long, String, Long> allTables = temporaryTableMgr.getTemporaryTables(sessionId);
+
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database database = localMetastore.getDb(databaseId);
+            if (database == null) {
+                // database maybe dropped by force, we should clean temporary tables on it.
+                temporaryTableMgr.dropTemporaryTables(sessionId, databaseId);
+                continue;
+            }
+            Map<String, Long> tables = allTables.row(databaseId);
+            tables.forEach((tableName, tableId) -> {
+                try {
+                    database.dropTemporaryTable(tableId, tableName, true, true);
+                    temporaryTableMgr.dropTemporaryTable(sessionId, database.getId(), tableName);
+                } catch (DdlException e) {
+                    LOG.error("Failed to drop temporary table {}.{} in session {}",
+                            database.getFullName(), tableName, sessionId, e);
+                }
+            });
+        }
+        temporaryTableMgr.removeTemporaryTables(sessionId);
+    }
+
     public Optional<Table> getTable(TableName tableName) {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
@@ -321,9 +502,21 @@ public class MetadataMgr {
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
-        if (connectorTable != null) {
+        if (connectorTable != null && !connectorTable.isMetadataTable()) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
+        }
+
+        if (connectorTable != null && connectorTable.isMetadataTable()) {
+            MetadataTable metadataTable = (MetadataTable) connectorTable;
+            String originDbName = metadataTable.getOriginDb();
+            String originTableName = metadataTable.getOriginTable();
+            boolean originTableExist = connectorMetadata.map(metadata ->
+                    metadata.tableExists(originDbName, originTableName)).orElse(false);
+            if (!originTableExist) {
+                LOG.error("origin table not exists with {}.{}.{}", catalogName, dbName, tblName);
+                return null;
+            }
         }
         return connectorTable;
     }
@@ -336,9 +529,89 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
+                .orElse(TableVersionRange.empty().empty());
+    }
+
+    public Optional<Database> getDatabase(BaseTableInfo baseTableInfo) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return Optional.ofNullable(getDb(baseTableInfo.getDbId()));
+        } else {
+            return Optional.ofNullable(getDb(baseTableInfo.getCatalogName(), baseTableInfo.getDbName()));
+        }
+    }
+
+    public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return Optional.ofNullable(getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+        } else {
+            return Optional.ofNullable(
+                    getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
+        }
+    }
+
+    public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTable(baseTableInfo);
+        if (baseTableInfo.isInternalCatalog()) {
+            return tableOpt;
+        } else if (tableOpt.isPresent()) {
+            Table table = tableOpt.get();
+            String tableIdentifier = baseTableInfo.getTableIdentifier();
+            if (tableIdentifier != null && tableIdentifier.equals(table.getTableIdentifier())) {
+                return tableOpt;
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Table getTableChecked(BaseTableInfo baseTableInfo) {
+        Optional<Table> tableOpt = getTableWithIdentifier(baseTableInfo);
+        if (tableOpt.isPresent()) {
+            return tableOpt.get();
+        }
+        throw MaterializedViewExceptions.reportBaseTableNotExists(baseTableInfo);
+    }
+
+    public Table getTemporaryTable(UUID sessionId, String catalogName, Long databaseId, String tblName) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            return null;
+        }
+        Long tableId = temporaryTableMgr.getTable(sessionId, databaseId, tblName);
+        if (tableId == null) {
+            return null;
+        }
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
+    }
+
     public boolean tableExists(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
+    }
+
+    /**
+     * getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
+     * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.
+     * For default/internal catalog, this method is equivalent to {@link MetadataMgr#getTable(String, String, String)}.
+     * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
+     */
+    public BasicTable getBasicTable(String catalogName, String dbName, String tblName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return getTable(catalogName, dbName, tblName);
+        }
+
+        // for external catalog, do not reach external metadata service
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        return connectorMetadata.map(
+                        metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
+                .orElse(null);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
@@ -347,11 +620,15 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+        return listPartitionNames(catalogName, dbName, tableName, TableVersionRange.empty());
+    }
+
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName, TableVersionRange versionRange) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listPartitionNames(dbName, tableName).forEach(partitionNames::add);
+                connectorMetadata.get().listPartitionNames(dbName, tableName, versionRange).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
                 throw e;
@@ -368,7 +645,6 @@ public class MetadataMgr {
      * SQL ： select dt,hh,mm from tbl where hh = '12' and mm = '30';
      * the partition columns are [dt,hh,mm]
      * the partition values should be [empty,'12','30']
-     *
      */
     public List<String> listPartitionNamesByValue(String catalogName, String dbName, String tableName,
                                                   List<Optional<String>> partitionValues) {
@@ -386,11 +662,12 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
-    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate, long limit) {
+    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate,
+                                                  long limit, TableVersionRange version) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
             try {
-                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit);
+                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit, version);
             } catch (Exception e) {
                 LOG.error("Failed to getPrunedPartitions on [{}.{}]", catalogName, table, e);
                 throw e;
@@ -406,10 +683,23 @@ public class MetadataMgr {
         List<ConnectorTableColumnStats> columnStatisticList =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
 
+        Map<String, Histogram> histogramStatistics =
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
+
         Statistics.Builder statistics = Statistics.builder();
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnRefOperator columnRef = requiredColumnRefs.get(i);
-            ConnectorTableColumnStats connectorTableColumnStats = columnStatisticList.get(i);
+            ConnectorTableColumnStats connectorTableColumnStats;
+            if (histogramStatistics.containsKey(columnRef.getName())) {
+                // add histogram to column statistic
+                Histogram histogram = histogramStatistics.get(columnRef.getName());
+                connectorTableColumnStats = new ConnectorTableColumnStats(
+                        ColumnStatistic.buildFrom(columnStatisticList.get(i).getColumnStatistic()).
+                                setHistogram(histogram).build(),
+                        columnStatisticList.get(i).getRowCount(), columnStatisticList.get(i).getUpdateTime());
+            } else {
+                connectorTableColumnStats = columnStatisticList.get(i);
+            }
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
                 if (!connectorTableColumnStats.isUnknown()) {
@@ -426,18 +716,47 @@ public class MetadataMgr {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange versionRange) {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
-        Statistics statistics = FeConstants.runningUnitTest ? null :
+        // Get basic/histogram stats from internal statistics.
+        Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+        if (internalStatistics == null ||
+                internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            // Get basic stats from connector metadata.
             session.setObtainedFromInternalStatistics(false);
-            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            return connectorMetadata.map(metadata -> metadata.getTableStatistics(
-                    session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+            // Avoid `analyze table` to collect table statistics from metadata.
+            if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+                return internalStatistics;
+            } else {
+                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                        session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
+                if (connectorBasicStats != null && internalStatistics != null &&
+                        internalStatistics.getColumnStatistics().values().stream().anyMatch(
+                                columnStatistic -> columnStatistic.getHistogram() != null)) {
+                    // combine connector metadata basic stats and histogram from internal stats
+                    Map<ColumnRefOperator, ColumnStatistic> internalColumnStatsMap = internalStatistics.getColumnStatistics();
+                    Map<ColumnRefOperator, ColumnStatistic> combinedColumnStatsMap = Maps.newHashMap();
+                    connectorBasicStats.getColumnStatistics().forEach((key, value) -> {
+                        if (internalColumnStatsMap.containsKey(key)) {
+                            combinedColumnStatsMap.put(key, ColumnStatistic.buildFrom(value).
+                                    setHistogram(internalColumnStatsMap.get(key).getHistogram()).build());
+                        } else {
+                            combinedColumnStatsMap.put(key, value);
+                        }
+                    });
+
+                    return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                } else {
+                    return connectorBasicStats;
+                }
+            }
         } else {
             session.setObtainedFromInternalStatistics(true);
-            return statistics;
+            return internalStatistics;
         }
     }
 
@@ -447,49 +766,82 @@ public class MetadataMgr {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
-        return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1);
+        return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1, TableVersionRange.empty());
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
-        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null, null, -1);
-    }
-
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames,
-                                                   long limit) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit)
-                        .forEach(files::add);
+                return connectorMetadata.get().getRemotePartitions(table, partitionNames);
             } catch (Exception e) {
-                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);
+                LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
+                        table.getCatalogName(), table, e);
                 throw e;
             }
         }
-        return ImmutableList.copyOf(files.build());
+        return new ArrayList<>();
+    }
+
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getRemoteFiles(table, params);
+            } catch (Exception e) {
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getRemoteFilesAsync(table, params);
+            } catch (Exception e) {
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return RemoteFileInfoDefaultSource.EMPTY;
     }
 
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getPartitions(table, partitionNames).forEach(partitions::add);
+                return connectorMetadata.get().getPartitions(table, partitionNames);
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;
             }
         }
-        return partitions.build();
+        return new ArrayList<>();
     }
 
-    public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item, Tracers tracers) {
+    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName, long snapshotId,
+                                                    String serializedPredicate, MetadataTableType type) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
+            } catch (Exception e) {
+                LOG.error("Failed to get remote meta splits on catalog [{}], table [{}.{}]", catalogName, dbName, tableName, e);
+                throw e;
+            }
+        }
+        return null;
+    }
+
+    public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item,
+                                   Tracers tracers, ConnectContext connectContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(Optional.of(queryId), catalogName);
         if (connectorMetadata.isPresent()) {
             try {
-                return connectorMetadata.get().prepareMetadata(item, tracers);
+                return connectorMetadata.get().prepareMetadata(item, tracers, connectContext);
             } catch (Exception e) {
                 LOG.error("prepare metadata failed on [{}]", item, e);
                 return true;
@@ -504,11 +856,12 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
     }
 
-    public void finishSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
+    public void finishSink(String catalogName, String dbName, String tableName,
+                           List<TSinkCommitInfo> sinkCommitInfos, String branch) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> {
             try {
-                metadata.finishSink(dbName, tableName, sinkCommitInfos);
+                metadata.finishSink(dbName, tableName, sinkCommitInfos, branch);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
                 throw new StarRocksConnectorException(e.getMessage());

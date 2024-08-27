@@ -1,0 +1,94 @@
+-- name: test_typeof_literal
+select typeof(cast(1 as tinyint));
+select typeof(cast(1 as smallint));
+select typeof(cast(1 as int));
+select typeof(cast(1 as bigint));
+select typeof(cast(1 as largeint));
+select typeof(cast(1 as decimal(19, 2)));
+select typeof(cast(1 as double));
+select typeof(cast(1 as float));
+select typeof(cast(1 as boolean));
+select typeof(cast(1 as char));
+select typeof(cast(1 as string));
+select typeof(cast(1 as varchar));
+select typeof(cast('s' as BINARY));
+select typeof(cast('2023-03-07' as date));
+select typeof(cast('2023-03-07 11:22:33' as datetime));
+select typeof([1, 2, 3]);
+select typeof(get_json_object('{"k1":1, "k2":"v2"}', '$.k1'));
+select typeof(map{1:"apple", 2:"orange", 3:"pear"});
+select typeof(struct(1, 2, 3, 4));
+select typeof(bitmap_empty());
+select typeof(hll_empty());
+select typeof(parse_json('{"a": 1, "b": true}'));
+select typeof(null);
+
+-- name: test_typeof_table
+create table t1 properties("replication_num" = "1") as
+select cast(1 as tinyint) as c1
+,cast(1 as smallint) as c2
+,cast(1 as int) as c3
+,cast(1 as bigint) as c4
+,cast(1 as largeint) as c5
+,cast(1 as decimal(19, 2)) as c6
+,cast(1 as double) as c7
+,cast(1 as float) as c8
+,cast(1 as boolean) as c9
+,cast(1 as char) as c10
+,cast(1 as string) as c11
+,cast(1 as varchar) as c12
+,cast('s' as BINARY) as c13
+,cast('2023-03-07' as date) as c14
+,cast('2023-03-07 11:22:33' as datetime) as c15
+,[1, 2, 3] as c16
+,get_json_object('{"k1":1, "k2":"v2"}', '$.k1') as c17
+,map{1:"apple", 2:"orange", 3:"pear"} as c18
+,struct(1, 2, 3, 4) as c19
+,parse_json('{"a": 1, "b": true}') as c20;
+select typeof(c1)
+  ,typeof(c2)
+  ,typeof(c3)
+  ,typeof(c4)
+  ,typeof(c5)
+  ,typeof(c6)
+  ,typeof(c7)
+  ,typeof(c8)
+  ,typeof(c9)
+  ,typeof(c10)
+  ,typeof(c11)
+  ,typeof(c12)
+  ,typeof(c13)
+  ,typeof(c14)
+  ,typeof(c15)
+  ,typeof(c16)
+  ,typeof(c17)
+  ,typeof(c18)
+  ,typeof(c19)
+  ,typeof(c20)
+  from t1;
+-- name: test_typeof_table_bitmap
+CREATE TABLE pv_bitmap (
+    dt INT(11) NULL COMMENT "",
+    page VARCHAR(10) NULL COMMENT "",
+    user_id bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(dt, page)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(dt)
+properties("replication_num" = "1");
+
+insert into pv_bitmap values(1, 'test', to_bitmap(10));
+
+select typeof(user_id) from pv_bitmap;
+
+-- name: test_typeof_table_hll
+create table test_uv(
+    dt date,
+    id int,
+    uv_set hll hll_union
+)
+distributed by hash(id)
+properties("replication_num" = "1");
+
+insert into test_uv values('2024-01-01', 1, hll_hash(10));
+select typeof(uv_set) from test_uv;

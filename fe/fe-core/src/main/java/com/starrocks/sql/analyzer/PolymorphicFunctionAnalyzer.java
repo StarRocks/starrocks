@@ -317,11 +317,15 @@ public class PolymorphicFunctionAnalyzer {
 
         if (!allRealElementType.isEmpty()) {
             Type commonType = allRealElementType.get(0);
-            for (Type type : allRealElementType) {
-                commonType = TypeManager.getCommonSuperType(commonType, type);
-                if (commonType == null) {
-                    LOGGER.warn("could not determine polymorphic type because input has non-match types");
-                    return null;
+            // For ARRAY_SORTBY, use the Type of the first AnyArray as the return value,
+            // Rather than the Common Type of all AnyArray Types
+            if (!FunctionSet.ARRAY_SORTBY.equals(fn.functionName())) {
+                for (Type type : allRealElementType) {
+                    commonType = TypeManager.getCommonSuperType(commonType, type);
+                    if (commonType == null) {
+                        LOGGER.warn("could not determine polymorphic type because input has non-match types");
+                        return null;
+                    }
                 }
             }
             commonType = replaceNullType2Boolean(commonType);

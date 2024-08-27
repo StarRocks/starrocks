@@ -21,7 +21,6 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -35,10 +34,8 @@ public class BadHttpRequestTest extends StarRocksHttpTestCase {
 
     private static String STREAM_LOAD_URL_FORMAT;
 
-    @Before
     @Override
-    public void setUp() {
-        super.setUp();
+    protected void doSetUp() throws Exception {
         STREAM_LOAD_URL_FORMAT = "http://localhost:" + HTTP_PORT + STREAM_LOAD_URI_FORMAT;
     }
 
@@ -61,6 +58,20 @@ public class BadHttpRequestTest extends StarRocksHttpTestCase {
         Request request = createRequest(Config.http_max_header_size / 2);
         Response response = networkClient.newCall(request).execute();
         Assert.assertEquals(200, response.code());
+    }
+
+    @Test
+    public void testInvalidAuthorityRequest() throws IOException {
+        RequestBody body = RequestBody.create(JSON, "{}");
+        Request.Builder requestBuilder = new Request.Builder()
+                .url(String.format(STREAM_LOAD_URL_FORMAT, DB_NAME, TABLE_NAME))
+                .put(body)
+                .addHeader("Authorization", "Basic xxx")
+                .addHeader("label", UUID.randomUUID().toString())
+                .addHeader("Expect", "100-continue");
+        Request request = requestBuilder.build();
+        Response response = networkClient.newCall(request).execute();
+        Assert.assertEquals(401, response.code());
     }
 
     @NotNull

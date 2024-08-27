@@ -14,7 +14,7 @@ StarRocks mainly consists of two types of components: FE nodes and BE nodes. Eac
 
 FE nodes are mainly responsible for metadata management, client connection management, query planning, and query scheduling.
 
-In production, we recommend you deploy at least **THREE** Follower FE nodes in your StarRocks cluster to prevent single points of failure (SPOFs).
+In production, we recommend you deploy at least **THREE** Follower FE nodes in your StarRocks cluster to prevent single points of failure (SPOFs). The Leader FE will be automatically elected from these three followers.
 
 StarRocks uses the BDB JE protocol to manage the metadata across FE nodes. StarRocks elects a Leader FE node from all Follower FE nodes. Only the Leader FE node can write metadata. The other Follower FE nodes only update their metadata based on the logs from the Leader FE node. Each time the Leader FE node fails, StarRocks re-elects a new Leader FE node as long as more than half of the Follower FE nodes are alive.
 
@@ -72,13 +72,13 @@ If the BE storage space runs out as your raw data grows, you can supplement it b
 
 - Add new BE nodes to your StarRocks cluster
 
-  You can add new BE nodes to your StarRocks cluster so that the data can be re-distributed evenly to more nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE out](../administration/Scale_up_down.md).
+  You can add new BE nodes to your StarRocks cluster so that the data can be re-distributed evenly to more nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE out](../administration/management/Scale_up_down.md).
 
   After new BE nodes are added, StarRocks automatically re-balances the data among all BE nodes. Such auto-balancing is supported on all table types.
 
 - Add extra storage volumes to your BE nodes
 
-  You can also add extra storage volumes to existing BE nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE up](../administration/Scale_up_down.md).
+  You can also add extra storage volumes to existing BE nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE up](../administration/management/Scale_up_down.md).
 
   After extra storage volumes are added, StarRocks automatically re-balances the data in all tables.
 

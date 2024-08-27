@@ -26,6 +26,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "util/runtime_profile.h"
@@ -52,8 +53,6 @@ public:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
-    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
-
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
@@ -68,6 +67,7 @@ private:
     void _update_realtime_counter(Chunk* chunk);
     void _decide_chunk_size(bool has_predicate);
     Status _init_column_access_paths(Schema* schema);
+    Status _prune_schema_by_access_paths(Schema* schema);
 
 private:
     TabletReaderParams _params{};
@@ -77,12 +77,12 @@ private:
     const int64_t _limit; // -1: no limit
     TInternalScanRange* _scan_range;
 
-    ConjunctivePredicates _not_push_down_predicates;
+    PredicateTree _non_pushdown_pred_tree;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;
-    std::shared_ptr<TabletSchema> _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     int64_t _version = 0;
 
     RuntimeState* _runtime_state = nullptr;
@@ -146,13 +146,15 @@ private:
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+    RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _json_flatten_timer = nullptr;
     RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
     RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };

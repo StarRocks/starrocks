@@ -18,7 +18,7 @@ displayed_sidebar: "Chinese"
 - **简化建模体验**：任何只具备基本 SQL 知识的数据分析师都可以使用 StarRocks 进行数据建模，无需专业数据工程师。
 - **简化系统维护**：StarRocks 的异步物化视图可以自动管理数据之间的层级和依赖关系，无需整个数据平台来处理此任务。
 
-![Modeling-1](../assets/Modeling-1.png)
+![Modeling-1](../_assets/Modeling-1.png)
 
 在实际情况中，您可以通过结合使用 StarRocks 的视图（逻辑视图）和异步物化视图来进行数据建模，如下所示：
 
@@ -127,7 +127,7 @@ ALTER TABLE <table1> SWAP WITH <table2>;
 ALTER VIEW <view_name> AS <query>;
 
 -- 原子替换物化视图（替换两个物化视图的名字，并不修改其中数据）。
-ALTER MATERIALIZED VIWE <mv1> SWAP WITH <mv2>;
+ALTER MATERIALIZED VIEW <mv1> SWAP WITH <mv2>;
 
 -- 重新启用物化视图。
 ALTER MATERIALIZED VIEW <mv_name> ACTIVE;
@@ -144,14 +144,15 @@ Schema Change 遵循以下原则：
 
 由于 Inactive 状态的物化视图其数据一致性无法保证，您可以使用以下方法修复：
 
-- **手动修复**：您可以通过执行 ALTER MATERIALIZED VIEW `<mv_name>` ACTIVE 手动修复 Inactive 状态的物化视图。此语句将根据物化视图原始 SQL 定义尝试重建。需要注意的是，重建时需保证在底层 Schema Change 之后， SQL 定义仍然有效，否则操作将失败。
-- **自动修复**：StarRocks 将尝试自动激活 Inactive 状态的物化视图，但时效性无法保证。
+- **手动修复**：您可以通过执行 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动修复 Inactive 状态的物化视图。此语句将根据物化视图原始 SQL 定义尝试重建。需要注意的是，重建时需保证在底层 Schema Change 之后， SQL 定义仍然有效，否则操作将失败。
+- **刷新时修复**：StarRocks 将会在刷新物化视图时会尝试自动执行以上的修复命令，重建物化视图再刷新。
+- **自动修复**： StarRocks 将会尝试自动修复 Inactive 的物化视图，您可以通过 `ADMIN SET FRONTEND CONFIG('enable_mv_automatic_active_check'='false')` 关闭此功能。此功能自 3.1.4 和 3.2.0 版本开始支持。
 
 ## 分区建模
 
 除分层建模外，分区建模也是数据建模的一个重要方面。数据建模往往涉及根据业务语义关联数据，并根据时效性要求设置数据的生存时间（TTL）。分区建模在此过程中起着重要作用。 不同的数据关联方式会产生不同的建模方法，如星型模式和雪花模式。这些模型有一个共同点 - 它们都使用事实表和维度表。一些业务场景需要多个大型事实表，而其他场景涉及复杂的维度表及其之间的复杂的关联关系。StarRocks 的物化视图支持事实表的分区关联，即事实表进行分区，而物化视图的 Join 结果按照同样的方式进行分区。
 
-![Modeling-2](../assets/Modeling-2.png)
+![Modeling-2](../_assets/Modeling-2.png)
 
 以上图为例，通过物化视图将事实表和多个维度表进行关联：
 

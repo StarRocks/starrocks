@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bit_shift_left
 
-## Description
+
 
 Shifts the binary representation of a numeric expression to the left by a specified number of bits.
 

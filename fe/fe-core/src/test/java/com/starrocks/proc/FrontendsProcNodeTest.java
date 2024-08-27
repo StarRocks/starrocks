@@ -78,6 +78,10 @@ public class FrontendsProcNodeTest {
         Method isJoin = clazz.getDeclaredMethod("isJoin", List.class, Frontend.class);
         isJoin.setAccessible(true);
 
+        Frontend feCouldNotFoundByPort = new Frontend(FrontendNodeType.LEADER, "test", "127.0.0.1", 2000);
+        boolean result = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldNotFoundByPort);
+        Assert.assertFalse(result);
+
         Frontend feCouldFoundByIP = new Frontend(FrontendNodeType.LEADER, "test", "127.0.0.1", 1000);
         boolean result1 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldFoundByIP);
         Assert.assertTrue(result1);

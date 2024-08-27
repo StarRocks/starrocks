@@ -18,17 +18,22 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
@@ -54,8 +59,11 @@ public class ExecPlan {
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
     private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
+    private List<ExecGroup> execGroups = new ArrayList<>();
 
     private volatile ProfilingExecPlan profilingPlan;
+    private LogicalPlan logicalPlan;
+    private ColumnRefFactory columnRefFactory;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -72,6 +80,15 @@ public class ExecPlan {
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
         this.outputColumns = outputColumns;
+    }
+
+    // for broker load plan
+    public ExecPlan(ConnectContext connectContext, List<PlanFragment> fragments) {
+        this.connectContext = connectContext;
+        this.colNames = new ArrayList<>();
+        this.physicalPlan = null;
+        this.outputColumns = new ArrayList<>();
+        this.fragments.addAll(fragments);
     }
 
     public ConnectContext getConnectContext() {
@@ -134,6 +151,14 @@ public class ExecPlan {
         return outputColumns;
     }
 
+    public void setExecGroups(List<ExecGroup> execGroups) {
+        this.execGroups = execGroups;
+    }
+
+    public List<ExecGroup> getExecGroups() {
+        return this.execGroups;
+    }
+
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
         optExpressions.put(id, optExpression);
     }
@@ -165,6 +190,17 @@ public class ExecPlan {
 
     public String getExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
+
+        if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {
+            if (FeConstants.showFragmentCost) {
+                final String prefix = "  ";
+                AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+                str.append("PLAN COST").append("\n")
+                        .append(prefix).append("CPU: ").append(auditEvent.planCpuCosts).append("\n")
+                        .append(prefix).append("Memory: ").append(auditEvent.planMemCosts).append("\n\n");
+            }
+        }
+
         if (level == null) {
             str.append(Explain.toString(physicalPlan, outputColumns));
         } else {
@@ -207,5 +243,21 @@ public class ExecPlan {
                 break;
         }
         return getExplainString(tlevel);
+    }
+
+    public LogicalPlan getLogicalPlan() {
+        return logicalPlan;
+    }
+
+    public void setLogicalPlan(LogicalPlan logicalPlan) {
+        this.logicalPlan = logicalPlan;
+    }
+
+    public ColumnRefFactory getColumnRefFactory() {
+        return columnRefFactory;
+    }
+
+    public void setColumnRefFactory(ColumnRefFactory columnRefFactory) {
+        this.columnRefFactory = columnRefFactory;
     }
 }

@@ -40,7 +40,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
@@ -49,9 +48,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -99,7 +95,11 @@ public class View extends Table {
     }
 
     public View(long id, String name, List<Column> schema) {
-        super(id, name, TableType.VIEW, schema);
+        this(id, name, schema, TableType.VIEW);
+    }
+
+    public View(long id, String name, List<Column> schema, TableType type) {
+        super(id, name, type, schema);
     }
 
     public QueryStatement getQueryStatement() throws StarRocksPlannerException {
@@ -168,21 +168,5 @@ public class View extends Table {
         }
 
         return Lists.newArrayList(this.tableRefsCache);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, originalViewDef);
-        Text.writeString(out, inlineViewDef);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        // just do not want to modify the meta version, so leave originalViewDef here but set it as empty
-        originalViewDef = Text.readString(in);
-        originalViewDef = "";
-        inlineViewDef = Text.readString(in);
-        inlineViewDef = inlineViewDef.replaceAll("default_cluster:", "");
     }
 }

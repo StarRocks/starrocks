@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # pmod
 
-## 功能
+
 
 取模函数，返回两个数相除之后的正余数。
 

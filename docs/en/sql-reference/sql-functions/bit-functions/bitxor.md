@@ -5,7 +5,7 @@ displayed_sidebar: "English"
 
 # bitxor
 
-## Description
+
 
 Returns the bitwise XOR of two numeric expressions.
 

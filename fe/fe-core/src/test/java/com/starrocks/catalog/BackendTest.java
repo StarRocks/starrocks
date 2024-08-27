@@ -246,7 +246,7 @@ public class BackendTest {
     public void testHeartbeatOk() throws Exception {
         Backend be = new Backend();
         BackendHbResponse hbResponse = new BackendHbResponse(1, 9060, 8040, 8060, 8090,
-                System.currentTimeMillis(), "1.0", 64);
+                System.currentTimeMillis(), "1.0", 64, 20);
         boolean isChanged = be.handleHbResponse(hbResponse, false);
         Assert.assertTrue(isChanged);
     }

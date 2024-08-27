@@ -38,13 +38,11 @@ PARTITION p20210109 VALUES [("2021-01-09 00:00:00"), ("2021-01-10 00:00:00")),
 PARTITION p20231226 VALUES [("2023-12-26 00:00:00"), ("2023-12-27 00:00:00")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "1",
+"compression" = "LZ4",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 alter table partition_unixtime drop partition p20231226;
@@ -89,12 +87,10 @@ PARTITION p20210109 VALUES [("2021-01-09 00:00:00"), ("2021-01-10 00:00:00")),
 PARTITION p20231226 VALUES [("2023-12-26 00:00:00"), ("2023-12-27 00:00:00")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "1",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result

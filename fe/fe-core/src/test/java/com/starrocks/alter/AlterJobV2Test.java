@@ -39,6 +39,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -108,7 +109,7 @@ public class AlterJobV2Test {
         // 1. process a schema change job
         String alterStmtStr = "alter table test.schema_change_test add column k4 int default '1'";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
         // 2. check alter job
         waitForSchemaChangeAlterJobFinish();
 
@@ -116,8 +117,7 @@ public class AlterJobV2Test {
         String showAlterStmtStr = "show alter table column from test;";
         ShowAlterStmt showAlterStmt =
                 (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showAlterStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -127,7 +127,7 @@ public class AlterJobV2Test {
         // 1. process a rollup job
         String alterStmtStr = "alter table test.schema_change_test add rollup test_rollup(k1, k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
         // 2. check alter job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
@@ -143,8 +143,7 @@ public class AlterJobV2Test {
         String showAlterStmtStr = "show alter table rollup from test;";
         ShowAlterStmt showAlterStmt =
                 (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showAlterStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -154,7 +153,7 @@ public class AlterJobV2Test {
         // 1. process a modify table properties job(enable_persistent_index)
         String alterStmtStr = "alter table test.properties_change_test set ('enable_persistent_index' = 'true');";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
         // 2. check alter job
         waitForSchemaChangeAlterJobFinish();
 
@@ -162,15 +161,14 @@ public class AlterJobV2Test {
         String showCreateTableStr = "show create table test.properties_change_test;";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
 
         // 4. process a modify table properties job(in_memory)
         String alterStmtStr2 = "alter table test.properties_change_test set ('in_memory' = 'true');";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr2, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
         // 4. check alter job
         waitForSchemaChangeAlterJobFinish();
@@ -178,7 +176,7 @@ public class AlterJobV2Test {
         // 5. check enable persistent index
         showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
-        showResultSet = showExecutor.execute();
+        showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -195,7 +193,7 @@ public class AlterJobV2Test {
             // modify column which define in mv
             String alterStmtStr = "alter table test.modify_column_test modify column k2 varchar(10)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv2 = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv2");
@@ -221,7 +219,7 @@ public class AlterJobV2Test {
 
             String alterStmtStr = "alter table test.modify_column_test3 modify column k2 varchar(20)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
@@ -247,7 +245,7 @@ public class AlterJobV2Test {
 
             String alterStmtStr = "alter table test.testModifyWithSelectStarMV2 add column k4 bigint";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
@@ -276,7 +274,7 @@ public class AlterJobV2Test {
 
             String alterStmtStr = "alter table test.modify_column_test5 drop column k2";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
@@ -305,7 +303,7 @@ public class AlterJobV2Test {
                 String alterStmtStr = "alter table test.modify_column_test4 modify column k3 varchar(10)";
                 AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
                         connectContext);
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+                DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
@@ -318,7 +316,7 @@ public class AlterJobV2Test {
                 String alterStmtStr = "alter table test.modify_column_test4 modify column k2 varchar(30) ";
                 AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
                         connectContext);
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+                DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
@@ -347,7 +345,7 @@ public class AlterJobV2Test {
             // modify column which not define in mv
             String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
@@ -365,18 +363,18 @@ public class AlterJobV2Test {
 
         String alterStmtStr = "alter table test.schema_change_test_load add column k4 int default '1'";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
         waitForSchemaChangeAlterJobFinish();
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         AlterJobV2 alterJobV2Old = new ArrayList<>(alterJobs.values()).get(0);
 
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().save(alterImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().save(alterImage.getImageWriter());
 
-        SRMetaBlockReader reader = new SRMetaBlockReader(alterImage.getDataInputStream());
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().load(reader);
-        reader.close();
+        SRMetaBlockReader srMetaBlockReader = alterImage.getMetaBlockReader();
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().load(srMetaBlockReader);
+        srMetaBlockReader.close();
 
         AlterJobV2 alterJobV2New =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().get(alterJobV2Old.jobId);

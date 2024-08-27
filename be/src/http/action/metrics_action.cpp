@@ -238,7 +238,6 @@ bool PrometheusMetricsVisitor::_dump_latency_recorder_suffix(const butil::String
         << si->metric_name << "{quantile=\"0.999\"} " << si->latency_percentiles[3] << '\n'
         << si->metric_name << "{quantile=\"0.9999\"} " << si->latency_percentiles[4] << '\n'
         << si->metric_name << "{quantile=\"1\"} " << si->latency_percentiles[5] << '\n'
-        << si->metric_name << "{quantile=\"avg\"} " << si->latency_avg << '\n'
         << si->metric_name
         << "_sum "
         // There is no sum of latency in bvar output, just use

@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -37,12 +36,15 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LargeStringLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -50,16 +52,16 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
-import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -80,19 +82,18 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -114,6 +115,9 @@ import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.PivotAggregation;
+import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -132,26 +136,26 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
-import com.starrocks.statistic.StatsConstants;
 import com.starrocks.storagevolume.StorageVolume;
-import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
-import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
+import static com.starrocks.catalog.Table.TableType.JDBC;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -167,10 +171,10 @@ public class AstToStringBuilder {
     }
 
     public static String getAliasName(ParseNode expr, boolean addFunctionDbName, boolean withBackquote) {
-        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote).visit(expr);
+        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote, true).visit(expr);
     }
 
-    public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+    public static class AST2StringBuilderVisitor implements AstVisitor<String, Void> {
 
         // when you want to get the full string of a functionCallExpr set it true
         // when you just want to a function name as its alias set it false
@@ -180,54 +184,75 @@ public class AstToStringBuilder {
         // when you just want to get the real expr name set it false
         protected boolean withBackquote;
 
+        protected boolean hideCredential;
+
         public AST2StringBuilderVisitor() {
-            this(true, true);
+            this(true, true, true);
         }
 
-        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote) {
+        public AST2StringBuilderVisitor(boolean hideCredential) {
+            this(true, true, hideCredential);
+        }
+
+        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote, boolean hideCredential) {
             this.addFunctionDbName = addFunctionDbName;
             this.withBackquote = withBackquote;
+            this.hideCredential = hideCredential;
         }
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
         @Override
-        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
+        public String visitCreateUserStatement(CreateUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            if (statement instanceof CreateUserStmt) {
-                sb.append("CREATE");
-            } else {
-                sb.append("ALTER");
+            sb.append("CREATE USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            if (!stmt.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        stmt.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
             }
 
-            sb.append(" USER ").append(statement.getUserIdentity());
-            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
-                if (statement.isPasswordPlain()) {
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterUserStatement(AlterUserStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            return sb.toString();
+        }
+
+
+        public StringBuilder buildAuthOptionSql(UserAuthOption authOption) {
+            StringBuilder sb = new StringBuilder();
+            if (authOption == null) {
+                return sb;
+            }
+
+            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
+                if (authOption.isPasswordPlain()) {
                     sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
                 } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
                 }
             }
 
-            if (!Strings.isNullOrEmpty(statement.getAuthPluginName())) {
-                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
-                if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
-                    if (statement.isPasswordPlain()) {
+            if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+                sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
                         sb.append(" BY '");
                     } else {
                         sb.append(" AS '");
                     }
-                    sb.append(statement.getAuthStringUnResolved()).append("'");
+                    sb.append(authOption.getAuthString()).append("'");
                 }
             }
-
-            if (!statement.getDefaultRoles().isEmpty()) {
-                sb.append(" DEFAULT ROLE ");
-                sb.append(Joiner.on(",").join(
-                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
-            }
-
-            return sb.toString();
+            return sb;
         }
 
         @Override
@@ -316,7 +341,9 @@ public class AstToStringBuilder {
                 if (setVar instanceof SystemVariable) {
                     SystemVariable systemVariable = (SystemVariable) setVar;
                     String setVarSql = "";
-                    setVarSql += systemVariable.getType().toString() + " ";
+                    if (systemVariable.getType() != null) {
+                        setVarSql += systemVariable.getType().toString() + " ";
+                    }
                     setVarSql += "`" + systemVariable.getVariable() + "`";
                     setVarSql += " = ";
                     setVarSql += visit(systemVariable.getResolvedExpression());
@@ -369,7 +396,7 @@ public class AstToStringBuilder {
             sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
 
             sb.append(" PROPERTIES (");
-            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
             sb.append(")");
             return sb.toString();
         }
@@ -387,6 +414,13 @@ public class AstToStringBuilder {
             }
 
             sb.append(stmt.getMvName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCleanTemporaryTableStatement(CleanTemporaryTableStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("clean temporary table on session '").append(stmt.getSessionId()).append("'");
             return sb.toString();
         }
 
@@ -411,14 +445,15 @@ public class AstToStringBuilder {
             }
 
             if (!stmt.getJobProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false);
+                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false, hideCredential);
                 sb.append("PROPERTIES ( ").append(map).append(" )");
             }
 
             sb.append(" FROM ").append(stmt.getTypeName()).append(" ");
 
             if (!stmt.getDataSourceProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, true);
+                PrintableMap<String, String> map =
+                        new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, hideCredential);
                 sb.append("( ").append(map).append(" )");
             }
 
@@ -450,7 +485,7 @@ public class AstToStringBuilder {
 
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append(" PROPERTIES (");
-                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false));
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             return sb.toString();
@@ -480,7 +515,7 @@ public class AstToStringBuilder {
             sb.append("\"" + stmt.getPath() + "\" ");
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             sb.append("WITH BROKER ");
@@ -489,7 +524,7 @@ public class AstToStringBuilder {
                     sb.append(stmt.getBrokerDesc().getName());
                 }
                 sb.append("' (");
-                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
+                sb.append(new PrintableMap<>(stmt.getBrokerDesc().getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             return sb.toString();
@@ -634,7 +669,14 @@ public class AstToStringBuilder {
                 sqlBuilder.append(relation.getJoinOp());
             }
             if (relation.getJoinHint() != null && !relation.getJoinHint().isEmpty()) {
-                sqlBuilder.append(" [").append(relation.getJoinHint()).append("]");
+                StringBuilder sb = new StringBuilder();
+                sb.append(relation.getJoinHint());
+                if (relation.getSkewColumn() != null) {
+                    sb.append("|").append(visit(relation.getSkewColumn())).append("(").append(
+                            relation.getSkewValues().stream().map(this::visit).
+                                    collect(Collectors.joining(","))).append(")");
+                }
+                sqlBuilder.append(" [").append(sb).append("]");
             }
             sqlBuilder.append(" ");
             if (relation.isLateral()) {
@@ -743,7 +785,8 @@ public class AstToStringBuilder {
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
 
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            List<String> childSql = Optional.ofNullable(node.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
@@ -768,7 +811,8 @@ public class AstToStringBuilder {
             TableFunctionRelation tableFunction = (TableFunctionRelation) node.getRight();
             sqlBuilder.append(tableFunction.getFunctionName());
             sqlBuilder.append("(");
-            sqlBuilder.append(tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+            sqlBuilder.append(Optional.ofNullable(tableFunction.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(Collectors.joining(",")));
             sqlBuilder.append(")");
             sqlBuilder.append(")"); // TABLE(
 
@@ -789,17 +833,67 @@ public class AstToStringBuilder {
             StringBuilder sb = new StringBuilder();
             sb.append(FileTableFunctionRelation.IDENTIFIER);
             sb.append("(");
+            sb.append(new PrintableMap<String, String>(node.getProperties(), "=", true, false, hideCredential));
+            sb.append(")");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitPivotRelation(PivotRelation node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(visit(Objects.requireNonNull(node.getQuery())));
+            sb.append(" PIVOT (");
             boolean first = true;
-            for (Map.Entry<String, String> entry : node.getProperties().entrySet()) {
+            for (PivotAggregation aggregation : node.getAggregateFunctions()) {
                 if (!first) {
-                    sb.append(",");
+                    sb.append(", ");
                 }
                 first = false;
-                sb.append("'").append(entry.getKey()).append("'");
-                sb.append("=");
-                sb.append("'").append((entry.getValue())).append("'");
+                sb.append(aggregation.getFunctionCallExpr().toSqlImpl());
+                if (aggregation.getAlias() != null) {
+                    sb.append(" AS ").append(aggregation.getAlias());
+                }
             }
-            sb.append(")");
+            sb.append("\n");
+
+            sb.append("FOR ");
+            if (node.getPivotColumns().size() == 1) {
+                sb.append(node.getPivotColumns().get(0).getColumnName());
+            } else {
+                sb.append("(");
+                String columns = node.getPivotColumns()
+                        .stream()
+                        .map(SlotRef::getColumnName)
+                        .collect(Collectors.joining(", "));
+                sb.append(columns);
+                sb.append(")");
+
+            }
+
+            sb.append(" IN (");
+            first = true;
+            for (PivotValue pivotValue : node.getPivotValues()) {
+                if (!first) {
+                    sb.append(", ");
+                }
+                first = false;
+                if (pivotValue.getExprs().size() == 1) {
+                    sb.append(visit(pivotValue.getExprs().get(0)));
+                } else {
+                    sb.append("(");
+                    String values = pivotValue.getExprs()
+                            .stream()
+                            .map(this::visit)
+                            .collect(Collectors.joining(", "));
+                    sb.append(values);
+                    sb.append(")");
+                }
+                if (pivotValue.getAlias() != null) {
+                    sb.append(" AS ").append(pivotValue.getAlias());
+                }
+            }
+            sb.append(")\n)");
+
             return sb.toString();
         }
 
@@ -1077,6 +1171,11 @@ public class AstToStringBuilder {
                     + " " + node.getOp() + " " + printWithParentheses(node.getChild(1));
         }
 
+        public String visitMatchExpr(MatchExpr node, Void context) {
+            return printWithParentheses(node.getChild(0))
+                    + " MATCH " + printWithParentheses(node.getChild(1));
+        }
+
         @Override
         public String visitLiteral(LiteralExpr node, Void context) {
             if (node instanceof DecimalLiteral) {
@@ -1085,6 +1184,8 @@ public class AstToStringBuilder {
                 } else {
                     return visitExpression(node, context);
                 }
+            } else if (node instanceof LargeStringLiteral) {
+                return ((LargeStringLiteral) node).toFullSqlImpl();
             } else {
                 return visitExpression(node, context);
             }
@@ -1094,6 +1195,8 @@ public class AstToStringBuilder {
         public String visitSlot(SlotRef node, Void context) {
             if (node.getTblNameWithoutAnalyzed() != null) {
                 return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnName();
+            } else if (node.getLabel() != null) {
+                return node.getLabel();
             } else {
                 return node.getColumnName();
             }
@@ -1116,6 +1219,14 @@ public class AstToStringBuilder {
                     sb.append("SESSION.");
                 }
             }
+            sb.append(node.getName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitUserVariableExpr(UserVariableExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("@");
             sb.append(node.getName());
             return sb.toString();
         }
@@ -1266,7 +1377,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
-            return "DICTIONARY_GET";
+            return node.toSql();
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {
@@ -1309,7 +1420,7 @@ public class AstToStringBuilder {
             StorageVolume.addMaskForCredential(properties);
             if (!stmt.getProperties().isEmpty()) {
                 sb.append(" PROPERTIES (")
-                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+                        .append(new PrintableMap<>(properties, "=", true, false, hideCredential)).append(")");
             }
             return sb.toString();
         }
@@ -1325,7 +1436,7 @@ public class AstToStringBuilder {
             StorageVolume.addMaskForCredential(properties);
             if (!properties.isEmpty()) {
                 sb.append(" SET (").
-                        append(new PrintableMap<>(properties, "=", true, false))
+                        append(new PrintableMap<>(properties, "=", true, false, hideCredential))
                         .append(")");
             }
             return sb.toString();
@@ -1339,20 +1450,33 @@ public class AstToStringBuilder {
             if (stmt.getComment() != null) {
                 sb.append("COMMENT \"").append(stmt.getComment()).append("\" ");
             }
-            sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
+            sb.append("PROPERTIES(");
+            sb.append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, hideCredential));
+            sb.append(")");
             return sb.toString();
+        }
+
+        protected String extractHintStr(List<HintNode> hintNodes) {
+            StringBuilder hintBuilder = new StringBuilder();
+            for (HintNode hintNode : hintNodes) {
+                hintBuilder.append(hintNode.toSql());
+                hintBuilder.append(" ");
+            }
+            return hintBuilder.toString();
         }
     }
 
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
-        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
+        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition,
+                hidePassword, table.isTemporaryTable());
     }
 
     public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
                                   List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword,
+                                  boolean isTemporary) {
         // 1. create table
         // 1.1 materialized view
         if (table.isMaterializedView()) {
@@ -1393,6 +1517,9 @@ public class AstToStringBuilder {
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
         }
+        if (isTemporary) {
+            sb.append("TEMPORARY ");
+        }
         sb.append("TABLE ");
         if (!Strings.isNullOrEmpty(dbName)) {
             sb.append("`").append(dbName).append("`.");
@@ -1408,12 +1535,12 @@ public class AstToStringBuilder {
             if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
+                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName(table.getIdToColumn()));
                 } else {
-                    sb.append("  ").append(column.toSql());
+                    sb.append("  ").append(column.toSql(table.getIdToColumn()));
                 }
             } else {
-                sb.append("  ").append(column.toSql());
+                sb.append("  ").append(column.toSql(table.getIdToColumn()));
             }
         }
         if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
@@ -1421,7 +1548,7 @@ public class AstToStringBuilder {
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
                     sb.append(",\n");
-                    sb.append("  ").append(index.toSql());
+                    sb.append("  ").append(index.toSql(table));
                 }
             }
         }
@@ -1455,7 +1582,7 @@ public class AstToStringBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql());
+            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
 
             // order by
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -1470,247 +1597,7 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-
-            // replicationNum
-            Short replicationNum = olapTable.getDefaultReplicationNum();
-            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-            sb.append(replicationNum).append("\"");
-
-            // bloom filter
-            Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
-            if (bfColumnNames != null) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
-                        .append("\" = \"");
-                sb.append(Joiner.on(", ").join(olapTable.getCopiedBfColumns())).append("\"");
-            }
-
-            if (separatePartition) {
-                // version info
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_VERSION_INFO)
-                        .append("\" = \"");
-                Partition partition = null;
-                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                    partition = olapTable.getPartition(olapTable.getName());
-                } else {
-                    Preconditions.checkState(partitionId.size() == 1);
-                    partition = olapTable.getPartition(partitionId.get(0));
-                }
-                sb.append(partition.getVisibleVersion()).append("\"");
-            }
-
-            // colocateTable
-            String colocateTable = olapTable.getColocateGroup();
-            if (colocateTable != null) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
-                        .append("\" = \"");
-                sb.append(colocateTable).append("\"");
-            }
-
-            // dynamic partition
-            if (olapTable.dynamicPartitionExists()) {
-                sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
-            }
-
-            String partitionDuration = olapTable.getTableProperty()
-                    .getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
-            if (partitionDuration != null) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)
-                        .append("\" = \"")
-                        .append(partitionDuration).append("\"");
-            }
-
-            if (olapTable.getAutomaticBucketSize() > 0) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
-                        .append("\" = \"")
-                        .append(olapTable.getAutomaticBucketSize()).append("\"");
-            }
-
-            // locations
-            if (olapTable.getLocation() != null) {
-                String locations = PropertyAnalyzer.convertLocationMapToString(olapTable.getLocation());
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)
-                        .append("\" = \"")
-                        .append(locations)
-                        .append("\"");
-            }
-
-            Map<String, String> properties = olapTable.getTableProperty().getProperties();
-            if (table.isCloudNativeTable()) {
-                Map<String, String> storageProperties = olapTable.getProperties();
-
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)
-                        .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)).append("\"");
-
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
-                        .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)).append("\"");
-
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
-                        .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
-
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
-                        .append("\" = \"");
-                sb.append(olapTable.enablePersistentIndex()).append("\"");
-
-                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
-                            .append("\" = \"");
-                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
-                }
-            } else {
-                // in memory
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
-                        .append("\" = \"");
-                sb.append(olapTable.isInMemory()).append("\"");
-
-                // enable_persistent_index
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
-                        .append("\" = \"");
-                sb.append(olapTable.enablePersistentIndex()).append("\"");
-
-                // replicated_storage
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
-                        .append("\" = \"");
-                sb.append(olapTable.enableReplicatedStorage()).append("\"");
-
-                // binlog config
-                if (olapTable.containsBinlogConfig()) {
-                    // binlog_version
-                    BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION)
-                            .append("\" = \"");
-                    sb.append(binlogConfig.getVersion()).append("\"");
-                    // binlog_enable
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)
-                            .append("\" = \"");
-                    sb.append(binlogConfig.getBinlogEnable()).append("\"");
-                    // binlog_ttl
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)
-                            .append("\" = \"");
-                    sb.append(binlogConfig.getBinlogTtlSecond()).append("\"");
-                    // binlog_max_size
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)
-                            .append("\" = \"");
-                    sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
-                }
-
-                // write quorum
-                if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
-                            .append("\" = \"");
-                    sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
-                }
-
-                // show fastSchemaEvolution only when it is set true
-                if (olapTable.getUseFastSchemaEvolution()) {
-                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).append("\" = \"");
-                    sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
-                }
-
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                            .append("\" = \"");
-                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
-                }
-
-                String storageCoolDownTTL =
-                        olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
-                if (storageCoolDownTTL != null) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
-                            .append("\" = \"")
-                            .append(storageCoolDownTTL).append("\"");
-                }
-
-                // unique constraint
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
-                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
-                            .append("\" = \"");
-                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
-                }
-
-                // foreign key constraint
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                            .append("\" = \"");
-                    sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
-                            .append("\"");
-                }
-
-                // store type
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
-                    if (olapTable.storageType() != null &&
-                            !PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(olapTable.storageType())) {
-                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                                .append(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
-                                .append("\" = \"");
-
-                        sb.append(olapTable.storageType()).append("\"");
-                    }
-                }
-            }
-
-            // partition live number
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
-                        .append("\" = \"");
-                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
-            }
-
-            if (olapTable.primaryIndexCacheExpireSec() > 0) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)
-                        .append("\" = \"");
-                sb.append(olapTable.primaryIndexCacheExpireSec()).append("\"");
-            }
-
-            // compression type
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
-                    .append("\" = \"");
-            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
-                sb.append("LZ4").append("\"");
-            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
-                sb.append("LZ4").append("\"");
-            } else {
-                sb.append(olapTable.getCompressionType()).append("\"");
-            }
-
-            if (table.getType() == Table.TableType.OLAP_EXTERNAL) {
-                ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
-                // properties
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("host\" = \"")
-                        .append(externalOlapTable.getSourceTableHost()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("port\" = \"")
-                        .append(externalOlapTable.getSourceTablePort()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("user\" = \"")
-                        .append(externalOlapTable.getSourceTableUser()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("password\" = \"")
-                        .append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
-                        .append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("database\" = \"")
-                        .append(externalOlapTable.getSourceTableDbName()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
-                        .append(externalOlapTable.getSourceTableName()).append("\"");
-            }
+            sb.append(new PrintableMap<>(olapTable.getProperties(), "=", true, true, hidePassword).toString());
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
@@ -1753,7 +1640,7 @@ public class AstToStringBuilder {
                 sb.append("PARTITION BY RANGE(");
                 idx = 0;
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                for (Column column : rangePartitionInfo.getPartitionColumns(table.getIdToColumn())) {
                     if (idx != 0) {
                         sb.append(", ");
                     }
@@ -1884,6 +1771,89 @@ public class AstToStringBuilder {
                 createRollupStmt.add(sb.toString());
             }
         }
+    }
+
+    public static String getExternalCatalogTableDdlStmt(Table table) {
+        // create table catalogName.dbName.tableName (
+        StringBuilder createTableSql = new StringBuilder();
+        String tableName = table.getName();
+        if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            createTableSql.append("CREATE EXTERNAL TABLE ");
+        } else {
+            createTableSql.append("CREATE TABLE ");
+        }
+        createTableSql.append("`").append(tableName).append("`")
+                .append(" (\n");
+
+        // Columns
+        List<String> columns = table.getFullSchema().stream().map(AstToStringBuilder::toMysqlDDL).
+                collect(Collectors.toList());
+        createTableSql.append(String.join(",\n", columns))
+                .append("\n)");
+
+        // Partition column names
+        List<String> partitionNames;
+        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+            createTableSql.append("\nPARTITION BY (");
+
+            if (!table.isIcebergTable()) {
+                partitionNames = table.getPartitionColumnNames();
+            } else {
+                partitionNames = ((IcebergTable) table).getPartitionColumnNamesWithTransform();
+            }
+
+            createTableSql.append(String.join(", ", partitionNames)).append(")");
+        }
+
+        // Location
+        String location = null;
+        if (table.isHiveTable() || table.isHudiTable()) {
+            location = ((HiveMetaStoreTable) table).getTableLocation();
+        } else if (table.isIcebergTable()) {
+            location = table.getTableLocation();
+        } else if (table.isDeltalakeTable()) {
+            location = table.getTableLocation();
+        } else if (table.isPaimonTable()) {
+            location = table.getTableLocation();
+        }
+
+        // Comment
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
+        }
+
+        if (!Strings.isNullOrEmpty(location)) {
+            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
+        }
+
+        return createTableSql.toString();
+    }
+
+    public static String getExternalCatalogViewDdlStmt(ConnectorView view) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE VIEW `").append(view.getName()).append("` (");
+        List<String> colDef = Lists.newArrayList();
+        for (Column column : view.getBaseSchema()) {
+            colDef.add("`" + column.getName() + "`");
+        }
+        sb.append(Joiner.on(", ").join(colDef));
+        sb.append(")");
+
+        sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+        return sb.toString();
+    }
+
+    private static String toMysqlDDL(Column column) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("  `").append(column.getName()).append("` ");
+        sb.append(column.getType().toSql());
+        sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+        }
+
+        return sb.toString();
     }
 
     private static void addTableComment(StringBuilder sb, Table table) {

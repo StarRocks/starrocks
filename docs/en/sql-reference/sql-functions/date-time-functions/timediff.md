@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # timediff
 
-## Description
+
 
 Returns the difference between two DATETIME expressions.
 

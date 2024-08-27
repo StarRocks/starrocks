@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # conv
 
-## Description
+
 
 Converts the number `x` from one numeric base system to another, and returns the result as a string value.
 

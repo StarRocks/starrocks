@@ -22,6 +22,7 @@
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+#include "util/json.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {
@@ -122,6 +123,8 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
+    bool deserialize_and_append(const Slice& src);
+
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
@@ -142,7 +145,7 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string get_name() const override { return std::string{"object"}; }
 

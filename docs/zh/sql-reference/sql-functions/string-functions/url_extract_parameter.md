@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # url_extract_parameter
 
-## 功能
+
 
 从一个 URL 的 query 部分，获取指定参数（`name`）的取值。参数截取按照 [RFC 1866#section-8.2.1](https://datatracker.ietf.org/doc/html/rfc1866.html#section-8.2.1) 指定的方式。如果指定的参数不存在，返回 NULL。
 

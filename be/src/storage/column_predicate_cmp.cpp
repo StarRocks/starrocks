@@ -263,6 +263,8 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match;
@@ -274,6 +276,15 @@ public:
         } else if (!s.is_not_found()) {
             return s;
         }
+        return Status::OK();
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
         return Status::OK();
     }
 
@@ -298,6 +309,8 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -309,6 +322,15 @@ public:
         } else if (!s.is_not_found()) {
             return s;
         }
+        return Status::OK();
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
         return Status::OK();
     }
 
@@ -334,6 +356,8 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -346,6 +370,15 @@ public:
             st = Status::OK();
         }
         return st;
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -370,6 +403,8 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -382,6 +417,15 @@ public:
             st = Status::OK();
         }
         return st;
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -407,6 +451,8 @@ public:
         return type_info->cmp(Datum(this->_value), min) >= 0 && type_info->cmp(Datum(this->_value), max) <= 0;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -422,9 +468,18 @@ public:
         return Status::OK();
     }
 
-    bool support_bloom_filter() const override { return true; }
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
 
-    bool bloom_filter(const BloomFilter* bf) const override {
+    bool support_original_bloom_filter() const override { return true; }
+
+    bool original_bloom_filter(const BloomFilter* bf) const override {
         static_assert(field_type != TYPE_JSON, "TODO");
         static_assert(field_type != TYPE_HLL, "TODO");
         static_assert(field_type != TYPE_OBJECT, "TODO");
@@ -450,8 +505,19 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+    bool support_bitmap_filter() const override { return false; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
+        *row_bitmap -= roaring;
+        return Status::OK();
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -548,7 +614,7 @@ public:
 
     bool can_vectorized() const override { return false; }
 
-    bool support_bloom_filter() const override { return false; }
+    bool support_original_bloom_filter() const override { return false; }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
@@ -596,12 +662,14 @@ public:
         return type_info->cmp(Datum(this->_value), min) >= 0 && type_info->cmp(Datum(this->_value), max) <= 0;
     }
 
-    bool support_bloom_filter() const override { return true; }
+    bool support_original_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const BloomFilter* bf) const override {
+    bool original_bloom_filter(const BloomFilter* bf) const override {
         Slice padded(Base::_zero_padded_str);
         return bf->test_bytes(padded.data, padded.size);
     }
+
+    bool support_bitmap_filter() const override { return true; }
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // see the comment in `predicate_parser.cpp`.
@@ -617,6 +685,16 @@ public:
         } else if (!s.is_not_found()) {
             return s;
         }
+        return Status::OK();
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
         return Status::OK();
     }
 };
@@ -635,6 +713,8 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // Can NOT use `_value` here, see the comment in `predicate_parser.cpp`.
         Slice padded_value(Base::_zero_padded_str);
@@ -649,6 +729,16 @@ public:
         } else if (!s.is_not_found()) {
             return s;
         }
+        return Status::OK();
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
         return Status::OK();
     }
 };
@@ -667,6 +757,8 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // Can NOT use `_value` here, see comment in predicate_parser.cpp.
         Slice padded_value(Base::_zero_padded_str);
@@ -680,6 +772,16 @@ public:
         } else if (!s.is_not_found()) {
             return s;
         }
+        return Status::OK();
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
         return Status::OK();
     }
 };
@@ -700,6 +802,8 @@ public:
         return (type_info->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -713,6 +817,16 @@ public:
             st = Status::OK();
         }
         return st;
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
     }
 };
 
@@ -731,6 +845,8 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -745,6 +861,16 @@ public:
         }
         return st;
     }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap &= roaring;
+        return Status::OK();
+    }
 };
 
 template <LogicalType field_type>
@@ -758,8 +884,20 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+    bool support_bitmap_filter() const override { return false; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        Slice padded_value(Base::_zero_padded_str);
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        *row_bitmap -= roaring;
+        return Status::OK();
     }
 };
 

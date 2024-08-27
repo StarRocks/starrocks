@@ -4,6 +4,12 @@ displayed_sidebar: "English"
 
 # table_privileges
 
+:::note
+
+This view does not apply to the available features in StarRocks.
+
+:::
+
 `table_privileges` provides information about table privileges.
 
 The following fields are provided in `table_privileges`:

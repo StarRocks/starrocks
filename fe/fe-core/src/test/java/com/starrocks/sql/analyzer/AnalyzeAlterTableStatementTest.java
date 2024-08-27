@@ -24,8 +24,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CompactionClause;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,7 +42,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAlterTableStatementTest {
     private static ConnectContext connectContext;
-    private static AlterTableClauseVisitor clauseAnalyzerVisitor;
+    private static AlterTableClauseAnalyzer clauseAnalyzerVisitor;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -49,21 +51,21 @@ public class AnalyzeAlterTableStatementTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         connectContext = AnalyzeTestUtil.getConnectContext();
-        clauseAnalyzerVisitor = new AlterTableClauseVisitor();
+        clauseAnalyzerVisitor = new AlterTableClauseAnalyzer(null);
     }
 
     @Test
     public void testTableRename() {
         AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table t0 rename test1");
-        Assert.assertEquals(alterTableStmt.getOps().size(), 1);
-        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof TableRenameClause);
+        Assert.assertEquals(alterTableStmt.getAlterClauseList().size(), 1);
+        Assert.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof TableRenameClause);
         analyzeFail("alter table test rename");
     }
 
     @Test(expected = SemanticException.class)
     public void testEmptyNewTableName() {
         TableRenameClause clause = new TableRenameClause("");
-        clauseAnalyzerVisitor.analyze(clause, connectContext);
+        clauseAnalyzerVisitor.analyze(connectContext, clause);
     }
 
     @Test(expected = SemanticException.class)
@@ -90,12 +92,31 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test
-    public void testCreateIndex() {
-        String sql = "CREATE INDEX index1 ON `test`.`t0` (`col1`) USING BITMAP COMMENT 'balabala'";
+    public void testCreateIndex() throws Exception {
+        String sql = "CREATE INDEX index1 ON `test`.`t0` (`v1`) USING BITMAP COMMENT 'balabala'";
         analyzeSuccess(sql);
 
         sql = "alter table t0 add index index1 (v2)";
         analyzeSuccess(sql);
+
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.bitmapTable\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ") AGGREGATE KEY (k1, k2)\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        // create bitmap index on v1
+        sql = "CREATE INDEX index1 ON `test`.`bitmapTable` (`v1`) USING BITMAP COMMENT 'balabala'";
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.INTERNAL_ERR);
+        connectContext.getState().getErrorMessage()
+                .contains(
+                        "BITMAP index only used in columns of " +
+                                "DUP_KEYS/PRIMARY_KEYS table or key columns of UNIQUE_KEYS/AGG_KEYS table");
     }
 
     @Test
@@ -144,7 +165,9 @@ public class AnalyzeAlterTableStatementTest {
                 "PROPERTIES('replication_num' = '1') \n" +
                 "as select k1, k2 from table_to_create_mv;");
         String renamePartition = "alter table mv1_partition_by_column rename partition p00000101_20200201 pbase;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, renamePartition);
+        StatementBase statement = SqlParser.parseSingleStatement(renamePartition,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
         connectContext.getState().getErrorMessage()
@@ -171,12 +194,10 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testColumnWithRowUpdate() {
-        String sql = "alter table tmcwr add column testcol TIME";
-        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        String sql = "alter table tmcwr add column testcol int";
+        analyzeSuccess(sql);
         sql = "alter table tmcwr drop column name";
-        analyzeFail(sql, "row store table tmcwr can't do schema change");
-        sql = "alter table tmcwr modify column name TIME";
-        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        analyzeSuccess(sql);
     }
 
 }

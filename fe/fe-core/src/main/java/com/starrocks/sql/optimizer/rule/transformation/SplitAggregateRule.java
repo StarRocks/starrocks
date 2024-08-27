@@ -18,17 +18,31 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
 public abstract class SplitAggregateRule extends TransformationRule {
     protected SplitAggregateRule(RuleType ruleType) {
@@ -83,5 +97,71 @@ public abstract class SplitAggregateRule extends TransformationRule {
         AggregateFunction af = (AggregateFunction) aggregation.getFunction();
         Preconditions.checkState(af != null);
         return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
+    }
+
+    protected boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
+                                                  List<ColumnRefOperator> distinctColumns) {
+        if (distinctColumns.isEmpty()) {
+            return true;
+        }
+        int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        for (CallOperator callOperator : operator.getAggregations().values()) {
+            if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator)) {
+                return false;
+            }
+        }
+
+        if (aggMode == TWO_STAGE.ordinal()) {
+            return true;
+        }
+
+        return CollectionUtils.isNotEmpty(operator.getGroupingKeys())
+                && aggMode == AUTO.ordinal()
+                && isTwoStageMoreEfficient(input, distinctColumns);
+    }
+
+    private boolean canGenerateTwoStageAggregate(CallOperator distinctCall) {
+        List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
+        List<ScalarOperator> children = distinctCall.getChildren();
+        // 1. multiple cols distinct is not support two stage aggregate
+        // 2. array type col is not support two stage aggregate
+        if (distinctCols.size() > 1 || children.get(0).getType().isComplexType()) {
+            return false;
+        }
+
+        // 3. group_concat distinct or avg distinct is not support two stage aggregate
+        // 4. array_agg with order by clause or decimal distinct col is not support two stage aggregate
+        String fnName = distinctCall.getFnName();
+        if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+            return false;
+        } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
+            AggregateFunction aggregateFunction = (AggregateFunction) distinctCall.getFunction();
+            if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
+                    children.get(0).getType().isDecimalOfAnyVersion()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isTwoStageMoreEfficient(OptExpression input, List<ColumnRefOperator> distinctColumns) {
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+        Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
+        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) || !aggOp.hasLimit()) {
+            return false;
+        }
+
+        double inputRowCount = inputStatistics.getOutputRowCount();
+        double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(aggOp.getGroupingKeys(), inputStatistics,
+                Maps.newHashMap());
+
+        double distinctOutputRow = StatisticsCalculator.computeGroupByStatistics(distinctColumns, inputStatistics,
+                Maps.newHashMap());
+
+        // both group by key and distinct key cannot with high cardinality
+        return aggOutputRow * MEDIUM_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount
+                && distinctOutputRow * LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount
+                && aggOutputRow > aggOp.getLimit();
     }
 }

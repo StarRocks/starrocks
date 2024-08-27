@@ -72,11 +72,6 @@ enum TTabletType {
     TABLET_TYPE_LAKE = 2
 }
 
-enum TTxnType {
-    TXN_NORMAL = 0,
-    TXN_REPLICATION = 1
-}
-
 struct TBinlogConfig {
     // Version of the configuration, and FE should deliver it to
     // the BE when executing 'ALTER TABLE'. The configuration with
@@ -120,6 +115,9 @@ struct TCreateTabletReq {
     19: optional i32 primary_index_cache_expire_sec;
     // Whether or not need to create a separate file to hold schema information.
     20: optional bool create_schema_file = true;
+    21: optional i32 compression_level = -1;
+    // Whether or not use shared tablet initial metadata.
+    22: optional bool enable_tablet_creation_optimization = false;
 }
 
 struct TDropTabletReq {
@@ -146,6 +144,11 @@ enum TAlterJobType {
     DECOMMISSION_BACKEND = 2
 }
 
+struct TAlterMaterializedViewParam {
+    1: required string column_name
+    2: optional string origin_column_name
+    3: optional Exprs.TExpr mv_expr
+}
 
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
@@ -169,12 +172,6 @@ struct TAlterTabletReqV2 {
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
     18: optional list<string> base_table_column_names 
-}
-
-struct TAlterMaterializedViewParam {
-    1: required string column_name
-    2: optional string origin_column_name
-    3: optional Exprs.TExpr mv_expr
 }
 
 struct TClusterInfo {
@@ -321,6 +318,8 @@ struct TPartitionVersionInfo {
     2: required Types.TVersion version
     3: required Types.TVersionHash version_hash // Deprecated
     4: optional TBinlogConfig binlog_config
+    5: optional i64 gtid
+    6: optional bool is_double_write
 }
 
 struct TMoveDirReq {
@@ -347,7 +346,9 @@ struct TPublishVersionRequest {
     4: optional i64 commit_timestamp
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
-    7: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    7: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
+    8: optional i64 gtid
+    9: optional bool is_version_overwrite = false
 }
 
 struct TClearAlterTaskRequest {
@@ -358,7 +359,7 @@ struct TClearAlterTaskRequest {
 struct TClearTransactionTaskRequest {
     1: required Types.TTransactionId transaction_id
     2: required list<Types.TPartitionId> partition_id
-    3: optional TTxnType txn_type = TTxnType.TXN_NORMAL
+    3: optional Types.TTxnType txn_type = Types.TTxnType.TXN_NORMAL
 }
 
 struct TRecoverTabletReq {
@@ -385,12 +386,6 @@ struct TRemoteSnapshotRequest {
      14: optional i32 timeout_sec
  }
 
- struct TRemoteSnapshotInfo {
-     1: optional Types.TBackend backend
-     2: optional string snapshot_path
-     3: optional bool incremental_snapshot
- }
-
  struct TReplicateSnapshotRequest {
      1: optional Types.TTransactionId transaction_id
      2: optional Types.TTableId table_id
@@ -404,7 +399,8 @@ struct TRemoteSnapshotRequest {
      10: optional TTabletType src_tablet_type
      11: optional Types.TSchemaHash src_schema_hash
      12: optional Types.TVersion src_visible_version
-     13: optional list<TRemoteSnapshotInfo> src_snapshot_infos
+     13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+     14: optional binary encryption_meta
  }
 
 enum TTabletMetaType {
@@ -417,7 +413,8 @@ enum TTabletMetaType {
     BINLOG_CONFIG,
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
-    STORAGE_TYPE
+    STORAGE_TYPE,
+    MUTABLE_BUCKET_NUM
 }
 
 struct TTabletMetaInfo {
@@ -429,6 +426,9 @@ struct TTabletMetaInfo {
     6: optional bool enable_persistent_index
     7: optional TBinlogConfig binlog_config
     8: optional i32 primary_index_cache_expire_sec
+    9: optional TTabletSchema tablet_schema;
+    // |create_schema_file| only used when |tablet_schema| exists
+    10: optional bool create_schema_file;
 }
 
 struct TUpdateTabletMetaInfoReq {

@@ -31,10 +31,12 @@
 
 namespace starrocks {
 
+namespace {
 struct SlotDesc {
     string name;
     TypeDescriptor type;
 };
+} // namespace
 
 // TODO: partition scan
 class HdfsScannerTest : public ::testing::Test {
@@ -166,11 +168,10 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     }
     tuple_desc_builder.build(&table_desc_builder);
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                   .ok());
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
@@ -209,6 +210,22 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
 
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
+}
+
+TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok());
+
+    ASSERT_TRUE(scanner->cpu_time_spent() > 0);
 }
 
 TEST_F(HdfsScannerTest, TestParquetGetNext) {
@@ -423,6 +440,85 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     scanner->close();
 }
 
+TEST_F(HdfsScannerTest, TestOrcSkipFile) {
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    // partition values for [PART_x, PART_y]
+    std::vector<int64_t> values = {10, 20};
+    extend_partition_values(&_pool, param, values);
+
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    scanner->_should_skip_file = true;
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    READ_SCANNER_ROWS(scanner, 0);
+    EXPECT_EQ(scanner->raw_rows_read(), 0);
+    scanner->close();
+}
+
+class BadOrcFileStream : public ORCHdfsFileStream {
+public:
+    BadOrcFileStream() : ORCHdfsFileStream(nullptr, 1024 * 1024, nullptr) {}
+    void read(void* buf, uint64_t length, uint64_t offset) override {
+        errno = ret_errno;
+        throw std::runtime_error(ret_message);
+    }
+    int ret_errno = 0;
+    std::string ret_message;
+};
+
+TEST_F(HdfsScannerTest, TestOrcReaderException) {
+    struct ErrorContent {
+        int ret_errno;
+        std::string ret_message;
+        TStatusCode::type ret_code;
+    };
+
+    std::vector<ErrorContent> error_contents = {
+            ErrorContent{.ret_errno = 0, .ret_message = "read error", .ret_code = TStatusCode::INTERNAL_ERROR},
+            ErrorContent{.ret_errno = ENOENT,
+                         .ret_message = "S3 SDK Error. Code = 404",
+                         .ret_code = TStatusCode::REMOTE_FILE_NOT_FOUND},
+    };
+
+    for (const auto& ec : error_contents) {
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+
+        auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+        auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+
+        // partition values for [PART_x, PART_y]
+        std::vector<int64_t> values = {10, 20};
+        extend_partition_values(&_pool, param, values);
+
+        ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+        ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
+        std::unique_ptr<BadOrcFileStream> file_stream(new BadOrcFileStream());
+        file_stream->ret_errno = ec.ret_errno;
+        file_stream->ret_message = ec.ret_message;
+        scanner->_input_stream = std::move(file_stream);
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+
+        status = scanner->open(_runtime_state);
+        EXPECT_FALSE(status.ok()) << status.message();
+        EXPECT_EQ(status.code(), ec.ret_code);
+        scanner->close();
+    }
+}
+
 static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerParams* params,
                                                 const std::vector<int>& values) {
     const TupleDescriptor* min_max_tuple_desc = params->min_max_tuple_desc;
@@ -482,7 +578,34 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
     ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
 
-    auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
+    // TupleDescriptor* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
+    TupleDescriptor* min_max_tuple_desc = nullptr;
+    {
+        TDescriptorTableBuilder table_desc_builder;
+        TSlotDescriptorBuilder slot_desc_builder;
+        TTupleDescriptorBuilder tuple_desc_builder;
+
+        slot_desc_builder.column_name("id")
+                .type(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT))
+                .id(0)
+                .nullable(true);
+        tuple_desc_builder.add_slot(slot_desc_builder.build());
+        slot_desc_builder.column_name("PART_y")
+                .type(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT))
+                .id(25)
+                .nullable(true);
+        tuple_desc_builder.add_slot(slot_desc_builder.build());
+
+        tuple_desc_builder.build(&table_desc_builder);
+        std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+        DescriptorTbl* tbl = nullptr;
+        CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+        min_max_tuple_desc = row_desc->tuple_descriptors()[0];
+    }
+
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
@@ -1612,6 +1735,56 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         scanner->close();
     }
     {
+        // compressed file with offset != 0
+        auto* range = _create_scan_range(compressed_file, 1, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        ASSERT_EQ(0, scanner->estimated_mem_usage());
+        scanner->close();
+    }
+    {
+        // compressed file with skip_header_line_count
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(50);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        READ_SCANNER_ROWS(scanner, 50);
+        scanner->close();
+    }
+    {
+        // compressed file with skip_header_line_count > total line count
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(200);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        READ_SCANNER_ROWS(scanner, 0);
+        scanner->close();
+    }
+    {
         auto* range = _create_scan_range(compressed_file, 0, 0);
         // Forcr to parse csv as uncompressed data.
         range->text_file_desc.__set_compression_type(TCompressionType::NO_COMPRESSION);
@@ -1782,11 +1955,7 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
 #if defined(WITH_STARCACHE)
         status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
         ASSERT_TRUE(status.ok()) << status.message();
-        param->use_datacache = true;
-#elif defined(WITH_CACHELIB)
-        status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
-        ASSERT_TRUE(status.ok()) << status.message();
-        param->use_datacache = true;
+        param->datacache_options.enable_datacache = true;
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
@@ -1861,6 +2030,56 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
 
         EXPECT_EQ("['5c3ffda0d1d7']", chunk->debug_row(0));
         EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(1));
+        scanner->close();
+    }
+
+    {
+        // bom + skip 2 line
+        auto* range = _create_scan_range(bom_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(2);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(1, chunk->num_rows());
+
+        EXPECT_EQ("['6358db89e73b']", chunk->debug_row(0));
+        scanner->close();
+    }
+
+    {
+        // offset + bom + skip 1 line, but bom and skip_header_line_count will not take effect because of start offset != 0
+        auto* range = _create_scan_range(bom_file, 20, 0);
+        range->text_file_desc.__set_skip_header_line_count(1);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(2, chunk->num_rows());
+        EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(0));
+        EXPECT_EQ("['6358db89e73b']", chunk->debug_row(1));
         scanner->close();
     }
 }

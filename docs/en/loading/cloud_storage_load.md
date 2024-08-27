@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data from cloud storage
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
@@ -16,7 +16,7 @@ Additionally, Broker Load supports data transformation at data loading and suppo
 
 <InsertPrivNote />
 
-From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
+From v3.1 onwards, StarRocks supports directly loading the data of specific file formats from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 
 This topic focuses on using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) to load data from cloud storage.
 
@@ -30,6 +30,8 @@ Broker Load supports the following data file formats:
 
 - ORC
 
+- JSON (supported from v3.2.3 onwards)
+
 > **NOTE**
 >
 > For CSV data, take note of the following points:
@@ -39,11 +41,11 @@ Broker Load supports the following data file formats:
 
 ## How it works
 
-After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of available BEs and the size of the data file you want to load, and then assigns each portion of the query plan to an available BE. During the load, each involved BE pulls the data of the data file from your external storage system, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
+After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of available BEs or CNs and the size of the data file you want to load, and then assigns each portion of the query plan to an available BE or CN. During the load, each involved BE or CN pulls the data of the data file from your external storage system, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs or CNs finish their portions of the query plan, the FE determines whether the load job is successful.
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 ## Prepare data examples
 
@@ -603,7 +605,7 @@ Execute the following statement to load the data of `file1.csv` stored in the `i
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_401
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -650,7 +652,7 @@ Execute the following statement to load the data of all data files (`file1.csv` 
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_402
 (
-    DATA INFILE("obs://bucket_minio/input/*")
+    DATA INFILE("s3://bucket_minio/input/*")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -701,12 +703,12 @@ Execute the following statement to load the data of all data files (`file1.csv` 
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_403
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("obs://bucket_minio/input/file2.csv")
+    DATA INFILE("s3://bucket_minio/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
@@ -885,17 +887,11 @@ A Broker Load job can be split into one or more tasks that concurrently run. The
 
 - If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
 
-Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../administration/FE_configuration.md#fe-configuration-items):
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs or CNs of your StarRocks cluster. StarRocks splits each task based on the FE parameter [`min_bytes_per_broker_scanner`](../administration/management/FE_configuration.md) and the number of BE or CN nodes. You can use the following formula to calculate the number of instances in an individual task:
 
-- `min_bytes_per_broker_scanner`: the minimum amount of data processed by each instance. The default amount is 64 MB.
+**Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`, Number of BE/CN nodes)**
 
-- `load_parallel_instance_num`: the number of concurrent instances allowed in each load job on an individual BE. The default number is 1.
-  
-  You can use the following formula to calculate the number of instances in an individual task:
-
-  **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`,`load_parallel_instance_num` x Number of BEs)**
-
-In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BEs.
+In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BE or CN nodes.
 
 ## Troubleshooting
 

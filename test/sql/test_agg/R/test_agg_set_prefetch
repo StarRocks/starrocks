@@ -1,0 +1,39 @@
+-- name: test_agg_set_prefetch
+create table t0 (
+    c0 STRING,
+    c1 STRING NOT NULL,
+    c2 int,
+    c3 int NOT NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  30000));
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+select count(distinct c0) from t0;
+-- result:
+30000
+-- !result
+select count(distinct c1) from t0;
+-- result:
+30000
+-- !result
+select count(distinct c2) from t0;
+-- result:
+30000
+-- !result
+select count(distinct c3) from t0;
+-- result:
+30000
+-- !result
+select count(distinct c0) from t0 group by c2 order by c2 limit 1;
+-- result:
+1
+-- !result
+select count(distinct c2) from t0 group by c3 order by c3 limit 1;
+-- result:
+1
+-- !result

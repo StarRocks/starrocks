@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # divide
 
-## Description
+
 
 Return the quotient of x divide y. If y is 0, return null.
 

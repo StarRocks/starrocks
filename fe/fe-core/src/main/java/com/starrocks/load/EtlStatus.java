@@ -45,6 +45,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
@@ -216,6 +217,7 @@ public class EtlStatus implements Writable {
         this.progress = 0;
         this.failMsg = "";
         this.dppResult = null;
+        loadStatistic.reset();
     }
 
     @Override
@@ -526,6 +528,18 @@ public class EtlStatus implements Writable {
             }
         }
 
+        public synchronized void reset() {
+            counterTbl.clear();
+            sinkBytesCounterTbl.clear();
+            sourceRowsCounterTbl.clear();
+            sourceBytesCounterTbl.clear();
+            filteredRowsCounterTbl.clear();
+            unselectedRowsCounterTbl.clear();
+            sourceScanBytesCounterTbl.clear();
+            unfinishedBackendIds.clear();
+            allBackendIds.clear();
+        }
+
         // used for `show load`
         public synchronized String toShowInfoStr() {
             long totalSinkRows = 0;
@@ -564,6 +578,17 @@ public class EtlStatus implements Writable {
             details.put("All backends", allBackendIds);
             Gson gson = new Gson();
             return gson.toJson(details);
+        }
+
+        public synchronized Map<String, Object> toRuntimeDetails() {
+            TreeMap<String, Object> details = Maps.newTreeMap();
+
+            details.put(LoadConstants.RUNTIME_DETAILS_FILE_SIZE, totalFileSizeB);
+            details.put(LoadConstants.RUNTIME_DETAILS_TASK_NUM, counterTbl.rowMap().size());
+            details.put(LoadConstants.RUNTIME_DETAILS_UNFINISHED_BACKENDS, unfinishedBackendIds);
+            details.put(LoadConstants.RUNTIME_DETAILS_BACKENDS, allBackendIds);
+
+            return details;
         }
 
         public String toJson() throws IOException {

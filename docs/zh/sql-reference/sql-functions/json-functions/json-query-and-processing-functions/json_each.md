@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # json_each
 
-## 功能
+
 
 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。
 

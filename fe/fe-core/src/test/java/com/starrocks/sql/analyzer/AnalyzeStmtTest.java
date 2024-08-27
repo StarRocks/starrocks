@@ -66,7 +66,6 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -93,13 +92,25 @@ public class AnalyzeStmtTest {
         createTblStmtStr = "create table db.tb2(kk1 int, kk2 json) "
                 + "DUPLICATE KEY(kk1) distributed by hash(kk1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
+
+        String createStructTableSql = "CREATE TABLE struct_a(\n" +
+                "a INT, \n" +
+                "b STRUCT<a INT, c INT> COMMENT 'smith',\n" +
+                "c STRUCT<a INT, b DOUBLE>,\n" +
+                "d STRUCT<a INT, b ARRAY<STRUCT<a INT, b DOUBLE>>, c STRUCT<a INT>>,\n" +
+                "struct_a STRUCT<struct_a STRUCT<struct_a INT>, other INT> COMMENT 'alias test'\n" +
+                ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createStructTableSql);
     }
 
     @Test
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertNull(analyzeStmt.getColumnNames());
+        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
     }
 
     @Test
@@ -111,7 +122,7 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testSetUserProperty() {
-        String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = 'value', 'test' = 'true'";
+        String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = '100'";
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) analyzeSuccess(sql);
         Assert.assertEquals("tom", setUserPropertyStmt.getUser());
     }
@@ -126,7 +137,26 @@ public class AnalyzeStmtTest {
 
         sql = "analyze table test.t0";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-        Assert.assertNull(analyzeStmt.getColumnNames());
+        Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+    }
+
+    @Test
+    public void testStructColumns() {
+        String sql = "analyze table db.struct_a (b.a, b.c)";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[b.a, b.c]", analyzeStmt.getColumnNames().toString());
+
+        sql = "analyze table db.struct_a (d.c.a)";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[d.c.a]", analyzeStmt.getColumnNames().toString());
+
+        sql = "analyze table db.struct_a update histogram on b.a, b.c, d.c.a with 256 buckets";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[b.a, b.c, d.c.a]", analyzeStmt.getColumnNames().toString());
+
+        sql = "analyze table db.struct_a drop histogram on b.a, b.c, d.c.a";
+        DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[b.a, b.c, d.c.a]", dropHistogramStmt.getColumnNames().toString());
     }
 
     @Test
@@ -145,10 +175,11 @@ public class AnalyzeStmtTest {
     public void testAnalyzeHiveResource() {
         new MockUp<MetaUtils>() {
             @Mock
-            public Table getTable(ConnectContext session, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext session, Database database, TableName tableName) {
                 return new HiveTable(1, "customer", Lists.newArrayList(), "resource_name",
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("resource_name", "hive"),
-                        "hive", "tpch", "", 0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),
+                        "hive", "tpch", "", "",
+                        0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),
                         Maps.newHashMap(), null, null);
             }
         };
@@ -182,6 +213,7 @@ public class AnalyzeStmtTest {
         Table table = testDb.getTable("t0");
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
+                Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
@@ -189,7 +221,8 @@ public class AnalyzeStmtTest {
                 ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), nativeAnalyzeJob).toString());
 
         ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
-                "t1", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                "t1", Lists.newArrayList(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.FINISH,
                 LocalDateTime.MIN);
         Assert.assertEquals("[-1, hive0, partitioned_db, t1, ALL, FULL, ONCE, {}, FINISH, None, ]",
@@ -247,21 +280,16 @@ public class AnalyzeStmtTest {
         Column v1 = table.getColumn("v1");
         Column v2 = table.getColumn("v2");
 
-        Assert.assertEquals(String.format(new String("SELECT cast(1 as INT), now(), " +
+        Assert.assertEquals(String.format("SELECT cast(1 as INT), now(), " +
                         "db_id, table_id, column_name," +
                         " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                        "cast(max(cast(max as bigint(20))) as string), " +
-                        "cast(min(cast(min as bigint(20))) as string) FROM column_statistics " +
-                        "WHERE table_id = %d and column_name = \"v1\" GROUP BY db_id, table_id, column_name " +
-                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(sum(data_size) as bigint), " +
-                        "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), " +
-                        "cast(min(cast(min as bigint(20))) as string) " +
-                        "FROM column_statistics WHERE table_id = %d and column_name = \"v2\" " +
-                        "GROUP BY db_id, table_id, column_name"), table.getId(), table.getId()),
+                        "cast(max(cast(max as bigint)) as string), " +
+                        "cast(min(cast(min as bigint)) as string) FROM column_statistics " +
+                        "WHERE table_id = %d and column_name in (\"v1\", \"v2\") " +
+                        "GROUP BY db_id, table_id, column_name", table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
-                        Lists.newArrayList(v1, v2)));
+                        Lists.newArrayList("v1", "v2"), Lists.newArrayList(v1.getType(), v2.getType())));
 
         Assert.assertEquals(String.format(
                 "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
@@ -396,22 +424,19 @@ public class AnalyzeStmtTest {
         Column kk1 = table.getColumn("kk1");
         Column kk2 = table.getColumn("kk2");
 
-        String pattern = "SELECT cast\\(1 as INT\\), now\\(\\), db_id, table_id, column_name, sum\\(row_count\\), " +
-                "cast\\(sum\\(data_size\\) as bigint\\), hll_union_agg\\(ndv\\), sum\\(null_count\\), " +
-                " cast\\(max\\(cast\\(max as int\\(11\\)\\)\\) as string\\), cast\\(min\\(cast\\(min " +
-                "as int\\(11\\)\\)\\) as string\\) " +
-                "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk1\" " +
+        String pattern = String.format("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
+                "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
+                "FROM column_statistics WHERE table_id = %d and column_name in (\"kk2\") " +
                 "GROUP BY db_id, table_id, column_name " +
-                "UNION ALL SELECT cast\\(1 as INT\\), now\\(\\), db_id, table_id, column_name, " +
-                "sum\\(row_count\\), " +
-                "cast\\(sum\\(data_size\\) as bigint\\), hll_union_agg\\(ndv\\), sum\\(null_count\\),  " +
-                "cast\\(max\\(cast\\(max as string\\)\\) as string\\), cast\\(min\\(cast\\(min as" +
-                " string\\)\\) as string\\) " +
-                "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk2\" " +
-                "GROUP BY db_id, table_id, column_name";
+                "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, " +
+                "sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
+                "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string) " +
+                "FROM column_statistics WHERE table_id = %d and column_name in (\"kk1\") " +
+                "GROUP BY db_id, table_id, column_name", table.getId(), table.getId());
         String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
-                Lists.newArrayList(kk1, kk2));
-        Assert.assertTrue(Pattern.matches(pattern, content));
+                Lists.newArrayList("kk1", "kk2"), Lists.newArrayList(kk1.getType(), kk2.getType()));
+        Assert.assertEquals(pattern, content);
     }
 
     @Test

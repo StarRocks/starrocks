@@ -177,12 +177,11 @@ public:
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                       .ok());
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -205,6 +204,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
     writer_options.partition_id = 10;
     writer_options.load_id.set_hi(1000);
     writer_options.load_id.set_lo(2222);
+    writer_options.replica_state = Primary;
     TupleDescriptor* tuple_desc = _create_tuple_desc();
     writer_options.slots = &tuple_desc->slots();
 
@@ -230,11 +230,11 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
             cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->close();
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->commit();
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
     }
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
@@ -247,7 +247,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         const RowsetSharedPtr& rowset = tablet_rs.second;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
     }
     Version max_version = tablet->max_version();
     ASSERT_EQ(3, max_version.first);
@@ -292,6 +292,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
     writer_options.partition_id = 10;
     writer_options.load_id.set_hi(2000);
     writer_options.load_id.set_lo(3222);
+    writer_options.replica_state = Primary;
     TupleDescriptor* tuple_desc = _create_tuple_desc();
     writer_options.slots = &tuple_desc->slots();
 
@@ -299,7 +300,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
     {
         MemTracker mem_checker(1024 * 1024 * 1024);
         auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
-        ASSERT_TRUE(writer_status.ok());
+        ASSERT_TRUE(writer_status.ok()) << writer_status.status().to_string();
         auto delta_writer = std::move(writer_status.value());
         ASSERT_TRUE(delta_writer != nullptr);
         // prepare chunk
@@ -317,11 +318,11 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
             cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->close();
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->commit();
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.to_string();
     }
     // publish version 3
     auto token = ExecEnv::GetInstance()

@@ -46,16 +46,21 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.metric.TableMetricsEntity;
+import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -105,8 +110,10 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testAfterAborted(@Injectable TransactionState transactionState,
+    public void testAfterAborted(@Mocked RoutineLoadMgr routineLoadMgr,
+                                 @Injectable TransactionState transactionState,
                                  @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+        Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
         long txnId = 1L;
@@ -118,6 +125,8 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(attachment, "progress", kafkaProgress);
 
         KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
 
         new Expectations() {
             {
@@ -136,6 +145,9 @@ public class RoutineLoadJobTest {
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
                 result = UUID.randomUUID();
+                routineLoadMgr.getJob(anyLong);
+                minTimes = 0;
+                result = routineLoadJob;
             }
         };
 
@@ -146,15 +158,86 @@ public class RoutineLoadJobTest {
         };
 
         String txnStatusChangeReasonString = "no data";
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
         Deencapsulation.setField(routineLoadJob, "progress", currentProgress);
+        TableMetricsEntity entity =
+                TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
+        long prevValue = entity.counterRoutineLoadAbortedTasksTotal.getValue();
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
 
         Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assert.assertEquals(new Long(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
         Assert.assertTrue(routineLoadJob.getOtherMsg(), routineLoadJob.getOtherMsg().endsWith(txnStatusChangeReasonString));
+
+        Assert.assertEquals(new Long(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
+
+        routineLoadTaskInfoList.clear();
+        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        Assert.assertEquals(new Long(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
+        Assert.assertEquals(new Long(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
+    }
+
+    @Test
+    public void testAfterCommitted(@Mocked RoutineLoadMgr routineLoadMgr,
+                                 @Injectable TransactionState transactionState,
+                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+        Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
+        List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+        routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        long txnId = 1L;
+
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment();
+        TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+        tKafkaRLTaskProgress.partitionCmtOffset = Maps.newHashMap();
+        KafkaProgress kafkaProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+        Deencapsulation.setField(attachment, "progress", kafkaProgress);
+
+        KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = txnId;
+                routineLoadTaskInfo.getTxnId();
+                minTimes = 0;
+                result = txnId;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+                routineLoadTaskInfo.getPartitions();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                routineLoadTaskInfo.getId();
+                minTimes = 0;
+                result = UUID.randomUUID();
+                routineLoadMgr.getJob(anyLong);
+                minTimes = 0;
+                result = routineLoadJob;
+            }
+        };
+
+        new MockUp<RoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+        };
+
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+        Deencapsulation.setField(routineLoadJob, "progress", currentProgress);
+        TableMetricsEntity entity =
+                TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
+        long prevValue = entity.counterRoutineLoadCommittedTasksTotal.getValue();
+        routineLoadJob.afterCommitted(transactionState, true);
+
+        Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        Assert.assertEquals(new Long(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
+
+        Assert.assertEquals(new Long(prevValue + 1), entity.counterRoutineLoadCommittedTasksTotal.getValue());
     }
 
     @Test
@@ -232,6 +315,38 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+    public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked WarehouseManager warehouseManager) throws UserException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+                warehouseManager.getWarehouse(0L);
+                result = new DefaultWarehouse(0, "default_warehouse");
+                warehouseManager.getWarehouse(1L);
+                result = new Exception("Warehouse id: 1 not exist");
+            }
+        };
+
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        routineLoadJob.setWarehouseId(0L);
+        List<String> showInfo = routineLoadJob.getShowInfo();
+        Assert.assertEquals(22, showInfo.size());
+        Assert.assertEquals("default_warehouse", showInfo.get(20));
+
+        routineLoadJob.setWarehouseId(1L);
+        showInfo = routineLoadJob.getShowInfo();
+        Assert.assertEquals("Warehouse id: 1 not exist", showInfo.get(20));
+    }
+
+    @Test
     public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
         new Expectations() {
             {
@@ -286,7 +401,8 @@ public class RoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) throws UserException {
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) throws UserException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };
@@ -313,8 +429,14 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "maxBatchRows", 0);
         Deencapsulation.invoke(routineLoadJob, "updateNumOfData", 1L, 1L, 0L, 1L, 1L, false);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, Deencapsulation.getField(routineLoadJob, "state"));
-
+        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assert.assertEquals(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, reason.getCode());
+        Assert.assertEquals(
+                "Current error rows: 1 is more than max error num: 0. Check the 'TrackingSQL' field for detailed information. " +
+                        "If you are sure that the data has many errors, you can set 'max_error_number' property " +
+                        "to a greater value through ALTER ROUTINE LOAD and RESUME the job",
+                reason.getMsg());
     }
 
     @Test

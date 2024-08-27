@@ -15,7 +15,13 @@
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
 #include <cstdint>
+#include <string_view>
+#include <unordered_map>
 
+#include "column/column.h"
+#include "column/column_access_path.h"
+#include "column/field.h"
+#include "common/status.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
@@ -34,6 +40,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_index.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
@@ -124,6 +131,8 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", segment_init_name);
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, segment_init_name);
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT,
                                            _get_counter_min_max_type("SegmentZoneMapFilterRows"), segment_init_name);
@@ -164,7 +173,6 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     // IOTime
     _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", IO_TASK_EXEC_TIMER_NAME);
 
-    _json_flatten_timer = ADD_CHILD_TIMER(_runtime_profile, "JsonFlattern", segment_read_name);
     _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
     _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
 }
@@ -199,28 +207,31 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = _runtime_state->use_page_cache();
     _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
+    if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
+        _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
+    }
+    if (thrift_olap_scan_node.__isset.enable_gin_filter) {
+        _params.enable_gin_filter = thrift_olap_scan_node.enable_gin_filter;
+    }
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
     _params.runtime_range_pruner =
             OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(parser, &preds));
-    _decide_chunk_size(!preds.empty());
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _not_push_down_predicates.add(p.get());
-        }
-        _predicate_free_pool.emplace_back(std::move(p));
-    }
+
+    ASSIGN_OR_RETURN(auto pred_tree, _scan_ctx->conjuncts_manager().get_predicate_tree(parser, _predicate_free_pool));
+    _decide_chunk_size(!pred_tree.empty());
+    PredicateAndNode pushdown_pred_root;
+    PredicateAndNode non_pushdown_pred_root;
+    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
+                                    &pushdown_pred_root, &non_pushdown_pred_root);
+    _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+    _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
     {
-        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                     *_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
 
     // Range
@@ -303,7 +314,7 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     int64_t leaf_size = 0;
     for (const auto& path : *paths) {
         auto& root = path->path();
-        int32_t index = _tablet->field_index_with_max_version(root);
+        int32_t index = _tablet_schema->field_index(root);
         auto field = schema->get_field_by_name(root);
         if (index >= 0 && field != nullptr) {
             auto res = path->convert_by_index(field.get(), index);
@@ -325,6 +336,69 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     return Status::OK();
 }
 
+Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
+    if (path->children().size() < 1) {
+        return Status::OK();
+    }
+    if (field->type()->type() == LogicalType::TYPE_ARRAY) {
+        DCHECK_EQ(path->children().size(), 1);
+        DCHECK_EQ(field->sub_fields().size(), 1);
+        RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[0], path->children()[0].get()));
+    } else if (field->type()->type() == LogicalType::TYPE_MAP) {
+        DCHECK_EQ(path->children().size(), 1);
+        auto child_path = path->children()[0].get();
+        if (child_path->is_index() || child_path->is_all()) {
+            DCHECK_EQ(field->sub_fields().size(), 2);
+            RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[1], child_path));
+        } else {
+            return Status::OK();
+        }
+    } else if (field->type()->type() == LogicalType::TYPE_STRUCT) {
+        std::unordered_map<std::string_view, ColumnAccessPath*> path_index;
+        for (auto& child_path : path->children()) {
+            path_index[child_path->path()] = child_path.get();
+        }
+
+        std::vector<Field> new_fields;
+        for (auto& child_fields : field->sub_fields()) {
+            auto iter = path_index.find(child_fields.name());
+            if (iter != path_index.end()) {
+                auto child_path = iter->second;
+                RETURN_IF_ERROR(prune_field_by_access_paths(&child_fields, child_path));
+                new_fields.emplace_back(child_fields);
+            }
+        }
+
+        field->set_sub_fields(std::move(new_fields));
+    }
+    return Status::OK();
+}
+
+Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
+    if (_column_access_paths.empty()) {
+        return Status::OK();
+    }
+
+    // schema
+    for (auto& path : _column_access_paths) {
+        if (path->is_from_predicate()) {
+            continue;
+        }
+        auto& root = path->path();
+        auto field = schema->get_field_by_name(root);
+        if (field == nullptr) {
+            LOG(WARNING) << "failed to find column in schema: " << root;
+            continue;
+        }
+        // field maybe modified, so we need to deep copy
+        auto new_field = std::make_shared<Field>(*field);
+        schema->set_field_by_name(new_field, root);
+        RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
+    }
+
+    return Status::OK();
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -336,18 +410,22 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
-    auto tablet_schema_ptr = _tablet->tablet_schema();
-    _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
+    // schema_id that not greater than 0 is invalid
+    if (_scan_node->thrift_olap_scan_node().__isset.schema_id && _scan_node->thrift_olap_scan_node().schema_id > 0 &&
+        _scan_node->thrift_olap_scan_node().schema_id == _tablet->tablet_schema()->id()) {
+        _tablet_schema = _tablet->tablet_schema();
+    }
 
-    // if column_desc come from fe, reset tablet schema
-    if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
-        !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
-        _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema->clear_columns();
-        for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
-            _tablet_schema->append_column(TabletColumn(column_desc));
+    if (_tablet_schema == nullptr) {
+        // if column_desc come from fe, reset tablet schema
+        if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
+            !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
+            _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
+            _tablet_schema =
+                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+        } else {
+            _tablet_schema = _tablet->tablet_schema();
         }
-        _tablet_schema->generate_sort_key_idxes();
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
@@ -355,11 +433,20 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
 
+    // schema is new object, but fields not
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
+    // will modify schema field, need to copy schema
+    RETURN_IF_ERROR(_prune_schema_by_access_paths(&child_schema));
+
+    std::vector<RowsetSharedPtr> rowsets;
+    for (auto& rowset : _morsel->rowsets()) {
+        rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
+    }
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
-                                             std::move(child_schema), _morsel->rowsets(), &_tablet_schema);
+                                             std::move(child_schema), std::move(rowsets), &_tablet_schema);
+    _reader->set_use_gtid(_morsel->get_olap_scan_range()->__isset.gtid);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -367,8 +454,18 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates.empty()) {
+    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_non_pushdown_pred_tree.empty()) {
         _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", IO_TASK_EXEC_TIMER_NAME);
+
+        _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
+                                                                  TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        COUNTER_SET(_non_pushdown_predicates_counter,
+                    static_cast<int64_t>(_scan_ctx->not_push_down_conjuncts().size() + _non_pushdown_pred_tree.size()));
+        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+            _runtime_profile->add_info_string(
+                    "NonPushdownPredicateTree",
+                    _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+        }
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
@@ -387,11 +484,6 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                                                _runtime_state->use_column_pool()));
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
-}
-
-const workgroup::WorkGroupScanSchedEntity* OlapChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
-    DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
 }
 
 // mapping a slot-column-id to schema-columnid
@@ -434,11 +526,11 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_not_push_down_predicates.empty()) {
+        if (!_non_pushdown_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
@@ -528,13 +620,20 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+
+    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        _runtime_profile->add_info_string(
+                "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+    }
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
@@ -554,13 +653,23 @@ void OlapChunkSource::_update_counter() {
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
     }
 
-    if (_reader->stats().flat_json_hits.size() > 0) {
+    if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
         std::string access_path_hits = "AccessPathHits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
-            auto* path_counter = _runtime_profile->get_counter(k);
+            std::string path = fmt::format("[Hit]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
             if (path_counter == nullptr) {
-                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, access_path_hits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            std::string merge_path = fmt::format("[HitMerge]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(merge_path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, merge_path, TUnit::UNIT, access_path_hits);
             }
             total += v;
             COUNTER_UPDATE(path_counter, v);
@@ -571,9 +680,10 @@ void OlapChunkSource::_update_counter() {
         std::string access_path_unhits = "AccessPathUnhits";
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
-            auto* path_counter = _runtime_profile->get_counter(k);
+            std::string path = fmt::format("[Unhit]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
             if (path_counter == nullptr) {
-                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_unhits);
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, access_path_unhits);
             }
             total += v;
             COUNTER_UPDATE(path_counter, v);
@@ -581,7 +691,23 @@ void OlapChunkSource::_update_counter() {
         COUNTER_UPDATE(_access_path_unhits_counter, total);
     }
 
-    COUNTER_UPDATE(_json_flatten_timer, _reader->stats().json_flatten_ns);
+    std::string parent_name = "SegmentRead";
+    if (_reader->stats().json_init_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonInit", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_init_ns);
+    }
+    if (_reader->stats().json_cast_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonCast", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+    }
+    if (_reader->stats().json_merge_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonMerge", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+    }
+    if (_reader->stats().json_flatten_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+    }
 }
 
 } // namespace starrocks::pipeline

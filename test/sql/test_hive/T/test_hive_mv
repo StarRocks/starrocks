@@ -1,0 +1,27 @@
+-- name: test_hive_mv
+
+create external catalog hive_mv_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+set catalog hive_mv_test_${uuid0};
+create database hive_db_${uuid0};
+use hive_db_${uuid0};
+create table t1 (k1 int, k2 int, k3 string) partition by (k3);
+insert into t1 values (1, 1, '2021-01-01'), (2, 2, '2021-02-01'), (3, 3, '2021-03-01'), (4, 4, '2021-01-02');
+select * from t1;
+
+set catalog default_catalog;
+create database hive_mv_${uuid0};
+use hive_mv_${uuid0};
+create materialized view mv1
+PARTITION BY (str2date(`k3`, '%Y-%m-%d'))
+DISTRIBUTED BY HASH(k1, k2) BUCKETS 5  as select * from hive_mv_test_${uuid0}.hive_db_${uuid0}.t1 where k2 in (2, 3);
+
+function: wait_async_materialized_view_finish("hive_db_${uuid0}", "mv1")
+
+select max(k1) from mv1 group by k3 having k3 = '2021-02-01';
+select /*+set_var(low_cardinality_optimize_v2 = false) */ max(k1) from mv1 group by k3 having k3 = '2021-02-01';
+
+set catalog hive_mv_test_${uuid0};
+drop table hive_db_${uuid0}.t1 force;
+drop database hive_db_${uuid0};
+drop catalog hive_mv_test_${uuid0};
+set catalog default_catalog;

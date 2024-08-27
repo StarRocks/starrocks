@@ -43,6 +43,8 @@ public:
 
     DEFINE_VECTORIZED_FN(array_slice);
 
+    DEFINE_VECTORIZED_FN(repeat);
+
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_overlap(FunctionContext* context, const Columns& columns) {
         return ArrayOverlap<type>::process(context, columns);
@@ -70,6 +72,14 @@ public:
 
     static StatusOr<ColumnPtr> array_join(FunctionContext* context, const Columns& columns) {
         return ArrayJoin::process(context, columns);
+    }
+
+    static StatusOr<ColumnPtr> array_concat_ws(FunctionContext* context, const Columns& columns) {
+        DCHECK_EQ(columns.size(), 2);
+        Columns new_columns(2);
+        new_columns[0] = columns[1];
+        new_columns[1] = columns[0];
+        return ArrayJoin::process(context, new_columns);
     }
 
     template <LogicalType type>
@@ -114,6 +124,8 @@ public:
     DEFINE_VECTORIZED_FN(array_distinct_any_type);
     DEFINE_VECTORIZED_FN(array_reverse_any_types);
     DEFINE_VECTORIZED_FN(array_intersect_any_type);
+
+    DEFINE_VECTORIZED_FN(array_sortby_multi);
 };
 
 } // namespace starrocks

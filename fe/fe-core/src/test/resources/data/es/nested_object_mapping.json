@@ -1,0 +1,58 @@
+{
+  "xxx": {
+    "mappings": {
+      "event": {
+        "_all": {
+          "enabled": true
+        },
+        "properties": {
+          "contactData": {
+            "type": "nested",
+            "properties": {
+              "contactType": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "emailAddress": {
+                "type": "text",
+                "analyzer": "emailAnalyzer"
+              },
+              "firstName": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "lastName": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "phoneNumber": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

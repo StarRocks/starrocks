@@ -23,20 +23,26 @@ import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
-import com.starrocks.analysis.IndexDef.IndexType;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
@@ -45,6 +51,7 @@ public class GINIndexTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.enable_experimental_gin = true;
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE `test_index_tbl` (\n" +
                 "  `f1` int NOT NULL COMMENT \"\",\n" +
@@ -70,7 +77,7 @@ public class GINIndexTest extends PlanTestBase {
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
-                "The inverted index can only be build on column with type of scalar type.");
+                "The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
 
         Column c2 = new Column("f2", Type.STRING, true);
         Assertions.assertThrows(
@@ -111,27 +118,24 @@ public class GINIndexTest extends PlanTestBase {
                     put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
                     put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
                 }}, KeysType.DUP_KEYS));
-    }
 
-    @Test
-    public void testIndexPropertiesWithDefault() {
-        Map<String, String> properties = new HashMap<>();
-        // empty set default
-        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
-        Assertions.assertEquals(properties.size(),
-                Arrays.stream(CommonIndexParamKey.values()).map(CommonIndexParamKey::needDefault).count());
-
-        // set values, so do not set default
-        properties.put(IMP_LIB.name(), "other");
-        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
-        Assertions.assertEquals(properties.get(IMP_LIB.name()), "other");
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
+                "The inverted index does not support shared data mode");
     }
 
     @Test
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "test_index";
-        List<String> columns = Collections.singletonList("f1");
+        List<ColumnId> columns = Collections.singletonList(ColumnId.create("f1"));
 
         Index index = new Index(indexId, indexName, columns, IndexType.GIN, "", new HashMap<>() {{
             put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
@@ -142,11 +146,13 @@ public class GINIndexTest extends PlanTestBase {
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
         }});
 
+        index.hashCode();
+
         TOlapTableIndex olapIndex = index.toThrift();
         Assertions.assertEquals(indexId, olapIndex.getIndex_id());
         Assertions.assertEquals(indexName, olapIndex.getIndex_name());
         Assertions.assertEquals(TIndexType.GIN, olapIndex.getIndex_type());
-        Assertions.assertEquals(columns, olapIndex.getColumns());
+        Assertions.assertEquals(Lists.newArrayList("f1"), olapIndex.getColumns());
         Assertions.assertEquals(
                 Collections.singletonMap(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name()),
                 olapIndex.getCommon_properties());
@@ -166,5 +172,13 @@ public class GINIndexTest extends PlanTestBase {
             put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
         }}, olapIndex.getSearch_properties());
+    }
+
+    @Test
+    public void testMatchExpr() {
+        SlotRef slot = new SlotRef(null, null, null);
+        StringLiteral stringExpr = new StringLiteral("test");
+        MatchExpr expr = new MatchExpr(slot, stringExpr);
+        MatchExpr newMatch = (MatchExpr) expr.clone();
     }
 }

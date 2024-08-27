@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # length
 
-## Description
+
 
 This function returns the length of a string (in bytes).
 

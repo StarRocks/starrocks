@@ -144,8 +144,12 @@ public class PartitionUtilTest {
 
     @Test
     public void testToPartitionValues() {
-        String partitionNames = "a=1/b=2/c=3";
-        Assert.assertEquals(Lists.newArrayList("1", "2", "3"), toPartitionValues(partitionNames));
+        Assert.assertEquals(Lists.newArrayList("1", "2", "3"), toPartitionValues("a=1/b=2/c=3"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=1"), toPartitionValues("a=1/b=2=1"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=null"), toPartitionValues("a=1/b=2=null"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=null", "1"), toPartitionValues("a=1/b=2=null/3=1"));
+        Assert.assertEquals(Lists.newArrayList("1", "2=null", ""), toPartitionValues("a=1/b=2=null/3="));
+        Assert.assertEquals(Lists.newArrayList("1", "", "1"), toPartitionValues("a=1/b=/3=1"));
     }
 
     @Test

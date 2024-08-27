@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # split
 
-## 功能
+
 
 根据分隔符拆分字符串，将拆分后的所有字符串以 ARRAY 的格式返回。
 

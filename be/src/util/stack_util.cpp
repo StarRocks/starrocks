@@ -22,8 +22,6 @@
 #include <fmt/format.h>
 #include <sys/syscall.h>
 
-#include <exception>
-
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
@@ -31,22 +29,21 @@
 #include "runtime/current_thread.h"
 #include "util/time.h"
 
-namespace google::glog_internal_namespace_ {
-void DumpStackTraceToString(std::string* stacktrace);
-} // namespace google::glog_internal_namespace_
+namespace google {
+std::string GetStackTrace();
+}
 
 // import hidden stack trace functions from glog
-namespace google {
+namespace google::glog_internal_namespace_ {
+enum class SymbolizeOptions { kNone = 0, kNoLineNumbers = 1 };
 int GetStackTrace(void** result, int max_depth, int skip_count);
-bool Symbolize(void* pc, char* out, int out_size);
-} // namespace google
+bool Symbolize(void* pc, char* out, unsigned long out_size, SymbolizeOptions options = SymbolizeOptions::kNone);
+} // namespace google::glog_internal_namespace_
 
 namespace starrocks {
 
 std::string get_stack_trace() {
-    std::string s;
-    google::glog_internal_namespace_::DumpStackTraceToString(&s);
-    return s;
+    return google::GetStackTrace();
 }
 
 struct StackTraceTask {
@@ -59,7 +56,7 @@ struct StackTraceTask {
         for (int i = 0; i < depth; ++i) {
             char line[2048];
             char buf[1024];
-            if (google::Symbolize(addrs[i], buf, sizeof(buf))) {
+            if (google::glog_internal_namespace_::Symbolize(addrs[i], buf, sizeof(buf))) {
                 snprintf(line, 2048, "  %16p  %s\n", addrs[i], buf);
             } else {
                 snprintf(line, 2048, "  %16p  (unknown)\n", addrs[i]);
@@ -93,7 +90,7 @@ struct StackTraceTaskHash {
 
 void get_stack_trace_sighandler(int signum, siginfo_t* siginfo, void* ucontext) {
     auto task = reinterpret_cast<StackTraceTask*>(siginfo->si_value.sival_ptr);
-    task->depth = google::GetStackTrace(task->addrs, StackTraceTask::kMaxStackDepth, 2);
+    task->depth = google::glog_internal_namespace_::GetStackTrace(task->addrs, StackTraceTask::kMaxStackDepth, 2);
     task->done = true;
 }
 
@@ -351,9 +348,10 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
         }
     }
     // call the real __cxa_throw():
-#ifdef __clang__
-    __real___cxa_throw(thrown_exception, info, dest);
-#elif defined(__GNUC__)
+
+#if defined(ADDRESS_SANITIZER)
+    __interceptor___cxa_throw(thrown_exception, info, dest);
+#else
     __real___cxa_throw(thrown_exception, info, dest);
 #endif
 }

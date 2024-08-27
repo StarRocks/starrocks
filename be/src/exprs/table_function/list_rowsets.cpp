@@ -29,10 +29,6 @@
 
 namespace starrocks {
 
-using TabletMetadata = lake::TabletMetadata;
-using TabletMetadataPtr = lake::TabletMetadataPtr;
-using RowsetMetadataPB = lake::RowsetMetadataPB;
-
 static void append_bigint(ColumnPtr& col, int64_t value) {
     [[maybe_unused]] auto n = col->append_numbers(&value, sizeof(value));
     DCHECK_EQ(1, n);

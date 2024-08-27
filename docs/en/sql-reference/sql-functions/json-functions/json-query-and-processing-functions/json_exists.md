@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # json_exists
 
-## Description
+
 
 Checks whether a JSON object contains an element that can be located by the `json_path` expression. If the element exists, the JSON_EXISTS function returns `1`. Otherwise, the JSON_EXISTS function returns `0`.
 

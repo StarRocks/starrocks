@@ -36,6 +36,7 @@
 
 #include <cstring>
 #include <string>
+#include <string_view>
 
 #include "column/column.h"
 #include "common/logging.h"
@@ -147,8 +148,8 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         // parse body and footer
         Slice page_slice = handle->data();
         uint32_t footer_size = decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
-        std::string footer_buf(page_slice.data + page_slice.size - 4 - footer_size, footer_size);
-        if (!footer->ParseFromString(footer_buf)) {
+        std::string_view footer_buf{page_slice.data + page_slice.size - 4 - footer_size, footer_size};
+        if (!footer->ParseFromArray(footer_buf.data(), footer_buf.size())) {
             return Status::Corruption(
                     strings::Substitute("Bad page: invalid footer, read from page cache, file=$0, footer_size=$1",
                                         opts.read_file->filename(), footer_size));
@@ -170,6 +171,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     Slice page_slice(page.get(), page_size);
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
+        // todo override is_cache_hit
         if (opts.read_file->is_cache_hit()) {
             RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, page_slice.data, page_slice.size));
             ++opts.stats->pages_from_local_disk;

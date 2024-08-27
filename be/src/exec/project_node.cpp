@@ -66,7 +66,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -77,7 +77,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }
@@ -241,7 +241,7 @@ void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
 
 void ProjectNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
-    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
+    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
 
     // check to see if runtime filters can be rewritten
     auto& descriptors = _runtime_filter_collector.descriptors();

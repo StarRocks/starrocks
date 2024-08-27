@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 StarRocks 使用 Internal Catalog 来管理内部数据，使用 External Catalog 来连接数据湖中的数据。存储在 StarRocks 中的数据都包含在 Internal Catalog 下，Internal Catalog 可以包含一个或多个数据库。数据库用于存储、管理和操作 StarRocks 中的数据，可用于管理多种对象，包括表、物化视图、视图等。StarRocks 采用权限系统来管理数据访问权限，定义了用户对哪些对象可以执行哪些操作，提高数据安全性。
 
-![img](../assets/table_design/Catalog_db_tbl.png)
+![img](../_assets/table_design/Catalog_db_tbl.png)
 
 ## [Catalogs](../data_source/catalog/catalog_overview.md)
 
@@ -48,7 +48,7 @@ StarRocks 中的表分为两类：内部表和外部表。
 
 视图（也叫逻辑视图）是虚拟表，不实际存储数据，其中所展示的数据来自于基表生成的查询结果。每次在查询中引用某个视图时，都会运行定义该视图的查询。
 
-## [权限系统](../administration/privilege_overview.md)
+## [权限系统](../administration/user_privs/privilege_overview.md)
 
 权限决定了哪些用户可以对哪些特定对象执行哪些特定的操作。StarRocks 采用了两种权限模型：基于用户标识的访问控制和基于角色的访问控制。您可以将权限赋予给角色然后通过角色传递权限给用户，或直接赋予权限给用户标识。
 

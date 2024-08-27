@@ -67,7 +67,7 @@ TEST_F(VectorizedBinaryPredicateTest, eqExpr) {
                         ASSERT_EQ(0, (int)v->get_data()[j]);
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -99,7 +99,7 @@ TEST_F(VectorizedBinaryPredicateTest, neExpr) {
                         ASSERT_EQ(1, (int)v->get_data()[j]);
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -130,7 +130,7 @@ TEST_F(VectorizedBinaryPredicateTest, geExpr) {
                         ASSERT_EQ(1, v->get_data()[j]);
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -196,7 +196,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
                         ASSERT_TRUE(v->is_null(j));
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -263,7 +263,7 @@ TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
                         }
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -296,7 +296,7 @@ TEST_F(VectorizedBinaryPredicateTest, eqForNullExpr) {
                         ASSERT_EQ(1, v->get_data()[j]);
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -367,7 +367,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullEqForNullExpr) {
                         }
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -424,7 +424,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
                         }
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 
@@ -482,7 +482,7 @@ TEST_F(VectorizedBinaryPredicateTest, diffNullEqForNullExpr) {
                         ASSERT_EQ(0, (int)ptr->get_data()[j]);
                     }
                 },
-                expr->is_compilable());
+                expr->is_compilable(&runtime_state));
     }
 }
 

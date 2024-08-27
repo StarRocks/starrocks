@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-This SQL statement can：
+This SQL statement can:
 
 - Alter the name of an asynchronous materialized view.
 - Alter the refresh strategy of an asynchronous materialized view.
@@ -28,8 +28,10 @@ This SQL statement can：
   - All session variable-related properties. For information on session variables, see [System variables](../../../reference/System_variable.md).
 
 :::tip
+
 - This operation requires the ALTER privilege on the target materialized view. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
 - ALTER MATERIALIZED VIEW does not support directly modifying the query statement used to build the materialized view. You can build a new materialized view and swap it with the original one using ALTER MATERIALIZED VIEW SWAP WITH.
+
 :::
 
 ## Syntax
@@ -42,8 +44,6 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
     | SWAP WITH [db_name.]<mv2_name>
     | SET ( "<key>" = "<value>"[,...]) }
 ```
-
-Parameters in brackets [] is optional.
 
 ## Parameters
 
@@ -72,13 +72,10 @@ Example 2: Alter the refresh interval of the materialized view.
 ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
 ```
 
-Example 3: Alter the materialized view's properties.
+Example 3: Alter the timeout duration for the materialized view refresh tasks to 1 hour (default).
 
 ```SQL
--- Change mv1's query_timeout to 40000 seconds.
-ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "40000");
--- Change mv1's mv_rewrite_staleness_second to 600 seconds.
-ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
+ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "3600");
 ```
 
 Example 4: Alter the materialized view's status to active.
@@ -91,4 +88,31 @@ Example 5: Perform an atomic exchange between materialized views `order_mv` and 
 
 ```SQL
 ALTER MATERIALIZED VIEW order_mv SWAP WITH order_mv1;
+```
+
+Example 6: Enable profile for the materialized view refresh process. This feature is enabled by default.
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("session.enable_profile" = "true");
+```
+
+Example 7: Enable intermediate result spilling for the materialized view refresh process, and set the mode of spilling to `force`. Intermediate result spilling is enabled by default since v3.1.
+
+```SQL
+-- Enable spilling during materialized view refresh.
+ALTER MATERIALIZED VIEW mv1 SET ("session.enable_spill" = "true");
+-- Set spill_mode to force (the default value is auto).
+ALTER MATERIALIZED VIEW mv1 SET ("session.spill_mode" = "force");
+```
+
+Example 8: Alter the optimizer timeout duration for materialized view to 30 seconds (default since v3.3) if its query statement contains external tables or multiple joins.
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("session.new_planner_optimize_timeout" = "30000");
+```
+
+Example 9: Alter the query rewrite staleness time for the materialized view to 600 seconds.
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
 ```

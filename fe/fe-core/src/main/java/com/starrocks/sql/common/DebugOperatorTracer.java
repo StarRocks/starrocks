@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -100,6 +101,14 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     }
 
     @Override
+    public String visitLogicalViewScan(LogicalViewScanOperator node, Void context) {
+        return "LogicalViewScanOperator" + " {" +
+                "table='" + node.getTable().getName() + '\'' +
+                ", outputColumns='" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) + '\'' +
+                '}';
+    }
+
+    @Override
     public String visitLogicalSchemaScan(LogicalSchemaScanOperator node, Void context) {
         return super.visitLogicalSchemaScan(node, context);
     }
@@ -108,8 +117,10 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalOlapScan(LogicalOlapScanOperator node, Void context) {
         return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                ", selectedIndexId=" + node.getSelectedIndexId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
                 "}";
     }
@@ -191,7 +202,10 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalAggregation(LogicalAggregationOperator node, Void context) {
         return "LogicalAggregation" + " {type=" + node.getType() +
                 " ,aggregations=" + node.getAggregations() +
-                " ,groupKeys=" + node.getGroupingKeys() + "}";
+                " ,groupKeys=" + node.getGroupingKeys() +
+                " ,projection=" + node.getProjection() +
+                " ,predicate=" + node.getPredicate() +
+                "}";
     }
 
     @Override
@@ -322,9 +336,11 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalOlapScan(PhysicalOlapScanOperator node, Void context) {
         return "PhysicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                ", selectedIndexId=" + node.getSelectedIndexId() +
                 ", outputColumns=" + node.getOutputColumns() +
                 ", projection=" + node.getProjection() +
                 ", predicate=" + node.getPredicate() +
+                ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
                 "}";
     }

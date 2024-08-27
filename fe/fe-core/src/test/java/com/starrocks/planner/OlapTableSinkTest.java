@@ -17,7 +17,9 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
@@ -36,6 +38,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -44,11 +47,15 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -61,18 +68,24 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class OlapTableSinkTest {
     private static final Logger LOG = LogManager.getLogger(OlapTableSinkTest.class);
@@ -102,6 +115,32 @@ public class OlapTableSinkTest {
         v2.setIsMaterialized(true);
 
         return tuple;
+    }
+
+    @Before
+    public void before() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
     }
 
     @Test
@@ -158,7 +197,7 @@ public class OlapTableSinkTest {
                 result = partInfo;
                 partInfo.getType();
                 result = PartitionType.RANGE;
-                partInfo.getPartitionColumns();
+                partInfo.getPartitionColumns((Map<ColumnId, Column>) any);
                 result = Lists.newArrayList(partKey);
                 dstTable.getPartitions();
                 result = Lists.newArrayList(p1, p2);
@@ -203,7 +242,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -260,7 +299,7 @@ public class OlapTableSinkTest {
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
@@ -272,7 +311,7 @@ public class OlapTableSinkTest {
         tPartition.setId(partitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), partitionParam, false);
+                table, partitionParam, false);
         System.out.println(param);
 
         // Check
@@ -287,7 +326,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                     @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -347,7 +386,7 @@ public class OlapTableSinkTest {
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
@@ -359,7 +398,7 @@ public class OlapTableSinkTest {
         tPartition.setId(partitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), partitionParam, true);
+                table, partitionParam, true);
         System.out.println(param);
 
         // Check
@@ -391,6 +430,9 @@ public class OlapTableSinkTest {
                 3, Lists.newArrayList(new Column("id", Type.BIGINT)));
         Partition partition = new Partition(1, "p1", index, distInfo);
 
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(ColumnId.create("province"), new Column("province", Type.STRING));
+
         new Expectations() {
             {
                 dstTable.getId();
@@ -401,6 +443,8 @@ public class OlapTableSinkTest {
                 result = partition;
                 dstTable.getPartitionInfo();
                 result = listPartitionInfo;
+                dstTable.getIdToColumn();
+                result = idToColumn;
             }
         };
 
@@ -421,10 +465,10 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, "p1", index, distInfo);
 
-        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, 2, 0, index);
+        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartitionImpl(4, 2, 0, index);
+        physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 
@@ -450,5 +494,49 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testInitialOpenPartition() throws UserException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+        Partition partition = new Partition(2, "p1", index, distInfo);
+
+        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
+        physicalPartition.setImmutable(true);
+        partition.addSubPartition(physicalPartition);
+
+        LOG.info("partition is {}", partition);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+            }
+        };
+
+        Config.max_load_initial_open_partition_number = 1;
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, true);
+        sink.setAutomaticBucketSize(1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        LOG.info("sink is {}", sink.toThrift());
+        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+
+        Config.max_load_initial_open_partition_number = 32;
     }
 }

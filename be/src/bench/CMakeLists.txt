@@ -12,17 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/csv_reader_bench)
-ADD_BE_BENCH(${SRC_DIR}/bench/orc_writer_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/shuffle_chunk_bench)
-ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_bench)
-ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_array_bench)
 #ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/roaring_bitmap_mem_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_dict_decode_bench)
@@ -32,3 +25,5 @@ ADD_BE_BENCH(${SRC_DIR}/bench/orc_column_reader_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hash_functions_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/binary_column_copy_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hyperscan_vec_bench)
+
+ADD_BE_BENCH(${SRC_DIR}/bench/mem_equal_bench)

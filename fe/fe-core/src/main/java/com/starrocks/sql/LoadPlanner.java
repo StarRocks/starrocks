@@ -56,11 +56,13 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPartitionType;
@@ -131,6 +133,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -225,6 +229,14 @@ public class LoadPlanner {
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
         this.context.getSessionVariable().setEnablePipelineEngine(true);
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
@@ -341,6 +353,14 @@ public class LoadPlanner {
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
         }
+        // load from local file does not require too much concurrency to maximize disk performance.
+        // Too much concurrency can easily lead to performance degradation and long tail.
+        if (fileGroups != null && !fileGroups.isEmpty()
+                && fileGroups.get(0).getFilePaths() != null
+                && fileGroups.get(0).getFilePaths().get(0).toLowerCase().startsWith("file:")) {
+            sinkFragment.setPipelineDop(1);
+            sinkFragment.setParallelExecNum(1);
+        }
         fragments.add(sinkFragment);
 
         // 5. finalize
@@ -365,8 +385,8 @@ public class LoadPlanner {
 
             if (col.getType().isVarchar() && enableDictOptimize
                     && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                    col.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                    col.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getColumnId());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
@@ -385,7 +405,7 @@ public class LoadPlanner {
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
                     tupleDesc,
-                    "FileScanNode", fileStatusesList, filesAdded);
+                    "FileScanNode", fileStatusesList, filesAdded, warehouseId);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
@@ -395,7 +415,7 @@ public class LoadPlanner {
             scanNode = fileScanNode;
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
-                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId);
+                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
             streamScanNode.setNeedAssignBE(true);
             streamScanNode.setUseVectorizedLoad(true);
             streamScanNode.init(analyzer);
@@ -441,9 +461,8 @@ public class LoadPlanner {
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
-                    olapTable.writeQuorum(),
-                    forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement(), enableAutomaticPartition);
+                    olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouseId);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }
@@ -593,6 +612,10 @@ public class LoadPlanner {
 
     public List<PlanFragment> getFragments() {
         return fragments;
+    }
+
+    public ExecPlan getExecPlan() {
+        return new ExecPlan(context, fragments);
     }
 
     public List<ScanNode> getScanNodes() {

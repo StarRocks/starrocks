@@ -16,6 +16,8 @@ CREATE [OR REPLACE] PIPE [db_name.]<pipe_name>
 AS <INSERT_SQL>
 ```
 
+StarRocks 自 3.2.3 版本起支持 CREATE [OR REPLACE] PIPE。使用 CREATE [OR REPLACE] PIPE 时，如果指定的 `pipe_name` 与当前数据库里的某个已有的 Pipe 名称相同，则新建的 Pipe 会取代已有的 Pipe。
+
 ## 参数说明
 
 ### db_name
@@ -43,7 +45,7 @@ INSERT INTO SELECT FROM FILES 语句，用于从指定的源数据文件导入�
 | 参数          | 默认值        | 参数描述                                                     |
 | :------------ | :------------ | :----------------------------------------------------------- |
 | AUTO_INGEST   | `TRUE`        | 是否启用自动增量导入。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开启自动增量导入。`FALSE` 表示只导入作业启动时指定的数据文件内容，后续新增或修改的文件内容不导入。对于批量导入来说，可以将其设置为 `FALSE`。 |
-| POLL_INTERVAL | `10` (second) | 自动增量导入的轮询间隔。                                     |
+| POLL_INTERVAL | `300` (second) | 自动增量导入的轮询间隔。                                     |
 | BATCH_SIZE    | `1 GB`       | 导入批次大小。如果参数取值中不指定单位，则使用默认单位 Byte。 |
 | BATCH_FILES   | `256`         | 导入批次文件数量。                                           |
 

@@ -127,6 +127,10 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         return loadPropertyList;
     }
 
+    public Map<String, String> getJobProperties() {
+        return jobProperties;
+    }
+
     public void checkJobProperties() throws UserException {
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !CONFIGURABLE_PROPERTIES_SET.contains(entity)).findFirst();

@@ -113,6 +113,7 @@ enum TSpillableOperatorType {
   AGG_DISTINCT = 2;
   SORT = 3;
   NL_JOIN = 4;
+  MULTI_CAST_LOCAL_EXCHANGE = 5;
 }
 
 enum TTabletInternalParallelMode {
@@ -142,6 +143,32 @@ struct TSpillToRemoteStorageOptions {
   1: optional list<string> remote_storage_paths;
   2: optional CloudConfiguration.TCloudConfiguration remote_storage_conf;
   3: optional bool disable_spill_to_local_disk;
+}
+
+// spill options
+struct TSpillOptions {
+  1: optional i32 spill_mem_table_size;
+  2: optional i32 spill_mem_table_num;
+  3: optional double spill_mem_limit_threshold;
+  4: optional i64 spill_operator_min_bytes;
+  5: optional i64 spill_operator_max_bytes;
+  6: optional i32 spill_encode_level;
+  7: optional i64 spill_revocable_max_bytes;
+  8: optional bool spill_enable_direct_io;
+  9: optional bool spill_enable_compaction;
+  // only used in spill_mode="random"
+  // probability of triggering operator spill
+  // (0.0,1.0)
+  10: optional double spill_rand_ratio;
+  11: optional TSpillMode spill_mode;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  12: optional i64 spillable_operator_mask;
+  13: optional bool enable_agg_spill_preaggregation;
+
+  21: optional bool enable_spill_to_remote_storage;
+  22: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  23: optional bool enable_spill_buffer_read;
+  24: optional i64 max_spill_read_buffer_bytes_per_driver;
 }
 
 // Query options with their respective defaults
@@ -211,7 +238,9 @@ struct TQueryOptions {
 
   72: optional i64 rpc_http_min_size;
 
+  // Deprecated
   // some experimental parameter for spill
+  // TODO: remove in 3.4.x
   73: optional i32 spill_mem_table_size;
   74: optional i32 spill_mem_table_num;
   75: optional double spill_mem_limit_threshold;
@@ -220,12 +249,10 @@ struct TQueryOptions {
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
   80: optional bool spill_enable_direct_io;
-  // only used in spill_mode="random"
-  // probability of triggering operator spill
-  // (0.0,1.0)
   81: optional double spill_rand_ratio;
-
   85: optional TSpillMode spill_mode;
+
+  82: optional TSpillOptions spill_options;
   
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
@@ -240,6 +267,7 @@ struct TQueryOptions {
   93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
   94: optional double scan_use_query_mem_ratio = 0.25;
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
+  // Deprecated
   // used to identify which operators allow spill, only meaningful when enable_spill=true
   96: optional i64 spillable_operator_mask;
   // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
@@ -254,7 +282,7 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
-
+  // Deprecated
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;
@@ -268,14 +296,30 @@ struct TQueryOptions {
   112: optional bool enable_pipeline_level_shuffle;
   113: optional bool enable_hyperscan_vec;
 
-  114: optional bool enable_jit = false;
+  114: optional i32 jit_level = 1;
 
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
-  
+
   116: optional string sql_dialect;
 
-  117: optional bool enable_spill_to_remote_storage;
-  118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  119: optional bool enable_result_sink_accumulate;
+  120: optional bool enable_connector_split_io_tasks = false;
+  121: optional i64 connector_max_split_size = 0;
+  122: optional bool enable_connector_sink_writer_scaling = true;
+
+  130: optional bool enable_wait_dependent_event = false;
+
+  131: optional bool orc_use_column_names = false;
+
+  132: optional bool enable_datacache_async_populate_mode;
+  133: optional bool enable_datacache_io_adaptor;
+  134: optional i32 datacache_priority;
+  135: optional i64 datacache_ttl_seconds;
+  136: optional bool enable_cache_select;
+
+  140: optional string catalog;
+
+  141: optional i32 datacache_evict_probability;
 }
 
 
@@ -330,6 +374,8 @@ struct TPlanFragmentExecParams {
   54: optional bool enable_exchange_perf
 
   70: optional i32 pipeline_sink_dop
+
+  73: optional bool report_when_finish;
 }
 
 // Global query parameters assigned by the coordinator.
@@ -363,6 +409,11 @@ enum InternalServiceVersion {
 struct TAdaptiveDopParam {
   1: optional i64 max_block_rows_per_driver_seq
   2: optional i64 max_output_amplification_factor
+}
+
+struct TPredicateTreeParams {
+  1: optional bool enable_or
+  2: optional bool enable_show_in_profile
 }
 
 // ExecPlanFragment
@@ -423,6 +474,9 @@ struct TExecPlanFragmentParams {
   57: optional bool is_stream_pipeline
 
   58: optional TAdaptiveDopParam adaptive_dop_param
+  59: optional i32 group_execution_scan_dop
+
+  60: optional TPredicateTreeParams pred_tree_params
 }
 
 struct TExecPlanFragmentResult {

@@ -43,12 +43,12 @@ public class ShortCircuitPlannerHybrid {
         public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             Table table = scanOp.getTable();
-            if (!(table instanceof OlapTable) && !(((OlapTable) table).getKeysType().equals(KeysType.PRIMARY_KEYS))) {
+            if (!(table instanceof OlapTable) || !(KeysType.PRIMARY_KEYS.equals(((OlapTable) table).getKeysType()))) {
                 return false;
             }
 
             for (Column column : table.getFullSchema()) {
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName())) {
+                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getColumnId())) {
                     return false;
                 }
             }
@@ -56,7 +56,7 @@ public class ShortCircuitPlannerHybrid {
             List<String> keyColumns = ((OlapTable) table).getKeyColumns().stream().map(Column::getName).collect(
                     Collectors.toList());
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-            return isPointScan(table, keyColumns, conjuncts);
+            return isPointScan(table, keyColumns, conjuncts, shortCircuitContext);
         }
     }
 }

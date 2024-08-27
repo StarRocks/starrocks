@@ -91,8 +91,23 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+    bool support_bitmap_filter() const override { return false; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring indices;
+        for (auto value : _values) {
+            roaring::Roaring index;
+            RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &value, query_type, &index));
+            indices |= index;
+        }
+        *row_bitmap -= indices;
+        return Status::OK();
     }
 
     PredicateType type() const override { return PredicateType::kNotInList; }
@@ -140,6 +155,20 @@ public:
         }
         *output = obj_pool->add(new_column_not_in_predicate(target_type_info, _column_id, strs));
         return Status::OK();
+    }
+
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "((columnId=" << _column_id << ")NOT IN(";
+        int i = 0;
+        for (auto& item : _values) {
+            if (i++ != 0) {
+                ss << ",";
+            }
+            ss << this->type_info()->to_string(&item);
+        }
+        ss << "))";
+        return ss.str();
     }
 
 private:
@@ -231,8 +260,24 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+    bool support_bitmap_filter() const override { return false; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring indices;
+        for (const std::string& s : _zero_padded_strs) {
+            Slice padded_value(s);
+            roaring::Roaring index;
+            RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &index));
+            indices |= index;
+        }
+        *row_bitmap -= indices;
+        return Status::OK();
     }
 
     bool can_vectorized() const override { return false; }

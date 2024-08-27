@@ -38,8 +38,10 @@ Usage: $0 <options>
      --with-gcov                    enable to build with gcov
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
      --enable-shared-data           enable to build with shared-data feature support
+     --without-starcache            build without starcache library
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      -j                             build parallel
 
@@ -81,8 +83,11 @@ OPTS=$(getopt \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
+  -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
+  -l 'without-starcache' \
+  -l 'with-brpc-keepalive' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -99,10 +104,13 @@ CLEAN=0
 DRY_RUN=0
 TEST_NAME=*
 TEST_MODULE=".*"
+EXCLUDING_TEST_SUIT=
 HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
+WITH_STARCACHE=ON
+WITH_BRPC_KEEPALIVE=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -114,6 +122,9 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+        --without-starcache) WITH_STARCACHE=OFF; shift ;;
+        --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
+        --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
@@ -150,15 +161,6 @@ if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
 
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
-# This option will soon be deprecated.
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    # force turn off cachelib on arm platform
-    WITH_CACHELIB=OFF
-elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=OFF
-fi
-
 source ${STARROCKS_HOME}/bin/common.sh
 
 cd ${CMAKE_BUILD_DIR}
@@ -179,7 +181,8 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
-            -DWITH_CACHELIB=${WITH_CACHELIB} \
+            -DWITH_STARCACHE=${WITH_STARCACHE} \
+            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
@@ -226,14 +229,17 @@ else
 fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
-if [ "${WITH_CACHELIB}" == "ON"  ]; then
-    CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
-    export LD_LIBRARY_PATH=$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
+if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
+    # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
+    export LD_LIBRARY_PATH=$STARROCKS_GCC_HOME/lib64:$LD_LIBRARY_PATH
 fi
 
 THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
 if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
     export HADOOP_CLASSPATH=${THIRDPARTY_HADOOP_HOME}/common/*:${THIRDPARTY_HADOOP_HOME}/common/lib/*:${THIRDPARTY_HADOOP_HOME}/hdfs/*:${THIRDPARTY_HADOOP_HOME}/hdfs/lib/*
+    # get rid of StackOverflowError on the process reaper thread, which has a small stack size.
+    # https://bugs.openjdk.org/browse/JDK-8153057
+    export LIBHDFS_OPTS="$LIBHDFS_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
 else
     # exclude HdfsFileSystemTest related test case if no hadoop env found
     echo "[INFO] Can't find available HADOOP common lib, disable HdfsFileSystemTest related test!"
@@ -250,6 +256,14 @@ export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"
+fi
+
+if [ -n "$EXCLUDING_TEST_SUIT" ]; then
+    excluding_test_suit=$EXCLUDING_TEST_SUIT
+    excluding_test_suit_array=("${excluding_test_suit//|/ }")
+    for element in ${excluding_test_suit_array[*]}; do
+        append_negative_case "*.${element}_*"
+    done
 fi
 
 # prepare util test_data

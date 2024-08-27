@@ -18,16 +18,28 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.metadata.MetadataTableName;
+import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -46,6 +58,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.metadata.MetadataTableType.LOGICAL_ICEBERG_METADATA;
 
 public class MetadataMgrTest {
     @BeforeClass
@@ -179,11 +192,10 @@ public class MetadataMgrTest {
         com.starrocks.catalog.Table tbl2 = metadataMgr.getTable("not_exist_catalog", "xxx", "xxx");
         Assert.assertNull(tbl2);
 
-        com.starrocks.catalog.Table tbl3 = metadataMgr.getTable("hive_catalog", "not_exist_db", "xxx");
-        Assert.assertNull(tbl3);
-
-        com.starrocks.catalog.Table tbl4 = metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl");
-        Assert.assertNull(tbl4);
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadataMgr.getTable("hive_catalog", "not_exist_db", "xxx"));
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl"));
     }
 
     @Test
@@ -254,6 +266,115 @@ public class MetadataMgrTest {
 
         createTableStmt.setIfNotExists();
         Assert.assertFalse(metadataMgr.createTable(createTableStmt));
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
+    public void testHiveCreateTableLike() throws Exception {
+        class MockedHiveMetadataMgr extends MockedMetadataMgr {
+
+            public MockedHiveMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+                super(localMetastore, connectorMgr);
+            }
+
+            @Override
+            public com.starrocks.catalog.Database getDb(String catalogName, String dbName) {
+                return new com.starrocks.catalog.Database(0, "hive_db", "s3://test-db/");
+            }
+
+            @Override
+            public com.starrocks.catalog.Table getTable(String catalogName, String dbName, String tblName) {
+                List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
+                List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+                String hdfsPath = "hdfs://127.0.0.1:10000/hive";
+                StorageDescriptor sd = new StorageDescriptor();
+                sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
+                sd.setCols(unPartKeys);
+                sd.setLocation(hdfsPath);
+                Table msTable = new Table();
+                msTable.setPartitionKeys(partKeys);
+                msTable.setSd(sd);
+                msTable.setTableType("MANAGED_TABLE");
+                msTable.setTableName("hive_tbl");
+                msTable.setDbName("hive_db");
+                int createTime = (int) System.currentTimeMillis();
+                msTable.setCreateTime(createTime);
+
+                return HiveMetastoreApiConverter.toHiveTable(msTable, "hive_catalog");
+            }
+
+            @Override
+            public boolean tableExists(String catalogName, String dbName, String tblName) {
+                return (catalogName.equals("hive_catalog") && dbName.equals("hive_db") && tblName.equals("hive_tbl")) ||
+                        (catalogName.equals("hive_catalog") && dbName.equals("hive_db") && tblName.equals("hive_tbl_1"));
+            }
+        }
+
+        ConnectContext connectContext = AnalyzeTestUtil.getConnectContext();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        MockedHiveMetadataMgr mockedHiveMetadataMgr = new MockedHiveMetadataMgr(
+                connectContext.getGlobalStateMgr().getLocalMetastore(),
+                connectContext.getGlobalStateMgr().getConnectorMgr());
+
+        // set to mockedHiveMetadataMgr to pass Analyzer check
+        GlobalStateMgr.getCurrentState().setMetadataMgr(mockedHiveMetadataMgr);
+        MockedHiveMetadata mockedHiveMetadata = new MockedHiveMetadata();
+        mockedHiveMetadataMgr.registerMockedMetadata("hive_catalog", mockedHiveMetadata);
+
+        String stmt = "create external table hive_catalog_1.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_tbl";
+        CreateTableLikeStmt createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        try {
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Invalid catalog hive_catalog_1"));
+        }
+
+        stmt = "create external table hive_catalog.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_table";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        try {
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Table 'hive_tbl_1' already exists"));
+        }
+
+        stmt = "create external table hive_catalog.hive_db.hive_tbl_2 like hive_catalog.hive_db.hive_tbl";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        try {
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
+        } catch (Exception e) {
+            Assert.assertNull(e);
+        }
+
+        stmt = "create external table if not exists hive_catalog.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_table";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        try {
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
+        } catch (Exception e) {
+            Assert.assertNull(e);
+        }
+
+        stmt = "create external table if not exists hive_catalog.hive_db.hive_tbl_2 like hive_catalog.hive_db.hive_table";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        try {
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
+        } catch (Exception e) {
+            Assert.assertNull(e);
+        }
+
+        // set back to original metadataMrg
+        GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
     }
 
     @Test
@@ -303,6 +424,46 @@ public class MetadataMgrTest {
     @Test(expected = StarRocksConnectorException.class)
     public void testGetPrunedPartition() {
         MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1);
+        metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1, TableVersionRange.empty());
+    }
+
+    @Test
+    public void testGetMetadataTable() throws Exception {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        com.starrocks.catalog.Table table = metadataMgr.getTable("iceberg_catalog", "iceberg_db", "t1$logical_iceberg_metadata");
+        Assert.assertTrue(table instanceof LogicalIcebergMetadataTable);
+        LogicalIcebergMetadataTable metadataTable = (LogicalIcebergMetadataTable) table;
+        Assert.assertEquals("iceberg_db", metadataTable.getOriginDb());
+        Assert.assertEquals("t1", metadataTable.getOriginTable());
+        Assert.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTable.getMetadataTableType());
+        Assert.assertTrue(metadataTable.isSupported());
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
+    public void testMetadataTableName() {
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid metadata table name",
+                () -> MetadataTableName.from("aaabbb&aaa"));
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid metadata table name",
+                () -> MetadataTableName.from("table$unknown_type"));
+
+        MetadataTableName metadataTableName = MetadataTableName.from("iceberg_table$logical_iceberg_metadata");
+        Assert.assertEquals("iceberg_table", metadataTableName.getTableName());
+        Assert.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTableName.getTableType());
+        Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.getTableNameWithType());
+        Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.toString());
     }
 }

@@ -15,6 +15,7 @@
 package com.starrocks.credential;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudCredential;

@@ -65,7 +65,7 @@ ALTER USER 'jack' IDENTIFIED BY '123456';
 ALTER USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
 ```
 
-Example 2: Change user's password to a cyphertext password.
+Example 2: Change user's password to a ciphertext password.
 
 ```SQL
 ALTER USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';

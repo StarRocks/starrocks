@@ -68,7 +68,7 @@ OutPut Exchange Id: 25
 |  other join predicates: [43: L_SUPPKEY, INT, false] != [11: L_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (9: L_ORDERKEY), remote = false
-|  output columns: 2, 11, 43
+|  output columns: 2
 |  cardinality: 2334117
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -145,7 +145,7 @@ probe runtime filters:
 - filter_id = 3, probe_expr = (26: O_ORDERKEY)
 column statistics:
 * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
-* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 1.0] ESTIMATE
+* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 1.0] MCV: [[O:73204400][F:72941300][P:3854300]] ESTIMATE
 
 PLAN FRAGMENT 4(F02)
 
@@ -171,7 +171,7 @@ OutPut Exchange Id: 18
 |  other join predicates: [61: L_SUPPKEY, INT, false] != [11: L_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 2, build_expr = (9: L_ORDERKEY), remote = false
-|  output columns: 2, 9, 11, 61
+|  output columns: 2, 9, 11
 |  cardinality: 4799995
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -229,7 +229,7 @@ OutPut Exchange Id: 18
 |       * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |       * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |       * L_COMMITDATE-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
-|       * L_RECEIPTDATE-->[6.94368E8, 9.150336E8, 0.0, 4.0, 2554.0] ESTIMATE
+|       * L_RECEIPTDATE-->[6.94368E8, 9.150336E8, 0.0, 4.0, 2554.0] MCV: [[1995-10-08:269400][1997-08-08:266100][1997-06-05:266000][1998-07-26:265100][1994-12-03:264500]] ESTIMATE
 |
 4:Project
 |  output columns:
@@ -253,7 +253,7 @@ column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * L_COMMITDATE-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
-* L_RECEIPTDATE-->[6.94368E8, 9.150336E8, 0.0, 4.0, 2554.0] ESTIMATE
+* L_RECEIPTDATE-->[6.94368E8, 9.150336E8, 0.0, 4.0, 2554.0] MCV: [[1995-10-08:269400][1997-08-08:266100][1997-06-05:266000][1998-07-26:265100][1994-12-03:264500]] ESTIMATE
 
 PLAN FRAGMENT 5(F04)
 
@@ -311,7 +311,7 @@ OutPut Exchange Id: 10
 |  36 <-> [36: N_NATIONKEY, INT, false]
 |  cardinality: 1
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 |
 8:OlapScanNode
 table: nation, rollup: nation
@@ -321,7 +321,6 @@ partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 [end]
-

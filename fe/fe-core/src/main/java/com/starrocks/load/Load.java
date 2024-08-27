@@ -34,8 +34,6 @@
 
 package com.starrocks.load;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -44,6 +42,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -59,8 +58,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.backup.BlobStorage;
-import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -70,29 +67,30 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +100,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.common.ErrorCode.ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND;
+import static com.starrocks.common.ErrorCode.ERR_MAPPING_EXPR_INVALID;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -180,8 +180,7 @@ public class Load {
     public static List<ImportColumnDesc> getSchemaChangeShadowColumnDesc(Table tbl, Map<String, Expr> columnExprMap) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
-            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) &&
-                    !column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
                 continue;
             }
 
@@ -242,7 +241,7 @@ public class Load {
             connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
 
             // If fe restart and execute the streamload, this re-analyze is needed.
-            Expr expr = column.generatedColumnExpr();
+            Expr expr = column.getGeneratedColumnExpr(tbl.getIdToColumn());
             // In case of spark load, we should get the unanalyzed expression
             if (analyze) {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
@@ -256,6 +255,12 @@ public class Load {
             shadowColumnDescs.add(importColumnDesc);
         }
         return shadowColumnDescs;
+    }
+
+    public static boolean checDictQueryExpr(Expr checkExpr) {
+        List<DictQueryExpr> result = Lists.newArrayList();
+        checkExpr.collect(DictQueryExpr.class, result);
+        return result.size() != 0;
     }
 
     public static boolean tableSupportOpColumn(Table tbl) {
@@ -593,6 +598,24 @@ public class Load {
             }
         }
 
+
+        if (dbName != null && !dbName.isEmpty()) {
+            for (Entry<String, Expr> entry : exprsByName.entrySet()) {
+                if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
+                    if (ConnectContext.get() == null) {
+                        ConnectContext context = new ConnectContext();
+                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        context.setCurrentUserIdentity(UserIdentity.ROOT);
+                        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+                        context.setQualifiedUser(UserIdentity.ROOT.getUser());
+                        context.setThreadLocalInfo();
+                    }
+                    ConnectContext.get().setDatabase(dbName);
+                    break;
+                }
+            }
+        }
+
         LOG.debug("slotDescByName: {}, exprsByName: {}, mvDefineExpr: {}", slotDescByName, exprsByName, mvDefineExpr);
 
         // analyze all exprs
@@ -675,7 +698,7 @@ public class Load {
             OlapTable olaptable = ((OlapTable) tbl);
             if (olaptable.hasGeneratedColumn()) {
                 for (Column col : olaptable.getBaseSchema()) {
-                    List<SlotRef> slots = col.getGeneratedColumnRef();
+                    List<SlotRef> slots = col.getGeneratedColumnRef(tbl.getIdToColumn());
                     if (slots != null) {
                         for (SlotRef slot : slots) {
                             Column originColumn = olaptable.getColumn(slot.getColumnName());
@@ -767,8 +790,8 @@ public class Load {
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 if (slotDesc == null) {
-                    throw new UserException("unknown reference column, column=" + entry.getKey()
-                            + ", reference=" + slot.getColumnName());
+                    ErrorReport.reportAnalysisException(ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND, slot.getColumnName(),
+                            AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey());
                 }
                 if (useVectorizedLoad) {
                     slotDesc.setIsMaterialized(true);
@@ -780,7 +803,12 @@ public class Load {
             }
             Expr expr = entry.getValue().clone(smap);
 
-            expr = Expr.analyzeAndCastFold(expr);
+            try {
+                expr = Expr.analyzeAndCastFold(expr);
+            } catch (SemanticException e) {
+                ErrorReport.reportAnalysisException(ERR_MAPPING_EXPR_INVALID, AstToSQLBuilder.toSQL(entry.getValue()),
+                        e.getDetailMsg(), entry.getKey());
+            }
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -866,8 +894,8 @@ public class Load {
                     smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
                             exprsByName.get(slot.getColumnName())));
                 } else {
-                    throw new UserException("unknown reference column, column=" + entry.getKey()
-                            + ", reference=" + slot.getColumnName());
+                    ErrorReport.reportAnalysisException(ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND, slot.getColumnName(),
+                            AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey());
                 }
             }
             Expr expr = entry.getValue().clone(smap);
@@ -1055,82 +1083,8 @@ public class Load {
         return originExpr;
     }
 
-    public LoadErrorHub.Param getLoadErrorHubInfo() {
-        return loadErrorHubParam;
-    }
-
     public void setLoadErrorHubInfo(LoadErrorHub.Param info) {
         this.loadErrorHubParam = info;
-    }
-
-    // TODO [meta-format-change] deprecated
-    public void setLoadErrorHubInfo(Map<String, String> properties) throws DdlException {
-        String type = properties.get("type");
-        if (type.equalsIgnoreCase("MYSQL")) {
-            String host = properties.get("host");
-            if (Strings.isNullOrEmpty(host)) {
-                throw new DdlException("mysql host is missing");
-            }
-
-            int port = -1;
-            try {
-                port = Integer.parseInt(properties.get("port"));
-            } catch (NumberFormatException e) {
-                throw new DdlException("invalid mysql port: " + properties.get("port"));
-            }
-
-            String user = properties.get("user");
-            if (Strings.isNullOrEmpty(user)) {
-                throw new DdlException("mysql user name is missing");
-            }
-
-            String db = properties.get("database");
-            if (Strings.isNullOrEmpty(db)) {
-                throw new DdlException("mysql database is missing");
-            }
-
-            String tbl = properties.get("table");
-            if (Strings.isNullOrEmpty(tbl)) {
-                throw new DdlException("mysql table is missing");
-            }
-
-            String pwd = Strings.nullToEmpty(properties.get("password"));
-
-            MysqlLoadErrorHub.MysqlParam param = new MysqlLoadErrorHub.MysqlParam(host, port, user, pwd, db, tbl);
-            loadErrorHubParam = LoadErrorHub.Param.createMysqlParam(param);
-        } else if (type.equalsIgnoreCase("BROKER")) {
-            String brokerName = properties.get("name");
-            if (Strings.isNullOrEmpty(brokerName)) {
-                throw new DdlException("broker name is missing");
-            }
-            properties.remove("name");
-
-            if (!GlobalStateMgr.getCurrentState().getBrokerMgr().containsBroker(brokerName)) {
-                throw new DdlException("broker does not exist: " + brokerName);
-            }
-
-            String path = properties.get("path");
-            if (Strings.isNullOrEmpty(path)) {
-                throw new DdlException("broker path is missing");
-            }
-            properties.remove("path");
-
-            // check if broker info is invalid
-            BlobStorage blobStorage = new BlobStorage(brokerName, properties);
-            Status st = blobStorage.checkPathExist(path);
-            if (!st.ok()) {
-                throw new DdlException("failed to visit path: " + path + ", err: " + st.getErrMsg());
-            }
-
-            BrokerLoadErrorHub.BrokerParam param = new BrokerLoadErrorHub.BrokerParam(brokerName, path, properties);
-            loadErrorHubParam = LoadErrorHub.Param.createBrokerParam(param);
-        } else if (type.equalsIgnoreCase("null")) {
-            loadErrorHubParam = LoadErrorHub.Param.createNullParam();
-        }
-
-        GlobalStateMgr.getCurrentState().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
-
-        LOG.info("set load error hub info: {}", loadErrorHubParam);
     }
 
     public static class JobInfo {
@@ -1147,61 +1101,41 @@ public class Load {
         }
     }
 
-    public long loadLoadJob(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
-            return loadLoadJobV1(dis, checksum);
-        } else {
-            return checksum;
+    public static class CSVOptions {
+        public String columnSeparator = "\t";
+        public String rowDelimiter = "\n";
+    }
+
+    public static TFileFormatType getFormatType(String fileFormat, String path) {
+        if (fileFormat != null) {
+            if (fileFormat.toLowerCase().equals("parquet")) {
+                return TFileFormatType.FORMAT_PARQUET;
+            } else if (fileFormat.toLowerCase().equals("orc")) {
+                return TFileFormatType.FORMAT_ORC;
+            } else if (fileFormat.toLowerCase().equals("json")) {
+                return TFileFormatType.FORMAT_JSON;
+            }
+            // Attention: The compression type of csv format is from the suffix of filename.
         }
-    }
 
-    public long loadLoadJobV1(DataInputStream dis, long checksum) throws IOException {
-        // load jobs
-        int jobSize = dis.readInt();
-        long newChecksum = checksum ^ jobSize;
-        Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
-
-        // delete jobs
-        jobSize = dis.readInt();
-        newChecksum ^= jobSize;
-        Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
-
-        // load error hub info
-        LoadErrorHub.Param param = new LoadErrorHub.Param();
-        param.readFields(dis);
-        setLoadErrorHubInfo(param);
-
-        // 4. load delete jobs
-        int deleteJobSize = dis.readInt();
-        newChecksum ^= deleteJobSize;
-        Preconditions.checkArgument(deleteJobSize == 0, "Number of delete jobs must be 0");
-
-        LOG.info("finished replay loadJob from image");
-        return newChecksum;
-    }
-
-    // TODO [meta-format-change] deprecated
-    public long saveLoadJob(DataOutputStream dos, long checksum) throws IOException {
-        // 1. save load.dbToLoadJob
-        int jobSize = 0;
-        checksum ^= jobSize;
-        dos.writeInt(jobSize);
-
-        // 2. save delete jobs
-        jobSize = 0;
-        checksum ^= jobSize;
-        dos.writeInt(jobSize);
-
-        // 3. load error hub info
-        LoadErrorHub.Param param = getLoadErrorHubInfo();
-        param.write(dos);
-
-        // 4. save delete load job info
-        int deleteJobSize = 0;
-        checksum ^= deleteJobSize;
-        dos.writeInt(deleteJobSize);
-
-        return checksum;
+        String lowerCasePath = path.toLowerCase();
+        if (lowerCasePath.endsWith(".parquet") || lowerCasePath.endsWith(".parq")) {
+            return TFileFormatType.FORMAT_PARQUET;
+        } else if (lowerCasePath.endsWith(".orc")) {
+            return TFileFormatType.FORMAT_ORC;
+        } else if (lowerCasePath.endsWith(".gz")) {
+            return TFileFormatType.FORMAT_CSV_GZ;
+        } else if (lowerCasePath.endsWith(".bz2")) {
+            return TFileFormatType.FORMAT_CSV_BZ2;
+        } else if (lowerCasePath.endsWith(".lz4")) {
+            return TFileFormatType.FORMAT_CSV_LZ4_FRAME;
+        } else if (lowerCasePath.endsWith(".deflate")) {
+            return TFileFormatType.FORMAT_CSV_DEFLATE;
+        } else if (lowerCasePath.endsWith(".zst")) {
+            return TFileFormatType.FORMAT_CSV_ZSTD;
+        } else {
+            return TFileFormatType.FORMAT_CSV_PLAIN;
+        }
     }
 
 }

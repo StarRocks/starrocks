@@ -15,7 +15,6 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
@@ -38,9 +37,7 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.commons.collections.MapUtils;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -70,6 +67,9 @@ public class TaskBuilder {
         } else if (submitTaskStmt.getCreateTableAsSelectStmt() != null) {
             taskNamePrefix = "ctas-";
             taskSource = Constants.TaskSource.CTAS;
+        } else if (submitTaskStmt.getDataCacheSelectStmt() != null) {
+            taskNamePrefix = "DataCacheSelect-";
+            taskSource = Constants.TaskSource.DATACACHE_SELECT;
         } else {
             throw new SemanticException("Submit task statement is not supported");
         }
@@ -79,11 +79,25 @@ public class TaskBuilder {
         Task task = new Task(taskName);
         task.setSource(taskSource);
         task.setCreateTime(System.currentTimeMillis());
+        task.setCatalogName(submitTaskStmt.getCatalogName());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
-        task.setProperties(submitTaskStmt.getProperties());
-        task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
+
+        Map<String, String> taskProperties = Maps.newHashMap();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(context.getCurrentWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
+        // the property of submit task has higher priority
+        taskProperties.putAll(submitTaskStmt.getProperties());
+        task.setProperties(taskProperties);
+
         task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
+        task.setSchedule(submitTaskStmt.getSchedule());
+        task.setType(submitTaskStmt.getSchedule() != null ? Constants.TaskType.PERIODICAL : Constants.TaskType.MANUAL);
+        if (submitTaskStmt.getSchedule() == null) {
+            task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
+        }
 
         handleSpecialTaskProperties(task);
         return task;
@@ -94,25 +108,12 @@ public class TaskBuilder {
      */
     private static void handleSpecialTaskProperties(Task task) {
         Map<String, String> properties = task.getProperties();
-        if (MapUtils.isEmpty(properties)) {
-            return;
-        }
-
-        List<String> toRemove = Lists.newArrayList();
-        Map<String, String> toAdd = Maps.newHashMap();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            // warehouse: translate the warehouse into warehouse_id, in case it changed after renaming
-            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE)) {
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
                 Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
                 Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
-
-                toRemove.add(entry.getKey());
-                toAdd.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID, String.valueOf(wa.getId()));
             }
         }
-
-        toRemove.forEach(properties::remove);
-        properties.putAll(toAdd);
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
@@ -151,24 +152,31 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
+
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
-
+        // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
+        // it only keeps session started properties
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(materializedView.getWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
         task.setProperties(taskProperties);
+
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+            task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
         }
         handleSpecialTaskProperties(task);
         return task;
     }
 
     public static Task rebuildMvTask(MaterializedView materializedView, String dbName,
-                                     Map<String, String> previousTaskProperties) {
+                                     Map<String, String> previousTaskProperties, Task previousTask) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
@@ -178,7 +186,10 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
-        task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        if (previousTask != null) {
+            task.setCreateUser(previousTask.getCreateUser());
+            task.setUserIdentity(previousTask.getUserIdentity());
+        }
         handleSpecialTaskProperties(task);
         return task;
     }
@@ -251,7 +262,7 @@ public class TaskBuilder {
         } else {
             Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
                      Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
-            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties);
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties, currentTask);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
             taskManager.alterTask(currentTask, changedTask, false);
             task = currentTask;
@@ -259,7 +270,7 @@ public class TaskBuilder {
 
         // for event triggered type, run task
         if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
-            taskManager.executeTask(task.getName());
+            taskManager.executeTask(task.getName(), ExecuteOption.makeMergeRedundantOption());
         }
     }
 

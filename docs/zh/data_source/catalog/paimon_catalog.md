@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 5
 ---
 
 # Paimon catalog
@@ -10,7 +11,7 @@ Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要
 
 此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
 
-为保证正常访问 Paimon 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Paimon 内的数据，StarRocks 集群必须能够访问 Paimon 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：如 AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 
@@ -40,10 +41,10 @@ Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删
 
 如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
 
-- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE 使配置生效。如果不设置该用户名，则默认使用 FE 和 BE 进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询 Paimon 数据时，StarRocks 集群的 FE 和 BE 会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
-  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
-  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
+- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件（或每个 CN 的 **cn/conf/hadoop_env.sh** 文件）最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE（或 CN）使配置生效。如果不设置该用户名，则默认使用 FE 和 BE（或 CN）进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
+- 查询 Paimon 数据时，StarRocks 集群的 FE 和 BE（或 CN）会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
+  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
+  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
 
 > **注意**
 >
@@ -53,8 +54,8 @@ Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删
 
 如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
 
-- 在每个 FE 和 每个 BE 上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 和 每个 BE（或 CN）上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
+- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件（或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件）中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
 
 ## 创建 Paimon Catalog
 
@@ -121,7 +122,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - 基于 Assumed Role 进行认证和鉴权
@@ -129,7 +130,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.iam_role_arn" = "<iam_role_arn>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - 基于 IAM User 进行认证和鉴权
@@ -138,7 +139,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 `StorageCredentialParams` 包含如下参数。
@@ -147,7 +148,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
+| aws.s3.endpoint             | 是       | 用于访问 AWS S3 Bucket 的 Endpoint。示例：`https://s3.us-west-2.amazonaws.com`。                |
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
@@ -391,7 +392,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
       "paimon.catalog.type" = "filesystem",
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -406,7 +407,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -422,7 +423,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 

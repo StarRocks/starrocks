@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # all_match
 
-## 功能
+
 
 判断数组中的所有元素是否都匹配谓词中 (predicate) 指定的条件。
 

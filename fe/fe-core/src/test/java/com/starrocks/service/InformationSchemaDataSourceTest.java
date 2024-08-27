@@ -14,8 +14,13 @@
 
 package com.starrocks.service;
 
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
@@ -24,18 +29,22 @@ import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.HashMap;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 
 public class InformationSchemaDataSourceTest {
@@ -99,8 +108,7 @@ public class InformationSchemaDataSourceTest {
                 .filter(t -> t.getTable_engine().equals("MATERIALIZED_VIEW")).findFirst()
                 .orElseGet(null);
         Assert.assertEquals("MATERIALIZED_VIEW", mvConfig.getTable_engine());
-        Map<String, String> propsMap = new HashMap<>();
-        propsMap = new Gson().fromJson(mvConfig.getProperties(), propsMap.getClass());
+        Map<String, String> propsMap = new Gson().fromJson(mvConfig.getProperties(), Map.class);
         Assert.assertEquals("1", propsMap.get("replication_num"));
         Assert.assertEquals("HDD", propsMap.get("storage_medium"));
 
@@ -218,5 +226,136 @@ public class InformationSchemaDataSourceTest {
                 .filter(t -> t.getTable_name().equals("duplicate_table_with_null")).findFirst().orElseGet(null);
         Assert.assertEquals("db3", partitionMeta.getDb_name());
         Assert.assertEquals("duplicate_table_with_null", partitionMeta.getTable_name());
+    }
+
+    @Test
+    public void testRandomDistribution() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db4").useDatabase("db4");
+        String createTblStmtStr = "CREATE TABLE db4.`duplicate_table_random` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db4");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_table_random")).findFirst().orElseGet(null);
+        Assert.assertEquals("RANDOM", tableConfig.getDistribute_type());
+        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assert.assertEquals("", tableConfig.getDistribute_key());
+    }
+
+    @Test
+    public void testDynamicPartition() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db5").useDatabase("db5");
+        String createTblStmtStr = "CREATE TABLE db5.`duplicate_dynamic_table` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY RANGE(k1)()\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "\"dynamic_partition.start\" = \"-3\",\n" +
+                "\"dynamic_partition.end\" = \"3\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db5");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_dynamic_table")).findFirst().orElseGet(null);
+        Map<String, String> props = new Gson().fromJson(tableConfig.getProperties(), Map.class);
+        Assert.assertEquals("true", props.get("dynamic_partition.enable"));
+        Assert.assertEquals("DAY", props.get("dynamic_partition.time_unit"));
+        Assert.assertEquals("-3", props.get("dynamic_partition.start"));
+        Assert.assertEquals("3", props.get("dynamic_partition.end"));
+        Assert.assertEquals("p", props.get("dynamic_partition.prefix"));
+        Assert.assertEquals("1", props.get("replication_num"));
+    }
+
+    @Test
+    public void testTaskRunsEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        starRocksAssert.withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1') ");
+        starRocksAssert.ddl("submit task t_1024 as insert into t1 select * from t1");
+
+        TaskRunStatus taskRun = new TaskRunStatus();
+        taskRun.setTaskName("t_1024");
+        taskRun.setState(Constants.TaskRunState.SUCCESS);
+        taskRun.setDbName("d1");
+        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        taskRun.setProcessStartTime(
+                DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05").toEpochSecond(ZoneOffset.UTC) * 1000);
+        new MockUp<TaskManager>() {
+            @Mock
+            public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
+                return Lists.newArrayList(taskRun);
+            }
+        };
+
+        starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' | 'SUCCESS' | " +
+                                "NULL | 'd1' | 'insert into t1 select * from t1' | '1970-01-01 00:00:00' | 0 | " +
+                                "NULL | '0%' | '' | NULL");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "'SUCCESS' | NULL");
+        starRocksAssert.query("select count(task_name) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "'t_1024'");
+        starRocksAssert.query("select count(error_code) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: \n         0\n");
+        starRocksAssert.query("select count(*) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "NULL");
+        starRocksAssert.query("select count(distinct task_name) " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ", "'t_1024'");
+        starRocksAssert.query("select error_code + 1, error_message + 'haha' " +
+                        " from information_schema.task_runs where task_name = 't_1024' ")
+                .explainContains("     constant exprs: ",
+                        "0 | NULL");
+
+        // Not supported
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where task_name='t_1024' or task_name='t_1025' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where error_message > 't_1024' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select state, error_message" +
+                        " from information_schema.task_runs where state = 'SUCCESS' ")
+                .explainContains("SCAN SCHEMA");
     }
 }

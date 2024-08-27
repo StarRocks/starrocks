@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -31,8 +32,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -41,7 +40,7 @@ import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -67,6 +66,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
 
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
@@ -74,27 +75,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
-
-        new MockUp<MaterializedView>() {
-            /**
-             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
-             */
-            @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            /**
-             * {@link UtFrameUtils#isPrintPlanTableNames()}
-             */
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
@@ -146,8 +126,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 // create mv if needed
                 if (mv != null && !mv.isEmpty()) {
                     LOG.info("start to create mv:" + mv);
-                    ExecPlan mvPlan = getExecPlan(mv);
-                    List<String> outputNames = mvPlan.getColNames();
                     String properties = this.properties != null ? "PROPERTIES (\n" +
                             this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
@@ -346,4 +324,23 @@ public class MaterializedViewTestBase extends PlanTestBase {
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
     }
+
+    public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
+        Map<Table, Column> result = mv.getRefBaseTablePartitionColumns();
+        Assert.assertTrue(result.size() == 1);
+        Map.Entry<Table, Column> e = result.entrySet().iterator().next();
+        return Pair.create(e.getKey(), e.getValue());
+    }
+
+    public String getQueryPlan(String query) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
+    }
 }
+

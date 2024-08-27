@@ -50,8 +50,8 @@ public:
     TabletsChannel() = default;
     virtual ~TabletsChannel() = default;
 
-    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                                      std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
+    virtual Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                        std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
 
     virtual Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
@@ -72,24 +72,41 @@ protected:
     // counter of remaining senders
     std::atomic<int> _num_remaining_senders = 0;
 
+    // counter of initial senders
+    std::atomic<int> _num_initial_senders = 0;
+
     std::unordered_map<int64_t, std::atomic<int>> _tablet_id_to_num_remaining_senders;
 };
 
 struct TabletsChannelKey {
     UniqueId id;
+    int64_t sink_id;
     int64_t index_id;
 
-    TabletsChannelKey(const PUniqueId& pid, int64_t index_id_) : id(pid), index_id(index_id_) {}
+    TabletsChannelKey(const PUniqueId& pid, int64_t sink_id_, int64_t index_id_)
+            : id(pid), sink_id(sink_id_), index_id(index_id_) {}
 
     ~TabletsChannelKey() noexcept = default;
 
-    bool operator==(const TabletsChannelKey& rhs) const noexcept { return index_id == rhs.index_id && id == rhs.id; }
+    bool operator==(const TabletsChannelKey& rhs) const noexcept {
+        return index_id == rhs.index_id && id == rhs.id && sink_id == rhs.sink_id;
+    }
+
+    bool operator<(const TabletsChannelKey& rhs) const noexcept {
+        if (id != rhs.id) {
+            return id < rhs.id;
+        }
+        if (sink_id != rhs.sink_id) {
+            return sink_id < rhs.sink_id;
+        }
+        return index_id < rhs.index_id;
+    }
 
     [[nodiscard]] std::string to_string() const;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key) {
-    os << "(id=" << key.id << ",index_id=" << key.index_id << ")";
+    os << "(id=" << key.id << ",sink_id=" << key.sink_id << ",index_id=" << key.index_id << ")";
     return os;
 }
 

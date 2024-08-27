@@ -14,12 +14,37 @@
 
 #include "exec/hash_join_components.h"
 
+#include <memory>
+
 #include "column/vectorized_fwd.h"
 #include "exec/hash_joiner.h"
+#include "exec/join_hash_map.h"
+#include "gutil/casts.h"
 
 namespace starrocks {
 
-Status HashJoinProber::push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) {
+class SingleHashJoinProberImpl final : public HashJoinProberImpl {
+public:
+    SingleHashJoinProberImpl(HashJoiner& hash_joiner) : HashJoinProberImpl(hash_joiner) {}
+    ~SingleHashJoinProberImpl() override = default;
+    bool probe_chunk_empty() const override { return _probe_chunk == nullptr; }
+    Status push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) override;
+    StatusOr<ChunkPtr> probe_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> probe_remain(RuntimeState* state, bool* has_remain) override;
+    void reset() override {
+        _probe_chunk.reset();
+        _current_probe_has_remain = false;
+    }
+    void set_ht(JoinHashTable* hash_table) { _hash_table = hash_table; }
+
+private:
+    JoinHashTable* _hash_table = nullptr;
+    ChunkPtr _probe_chunk;
+    Columns _key_columns;
+    bool _current_probe_has_remain = false;
+};
+
+Status SingleHashJoinProberImpl::push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     DCHECK(!_probe_chunk);
     _probe_chunk = std::move(chunk);
     _current_probe_has_remain = true;
@@ -27,54 +52,72 @@ Status HashJoinProber::push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     return Status::OK();
 }
 
-StatusOr<ChunkPtr> HashJoinProber::probe_chunk(RuntimeState* state, JoinHashTable* hash_table) {
+StatusOr<ChunkPtr> SingleHashJoinProberImpl::probe_chunk(RuntimeState* state) {
     auto chunk = std::make_shared<Chunk>();
     TRY_CATCH_ALLOC_SCOPE_START()
     DCHECK(_current_probe_has_remain && _probe_chunk);
-    RETURN_IF_ERROR(hash_table->probe(state, _key_columns, &_probe_chunk, &chunk, &_current_probe_has_remain));
+    RETURN_IF_ERROR(_hash_table->probe(state, _key_columns, &_probe_chunk, &chunk, &_current_probe_has_remain));
+    RETURN_IF_ERROR(_hash_joiner.filter_probe_output_chunk(chunk, *_hash_table));
+    RETURN_IF_ERROR(_hash_joiner.lazy_output_chunk<false>(state, &_probe_chunk, &chunk, *_hash_table));
     if (!_current_probe_has_remain) {
         _probe_chunk = nullptr;
     }
-    RETURN_IF_ERROR(_hash_joiner.filter_probe_output_chunk(chunk, *hash_table));
     TRY_CATCH_ALLOC_SCOPE_END()
     return chunk;
 }
 
-StatusOr<ChunkPtr> HashJoinProber::probe_remain(RuntimeState* state, JoinHashTable* hash_table, bool* has_remain) {
+StatusOr<ChunkPtr> SingleHashJoinProberImpl::probe_remain(RuntimeState* state, bool* has_remain) {
     auto chunk = std::make_shared<Chunk>();
     TRY_CATCH_ALLOC_SCOPE_START()
-    RETURN_IF_ERROR(hash_table->probe_remain(state, &chunk, &_current_probe_has_remain));
+    RETURN_IF_ERROR(_hash_table->probe_remain(state, &chunk, &_current_probe_has_remain));
     *has_remain = _current_probe_has_remain;
     RETURN_IF_ERROR(_hash_joiner.filter_post_probe_output_chunk(chunk));
+    RETURN_IF_ERROR(_hash_joiner.lazy_output_chunk<true>(state, nullptr, &chunk, *_hash_table));
     TRY_CATCH_ALLOC_SCOPE_END()
     return chunk;
 }
 
-void HashJoinProber::reset() {
-    _probe_chunk.reset();
-    _current_probe_has_remain = false;
+void HashJoinProber::attach(HashJoinBuilder* builder, const HashJoinProbeMetrics& probe_metrics) {
+    builder->visitHt([&](JoinHashTable* ht) {
+        ht->set_probe_profile(probe_metrics.search_ht_timer, probe_metrics.output_probe_column_timer,
+                              probe_metrics.output_build_column_timer, probe_metrics.probe_counter);
+    });
+    _impl = builder->create_prober();
 }
 
-void HashJoinBuilder::create(const HashTableParam& param) {
+void SingleHashJoinBuilder::create(const HashTableParam& param) {
     _ht.create(param);
 }
 
-void HashJoinBuilder::close() {
+void SingleHashJoinBuilder::close() {
     _key_columns.clear();
     _ht.close();
 }
 
-void HashJoinBuilder::reset(const HashTableParam& param) {
+void SingleHashJoinBuilder::reset(const HashTableParam& param) {
     close();
     create(param);
 }
 
-void HashJoinBuilder::reset_probe(RuntimeState* state) {
+void SingleHashJoinBuilder::reset_probe(RuntimeState* state) {
     _key_columns.clear();
     _ht.reset_probe_state(state);
 }
 
-Status HashJoinBuilder::append_chunk(const ChunkPtr& chunk) {
+bool SingleHashJoinBuilder::anti_join_key_column_has_null() const {
+    if (_ht.get_key_columns().size() != 1) {
+        return false;
+    }
+    auto& column = _ht.get_key_columns()[0];
+    if (column->is_nullable()) {
+        const auto& null_column = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
+        DCHECK_GT(null_column->size(), 0);
+        return null_column->contain_value(1, null_column->size(), 1);
+    }
+    return false;
+}
+
+Status SingleHashJoinBuilder::do_append_chunk(const ChunkPtr& chunk) {
     if (UNLIKELY(_ht.get_row_count() + chunk->num_rows() >= max_hash_table_element_size)) {
         return Status::NotSupported(strings::Substitute("row count of right table in hash join > $0", UINT32_MAX));
     }
@@ -86,11 +129,30 @@ Status HashJoinBuilder::append_chunk(const ChunkPtr& chunk) {
     return Status::OK();
 }
 
-Status HashJoinBuilder::build(RuntimeState* state) {
+Status SingleHashJoinBuilder::build(RuntimeState* state) {
     SCOPED_TIMER(_hash_joiner.build_metrics().build_ht_timer);
     TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
     _ready = true;
     return Status::OK();
+}
+
+void SingleHashJoinBuilder::visitHt(const std::function<void(JoinHashTable*)>& visitor) {
+    visitor(&_ht);
+}
+
+std::unique_ptr<HashJoinProberImpl> SingleHashJoinBuilder::create_prober() {
+    auto res = std::make_unique<SingleHashJoinProberImpl>(_hash_joiner);
+    res->set_ht(&_ht);
+    return res;
+}
+
+void SingleHashJoinBuilder::clone_readable(HashJoinBuilder* builder) {
+    auto* other = down_cast<SingleHashJoinBuilder*>(builder);
+    other->_ht = _ht.clone_readable_table();
+}
+
+ChunkPtr SingleHashJoinBuilder::convert_to_spill_schema(const ChunkPtr& chunk) const {
+    return _ht.convert_to_spill_schema(chunk);
 }
 
 } // namespace starrocks

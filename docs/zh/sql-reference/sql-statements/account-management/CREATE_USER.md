@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # CREATE USER
 
-import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
 ## 功能
 
@@ -15,7 +15,7 @@ import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPri
 ## 语法
 
 ```SQL
-CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
+CREATE USER [IF NOT EXISTS] <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
 ```
 
 ## 参数说明

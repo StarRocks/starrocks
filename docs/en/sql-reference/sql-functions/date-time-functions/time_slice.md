@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # time_slice
 
-## Description
+
 
 Converts a given time into the beginning or end of a time interval based on the specified time granularity.
 

@@ -15,12 +15,12 @@
 
 package com.starrocks.connector.hive.glue.util;
 
-import com.amazonaws.services.glue.model.EntityNotFoundException;
-import com.amazonaws.services.glue.model.InvalidInputException;
-import com.amazonaws.services.glue.model.Partition;
-import com.amazonaws.services.glue.model.PartitionValueList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
+import software.amazon.awssdk.services.glue.model.InvalidInputException;
+import software.amazon.awssdk.services.glue.model.Partition;
+import software.amazon.awssdk.services.glue.model.PartitionValueList;
 
 import java.util.List;
 import java.util.Map;
@@ -38,7 +38,7 @@ public final class PartitionUtils {
     public static List<PartitionValueList> getPartitionValuesList(final Map<PartitionKey, Partition> partitionMap) {
         List<PartitionValueList> partitionValuesList = Lists.newArrayList();
         for (Map.Entry<PartitionKey, Partition> entry : partitionMap.entrySet()) {
-            partitionValuesList.add(new PartitionValueList().withValues(entry.getValue().getValues()));
+            partitionValuesList.add(PartitionValueList.builder().values(entry.getValue().values()).build());
         }
         return partitionValuesList;
     }

@@ -15,7 +15,8 @@
 
 package com.starrocks.connector.hive.glue.util;
 
-import com.amazonaws.services.glue.model.Partition;
+
+import software.amazon.awssdk.services.glue.model.Partition;
 
 import java.util.List;
 
@@ -25,7 +26,7 @@ public class PartitionKey {
     private final int hashCode;
 
     public PartitionKey(Partition partition) {
-        this(partition.getValues());
+        this(partition.values());
     }
 
     public PartitionKey(List<String> partitionValues) {

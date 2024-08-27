@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # unhex
 
-## Description
+
 
 This function performs the opposite operation of hex().
 

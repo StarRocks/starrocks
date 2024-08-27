@@ -39,6 +39,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "gutil/port.h"
 

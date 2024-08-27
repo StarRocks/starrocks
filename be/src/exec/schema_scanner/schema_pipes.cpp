@@ -26,21 +26,23 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablePipes::_s_columns[] = {
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PIPE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PIPE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LOAD_STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_ERROR", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATED_TIME", TYPE_DATETIME, sizeof(DateTimeValue), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PIPE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PIPE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LOAD_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LAST_ERROR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
 };
 
 SchemaTablePipes::SchemaTablePipes()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaTablePipes::start(RuntimeState* state) {
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     return SchemaScanner::start(state);
 }
 
@@ -51,7 +53,7 @@ Status SchemaTablePipes::_list_pipes() {
     if (_param->current_user_ident) {
         params.__set_user_ident(*_param->current_user_ident);
     }
-    return SchemaHelper::list_pipes(*(_param->ip), _param->port, params, &_pipes_result);
+    return SchemaHelper::list_pipes(_ss_state, params, &_pipes_result);
 }
 
 Status SchemaTablePipes::get_next(ChunkPtr* chunk, bool* eos) {

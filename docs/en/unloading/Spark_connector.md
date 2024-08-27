@@ -33,7 +33,7 @@ You can also map the StarRocks table to a Spark DataFrame or a Spark RDD, and th
 
 > **NOTICE**
 >
-> - Please see [Upgrade Spark connector](#upgrade-spark-connector) for behaviour changes among different connector versions.
+> - Please see [Upgrade Spark connector](#upgrade-spark-connector) for behavior changes among different connector versions.
 > - The connector does not provide MySQL JDBC driver since version 1.1.1, and you need import the driver to the Spark classpath manually. You can find the driver on [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/).
 > - In version 1.0.0, the Spark connector only supports reading data from StarRocks. From version 1.1.0 onwards, the Spark connector supports both reading data from and writing data to StarRocks.
 > - Version 1.0.0 differs from version 1.1.0 in terms of parameters and data type mappings. See [Upgrade Spark connector](#upgrade-spark-connector).
@@ -269,6 +269,10 @@ The processing logic of the underlying storage engine used by StarRocks cannot c
 ## Examples
 
 The following examples assume you have created a database named `test` in your StarRocks cluster and you have the permissions of user `root`. The parameter settings in the examples are based on Spark Connector 1.1.0.
+
+### Network configuration
+
+Ensure that the machine where Spark is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
 
 ### Data example
 

@@ -15,10 +15,26 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
+#include "common/status.h"
+
 namespace starrocks {
+
+// Options to control how to create DataCache instance
+struct DataCacheOptions {
+    bool enable_datacache = false;
+    bool enable_cache_select = false;
+    bool enable_populate_datacache = false;
+    bool enable_datacache_async_populate_mode = false;
+    bool enable_datacache_io_adaptor = false;
+    int64_t modification_time = 0;
+    int32_t datacache_evict_probability = 100;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
+};
 
 struct DirSpace {
     std::string path;
@@ -27,26 +43,38 @@ struct DirSpace {
 
 struct CacheOptions {
     // basic
-    size_t mem_space_size;
+    size_t mem_space_size = 0;
     std::vector<DirSpace> disk_spaces;
     std::string meta_path;
 
     // advanced
-    size_t block_size;
-    bool enable_checksum;
-    bool enable_direct_io;
+    size_t block_size = 0;
+    bool enable_checksum = false;
+    bool enable_direct_io = false;
+    bool enable_tiered_cache = true;
     std::string engine;
-    size_t max_concurrent_inserts;
-    size_t max_flying_memory_mb;
-    bool enable_cache_adaptor;
-    size_t skip_read_factor;
+    size_t max_concurrent_inserts = 0;
+    size_t max_flying_memory_mb = 0;
+    double scheduler_threads_per_cpu = 0;
+    double skip_read_factor = 0;
 };
 
 struct WriteCacheOptions {
+    int8_t priority = 0;
     // If ttl_seconds=0 (default), no ttl restriction will be set. If an old one exists, remove it.
     uint64_t ttl_seconds = 0;
     // If overwrite=true, the cache value will be replaced if it already exists.
-    bool overwrite = true;
+    bool overwrite = false;
+    bool async = false;
+    // When allow_zero_copy=true, it means the caller can ensure the target buffer not be released before
+    // the write finish. So the cache library can use the buffer directly without copying it to another buffer.
+    bool allow_zero_copy = false;
+    std::function<void(int, const std::string&)> callback = nullptr;
+
+    // The probability to evict other items if the cache space is full, which can help avoid frequent cache replacement
+    // and improve cache hit rate sometimes.
+    // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
+    int32_t evict_probability = 100;
 
     struct Stats {
         int64_t write_mem_bytes = 0;
@@ -55,14 +83,25 @@ struct WriteCacheOptions {
 };
 
 struct ReadCacheOptions {
+    bool use_adaptor = false;
+
     struct Stats {
         int64_t read_mem_bytes = 0;
         int64_t read_disk_bytes = 0;
     } stats;
 };
 
-int64_t parse_mem_size(const std::string& mem_size_str, int64_t mem_limit = -1);
+int64_t parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit);
 
-int64_t parse_disk_size(const std::string& disk_path, const std::string& disk_size_str, int64_t disk_limit = -1);
+int64_t parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
+                                       int64_t disk_limit);
+
+Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
+                                       bool ignore_broken_disk);
+
+Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, const std::string& config_disk_size,
+                                        bool ignore_broken_disk, std::vector<DirSpace>* disk_spaces);
+
+void clean_residual_datacache(const std::string& disk_path);
 
 } // namespace starrocks

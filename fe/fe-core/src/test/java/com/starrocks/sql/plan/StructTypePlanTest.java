@@ -202,7 +202,7 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
-        assertPlanContains(sql, "map_from_arrays(5: cast, 5: cast)");
+        assertPlanContains(sql, "<slot 4> : map_keys(map_from_arrays(CAST([] AS ARRAY<BOOLEAN>), CAST([] AS ARRAY<BOOLEAN>)))");
     }
 
     @Test
@@ -318,5 +318,21 @@ public class StructTypePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "c1.b[true]", "c1.b[true][1]");
         sql = "select c1.b[1].a, c1.b from test";
         assertVerbosePlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
+    }
+
+    @Test
+    public void testSemiTypeCountDistinct() throws Exception {
+        String sql = "select count(distinct row(1, 2))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(CAST(row(1, 2) IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct [1,2,3])";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST([1,2,3] IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct map{'a': 1})";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
     }
 }

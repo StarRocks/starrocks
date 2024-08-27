@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # unnest_bitmap
 
-## 功能
+
 
 unnest_bitmap 是一种表函数 (table function)，用于将一个 bitmap 展开成多行。
 

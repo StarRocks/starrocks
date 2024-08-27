@@ -18,14 +18,15 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheRule;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import org.elasticsearch.common.collect.List;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -108,5 +109,42 @@ public class DataCacheStmtAnalyzerTest {
         Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(stmt.getTarget());
         Assert.assertTrue(dataCacheRule.isPresent());
         Assert.assertEquals("[id = 0, target = hive0.datacache_db.multi_partition_table, predicates = `hive0`.`datacache_db`.`multi_partition_table`.`l_shipdate` > '2012-1-1', priority = -1, properties = NULL]", dataCacheRule.get().toString());
+    }
+
+    @Test
+    public void testCacheSelect() {
+        DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table");
+        Assert.assertEquals("black_hole_catalog.black_hole_db.black_hole_table",
+                stmt.getInsertStmt().getTableName().toString());
+        analyzeSuccess("cache select * from hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1'");
+        analyzeFail("cache select * from hive0.datacache_db.not_existed");
+        analyzeFail("cache select * from default_catalog.test.t0",
+                "Currently cache select is not supported in local olap table");
+    }
+
+    @Test
+    public void testCacheSelectProperties() {
+        DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"verBose\"=\"true\")");
+        Assert.assertTrue(stmt.isVerbose());
+        Assert.assertEquals(0, stmt.getPriority());
+        Assert.assertEquals(0, stmt.getTTLSeconds());
+
+        analyzeFail("cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\")",
+                "TTL must be specified when priority > 0");
+
+        analyzeFail(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1Y\")");
+
+        stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1d\")");
+        Assert.assertEquals(1, stmt.getPriority());
+        Assert.assertEquals(24 * 3600, stmt.getTTLSeconds());
+
+        stmt = (DataCacheSelectStatement) analyzeSuccess(
+                "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1DT1S\")");
+        Assert.assertEquals(1, stmt.getPriority());
+        Assert.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
     }
 }

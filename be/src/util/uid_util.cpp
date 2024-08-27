@@ -44,6 +44,15 @@ std::ostream& operator<<(std::ostream& os, const UniqueId& uid) {
     return os;
 }
 
+std::string print_id(const UniqueId& id) {
+    boost::uuids::uuid uuid{};
+    int64_t hi = gbswap_64(id.hi);
+    int64_t lo = gbswap_64(id.lo);
+    memcpy(uuid.data + 0, &hi, 8);
+    memcpy(uuid.data + 8, &lo, 8);
+    return boost::uuids::to_string(uuid);
+}
+
 std::string print_id(const TUniqueId& id) {
     boost::uuids::uuid uuid{};
     int64_t hi = gbswap_64(id.hi);

@@ -34,6 +34,7 @@
 
 #include "runtime/exec_env.h"
 
+#include <cctype>
 #include <memory>
 #include <thread>
 
@@ -49,12 +50,15 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
+#include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -86,6 +90,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+#include "udf/python/env.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
@@ -198,6 +203,8 @@ Status GlobalEnv::_init_mem_tracker() {
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+    int64_t query_pool_spill_limit = query_pool_mem_limit * config::query_pool_spill_mem_limit_threshold;
+    _query_pool_mem_tracker->set_reserve_limit(query_pool_spill_limit);
     _connector_scan_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit * config::connector_scan_use_query_mem_ratio,
                            "query_pool/connector_scan", nullptr);
@@ -226,6 +233,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
     _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
     _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
+    _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
@@ -256,18 +264,17 @@ void GlobalEnv::_init_storage_page_cache() {
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (process_mem_tracker()->has_limit()) {
         mem_limit = process_mem_tracker()->limit();
     }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
 }
 
 int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
@@ -336,7 +343,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
                             .set_min_threads(0)
-                            .set_max_threads(8)
+                            .set_max_threads(1000)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
@@ -399,6 +406,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [] {
+        auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
+        return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
+    });
 
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
@@ -429,10 +440,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_with_workgroup));
-    _connector_scan_executor =
-            new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
-                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
+    _connector_scan_executor = new workgroup::ScanExecutor(
+            std::move(connector_scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::CONNECTOR));
     _connector_scan_executor->initialize(connector_num_io_threads);
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
@@ -442,6 +452,26 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     } else {
         _load_path_mgr = new LoadPathMgr(this);
     }
+
+    std::unique_ptr<ThreadPool> load_rowset_pool;
+    std::unique_ptr<ThreadPool> load_segment_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_rowset_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_rowset_pool));
+    _load_rowset_thread_pool = load_rowset_pool.release();
+
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_segment_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_segment_pool));
+    _load_segment_thread_pool = load_segment_pool.release();
 
     _broker_mgr = new BrokerMgr(this);
 #ifndef BE_TEST
@@ -462,6 +492,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(this);
+    auto runtime_filter_event_func = [] {
+        auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
+        return (pool == nullptr) ? 0U : pool->queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -479,9 +514,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_with_workgroup));
-    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
-                                                 std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                         workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor = new workgroup::ScanExecutor(
+            std::move(scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::OLAP));
     _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
@@ -537,6 +572,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     if (!status.ok()) {
         LOG(WARNING) << "Failed to init JIT engine: " << status.message();
     }
+
+    RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
+    PythonEnvManager::getInstance().start_background_cleanup_thread();
 
     return Status::OK();
 }
@@ -638,6 +676,8 @@ void ExecEnv::stop() {
 #ifndef BE_TEST
     close_s3_clients();
 #endif
+
+    PythonEnvManager::getInstance().close();
 }
 
 void ExecEnv::destroy() {
@@ -667,6 +707,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_streaming_load_thread_pool);
+    SAFE_DELETE(_load_segment_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
@@ -690,6 +731,8 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+    _dictionary_cache_pool.reset();
+    _automatic_partition_pool.reset();
     _metrics = nullptr;
 }
 
@@ -735,6 +778,82 @@ uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
+}
+
+bool parse_resource_str(const string& str, string* value) {
+    if (!str.empty()) {
+        std::string tmp_str = str;
+        StripLeadingWhiteSpace(&tmp_str);
+        StripTrailingWhitespace(&tmp_str);
+        if (tmp_str.empty()) {
+            return false;
+        } else {
+            *value = tmp_str;
+            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+void ExecEnv::try_release_resource_before_core_dump() {
+    std::set<std::string> modules;
+    bool release_all = false;
+    if (config::try_release_resource_before_core_dump.value() == "*") {
+        release_all = true;
+    } else {
+        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
+                                       &parse_resource_str, &modules);
+    }
+
+    auto need_release = [&release_all, &modules](const std::string& name) {
+        return release_all || modules.contains(name);
+    };
+
+    if (_connector_scan_executor != nullptr && need_release("connector_scan_executor")) {
+        _connector_scan_executor->close();
+        LOG(INFO) << "close connector scan executor";
+    }
+    if (_scan_executor != nullptr && need_release("olap_scan_executor")) {
+        _scan_executor->close();
+        LOG(INFO) << "close olap scan executor";
+    }
+    if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
+        _thread_pool->shutdown();
+        LOG(INFO) << "shutdown non-pipeline scan thread pool";
+    }
+    if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
+        _pipeline_prepare_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline prepare thread pool";
+    }
+    if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
+        _pipeline_sink_io_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline sink io thread pool";
+    }
+    if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
+        _query_rpc_pool->shutdown();
+        LOG(INFO) << "shutdown query rpc thread pool";
+    }
+    if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
+        _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
+        LOG(INFO) << "stop task worker pool for publish version";
+    }
+    if (_wg_driver_executor != nullptr && need_release("wg_driver_executor")) {
+        _wg_driver_executor->close();
+        LOG(INFO) << "stop worker group driver executor";
+    }
+    auto* storage_page_cache = StoragePageCache::instance();
+    if (storage_page_cache != nullptr && need_release("data_cache")) {
+        storage_page_cache->set_capacity(0);
+        LOG(INFO) << "release storage page cache memory";
+    }
+    if (_block_cache != nullptr && need_release("data_cache")) {
+        // TODO: Currently, block cache don't support shutdown now,
+        //  so here will temporary use update_mem_quota instead to release memory.
+        (void)_block_cache->update_mem_quota(0, false);
+        LOG(INFO) << "release block cache";
+    }
 }
 
 } // namespace starrocks

@@ -26,6 +26,7 @@
 #include "storage/olap_define.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
+#include "storage/task/engine_clone_task.h"
 #include "testutil/assert.h"
 #include "util/uuid_generator.h"
 
@@ -119,10 +120,9 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     auto remote_snapshot_agent_task = std::make_shared<RemoteSnapshotAgentTaskRequest>(
             agent_task_request, agent_task_request.remote_snapshot_req, time(nullptr));
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-            remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                          &remote_snapshot_info);
     EXPECT_TRUE(status.ok());
 
     run_remote_snapshot_task(remote_snapshot_agent_task, nullptr);
@@ -140,10 +140,6 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_src_visible_version(_src_version);
-    TRemoteSnapshotInfo remote_snapshot_info;
-    remote_snapshot_info.__set_backend(TBackend());
-    remote_snapshot_info.__set_snapshot_path(snapshot_path);
-    remote_snapshot_info.__set_incremental_snapshot(incremental_snapshot);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
     agent_task_request.__set_replicate_snapshot_req(replicate_snapshot_request);
 
@@ -245,6 +241,17 @@ TEST_F(AgentTaskTest, test_update_schema) {
 
     auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
     EXPECT_EQ(3, tablet->num_columns_with_max_version());
+}
+
+TEST_F(AgentTaskTest, clone_task_under_dropping) {
+    TCloneReq clone_req;
+    clone_req.__set_tablet_id(_tablet_id);
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
+    tablet->set_is_dropping(true);
+    EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, nullptr);
+    Status st = task.execute();
+    ASSERT_TRUE(st.is_corruption());
+    tablet->set_is_dropping(false);
 }
 
 } // namespace starrocks

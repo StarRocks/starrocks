@@ -18,7 +18,7 @@ Using materialized views for data modeling can effectively address these problem
 - **Ease the data modeling experience**: Any data analyst with only basic SQL knowledge is capable of data modeling with StarRocks. Data modeling is no longer the exclusive province of experienced data engineers.
 - **Reduce maintenance complexity**: StarRocks' asynchronous materialized views can automatically manage the lineage relationships and dependencies across data layers, eliminating the need for an entire data platform to handle this task.
 
-![Modeling-1](../assets/Modeling-1.png)
+![Modeling-1](../_assets/Modeling-1.png)
 
 In real-world situations, you can perform data modeling by combining the usage of StarRocks' views (logical views) and asynchronous materialized views as follows:
 
@@ -128,7 +128,7 @@ ALTER VIEW <view_name> AS <query>;
 
 -- Swap two materialized views 
 -- (by swapping the name of the two materialized views without affecting the data within).
-ALTER MATERIALIZED VIWE <mv1> SWAP WITH <mv2>;
+ALTER MATERIALIZED VIEW <mv1> SWAP WITH <mv2>;
 
 -- Re-activate a materialized view.
 ALTER MATERIALIZED VIEW <mv_name> ACTIVE;
@@ -145,8 +145,9 @@ Schema changes follow these principles:
 
 Whereas the data consistency of inactive materialized views cannot be guaranteed, you can restore the functionality of them using the following methods:
 
-- **Manual repair**: You can manually repair an inactive materialized view by executing ALTER MATERIALIZED VIEW `<mv_name>` ACTIVE. This statement will recreate the materialized view based on its original SQL definition. Please note that the SQL definition must still be valid after the underlying schema changes, otherwise, the operation will fail.
-- **Automatic repair**: StarRocks will attempt to automatically activate inactive materialized views. However, the timeliness of this process cannot be guaranteed.
+- **Manual activation**: You can manually repair an inactive materialized view by executing `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`. This statement will recreate the materialized view based on its original SQL definition. Please note that the SQL definition must still be valid after the underlying schema changes. Otherwise, the operation will fail.
+- **Activation before refresh**: StarRocks will attempt to activate the inactive materialized view before refreshing it.
+- **Automatic Activation**: StarRocks will attempt to automatically activate the inactive materialized views. However, the timeliness of this process cannot be guaranteed. You can disable this feature by executing `ADMIN SET FRONTEND CONFIG('enable_mv_automatic_active_check'='false')`. This feature is available from v3.1.4 and v3.2.0 onwards.
 
 ## Partitioned modeling
 
@@ -156,7 +157,7 @@ Partitioned modeling is an essential aspect of data modeling, complementing laye
 
 Different ways of associating data give rise to various modeling approaches, such as star schemas and snowflake schemas. These models have something in common - they all use fact tables and dimension tables. Some business scenarios require multiple large fact tables, while others deal with complex dimension tables and the relationships among them. StarRocks' materialized views support partition association for fact tables, meaning that the fact table is partitioned, and the materialized view's join results are partitioned in the same way.
 
-![Modeling-2](../assets/Modeling-2.png)
+![Modeling-2](../_assets/Modeling-2.png)
 
 As the above figure shows, a materialized view associates a fact table with multiple dimension tables:
 

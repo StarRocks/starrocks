@@ -37,6 +37,7 @@ package com.starrocks.common.util;
 import com.starrocks.common.Pair;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -160,8 +161,14 @@ public class DebugUtil {
         return printId(uuid);
     }
 
-    public static String getStackTrace(Exception e) {
-        StringWriter sw = new StringWriter();
+    /**
+     * Get the stack trace of a throwable object.
+     * see {@link ExceptionUtils#getStackTrace(Throwable)}
+     * @param e the throwable object
+     * @return the stack trace of the throwable object
+     */
+    public static String getStackTrace(final Throwable e) {
+        final StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
         return sw.toString();
     }

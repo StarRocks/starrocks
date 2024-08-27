@@ -1,0 +1,351 @@
+-- name: test_sink_parquet_partitioned @slow
+shell: ossutil64 cp ./sql/test_across_engine/data/tpch_lineitem.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
+-- result:
+0
+
+-- !result
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} partition by (year) properties (
+    "file_format" = "parquet"
+)
+as select 
+orderkey,
+partkey,
+suppkey,
+linenumber,
+quantity,
+extendedprice,
+discount,
+tax,
+returnflag,
+linestatus,
+commitdate,
+receiptdate,
+shipinstruct,
+shipmode,
+comment,
+year(shipdate) as year
+from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+function: assert_equal_result("select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;", "trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3", "spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;", "hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;")
+-- result:
+None
+-- !result
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+-- result:
+-- !result
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
+-- result:
+0
+
+-- !result
+-- name: test_sink_orc_partitioned @slow
+shell: ossutil64 cp ./sql/test_across_engine/data/tpch_lineitem.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
+-- result:
+0
+
+-- !result
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} partition by (year) properties (
+    "file_format" = "orc"
+)
+as select 
+orderkey,
+partkey,
+suppkey,
+linenumber,
+quantity,
+extendedprice,
+discount,
+tax,
+returnflag,
+linestatus,
+commitdate,
+receiptdate,
+shipinstruct,
+shipmode,
+comment,
+year(shipdate) as year
+from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+function: assert_equal_result("select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;", "trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3", "spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;", "hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;")
+-- result:
+None
+-- !result
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+-- result:
+-- !result
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
+-- result:
+0
+
+-- !result
+-- name: test_sink_textfile_partitioned @slow
+shell: ossutil64 cp ./sql/test_across_engine/data/tpch_lineitem.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
+-- result:
+0
+
+-- !result
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} partition by (year) properties (
+    "file_format" = "textfile"
+)
+as select 
+orderkey,
+partkey,
+suppkey,
+linenumber,
+quantity,
+extendedprice,
+discount,
+tax,
+returnflag,
+linestatus,
+commitdate,
+receiptdate,
+shipinstruct,
+shipmode,
+comment,
+year(shipdate) as year
+from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
+-- result:
+1172038	8214	8215	4	9.000000000	10099.890000000	0.100000000	0.060000000	A	F	1994-07-18	1994-07-02	NONE	RAIL	 final packages cajole. fin	1994
+1172038	148368	8369	3	40.000000000	56654.400000000	0.060000000	0.010000000	R	F	1994-08-07	1994-07-10	DELIVER IN PERSON	MAIL	 along the carefully pe	1994
+1172038	186063	1100	2	14.000000000	16086.840000000	0.020000000	0E-9	R	F	1994-08-06	1994-06-29	NONE	SHIP	hrough the carefully ironic foxes. depths	1994
+1172039	16549	4053	4	6.000000000	8793.240000000	0.100000000	0.010000000	R	F	1992-02-26	1992-04-04	NONE	SHIP	te. ironic, regular requests boos	1992
+1172039	122410	7435	1	45.000000000	64458.450000000	0.060000000	0.070000000	A	F	1992-02-15	1992-05-08	TAKE BACK RETURN	TRUCK	leep carefully al	1992
+1172039	130745	8285	3	8.000000000	14205.920000000	0.020000000	0.010000000	R	F	1992-03-07	1992-03-19	DELIVER IN PERSON	RAIL	nstructions. special, idle requests lose 	1992
+1172039	139010	9011	2	16.000000000	16784.160000000	0.050000000	0E-9	R	F	1992-03-02	1992-03-14	COLLECT COD	TRUCK	 the carefully silent deposits	1992
+1172064	22210	2211	2	39.000000000	44156.190000000	0.040000000	0.010000000	A	F	1994-12-24	1995-02-13	DELIVER IN PERSON	MAIL	 quickly unusual requests. regular instru	1995
+1172064	32655	5159	1	19.000000000	30165.350000000	0.060000000	0.060000000	R	F	1995-02-10	1994-12-12	TAKE BACK RETURN	RAIL	s are carefully express, final packag	1994
+1172064	77399	9907	3	49.000000000	67443.110000000	0.060000000	0.010000000	A	F	1995-02-14	1995-04-18	TAKE BACK RETURN	RAIL	gle. even dependencies a	1995
+-- !result
+function: assert_equal_result("select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;", "trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3", "spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;", "hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3;")
+-- result:
+None
+-- !result
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+-- result:
+-- !result
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
+-- result:
+0
+
+-- !result

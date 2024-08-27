@@ -253,8 +253,18 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
         tablet_info.data_size = 0;
         tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
     }
+    TStatus task_status;
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
 
-    unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature, true);
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+    finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+    finish_task_request.__set_task_status(task_status);
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
@@ -262,15 +272,17 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
     std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
                                                      agent_task_req->task_req.base_tablet_id);
     LOG(INFO) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
-    bool is_task_timeout = false;
+    bool is_task_req_expired = false;
     if (agent_task_req->isset.recv_time) {
         int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
         if (time_elapsed > config::report_task_interval_seconds * 20) {
-            LOG(INFO) << "task elapsed " << time_elapsed << " seconds since it is inserted to queue, it is timeout";
-            is_task_timeout = true;
+            // task have been in queue for a long time, this task may already be cancelled by FE
+            // so just ignore this task, cause if it's not cancelled, FE will resend a new one
+            LOG(INFO) << alter_msg_head << " ignore expired task request " << time_elapsed << "s since enqueue";
+            is_task_req_expired = true;
         }
     }
-    if (!is_task_timeout) {
+    if (!is_task_req_expired) {
         TFinishTaskRequest finish_task_request;
         TTaskType::type task_type = agent_task_req->task_type;
         if (task_type == TTaskType::ALTER) {
@@ -584,10 +596,8 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
             if (schema_version <= ori_tablet_schema->schema_version()) {
                 continue;
             }
-            TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>();
-            new_schema->copy_from(ori_tablet_schema);
-            st = new_schema->build_current_tablet_schema(schema_id, schema_version, pcolumn_param, ori_tablet_schema);
-            if (!st.ok()) {
+            auto ret = TabletSchema::create(*ori_tablet_schema, schema_id, schema_version, pcolumn_param);
+            if (!ret.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
                 std::string msg =
                         strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
@@ -596,7 +606,7 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
                 error_tablet_ids.push_back(tablet_id);
                 continue;
             }
-            tablet->update_max_version_schema(new_schema);
+            tablet->update_max_version_schema(ret.value());
             VLOG(1) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
                     << " to " << schema_version;
         }
@@ -956,16 +966,14 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
 
-    std::string src_snapshot_path;
-    bool incremental_snapshot;
+    TSnapshotInfo src_snapshot_info;
 
     Status res;
     if (remote_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req, &src_snapshot_path,
-                                                                        &incremental_snapshot);
+        res = exec_env->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req, &src_snapshot_info);
     } else {
-        res = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-                remote_snapshot_req, &src_snapshot_path, &incremental_snapshot);
+        res = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_req,
+                                                                                    &src_snapshot_info);
     }
 
     if (!res.ok()) {
@@ -973,8 +981,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
         LOG(WARNING) << "remote snapshot failed. status: " << res << ", signature:" << agent_task_req->signature;
         error_msgs.emplace_back("replicate snapshot failed, " + res.to_string());
     } else {
-        finish_task_request.__set_snapshot_path(src_snapshot_path);
-        finish_task_request.__set_incremental_snapshot(incremental_snapshot);
+        finish_task_request.__set_snapshot_info(src_snapshot_info);
     }
 
     task_status.__set_status_code(status_code);

@@ -8,7 +8,7 @@ RESULT SINK
 distribution type: GATHER
 cardinality: 3
 column statistics:
-* L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
+* L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[N:304385200][R:147887000][A:147849300]] ESTIMATE
 * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
 * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
@@ -30,7 +30,7 @@ OutPut Exchange Id: 06
 |  offset: 0
 |  cardinality: 3
 |  column statistics:
-|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
+|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[N:304385200][R:147887000][A:147849300]] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
 |  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
@@ -46,7 +46,7 @@ OutPut Exchange Id: 06
 |  group by: [9: L_RETURNFLAG, VARCHAR, false], [10: L_LINESTATUS, VARCHAR, false]
 |  cardinality: 3
 |  column statistics:
-|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
+|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[N:304385200][R:147887000][A:147849300]] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
 |  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
@@ -74,7 +74,7 @@ OutPut Exchange Id: 03
 |  group by: [9: L_RETURNFLAG, VARCHAR, false], [10: L_LINESTATUS, VARCHAR, false]
 |  cardinality: 3
 |  column statistics:
-|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
+|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[N:304385200][R:147887000][A:147849300]] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
 |  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
@@ -99,10 +99,10 @@ OutPut Exchange Id: 03
 |  29 <-> [6: L_EXTENDEDPRICE, DOUBLE, false] * [28: subtract, DOUBLE, false]
 |  cardinality: 600000000
 |  column statistics:
-|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+|  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[N:304385200][R:147887000][A:147849300]] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * expr-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
@@ -115,13 +115,13 @@ partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=54.0
 cardinality: 600000000
 column statistics:
-* L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+* L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+* L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
 * L_TAX-->[0.0, 0.08, 0.0, 8.0, 9.0] ESTIMATE
-* L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
+* L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[N:304385200][R:147887000][A:147849300]] ESTIMATE
 * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE
+* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] MCV: [[1997-06-01:270700][1998-01-17:269100][1995-09-18:267300][1996-11-29:266400][1995-09-26:265700]] ESTIMATE
 * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 * expr-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
 [end]

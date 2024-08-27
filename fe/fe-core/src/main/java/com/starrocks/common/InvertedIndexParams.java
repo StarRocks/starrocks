@@ -14,9 +14,10 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.io.ParamsKey;
+
 import java.util.Arrays;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -28,23 +29,6 @@ public class InvertedIndexParams {
             .flatMap(key -> key.map(k -> k.name().toLowerCase(Locale.ROOT)))
             .collect(Collectors.toSet());
 
-    public static void setDefaultParamsValue(Map<String, String> properties, ParamsKey[] e) {
-        Arrays.stream(e).filter(k -> !properties.containsKey(k.name()) && k.needDefault())
-                .forEach(k -> properties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-    }
-
-    public interface ParamsKey {
-
-        String defaultValue();
-
-        default boolean needDefault() {
-            return false;
-        }
-
-        // auto implemented by Enum.name()
-        String name();
-    }
-
     public enum InvertedIndexImpType {
         CLUCENE
     }
@@ -53,17 +37,7 @@ public class InvertedIndexParams {
         /**
          * index implement lib, default is clucene
          */
-        IMP_LIB {
-            @Override
-            public String defaultValue() {
-                return InvertedIndexImpType.CLUCENE.name();
-            }
-
-            @Override
-            public boolean needDefault() {
-                return true;
-            }
-        }
+        IMP_LIB
     }
 
 
@@ -89,16 +63,6 @@ public class InvertedIndexParams {
         IndexParamsKey(String defaultValue) {
             this.defaultValue = defaultValue;
         }
-
-        @Override
-        public String defaultValue() {
-            return defaultValue;
-        }
-
-        @Override
-        public boolean needDefault() {
-            return needDefault;
-        }
     }
 
     public enum SearchParamsKey implements ParamsKey {
@@ -119,11 +83,6 @@ public class InvertedIndexParams {
 
         SearchParamsKey(String defaultValue) {
             this.defaultValue = defaultValue;
-        }
-
-        @Override
-        public String defaultValue() {
-            return defaultValue;
         }
     }
 }

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # CREATE USER
 
-import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
 ## Description
 
@@ -15,7 +15,7 @@ Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a 
 ### Syntax
 
 ```SQL
-CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
+CREATE USER [IF NOT EXISTS] <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
 ```
 
 ## Parameters
@@ -61,7 +61,7 @@ Example 2: Create a user using a plaintext password and allow the user to log in
 CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
 ```
 
-Example 3: Create a user with a cyphertext password and allow the user to log in from  `'172.10.1.10'`.
+Example 3: Create a user with a ciphertext password and allow the user to log in from  `'172.10.1.10'`.
 
 ```SQL
 CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';

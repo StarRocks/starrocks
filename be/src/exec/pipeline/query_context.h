@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 #include "exec/pipeline/fragment_context.h"
@@ -63,6 +64,11 @@ public:
         _num_active_fragments.fetch_add(1);
     }
 
+    void rollback_inc_fragments() {
+        _num_fragments.fetch_sub(1);
+        _num_active_fragments.fetch_sub(1);
+    }
+
     void count_down_fragments();
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
@@ -73,14 +79,16 @@ public:
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline;
+        return now > _delivery_deadline || _is_cancelled;
     }
     bool is_query_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _query_deadline;
     }
 
-    bool is_dead() const { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
+    bool is_cancelled() const { return _is_cancelled; }
+
+    bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -93,6 +101,7 @@ public:
     void set_enable_pipeline_level_shuffle(bool flag) { _enable_pipeline_level_shuffle = flag; }
     bool enable_pipeline_level_shuffle() { return _enable_pipeline_level_shuffle; }
     void set_enable_profile() { _enable_profile = true; }
+    bool get_enable_profile_flag() { return _enable_profile; }
     bool enable_profile() {
         if (_enable_profile) {
             return true;
@@ -126,6 +135,7 @@ public:
         }
         _big_query_profile_threshold_ns = factor * big_query_profile_threshold;
     }
+    int64_t get_big_query_profile_threshold_ns() const { return _big_query_profile_threshold_ns; }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
         _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
     }
@@ -145,17 +155,14 @@ public:
         _desc_tbl = desc_tbl;
     }
 
-    DescriptorTbl* desc_tbl() {
-        DCHECK(_desc_tbl != nullptr);
-        return _desc_tbl;
-    }
+    DescriptorTbl* desc_tbl() { return _desc_tbl; }
 
     size_t total_fragments() { return _total_fragments; }
     /// Initialize the mem_tracker of this query.
     /// Positive `big_query_mem_limit` and non-null `wg` indicate
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
-                          int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr,
+                          std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
                           RuntimeState* state = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
@@ -261,6 +268,7 @@ private:
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
+    std::atomic_bool _is_cancelled = false;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -302,6 +310,7 @@ private:
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
 };
 
+// TODO: use brpc::TimerThread refactor QueryContext
 class QueryContextManager {
 public:
     QueryContextManager(size_t log2_num_slots);

@@ -61,19 +61,24 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
 
-class QueryTransformer {
+public class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
     private final boolean inlineView;
+    private final MVTransformerContext mvTransformerContext;
+    public static final String GROUPING_ID = "GROUPING_ID";
+    public static final String GROUPING = "GROUPING";
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean inlineView) {
+                            CTETransformerContext cteContext, boolean inlineView,
+                            MVTransformerContext mvTransformerContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
         this.inlineView = inlineView;
+        this.mvTransformerContext = mvTransformerContext;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -98,16 +103,8 @@ class QueryTransformer {
         builder = window(builder, analyticExprList);
 
         if (queryBlock.hasOrderByClause()) {
-            if (!queryBlock.hasAggregation()) {
-                //requires both output and source fields to be visible if there are no aggregations
-                builder = projectForOrder(builder,
-                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
-                        queryBlock.getOutputExprInOrderByScope(),
-                        queryBlock.getColumnOutputNames(),
-                        builder.getFieldMappings(),
-                        queryBlock.getOrderScope(), false);
-            } else {
-                //requires output fields, groups and translated aggregations to be visible for queries with aggregation
+            if (!queryBlock.getGroupBy().isEmpty() || !queryBlock.getAggregate().isEmpty()) {
+                // requires output fields, groups and translated aggregations to be visible for queries with aggregation
                 List<String> outputNames = new ArrayList<>(queryBlock.getColumnOutputNames());
                 for (int i = 0; i < queryBlock.getOrderSourceExpressions().size(); ++i) {
                     outputNames.add(queryBlock.getOrderSourceExpressions().get(i).toString());
@@ -121,6 +118,17 @@ class QueryTransformer {
                         outputNames,
                         builder.getFieldMappings(),
                         queryBlock.getOrderScope(), true);
+
+            } else {
+                // requires both output and source fields to be visible if there is no aggregation or distinct
+                // if there is a distinct, we still no need to project the orderSourceExpressions because it must
+                // in the outputExpression.
+                builder = projectForOrder(builder,
+                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
+                        queryBlock.getOutputExprInOrderByScope(),
+                        queryBlock.getColumnOutputNames(),
+                        builder.getFieldMappings(),
+                        queryBlock.getOrderScope(), queryBlock.isDistinct());
             }
         }
 
@@ -153,15 +161,9 @@ class QueryTransformer {
     }
 
     private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
-        // This must be a copy of the context, because the new Relation may contain cte with the same name,
-        // and the internal cte with the same name will overwrite the original mapping
-        CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         TransformerContext transformerContext = new TransformerContext(
-                columnRefFactory,
-                session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                newCteContext,
-                inlineView);
+                columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                cteContext, inlineView, mvTransformerContext);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
@@ -230,7 +232,6 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-
         for (Expr expression : expressions) {
             Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
             ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
@@ -289,10 +290,22 @@ class QueryTransformer {
         }
 
         final ExpressionMapping expressionMapping = subOpt.getExpressionMapping();
-        boolean allColumnRef = projectExpressions.stream()
-                .map(expression -> SqlToScalarOperatorTranslator.translate(expression, expressionMapping,
-                        columnRefFactory))
-                .allMatch(ScalarOperator::isColumnRef);
+        boolean allColumnRef = true;
+        Map<Expr, ColumnRefOperator> tempMapping = new HashMap<>();
+        for (Expr expression : projectExpressions) {
+            ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expression, expressionMapping,
+                    columnRefFactory);
+            if (!operator.isColumnRef()) {
+                allColumnRef = false;
+                tempMapping.clear();
+                break;
+            } else {
+                tempMapping.put(expression, (ColumnRefOperator) operator);
+            }
+        }
+        if (allColumnRef) {
+            expressionMapping.getExpressionToColumns().putAll(tempMapping);
+        }
 
         /*
          * If there is no expression calculate in partition and order by,
@@ -365,10 +378,10 @@ class QueryTransformer {
         return subOpt.withNewRoot(limitOperator);
     }
 
-    private OptExprBuilder aggregate(OptExprBuilder subOpt,
+    public OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
-        if (aggregates.size() == 0 && groupByExpressions.size() == 0) {
+        if (aggregates.isEmpty() && groupByExpressions.isEmpty()) {
             return subOpt;
         }
 
@@ -484,7 +497,7 @@ class QueryTransformer {
             }
 
             //Build grouping_id(all grouping columns)
-            ColumnRefOperator grouping = columnRefFactory.create("GROUPING_ID", Type.BIGINT, false);
+            ColumnRefOperator grouping = columnRefFactory.create(GROUPING_ID, Type.BIGINT, false);
             List<Long> groupingID = new ArrayList<>();
             for (BitSet bitSet : groupingIdsBitSets) {
                 long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
@@ -495,7 +508,7 @@ class QueryTransformer {
                 // causing the data to be aggregated in advance.
                 // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
                 while (groupingID.contains(gid)) {
-                    gid += Math.pow(2, groupByColumnRefs.size());
+                    gid += (1L << groupByColumnRefs.size());
                 }
                 groupingID.add(gid);
             }
@@ -505,7 +518,7 @@ class QueryTransformer {
 
             //Build grouping function in select item
             for (Expr groupingFunction : groupingFunctionCallExprs) {
-                grouping = columnRefFactory.create("GROUPING", Type.BIGINT, false);
+                grouping = columnRefFactory.create(GROUPING, Type.BIGINT, false);
 
                 ArrayList<BitSet> tempGroupingIdsBitSets = new ArrayList<>();
                 for (int i = 0; i < repeatColumnRefList.size(); ++i) {
@@ -513,10 +526,10 @@ class QueryTransformer {
                 }
 
                 for (int childIdx = 0; childIdx < groupingFunction.getChildren().size(); ++childIdx) {
-                    SlotRef slotRef = (SlotRef) groupingFunction.getChild(childIdx);
+                    Expr expr = groupingFunction.getChild(childIdx);
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
-                            .translate(slotRef, subOpt.getExpressionMapping(), columnRefFactory);
+                            .translate(expr, subOpt.getExpressionMapping(), columnRefFactory);
                     for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {

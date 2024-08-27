@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # tanh
 
-## Description
+
 
 Computes the hyperbolic tangent of the argument.
 

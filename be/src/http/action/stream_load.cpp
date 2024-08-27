@@ -288,7 +288,8 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-            ctx->buffer = ByteBuffer::allocate(ctx->body_bytes + simdjson::SIMDJSON_PADDING);
+            ASSIGN_OR_RETURN(ctx->buffer,
+                             ByteBuffer::allocate_with_tracker(ctx->body_bytes + simdjson::SIMDJSON_PADDING));
         }
     } else {
 #ifndef BE_TEST
@@ -356,14 +357,19 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ctx->buffer = ByteBuffer::allocate(
-                    ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, ctx->kDefaultBufferSize) : len);
+            ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                    ctx->status, ctx->buffer,
+                    ByteBuffer::allocate_with_tracker(ctx->format == TFileFormatType::FORMAT_JSON
+                                                              ? std::max(len, ctx->kDefaultBufferSize)
+                                                              : len));
 
         } else if (ctx->buffer->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
                 // For json format, we need build a complete json before we push the buffer to the pipe.
                 // buffer capacity is not enough, so we try to expand the buffer.
-                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len));
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ByteBufferPtr buf,
+                        ByteBuffer::allocate_with_tracker(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len)));
                 buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
                 std::swap(buf, ctx->buffer);
 
@@ -378,7 +384,9 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
                     return;
                 }
 
-                ctx->buffer = ByteBuffer::allocate(std::max(len, ctx->kDefaultBufferSize));
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ctx->buffer,
+                        ByteBuffer::allocate_with_tracker(std::max(len, ctx->kDefaultBufferSize)));
             }
         }
 
@@ -422,6 +430,11 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.formatType = ctx->format;
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
+
     request.__set_loadId(ctx->id.to_thrift());
     if (ctx->use_streaming) {
         auto pipe =
@@ -584,6 +597,16 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     if (!http_req->header(HTTP_MAX_FILTER_RATIO).empty()) {
         ctx->max_filter_ratio = strtod(http_req->header(HTTP_MAX_FILTER_RATIO).c_str(), nullptr);
+    }
+
+    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty() && !http_req->header(HTTP_COMPRESSION).empty()) {
+        return Status::InvalidArgument("Only one of http header content-encoding and compression can be set");
+    }
+
+    if (!http_req->header(HttpHeaders::CONTENT_ENCODING).empty()) {
+        request.__set_payload_compression_type(http_req->header(HttpHeaders::CONTENT_ENCODING));
+    } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
+        request.__set_payload_compression_type(http_req->header(HTTP_COMPRESSION));
     }
 
     // plan this load

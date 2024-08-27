@@ -53,6 +53,7 @@
 #include "util/bthreads/semaphore.h"
 // resolve `barrier` macro conflicts with boost/thread.hpp header file
 #undef barrier
+#include "util/metrics.h"
 #include "util/monotime.h"
 #include "util/priority_queue.h"
 
@@ -125,7 +126,7 @@ public:
     ThreadPoolBuilder& set_idle_timeout(const MonoDelta& idle_timeout);
 
     // Instantiate a new ThreadPool with the existing builder arguments.
-    [[nodiscard]] Status build(std::unique_ptr<ThreadPool>* pool) const;
+    Status build(std::unique_ptr<ThreadPool>* pool) const;
 
 private:
     friend class ThreadPool;
@@ -195,10 +196,10 @@ public:
     void shutdown();
 
     // Submits a Runnable class.
-    [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
+    Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
-    [[nodiscard]] Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
+    Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
 
     // Waits until all the tasks are completed.
     void wait();
@@ -208,7 +209,10 @@ public:
     [[nodiscard]] bool wait_for(const MonoDelta& delta);
 
     // dynamic update max threads num
-    [[nodiscard]] Status update_max_threads(int max_threads);
+    Status update_max_threads(int max_threads);
+
+    // dynamic update min threads num
+    Status update_min_threads(int max_threads);
 
     // Allocates a new token for use in token-based task submission. All tokens
     // must be destroyed before their ThreadPool is destroyed.
@@ -248,6 +252,12 @@ public:
 
     int max_threads() const { return _max_threads.load(std::memory_order_acquire); }
 
+    int64_t total_executed_tasks() const { return _total_executed_tasks.value(); }
+
+    int64_t total_pending_time_ns() const { return _total_pending_time_ns.value(); }
+
+    int64_t total_execute_time_ns() const { return _total_execute_time_ns.value(); }
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
@@ -285,7 +295,7 @@ private:
     void release_token(ThreadPoolToken* t);
 
     const std::string _name;
-    const int _min_threads;
+    std::atomic<int> _min_threads;
     std::atomic<int> _max_threads;
     const int _max_queue_size;
     const MonoDelta _idle_timeout;
@@ -372,6 +382,15 @@ private:
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
 
+    // Total number of tasks that have finished
+    CoreLocalCounter<int64_t> _total_executed_tasks{MetricUnit::NOUNIT};
+
+    // Total time in nanoseconds that tasks pending in the queue.
+    CoreLocalCounter<int64_t> _total_pending_time_ns{MetricUnit::NOUNIT};
+
+    // Total time in nanoseconds to execute tasks.
+    CoreLocalCounter<int64_t> _total_execute_time_ns{MetricUnit::NOUNIT};
+
     ThreadPool(const ThreadPool&) = delete;
     const ThreadPool& operator=(const ThreadPool&) = delete;
 };
@@ -390,10 +409,10 @@ public:
     ~ThreadPoolToken();
 
     // Submits a Runnable class with specified priority.
-    [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...)  with specified priority.
-    [[nodiscard]] Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Marks the token as unusable for future submissions. Any queued tasks not
     // yet running are destroyed. If tasks are in flight, Shutdown() will wait

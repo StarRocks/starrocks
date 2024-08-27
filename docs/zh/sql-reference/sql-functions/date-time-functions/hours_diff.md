@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # hours_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差多少个小时 (`expr1` − `expr2`)。
 

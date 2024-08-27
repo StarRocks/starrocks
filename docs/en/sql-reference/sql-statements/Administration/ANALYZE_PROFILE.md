@@ -31,14 +31,13 @@ ANALYZE PROFILE FROM '<query_id>', [<plan_node_id>[, ...] ]
 
 Example 1: Querying the Query Profile without specifying node ID.
 
-![img](../../../assets/Profile/text_based_profile_without_node_id.jpeg)
+![img](../../../_assets/Profile/text_based_profile_without_node_id.jpeg)
 
 Example 2: Querying the Query Profile and specifying node ID as `0`. StarRocks returns all detailed metrics for Node ID `0` and highlights metrics with high usage for easier problem identification.
 
-![img](../../../assets/Profile/text_based_profile_with_node_id.jpeg)
+![img](../../../_assets/Profile/text_based_profile_with_node_id.jpeg)
 
 ## Relevant SQLs
 
 - [SHOW PROFILELIST](./SHOW_PROFILELIST.md)
 - [EXPLAIN ANALYZE](./EXPLAIN_ANALYZE.md)
-

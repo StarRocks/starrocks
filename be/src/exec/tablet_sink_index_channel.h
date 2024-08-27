@@ -25,13 +25,14 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
-#include "exec/data_sink.h"
+#include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
@@ -41,11 +42,13 @@ namespace starrocks {
 
 class MemTracker;
 class TupleDescriptor;
-
-namespace stream_load {
+class TxnLogPB;
 
 class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
+
+template <typename T>
+void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf);
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -136,10 +139,12 @@ public:
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close(bool wait_all_sender_close = false);
+    Status try_close();
     bool is_close_done();
     Status close_wait(RuntimeState* state);
 
+    Status try_finish();
+    bool is_finished();
     void cancel(const Status& err_st);
     void cancel();
 
@@ -155,6 +160,7 @@ public:
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
+    std::vector<TxnLogPB>& txn_logs() { return _txn_logs; }
 
     bool is_incremental() const { return _is_incremental; }
 
@@ -202,12 +208,15 @@ private:
     bool _cancelled{false};
     bool _cancel_finished{false};
 
-    // send finished means the consumer thread which send the rpc can exit
-    bool _send_finished{false};
+    // channel is closed
+    bool _closed{false};
+
+    // data sending is finished
+    bool _finished{false};
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    PInternalService_Stub* _stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
@@ -215,6 +224,7 @@ private:
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
+    std::vector<TxnLogPB> _txn_logs;
     struct {
         std::unordered_set<std::string> invalid_dict_cache_column_set;
         std::unordered_map<std::string, int64_t> valid_dict_cache_column_set;
@@ -314,5 +324,4 @@ private:
     bool _has_intolerable_failure = false;
 };
 
-} // namespace stream_load
 } // namespace starrocks

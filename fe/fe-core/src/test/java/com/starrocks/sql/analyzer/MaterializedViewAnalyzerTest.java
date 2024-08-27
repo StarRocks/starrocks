@@ -25,6 +25,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ShowExecutor;
@@ -256,18 +257,26 @@ public class MaterializedViewAnalyzerTest {
                         "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
                         "REFRESH ASYNC\n" +
                         "PROPERTIES (\n" +
+                        "\"compression\" = \"zstd\",\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT k1, k2, v1 from test.tbl1");
-        ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
-                (ShowStmt) analyzeSuccess("show full columns from mv1"));
-        ShowResultSet showResultSet = showExecutor.execute();
-        Assert.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
-                        " [b, int, , YES, YES, null, , , b2]," +
-                        " [c, int, , YES, YES, null, , , ]]",
-                showResultSet.getResultRows().toString());
+        {
+            ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) analyzeSuccess("show full columns from mv1"),
+                    starRocksAssert.getCtx());
+            Assert.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
+                            " [b, int, , YES, YES, null, , , b2]," +
+                            " [c, int, , YES, YES, null, , , ]]",
+                    showResultSet.getResultRows().toString());
+        }
+        {
+            ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) analyzeSuccess("show create table mv1"),
+                    starRocksAssert.getCtx());
+            String result = showResultSet.getResultRows().toString();
+            Assert.assertTrue(result.contains("zstd"));
+        }
     }
 
     @Test
@@ -329,6 +338,7 @@ public class MaterializedViewAnalyzerTest {
         }
 
         {
+            // Not supported
             String mvSql = "create materialized view window_mv_3\n" +
                     "partition by k1\n" +
                     "distributed by hash(k2)\n" +
@@ -340,6 +350,117 @@ public class MaterializedViewAnalyzerTest {
             analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
                     " should contain the partition column k1 of materialized view");
         }
+
+        {
+            starRocksAssert.withTable("CREATE TABLE t1_event(\n" +
+                    "    order_root_id VARCHAR(255),\n" +
+                    "    event_type VARCHAR(255),\n" +
+                    "    sequence_timestamp datetime\n" + ")\n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\"replication_num\"=\"1\");");
+
+            // Not supported
+            String mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC " +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" +
+                    "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) of" +
+                    " materialized view.");
+
+            // Not supported: with subquery
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "SELECT * from  (\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) t\n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with subquery
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    "SELECT * from  (\n" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) t\n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
+
+            // Not supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions " +
+                    "should contain the partition column date_trunc('day', `test`.`t1_event`.`sequence_timestamp`) " +
+                    "of materialized view.");
+
+            // Supported: with CTE
+            mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
+                    "REFRESH ASYNC \n" +
+                    "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
+                    "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
+                    "AS\n" +
+                    " WITH cte1 AS (" +
+                    "  SELECT\n" +
+                    "    order_root_id, event_type, sequence_timestamp,\n" +
+                    "    ROW_NUMBER() OVER (" +
+                    "       PARTITION BY order_root_id, date_trunc('DAY', sequence_timestamp) " +
+                    "       ORDER BY sequence_timestamp DESC) AS row_num\n" +
+                    "  FROM t1_event) \n" +
+                    "SELECT * FROM cte1 \n" +
+                    "ORDER BY sequence_timestamp;\n";
+            analyzeSuccess(mvSql);
+        }
+    }
+
+    @Test
+    public void testCreateMvBaseOnView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withView("create view v1 as select date_trunc('month', k1) as kv1, k2 as kv2 from tbl1");
+
+        analyzeSuccess("create materialized view mv1 partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                "as select kv1 as k1, kv2 as k2 from v1");
+
+        starRocksAssert.useDatabase("test")
+                .withView("create view v2(kv1, kv2) as select date_trunc('month', k1), k2 as vv from tbl1");
+
+        analyzeSuccess("create materialized view mv2 partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                "as select kv1 as k1, kv2 as k2 from v2");
     }
 
     @Test
@@ -354,7 +475,7 @@ public class MaterializedViewAnalyzerTest {
     private void checkQueryOutputIndices(List<Integer> inputs, String expect, boolean isChanged) {
         List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
         for (Integer i : inputs) {
-            mvColumnPairs.add(Pair.create(new Column(), i));
+            mvColumnPairs.add(Pair.create(new Column("k1", Type.INT), i));
         }
         List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
         Assert.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());

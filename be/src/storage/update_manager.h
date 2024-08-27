@@ -150,6 +150,9 @@ public:
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
 private:
+    void* _schedule_apply_thread_callback(void* arg);
+
+private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
 

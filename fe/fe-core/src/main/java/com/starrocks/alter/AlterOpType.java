@@ -66,7 +66,9 @@ public enum AlterOpType {
 
     // Optimize table
     OPTIMIZE,
-
+    ALTER_BRANCH,
+    ALTER_TAG,
+    ALTER_TABLE_OPERATION,
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.
@@ -85,8 +87,6 @@ public enum AlterOpType {
         COMPATIBITLITY_MATRIX[DROP_ROLLUP.ordinal()][DROP_ROLLUP.ordinal()] = true;
         // schema change, such as add/modify/drop columns can be processed in batch
         COMPATIBITLITY_MATRIX[SCHEMA_CHANGE.ordinal()][SCHEMA_CHANGE.ordinal()] = true;
-        COMPATIBITLITY_MATRIX[SCHEMA_CHANGE.ordinal()][COMPACT.ordinal()] = true;
-        COMPATIBITLITY_MATRIX[ADD_ROLLUP.ordinal()][COMPACT.ordinal()] = true;
     }
 
     public boolean needCheckCapacity() {

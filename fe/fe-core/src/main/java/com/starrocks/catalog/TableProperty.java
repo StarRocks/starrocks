@@ -45,7 +45,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -61,6 +60,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -92,8 +92,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
-        LOOSE,      // 1: enable query rewrite, and skip the partition version check
-        CHECKED;    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+        LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
+        CHECKED,    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+        NOCHECK;   // 3: enable query rewrite, and rewrite without any check
 
         public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
             return CHECKED;
@@ -109,6 +110,68 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
         public static String valueList() {
             return Joiner.on("/").join(QueryRewriteConsistencyMode.values());
+        }
+    }
+
+    /**
+     * The value for enable_query_rewrite variable
+     */
+    public enum MVQueryRewriteSwitch {
+        DEFAULT,    // default, no check but eligible for query rewrite
+        TRUE,       // enabled, check the semantic and is eligible for query rewrite
+        FALSE,      // disabled
+        ;
+
+        public boolean isEnable() {
+            return TRUE == this || DEFAULT == this;
+        }
+
+        public static MVQueryRewriteSwitch defaultValue() {
+            return DEFAULT;
+        }
+
+        public static MVQueryRewriteSwitch parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return DEFAULT;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVQueryRewriteSwitch.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVQueryRewriteSwitch.values());
+        }
+    }
+
+    /**
+     * The value for transparent_mv_rewrite_mode variable
+     */
+    public enum MVTransparentRewriteMode {
+        FALSE, // default, mv acts as a normal table, only return the contained data no matter it's fresh or not
+        TRUE, // transparent, mv acts as transparent table of its defined query, its result is the same as its
+        // defined query.And it will redirect to its defined query if transparent rewrite failed or exceptions occurs.
+        TRANSPARENT_OR_ERROR, // try to transparent rewrite, and it will throw exception if transparent rewrite failed or
+        // exceptions occurs.
+        TRANSPARENT_OR_DEFAULT; // try to transparent rewrite, and it will use the original materialized view without partition
+        // compensated if transparent rewrite failed or exceptions occurs.
+
+        public boolean isEnable() {
+            return TRUE == this || TRANSPARENT_OR_ERROR == this || TRANSPARENT_OR_DEFAULT == this;
+        }
+
+        public static MVTransparentRewriteMode defaultValue() {
+            return FALSE;
+        }
+
+        public static MVTransparentRewriteMode parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return FALSE;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVTransparentRewriteMode.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVTransparentRewriteMode.values());
+
         }
     }
 
@@ -151,6 +214,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private QueryRewriteConsistencyMode queryRewriteConsistencyMode =
             QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
 
+    private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
+    private MVTransparentRewriteMode mvTransparentRewriteMode = MVTransparentRewriteMode.FALSE;
+
     private boolean isInMemory = false;
 
     private boolean enablePersistentIndex = false;
@@ -178,6 +244,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
+    @SerializedName(value = "compressionLevel")
+    // the default compression level of this table, only used for zstd for now.
+    private int compressionLevel = -1;
+
     // the default write quorum
     private TWriteQuorumType writeQuorum = TWriteQuorumType.MAJORITY;
 
@@ -188,6 +258,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // the default automatic bucket size
     private long bucketSize = 0;
+
+    // the default mutable bucket number
+    private long mutableBucketNum = 0;
 
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
@@ -225,12 +298,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
-        if (FeConstants.runningUnitTest) {
-            // FIXME: remove this later.
-            // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
-            // task run will only refresh 1 partition and will produce wrong result.
-            partitionRefreshNumber = INVALID;
-        }
     }
 
     public TableProperty copy() {
@@ -242,6 +309,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
         newTableProperty.hasDelete = this.hasDelete;
         newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
+        if (this.storageInfo != null) {
+            newTableProperty.storageInfo =
+                    new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());
+        }
         return newTableProperty;
     }
 
@@ -284,6 +355,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_BUCKET_SIZE:
                 buildBucketSize();
                 break;
+            case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+                buildMutableBucketNum();
+                break;
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
                 break;
@@ -315,6 +389,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildConstraint();
         buildMvSortKeys();
         buildQueryRewrite();
+        buildMVQueryRewriteSwitch();
+        buildMVTransparentRewriteMode();
         return this;
     }
 
@@ -365,17 +441,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPartitionTTL() {
-        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
-                String.valueOf(INVALID)));
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER));
+        }
         return this;
     }
 
     public TableProperty buildPartitionLiveNumber() {
-        if (partitionTTLNumber != INVALID) {
-            return this;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER));
         }
-        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
-                String.valueOf(INVALID)));
         return this;
     }
 
@@ -420,12 +495,53 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public void putMvSortKeys() {
+        if (CollectionUtils.isNotEmpty(mvSortKeys)) {
+            String value = Joiner.on(",").join(mvSortKeys);
+            this.properties.put(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS, value);
+        }
+    }
+
     public static List<String> analyzeMvSortKeys(String value) {
         if (StringUtils.isEmpty(value)) {
             return Lists.newArrayList();
         } else {
             return Splitter.on(",").omitEmptyStrings().trimResults().splitToList(value);
         }
+    }
+
+    public TableProperty buildMVQueryRewriteSwitch() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        this.mvQueryRewriteSwitch = MVQueryRewriteSwitch.parse(value);
+        return this;
+    }
+
+    public static MVQueryRewriteSwitch analyzeQueryRewriteSwitch(String value) {
+        MVQueryRewriteSwitch res = MVQueryRewriteSwitch.parse(value);
+        if (res == null) {
+            String valueList = MVQueryRewriteSwitch.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
+    }
+
+    public TableProperty buildMVTransparentRewriteMode() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+        this.mvTransparentRewriteMode = MVTransparentRewriteMode.parse(value);
+        return this;
+    }
+
+    public static MVTransparentRewriteMode analyzeMVTransparentRewrite(String value) {
+        MVTransparentRewriteMode res = MVTransparentRewriteMode.parse(value);
+        if (res == null) {
+            String valueList = MVTransparentRewriteMode.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
     }
 
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
@@ -494,8 +610,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildCompressionType() {
-        compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
-                TCompressionType.LZ4_FRAME.name()));
+        String compression = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
+                TCompressionType.LZ4_FRAME.name());
+        for (TCompressionType type : TCompressionType.values()) {
+            if (type.name().equalsIgnoreCase(compression)) {
+                compressionType = type;
+                return this;
+            }
+        }
+
+        compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
 
@@ -515,6 +639,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildBucketSize() {
         if (properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) != null) {
             bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+        }
+        return this;
+    }
+
+    public TableProperty buildMutableBucketNum() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM) != null) {
+            mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
         }
         return this;
     }
@@ -555,11 +686,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
-
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             try {
-                uniqueConstraints = UniqueConstraint.parse(
+                uniqueConstraints = UniqueConstraint.parse(null, null, null,
                         properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
             } catch (Exception e) {
                 LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
@@ -640,6 +770,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return replicationNum;
     }
 
+    public void setCompressionLevel(int compressionLevel) {
+        this.compressionLevel = compressionLevel;
+    }
+
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
     }
@@ -712,6 +846,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this.queryRewriteConsistencyMode;
     }
 
+    public void setMvQueryRewriteSwitch(MVQueryRewriteSwitch value) {
+        this.mvQueryRewriteSwitch = value;
+    }
+
+    public MVQueryRewriteSwitch getMvQueryRewriteSwitch() {
+        return this.mvQueryRewriteSwitch;
+    }
+
+    public void setMvTransparentRewriteMode(MVTransparentRewriteMode value) {
+        this.mvTransparentRewriteMode = value;
+    }
+
+    public MVTransparentRewriteMode getMvTransparentRewriteMode() {
+        return this.mvTransparentRewriteMode;
+    }
+
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -752,12 +902,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return bucketSize;
     }
 
+    public long getMutableBucketNum() {
+        return mutableBucketNum;
+    }
+
     public String getStorageVolume() {
         return storageVolume;
     }
 
     public TCompressionType getCompressionType() {
         return compressionType;
+    }
+
+    public int getCompressionLevel() {
+        return compressionLevel;
     }
 
     public boolean hasDelete() {
@@ -828,7 +986,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildUseFastSchemaEvolution() {
         useFastSchemaEvolution = Boolean.parseBoolean(
-            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
         return this;
     }
 

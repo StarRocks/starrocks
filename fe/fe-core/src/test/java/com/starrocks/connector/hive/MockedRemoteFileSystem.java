@@ -66,7 +66,8 @@ public class MockedRemoteFileSystem extends FileSystem {
         List<LocatedFileStatus> tblDirs = ImmutableList.of(
                 locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/subdir1"), true),
                 locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/subdir2"), true),
-                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/.subdir3"), true)
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/.subdir3"), true),
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/_temporary"), true)
                 );
         recEntries.put(HDFS_RECURSIVE_TABLE, tblDirs);
 
@@ -85,6 +86,11 @@ public class MockedRemoteFileSystem extends FileSystem {
                 locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/.subdir3/000000_3"), false)
                 );
         recEntries.put(HDFS_RECURSIVE_TABLE + "/.subdir3", subDir3);
+
+        List<LocatedFileStatus> subDir4 = ImmutableList.of(
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/_temporary/000000_4"), false)
+                );
+        recEntries.put(HDFS_RECURSIVE_TABLE + "/_temporary", subDir4);
 
         return recEntries;
     }

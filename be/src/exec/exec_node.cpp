@@ -50,6 +50,7 @@
 #include "exec/aggregate/distinct_streaming_node.h"
 #include "exec/analytic_node.h"
 #include "exec/assert_num_rows_node.h"
+#include "exec/capture_version_node.h"
 #include "exec/connector_scan_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/dict_decode_node.h"
@@ -74,6 +75,7 @@
 #include "exec/union_node.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -92,7 +94,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _type(tnode.node_type),
           _pool(pool),
           _tuple_ids(tnode.row_tuples),
-          _row_descriptor(descs, tnode.row_tuples, tnode.nullable_tuples),
+          _row_descriptor(descs, tnode.row_tuples),
           _resource_profile(tnode.resource_profile),
           _debug_phase(TExecNodePhase::INVALID),
           _debug_action(TDebugAction::WAIT),
@@ -148,7 +150,7 @@ void ExecNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterP
     if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
-    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
+    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
@@ -220,7 +222,7 @@ Status ExecNode::prepare(RuntimeState* state) {
     _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
                                       _runtime_profile->name(), nullptr));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
+    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, _runtime_profile.get()));
 
     // TODO(zc):
     // AddExprCtxsToFree(_conjunct_ctxs);
@@ -495,7 +497,8 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         *node = pool->add(new TableFunctionNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::HDFS_SCAN_NODE: {
+    case TPlanNodeType::HDFS_SCAN_NODE:
+    case TPlanNodeType::KUDU_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::HIVE;
@@ -561,6 +564,10 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     }
     case TPlanNodeType::STREAM_AGG_NODE: {
         *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::CAPTURE_VERSION_NODE: {
+        *node = pool->add(new CaptureVersionNode(pool, tnode, descs));
         return Status::OK();
     }
     default:

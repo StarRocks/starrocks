@@ -50,6 +50,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "util/uid_util.h"
 
@@ -64,6 +65,7 @@ class TabletsChannel;
 class LoadChannel;
 class LoadChannelMgr;
 class OlapTableSchemaParam;
+class RuntimeProfile;
 
 namespace lake {
 class TabletManager;
@@ -82,6 +84,8 @@ public:
 
     DISALLOW_COPY_AND_MOVE(LoadChannel);
 
+    void set_profile_config(const PLoadChannelProfileConfig& config);
+
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
     void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
@@ -98,7 +102,7 @@ public:
 
     void abort();
 
-    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason);
+    void abort(const TabletsChannelKey& key, const std::vector<int64_t>& tablet_ids, const std::string& reason);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
@@ -108,13 +112,15 @@ public:
 
     int64_t timeout() const { return _timeout_s; }
 
-    std::shared_ptr<TabletsChannel> get_tablets_channel(int64_t index_id);
+    std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
 
-    void remove_tablets_channel(int64_t index_id);
+    void remove_tablets_channel(const TabletsChannelKey& key);
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     Span get_span() { return _span; }
+
+    void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
 private:
     void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
@@ -135,14 +141,31 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::atomic<time_t> _last_updated_time;
 
+    // Put profile before _tablets_channels to avoid TabletsChannel use profile in destructor
+    // The root profile named "LoadChannel"
+    std::shared_ptr<RuntimeProfile> _root_profile;
+    // The profile named "Channel" for each BE
+    RuntimeProfile* _profile;
+
     // lock protect the tablets channel map
     bthread::Mutex _lock;
-    // index id -> tablets channel
-    std::unordered_map<int64_t, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    // key -> tablets channel
+    std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    std::atomic<bool> _closed{false};
 
     Span _span;
     size_t _num_chunk{0};
     size_t _num_segment = 0;
+
+    int64_t _create_time_ns;
+    bool _enable_profile{false};
+    int64_t _big_query_profile_threshold_ns{-1};
+    int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
+    std::atomic<int64_t> _last_report_time_ns{0};
+    std::atomic<bool> _final_report{false};
+
+    RuntimeProfile::Counter* _index_num = nullptr;
+    RuntimeProfile::Counter* _peak_memory_usage = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {

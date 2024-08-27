@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['suoyin']
 ---
 
 # CREATE INDEX
@@ -61,5 +62,5 @@ CREATE INDEX index3 ON sales_records (item_id);
 
 ## 相关操作
 
-- 如要查看索引，参见 [SHOW INDEX](../Administration/SHOW_INDEX.md)。
+- 如要查看索引，参见 [SHOW INDEX](../data-manipulation//SHOW_INDEX.md)。
 - 如要删除索引，参见 [DROP INDEX](../data-definition/DROP_INDEX.md)。

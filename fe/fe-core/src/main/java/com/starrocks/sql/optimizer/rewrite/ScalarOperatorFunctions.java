@@ -37,7 +37,6 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -100,6 +99,7 @@ import static com.starrocks.catalog.PrimitiveType.SMALLINT;
 import static com.starrocks.catalog.PrimitiveType.TIME;
 import static com.starrocks.catalog.PrimitiveType.TINYINT;
 import static com.starrocks.catalog.PrimitiveType.VARCHAR;
+import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
 
 /**
  * Constant Functions List
@@ -107,8 +107,6 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 public class ScalarOperatorFunctions {
     public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
             ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
-
-    private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
@@ -146,6 +144,79 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    // NOTE: Have to be consistent with BE implementation in `time_functions.cpp`
+    public static class TimeFunctions {
+        static final int NUMBER_OF_LEAP_YEAR = 366;
+        static final int NUMBER_OF_NON_LEAP_YEAR = 365;
+
+        static long computeDayNR(long year, long month, long day) {
+            long y = year;
+            if (y == 0 && month == 0) {
+                return 0;
+            }
+            long delsum = NUMBER_OF_NON_LEAP_YEAR * y + 31 * (month - 1) + day;
+            if (month <= 2) {
+                y--;
+            } else {
+                delsum -= (month * 4 + 23) / 10;
+            }
+            long tmp = ((y / 100 + 1) * 3) / 4;
+            long result = delsum + y / 4 - tmp;
+            Preconditions.checkArgument(result >= 0);
+            return result;
+        }
+
+        static long computeWeekDay(long days, boolean sundayFirstDayOfWeek) {
+            return (days + 5 + (sundayFirstDayOfWeek ? 1 : 0)) % 7;
+        }
+
+        static long computeDaysInYear(long year) {
+            return (year & 3) == 0 && ((year % 100 != 0) || (year % 400 == 0 && (year != 0))) ? NUMBER_OF_LEAP_YEAR
+                    : NUMBER_OF_NON_LEAP_YEAR;
+        }
+
+        public static long computeWeek(long year, long month, long day, int weekBehaviour) {
+            weekBehaviour = weekBehaviour & 0x7;
+            if ((weekBehaviour & 0x1) == 0) {
+                weekBehaviour ^= 0x4;
+            }
+
+            long days = 0;
+            long dayNR = computeDayNR(year, month, day);
+            long firstDayNR = computeDayNR(year, 1, 1);
+            boolean bMondayFirst = (weekBehaviour & 0x1) != 0;
+            boolean bWeekYear = (weekBehaviour & 0x2) != 0;
+            boolean bFirstWeekDay = (weekBehaviour & 0x4) != 0;
+
+            long weekDay = computeWeekDay(firstDayNR, !bMondayFirst);
+            long yearLocal = year;
+            if (month == 1 && day <= (7 - weekDay)) {
+                if (!bWeekYear && ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4))) {
+                    return 0;
+                }
+                bWeekYear = true;
+                yearLocal--;
+                days = computeDaysInYear(yearLocal);
+                firstDayNR -= days;
+                weekDay = (weekDay + 53 * 7 - days) % 7;
+            }
+
+            if ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4)) {
+                days = dayNR - (firstDayNR + 7 - weekDay);
+            } else {
+                days = dayNR - (firstDayNR - weekDay);
+            }
+            if (bWeekYear && days >= 52 * 7) {
+                weekDay = (weekDay + computeDaysInYear(yearLocal)) % 7;
+                if ((!bFirstWeekDay && weekDay < 4) || (bFirstWeekDay && weekDay == 0)) {
+                    yearLocal++;
+                    return 1;
+                }
+            }
+            return days / 7 + 1;
+        }
+    }
+
     /**
      * date and time function
      */
@@ -174,6 +245,12 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    @ConstantFunction(name = "quarters_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator quartersAdd(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetimeOrNull(
+                date.getDatetime().plus(quarter.getInt(), IsoFields.QUARTER_YEARS));
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "months_add", argTypes = {DATETIME,
                     INT}, returnType = DATETIME, isMonotonic = true),
@@ -188,6 +265,11 @@ public class ScalarOperatorFunctions {
         } else {
             return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusMonths(month.getInt()));
         }
+    }
+
+    @ConstantFunction(name = "weeks_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator weeksAdd(ConstantOperator date, ConstantOperator week) {
+        return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusWeeks(week.getInt()));
     }
 
     @ConstantFunction.List(list = {
@@ -212,6 +294,11 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "seconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator secondsAdd(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusSeconds(second.getInt()));
+    }
+
+    @ConstantFunction(name = "milliseconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator millisecondsAdd(ConstantOperator date, ConstantOperator millisecond) {
+        return ConstantOperator.createDatetimeOrNull(date.getDatetime().plus(millisecond.getInt(), ChronoUnit.MILLIS));
     }
 
     @ConstantFunction.List(list = {
@@ -340,13 +427,19 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
     public static ConstantOperator toDate(ConstantOperator dateTime) {
         LocalDateTime dt = dateTime.getDatetime();
-        dt.truncatedTo(ChronoUnit.DAYS);
-        return ConstantOperator.createDateOrNull(dt);
+        LocalDateTime newDt = dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDateOrNull(newDt);
     }
 
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().minusYears(year.getInt()));
+    }
+
+    @ConstantFunction(name = "quarters_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator quartersSub(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetimeOrNull(
+                date.getDatetime().minus(quarter.getInt(), IsoFields.QUARTER_YEARS));
     }
 
     @ConstantFunction(name = "months_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
@@ -361,6 +454,11 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator daysSub(ConstantOperator date, ConstantOperator day) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().minusDays(day.getInt()));
+    }
+
+    @ConstantFunction(name = "weeks_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator weeksSub(ConstantOperator date, ConstantOperator week) {
+        return ConstantOperator.createDatetimeOrNull(date.getDatetime().minusWeeks(week.getInt()));
     }
 
     @ConstantFunction(name = "hours_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
@@ -378,12 +476,37 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().minusSeconds(second.getInt()));
     }
 
+    @ConstantFunction(name = "milliseconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator millisecondsSub(ConstantOperator date, ConstantOperator millisecond) {
+        return ConstantOperator.createDatetimeOrNull(date.getDatetime().minus(millisecond.getInt(), ChronoUnit.MILLIS));
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "year", argTypes = {DATETIME}, returnType = SMALLINT, isMonotonic = true),
             @ConstantFunction(name = "year", argTypes = {DATE}, returnType = SMALLINT, isMonotonic = true)
     })
     public static ConstantOperator year(ConstantOperator arg) {
         return ConstantOperator.createSmallInt((short) arg.getDatetime().getYear());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "week", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE}, returnType = INT)
+    })
+    public static ConstantOperator week(ConstantOperator arg) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
+        return ConstantOperator.createInt((int) result);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "week", argTypes = {DATETIME, INT}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE, INT}, returnType = INT)
+    })
+    public static ConstantOperator weekWithMode(ConstantOperator arg, ConstantOperator mode) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
+        return ConstantOperator.createInt((int) result);
     }
 
     @ConstantFunction.List(list = {
@@ -1125,6 +1248,12 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
     }
 
+    @ConstantFunction(name = "replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator replace(ConstantOperator value, ConstantOperator target,
+                                           ConstantOperator replacement) {
+        return ConstantOperator.createVarchar(value.getVarchar().replace(target.getVarchar(), replacement.getVarchar()));
+    }
+
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
@@ -1213,5 +1342,11 @@ public class ScalarOperatorFunctions {
 
         return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));
     }
+
+    @ConstantFunction(name = "typeof_internal", returnType = VARCHAR, argTypes = {VARCHAR})
+    public static ConstantOperator typeofInternal(ConstantOperator value) {
+        return ConstantOperator.createVarchar(value.getVarchar());
+    }
+
 }
 

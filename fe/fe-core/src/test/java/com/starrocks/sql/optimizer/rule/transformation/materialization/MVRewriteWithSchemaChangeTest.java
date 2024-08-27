@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -87,7 +88,6 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 ");");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_cache_mv1 \n" +
                 "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
-                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
                 "partition by date_trunc('day', dt)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -121,7 +121,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1  varchar(30);";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             // check mv invalid
@@ -132,7 +132,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
                 Assert.fail("could not active the mv");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains("Column schema not compatible"));
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains("column schema not compatible"));
             }
 
             plan = getFragmentPlan(sql);
@@ -144,7 +144,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1 bigint;";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
@@ -275,7 +275,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
 
 
         {
-            starRocksAssert.withTables(cluster, List.of("depts", "emps_par"),
+            starRocksAssert.withMTableNames(cluster, List.of("depts", "emps_par"),
                     () -> {
                         starRocksAssert.withView("create view view1 as " +
                                 " select deptno1, deptno2, empid, name " +

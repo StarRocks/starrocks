@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "column/column_hash.h"
+#include "runtime/memory/counting_allocator.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"

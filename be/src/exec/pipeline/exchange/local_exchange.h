@@ -115,7 +115,7 @@ public:
 
     virtual ~LocalExchanger() = default;
 
-    enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2 };
+    enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2, SCALE = 3 };
 
     virtual Status prepare(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
@@ -228,20 +228,19 @@ private:
 // For external table sinks, the chunk received by operators after exchange need to ensure that
 // the values of the partition columns are the same.
 class KeyPartitionExchanger final : public LocalExchanger {
-    using RowIndexPtr = std::shared_ptr<std::vector<uint32_t>>;
-    using Partition2RowIndexes = std::map<PartitionKeyPtr, RowIndexPtr, PartitionKeyComparator>;
-
 public:
     KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                           LocalExchangeSourceOperatorFactory* source, std::vector<ExprContext*> _partition_expr_ctxs,
                           size_t num_sinks);
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
 private:
     LocalExchangeSourceOperatorFactory* _source;
     const std::vector<ExprContext*> _partition_expr_ctxs;
-    std::vector<Columns> _channel_partitions_columns;
 };
 
 // Exchange the local data for broadcast
@@ -269,6 +268,23 @@ public:
 
 private:
     std::atomic<size_t> _next_accept_source = 0;
+};
+
+// Scale local source for connector sink
+class ConnectorSinkPassthroughExchanger final : public LocalExchanger {
+public:
+    ConnectorSinkPassthroughExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                      LocalExchangeSourceOperatorFactory* source)
+            : LocalExchanger("ConnectorSinkPassthrough", memory_manager, source) {}
+
+    ~ConnectorSinkPassthroughExchanger() override = default;
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+
+private:
+    std::atomic<size_t> _next_accept_source = 0;
+    std::atomic<size_t> _writer_count = 1;
+    std::atomic<size_t> _data_processed = 0;
 };
 
 // Random shuffle for each chunk of source.

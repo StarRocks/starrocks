@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bitmap_count
 
-## 功能
+
 
 统计 bitmap 中不重复值的个数。
 

@@ -4,8 +4,8 @@ sidebar_position: 3
 description: "湖仓分析"
 toc_max_heading_level: 2
 ---
-import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 # 基于 Apache Iceberg 的数据湖分析
 
@@ -50,7 +50,7 @@ CN 节点负责在**存算分离**或**存算一体**集群中执行查询。
 
 ### BE
 
-BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本教程中使用的 Iceberg Catalog）时，BE 仅用于存储本地数据。
+BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本教程中使用的 Iceberg Catalog）时，BE 可以用于缓存外部数据，从而达到加速查询的效果。
 
 ---
 

@@ -34,6 +34,7 @@
 
 package com.starrocks.mysql;
 
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.mysql.ssl.SSLChannel;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -92,7 +93,8 @@ public class MysqlChannel {
                 if (channel.getRemoteAddress() instanceof InetSocketAddress) {
                     InetSocketAddress address = (InetSocketAddress) channel.getRemoteAddress();
                     // avoid calling getHostName() which may trigger a name service reverse lookup
-                    remoteHostPortString = address.getHostString() + ":" + address.getPort();
+                    remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(address.getHostString(), 
+                            address.getPort());
                     remoteIp = address.getAddress().getHostAddress();
                 } else {
                     // Reach here, what's it?

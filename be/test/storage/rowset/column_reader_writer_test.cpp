@@ -161,7 +161,7 @@ protected:
         // read and check
         {
             // read and check
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -386,7 +386,7 @@ protected:
 
         // read and check
         {
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -709,7 +709,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     // read and check
     {
         // read and check
-        auto res = ColumnReader::create(&meta, segment.get());
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
         ASSERT_EQ(1024, meta.num_rows());
@@ -770,7 +770,7 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             ASSERT_TRUE(wfile->close().ok());
             // read and check result
             auto segment = create_dummy_segment(fs, fname);
-            auto res = ColumnReader::create(&meta, segment.get());
+            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator());

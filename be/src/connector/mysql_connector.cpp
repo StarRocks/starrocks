@@ -227,7 +227,7 @@ Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         return Status::EndOfFile("finished!");
     }
 
-    _init_chunk(chunk, 0);
+    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
     // indicates whether there are more rows to process. Set in _hbase_scanner.next().
     bool mysql_eos = false;
     int row_num = 0;

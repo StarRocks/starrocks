@@ -267,7 +267,7 @@ public class AnalyzeFunctionTest {
                 "CREATE FUNCTION f(INT, INT, CHAR(10), BIGINT, ...) RETURNS INT",
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
-                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT INTERMEDIATE INT",
+                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT",
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "CREATE TABLE FUNCTION f(INT, INT) RETURNS INT",
@@ -294,5 +294,11 @@ public class AnalyzeFunctionTest {
         analyzeFail("select covar_samp(3,v1) from t0");
         analyzeFail("select covar_pop(v1,3) from t0");
         analyzeFail("select corr(v1) from t0");
+    }
+
+    @Test
+    public void testTypeofFunction() throws Exception {
+        analyzeFail("select typeof(cast(1 as tinyint),  cast(1 as int))");
+        analyzeFail("select typeof()");
     }
 }

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # months_sub
 
-## Description
+
 
 Subtracts specified months from the date.
 

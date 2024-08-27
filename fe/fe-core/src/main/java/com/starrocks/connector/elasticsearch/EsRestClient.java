@@ -205,6 +205,7 @@ public class EsRestClient {
             // User may set a config like described below:
             // hosts: "http://192.168.0.1:8200, http://192.168.0.2:8200"
             // then currentNode will be "http://192.168.0.1:8200", " http://192.168.0.2:8200"
+            // If use ipv6, remember to use format like [2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8080
             currentNode = currentNode.trim();
             if (!(currentNode.startsWith("http://") || currentNode.startsWith("https://"))) {
                 currentNode = "http://" + currentNode;

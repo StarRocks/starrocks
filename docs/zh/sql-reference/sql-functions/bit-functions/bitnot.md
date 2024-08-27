@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bitnot
 
-## 功能
+
 
 返回参数 `x` 进行取反运算后的结果。
 

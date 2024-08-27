@@ -21,6 +21,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
+    capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
     exec_node.cpp
@@ -36,6 +37,8 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+    write_combined_txn_log.cpp
+    multi_olap_table_sink.cpp
     mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
@@ -81,7 +84,6 @@ set(EXEC_FILES
     except_node.cpp
     file_scanner.cpp
     orc_scanner.cpp
-    orc_writer.cpp
     jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
@@ -99,6 +101,7 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
+    cache_select_scanner.cpp
     mor_processor.cpp
     json_scanner.cpp
     json_parser.cpp
@@ -112,6 +115,7 @@ set(EXEC_FILES
     dictionary_cache_writer.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
+    paimon/paimon_delete_file_builder.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -154,6 +158,8 @@ set(EXEC_FILES
     schema_scanner/schema_be_datacache_metrics_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
     schema_scanner/sys_fe_locks.cpp
+    schema_scanner/sys_fe_memory_usage.cpp
+    schema_scanner/schema_temp_tables_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -162,6 +168,7 @@ set(EXEC_FILES
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
+    pipeline/capture_version_operator.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
@@ -170,6 +177,10 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
     pipeline/exchange/multi_cast_local_exchange.cpp
+    pipeline/exchange/mem_limited_chunk_queue.cpp
+    pipeline/exchange/spillable_multi_cast_local_exchange.cpp
+    pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
+    pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
@@ -198,7 +209,9 @@ set(EXEC_FILES
     pipeline/scan/schema_chunk_source.cpp
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
+    pipeline/sink/connector_sink_operator.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
@@ -268,6 +281,9 @@ set(EXEC_FILES
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
+    pipeline/group_execution/execution_group.cpp
+    pipeline/group_execution/execution_group_builder.cpp
+    pipeline/group_execution/group_operator.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
@@ -285,6 +301,8 @@ set(EXEC_FILES
     spill/dir_manager.cpp
     spill/serde.cpp
     spill/input_stream.cpp
+    spill/data_stream.cpp
+    spill/block_reader.cpp
     spill/log_block_manager.cpp
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp

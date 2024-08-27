@@ -101,9 +101,13 @@ public class ColocateTableBalancerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         balancer.setStop();
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
+        GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
+        ColocateTableBalancer.getInstance().setStop();
     }
 
     @Before
@@ -867,81 +871,37 @@ public class ColocateTableBalancerTest {
     }
 
     @Test
-    public void testGetUnavailableBeIdsInGroup(@Mocked ColocateTableIndex colocateTableIndex,
-                                               @Mocked SystemInfoService infoService,
-                                               @Mocked Backend myBackend2,
-                                               @Mocked Backend myBackend3,
-                                               @Mocked Backend myBackend4,
-                                               @Mocked Backend myBackend5
-    ) {
+    public void testGetUnavailableBeIdsInGroup() {
         GroupId groupId = new GroupId(10000, 10001);
-        Set<Long> allBackendsInGroup = Sets.newHashSet(1L, 2L, 3L, 4L, 5L);
-        new Expectations() {
-            {
-                infoService.getBackend(1L);
-                result = null;
-                minTimes = 0;
+        List<Long> allBackendsInGroup = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
+        List<List<Long>> backendsPerBucketSeq = new ArrayList<>();
+        backendsPerBucketSeq.add(allBackendsInGroup);
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+        SystemInfoService infoService = new SystemInfoService();
+        colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
 
-                // backend2 is available
-                infoService.getBackend(2L);
-                result = myBackend2;
-                minTimes = 0;
-                myBackend2.isAvailable();
-                result = true;
-                minTimes = 0;
+        Backend be2 = new Backend(2L, "", 2002);
+        be2.setAlive(true);
+        infoService.replayAddBackend(be2);
 
-                // backend3 not available, and dead for a long time
-                infoService.getBackend(3L);
-                result = myBackend3;
-                minTimes = 0;
-                myBackend3.isAvailable();
-                result = false;
-                minTimes = 0;
-                myBackend3.isAlive();
-                result = false;
-                minTimes = 0;
-                myBackend3.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2;
-                minTimes = 0;
+        Backend be3 = new Backend(3L, "", 3003);
+        be3.setAlive(false);
+        be3.setLastUpdateMs(System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2);
+        infoService.replayAddBackend(be3);
 
-                // backend4 not available, and dead for a short time
-                infoService.getBackend(4L);
-                result = myBackend4;
-                minTimes = 0;
-                myBackend4.isAvailable();
-                result = false;
-                minTimes = 0;
-                myBackend4.isAlive();
-                result = false;
-                minTimes = 0;
-                myBackend4.getLastUpdateMs();
-                result = System.currentTimeMillis();
-                minTimes = 0;
+        Backend be4 = new Backend(4L, "", 4004);
+        be4.setAlive(false);
+        be4.setLastUpdateMs(System.currentTimeMillis());
+        infoService.replayAddBackend(be4);
 
-                // backend5 not available, and in decommission
-                infoService.getBackend(5L);
-                result = myBackend5;
-                minTimes = 0;
-                myBackend5.isAvailable();
-                result = false;
-                minTimes = 0;
-                myBackend5.isAlive();
-                result = true;
-                minTimes = 0;
-                myBackend5.isDecommissioned();
-                result = true;
-                minTimes = 0;
-
-                colocateTableIndex.getBackendsByGroup(groupId);
-                result = allBackendsInGroup;
-                minTimes = 0;
-            }
-        };
+        Backend be5 = new Backend(5L, "", 5005);
+        be5.setDecommissioned(true);
+        infoService.replayAddBackend(be5);
 
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+
         Set<Long> unavailableBeIds = Deencapsulation
                 .invoke(balancer, "getUnavailableBeIdsInGroup", infoService, colocateTableIndex, groupId);
-        System.out.println(unavailableBeIds);
         Assert.assertArrayEquals(new long[] {1L, 3L, 5L},
                 unavailableBeIds.stream().mapToLong(i -> i).sorted().toArray());
     }
@@ -1085,5 +1045,40 @@ public class ColocateTableBalancerTest {
         List<List<Long>> expected = Lists.partition(
                 Lists.newArrayList(5L, 8L, 7L, 8L, 6L, 5L, 6L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
+    }
+
+    @Test
+    public void testSystemStable() throws Exception {
+        ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
+        Backend backend1 = new Backend(100001L, "192.168.0.1", 9050);
+        backend1.setAlive(true);
+        Backend backend2 = new Backend(100002L, "192.168.0.2", 9050);
+        backend2.setAlive(true);
+        SystemInfoService infoService = new SystemInfoService();
+        infoService.replayAddBackend(backend1);
+        infoService.replayAddBackend(backend2);
+
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        // set stable last time to 1s, and sleep 1s, the system becomes to stable
+        Config.tablet_sched_colocate_balance_wait_system_stable_time_s = 1;
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
+
+        // one backend is changed to not alive, the system becomes to unstable
+        backend1.setAlive(false);
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        Assert.assertFalse(balancer.isSystemStable(infoService));
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Assert.assertTrue(balancer.isSystemStable(infoService));
     }
 }

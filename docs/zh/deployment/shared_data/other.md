@@ -4,16 +4,16 @@ displayed_sidebar: "Chinese"
 
 # 基于其他云存储部署
 
-import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
-import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
-import SharedDataUseIntro from '../../assets/commonMarkdown/sharedDataUseIntro.md'
-import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
+import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
+import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
+import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.md'
+import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 
 <SharedDataIntro />
 
 ## 系统架构
 
-![Shared-data Architecture](../../assets/share_data_arch.png)
+![Shared-data Architecture](../../_assets/share_data_arch.png)
 
 ## 部署 StarRocks 存算分离集群
 
@@ -232,19 +232,20 @@ StarRocks 集群的运行模式。有效值：
 
 <SharedDataUseIntro />
 
-以下示例使用 Access Key 以及 Secret Key 认证为 OSS 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活并将其设置为默认存储卷：
+以下示例使用 Access Key 以及 Secret Key 认证为 OSS 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活[分区前缀](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md#分区前缀)功能，并将其设置为默认存储卷：
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
 TYPE = S3
-LOCATIONS = ("s3://defaultbucket/test/")
+LOCATIONS = ("s3://defaultbucket")
 PROPERTIES
 (
     "enabled" = "true",
     "aws.s3.region" = "cn-zhangjiakou",
     "aws.s3.endpoint" = "http://oss-cn-zhangjiakou-internal.aliyuncs.com",
     "aws.s3.access_key" = "<oss_access_key>",
-    "aws.s3.secret_key" = "<oss_secret_key>"
+    "aws.s3.secret_key" = "<oss_secret_key>",
+    "aws.s3.enable_partitioned_prefix" = "true"
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;

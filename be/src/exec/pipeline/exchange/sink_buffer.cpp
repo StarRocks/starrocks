@@ -34,7 +34,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _is_dest_merge(is_dest_merge),
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
           _sent_audit_stats_frequency_upper_limit(
-                  std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->num_drivers() * 4))) {
+                  std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->total_dop() * 4))) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -238,7 +238,7 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     }
     if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
-        LOG(INFO) << fmt::format(
+        VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
                 "_num_sending_rpc {}, chunk is full {}",
                 print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,
@@ -423,6 +423,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
+        SET_IGNORE_OVERCROWDED(closure->cntl, query);
 
         Status st;
         if (bthread_self()) {

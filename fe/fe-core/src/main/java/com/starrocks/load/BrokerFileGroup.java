@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -137,9 +138,10 @@ public class BrokerFileGroup implements Writable {
         this.filePaths.add(table.getPath());
 
         this.fileFormat = table.getFormat();
-        this.columnSeparator = "\t";
-        this.rowDelimiter = "\n";
-        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+        this.columnSeparator = Delimiter.convertDelimiter(table.getCsvColumnSeparator());
+        this.rowDelimiter = Delimiter.convertDelimiter(table.getCsvRowDelimiter());
+        this.csvFormat = new CsvFormat(table.getCsvEnclose(), table.getCsvEscape(),
+                table.getCsvSkipHeader(), table.getCsvTrimSpace());
         this.fileFieldNames = new ArrayList<>();
 
         this.columnExprList = table.getColumnExprList();
@@ -360,6 +362,11 @@ public class BrokerFileGroup implements Writable {
 
     public boolean isTrimspace() {
         return csvFormat.isTrimspace();
+    }
+
+    @VisibleForTesting
+    void setFilePaths(List<String> filePaths) {
+        this.filePaths = filePaths;
     }
 
     @Override

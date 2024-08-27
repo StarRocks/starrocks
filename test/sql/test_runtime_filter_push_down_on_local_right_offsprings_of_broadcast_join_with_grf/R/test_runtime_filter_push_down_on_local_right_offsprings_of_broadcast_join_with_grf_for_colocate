@@ -1,0 +1,61 @@
+-- name: test_runtime_filter_push_down_on_local_right_offsprings_of_broadcast_join_with_grf_for_colocate
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE t2 (
+  k1 bigint NULL,
+  c1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series from TABLE(generate_series(0, 100 - 1));
+-- result:
+-- !result
+insert into t2 select * from t1;
+-- result:
+-- !result
+set global_runtime_filter_probe_min_size = 0;
+-- result:
+-- !result
+set enable_group_execution = false;
+-- result:
+-- !result
+with 
+    w1 as (select vt1.k1, vt1.c1 from t1 vt1 join [bucket] t1 vt2 on vt1.k1 = vt2.k1),
+    w2 as (select vt1.k1 from w1 vt1 join [broadcast] t2 vt2 on vt1.k1 =vt2.k1 ),
+    w3_right as (select * from t1 where c1 in (1, 4, 10, 20)),
+    w3 as (select vt1.k1 from w2 vt1 join [colocate] w3_right vt2 on vt1.k1 = vt2.k1)
+select * from w3
+order by k1;
+-- result:
+1
+4
+10
+20
+-- !result
+with 
+    w1 as (select vt1.k1, vt1.c1 from t1 vt1 join [bucket] t1 vt2 on vt1.k1 = vt2.k1),
+    w2 as (select vt1.k1 from w1 vt1 join [broadcast] t2 vt2 on vt1.k1 =vt2.k1 ),
+    w3_right as (select * from t1 where c1 in (1, 4, 10, 20)),
+    w3 as (select vt1.k1 from w2 vt1 join [broadcast] w3_right vt2 on vt1.k1 = vt2.k1)
+select * from w3
+order by k1;
+-- result:
+1
+4
+10
+20
+-- !result

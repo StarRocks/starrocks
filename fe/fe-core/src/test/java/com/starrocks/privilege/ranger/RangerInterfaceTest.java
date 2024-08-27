@@ -21,7 +21,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessController;
@@ -29,11 +28,19 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserIdentity;
-import mockit.Expectations;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.ranger.plugin.model.RangerPolicy;
 import org.apache.ranger.plugin.model.RangerServiceDef;
 import org.apache.ranger.plugin.policyengine.RangerAccessRequest;
@@ -44,13 +51,18 @@ import org.apache.ranger.plugin.service.RangerBasePlugin;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class RangerInterfaceTest {
+
+    ConnectContext connectContext;
+    StarRocksAssert starRocksAssert;
 
     @Before
     public void setUp() throws Exception {
@@ -64,6 +76,21 @@ public class RangerInterfaceTest {
                 return null;
             }
         };
+
+        UtFrameUtils.createMinStarRocksCluster();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("db").useDatabase("db").withTable("CREATE TABLE `t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
+                "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
     }
 
     @Test
@@ -111,25 +138,6 @@ public class RangerInterfaceTest {
     }
 
     @Test
-    public void testKerberos() throws IOException {
-        new Expectations() {
-            {
-                UserGroupInformation.loginUserFromKeytab((String) any, (String) any);
-                minTimes = 0;
-            }
-        };
-
-        Config.ranger_spnego_kerberos_principal = "HTTP/172.26.92.195@EXAMPLE.COM";
-        Config.ranger_spnego_kerberos_keytab = this.getClass().getResource("/").getPath() + "rangadmin.keytab";
-        Config.ranger_kerberos_krb5_conf = this.getClass().getResource("/").getPath() + "krb5.conf";
-
-        RangerStarRocksAccessController rangerStarRocksAccessController = new RangerStarRocksAccessController();
-
-        Config.ranger_spnego_kerberos_principal = "";
-        Config.ranger_spnego_kerberos_keytab = "";
-    }
-
-    @Test
     public void testMaskingExpr() {
         new MockUp<RangerBasePlugin>() {
             @Mock
@@ -150,7 +158,6 @@ public class RangerInterfaceTest {
 
         Map<String, Expr> e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
         Assert.assertTrue(new ArrayList<>(e.values()).get(0) instanceof NullLiteral);
-
 
         new MockUp<RangerBasePlugin>() {
             @Mock
@@ -223,5 +230,32 @@ public class RangerInterfaceTest {
 
         Assert.assertThrows(AccessDeniedException.class, () -> rangerStarRocksAccessController.hasPermission(
                 RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testRewriteWithAlias() throws Exception {
+        Expr e = SqlParser.parseSqlToExpr("v4+1", new ConnectContext().getSessionVariable().getSqlMode());
+        HashMap<String, Expr> exprHashMap = new HashMap<>();
+        exprHashMap.put("v4", e);
+
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic.when(() -> Authorizer.getColumnMaskingPolicy(Mockito.any(),
+                    Mockito.any(), Mockito.any())).thenReturn(exprHashMap);
+
+            StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse("select * from t1 t",
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+
+            QueryStatement queryStatement = (QueryStatement) stmt;
+            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+        }
     }
 }

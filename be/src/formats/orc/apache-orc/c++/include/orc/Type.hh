@@ -54,7 +54,6 @@ public:
     virtual TypeKind getKind() const = 0;
     virtual uint64_t getSubtypeCount() const = 0;
     virtual const Type* getSubtype(uint64_t childId) const = 0;
-    virtual const Type* getSubtypeByColumnId(uint64_t columnId) const = 0;
     virtual const std::string& getFieldName(uint64_t childId) const = 0;
     virtual uint64_t getFieldNamesCount() const = 0;
     virtual uint64_t getMaximumLength() const = 0;

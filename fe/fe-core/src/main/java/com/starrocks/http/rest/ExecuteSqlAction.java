@@ -39,6 +39,7 @@ import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
@@ -101,10 +102,13 @@ public class ExecuteSqlAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        TASKSERVICE.submit(() -> realWork(request, response));
+        // Get the content before submitting to executor pool,
+        // because the request body will be released after handleAction.
+        String content = request.getContent();
+        TASKSERVICE.submit(() -> realWork(request, content, response));
     }
 
-    private void realWork(BaseRequest request, BaseResponse response) {
+    private void realWork(BaseRequest request, String requestContent, BaseResponse response) {
         StatementBase parsedStmt;
 
         response.setContentType("application/x-ndjson; charset=utf-8");
@@ -122,7 +126,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         try {
             changeCatalogAndDB(catalogName, databaseName, context);
             try {
-                SqlRequest requestBody = validatePostBody(request.getContent(), context);
+                SqlRequest requestBody = validatePostBody(requestContent, context);
                 // set result format as json,
                 context.setResultSinkFormatType(TResultSinkFormatType.JSON);
                 checkSessionVariable(requestBody.sessionVariables, context);
@@ -237,9 +241,9 @@ public class ExecuteSqlAction extends RestBaseAction {
 
         context.setConnectScheduler(connectScheduler);
         // mark as registered
-        boolean registered = connectScheduler.registerConnection(context);
-        if (!registered) {
-            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, "Reach limit of connections");
+        Pair<Boolean, String> result = connectScheduler.registerConnection(context);
+        if (!result.first) {
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, result.second);
         }
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);

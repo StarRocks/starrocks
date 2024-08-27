@@ -12,7 +12,6 @@ PARTITION p4 VALUES [('15000000'), ('20000000'))
 DISTRIBUTED BY HASH(`bill_code`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT"
 );
 -- result:

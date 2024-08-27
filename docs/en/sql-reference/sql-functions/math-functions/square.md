@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # square
 
-## Description
+
 
 Calculates the square of a value.
 

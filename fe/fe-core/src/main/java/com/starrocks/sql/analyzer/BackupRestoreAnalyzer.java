@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,6 +50,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public class BackupRestoreAnalyzer {
@@ -58,7 +60,7 @@ public class BackupRestoreAnalyzer {
         new BackupRestoreStmtAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class BackupRestoreStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class BackupRestoreStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private static final String PROP_TIMEOUT = "timeout";
         private static final long MIN_TIMEOUT_MS = 600_000L; // 10 min
@@ -87,6 +89,9 @@ public class BackupRestoreAnalyzer {
                     if (!Config.enable_backup_materialized_view && tbl.isMaterializedView()) {
                         LOG.info("Skip backup materialized view: {} because " +
                                         "`Config.enable_backup_materialized_view=false`", tbl.getName());
+                        continue;
+                    }
+                    if (tbl.isTemporaryTable()) {
                         continue;
                     }
                     TableName tableName = new TableName(dbName, tbl.getName());
@@ -195,13 +200,24 @@ public class BackupRestoreAnalyzer {
             if (mvPartsMap.containsKey(tableName)) {
                 MaterializedView mv = mvPartsMap.get(tableName);
                 for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-                    if (baseTableInfo.getDb().getId() != database.getId()) {
+                    Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+                    if (dbOpt.isEmpty()) {
+                        LOG.warn("database {} do not exist when collect table info for table: {}",
+                                baseTableInfo.getDbInfoStr(), tableName);
+                        continue;
+                    }
+                    if (dbOpt.get().getId() != database.getId()) {
                         // if the referred base table is not the same with the current database, skip it.
                         LOG.warn("The referred base table {} 's database is different from the materialized view {}, " +
                                         "skip backup it", baseTableInfo.getTableName(), tableRef.getName());
                         continue;
                     }
-                    Table baseTable = baseTableInfo.getTable();
+                    Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                    if (baseTableOpt.isEmpty()) {
+                        LOG.warn("The referred base table {} is not found in catalog, " +
+                                "skip backup it", baseTableInfo.getTableName());
+                    }
+                    Table baseTable = baseTableOpt.get();
                     if (!tableIdToTableRefMap.containsKey(baseTable.getId())) {
                         // if the table_id->table_ref map not contains the ref base table, skip it
                         LOG.warn("The referred base table {} is not found in the collected table ref map, " +
@@ -408,8 +424,8 @@ public class BackupRestoreAnalyzer {
             // check its base tables exist for materialized view.
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Table refTable = baseTableInfo.getTable();
-                if (refTable == null) {
+                Optional<Table> refTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                if (refTableOpt.isEmpty()) {
                     throw new SemanticException(String.format("Base table %s doest not existed in materialized view %s when " +
                             "backup/restore", baseTableInfo.getTableName(), mv.getName()));
                 }

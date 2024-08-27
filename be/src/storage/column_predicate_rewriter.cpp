@@ -41,212 +41,301 @@
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
+
+// ------------------------------------------------------------------------------------
+// ColumnPredicateRewriter
+// ------------------------------------------------------------------------------------
+
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
-Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
-    // because schema has reordered
-    // so we only need to check the first `predicate_column_size` fields
+struct RewritePredicateTreeVisitor {
+    using RewriteStatus = ColumnPredicateRewriter::RewriteStatus;
+
+    template <CompoundNodeType ParentType>
+    StatusOr<RewriteStatus> operator()(PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) const {
+        const auto* col_pred = node.col_pred();
+        const auto cid = col_pred->column_id();
+        // index only filter only used for storage engine index filter
+        // after index filter,it's useless and will be thrown away in SegmentIterator::_init_column_predicates
+        if (col_pred->is_index_filter_only() && col_pred->is_expr_predicate()) {
+            return RewriteStatus::UNCHANGED;
+        }
+
+        if (!_rewriter._need_rewrite[cid]) {
+            return RewriteStatus::UNCHANGED;
+        }
+
+        const auto& field = _cid_to_field.find(cid)->second;
+        DCHECK(_rewriter._column_iterators[cid]->all_page_dict_encoded());
+
+        ColumnPredicate* rewrited_pred;
+        ASSIGN_OR_RETURN(auto rewrite_status, _rewriter._rewrite_predicate(_pool, field, col_pred, &rewrited_pred));
+
+        if (rewrite_status == RewriteStatus::CHANGED) {
+            _pool->add(rewrited_pred);
+            parent.add_child(PredicateColumnNode{rewrited_pred});
+        }
+
+        return rewrite_status;
+    }
+
+    template <CompoundNodeType Type, CompoundNodeType ParentType>
+    StatusOr<RewriteStatus> operator()(PredicateCompoundNode<Type>& node,
+                                       PredicateCompoundNode<ParentType>& parent) const {
+        std::vector<PredicateNodePtr> unchanged_children;
+        unchanged_children.reserve(node.num_children());
+        auto new_node = PredicateCompoundNode<Type>{};
+
+        bool changed = false;
+        for (auto child : node.children()) {
+            ASSIGN_OR_RETURN(auto rewrite_status, child.visit(*this, new_node));
+
+            changed |= rewrite_status != RewriteStatus::UNCHANGED;
+
+            switch (rewrite_status) {
+            case RewriteStatus::ALWAYS_TRUE:
+                if constexpr (Type == CompoundNodeType::AND) {
+                    break; // Do nothing.
+                } else {
+                    return RewriteStatus::ALWAYS_TRUE;
+                }
+            case RewriteStatus::ALWAYS_FALSE:
+                if constexpr (Type == CompoundNodeType::AND) {
+                    return RewriteStatus::ALWAYS_FALSE;
+                } else {
+                    break; // Do nothing.
+                }
+            case RewriteStatus::CHANGED:
+                // The changed new node has been added to new_node when visiting the child.
+                break;
+            case RewriteStatus::UNCHANGED:
+                [[fallthrough]];
+            default:
+                unchanged_children.emplace_back(std::move(child));
+                break;
+            }
+        }
+
+        if (!changed) {
+            return RewriteStatus::UNCHANGED;
+        }
+
+        if (unchanged_children.empty() && new_node.empty()) {
+            if constexpr (Type == CompoundNodeType::AND) {
+                return RewriteStatus::ALWAYS_TRUE;
+            } else {
+                return RewriteStatus::ALWAYS_FALSE;
+            }
+        }
+
+        for (auto& child_var : unchanged_children) {
+            child_var.visit([&new_node](auto& child) { new_node.add_child(std::move(child)); });
+        }
+        parent.add_child(std::move(new_node));
+        return RewriteStatus::CHANGED;
+    }
+
+    ColumnPredicateRewriter& _rewriter;
+    std::unordered_map<ColumnId, const FieldPtr&>& _cid_to_field;
+    ObjectPool* _pool;
+};
+
+Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree) {
+    std::unordered_map<ColumnId, const FieldPtr&> cid_to_field;
     for (size_t i = 0; i < _column_size; i++) {
         const FieldPtr& field = _schema.field(i);
-        ColumnId cid = field->id();
-        if (_need_rewrite[cid]) {
-            RETURN_IF_ERROR(_rewrite_predicate(pool, field));
-        }
+        const ColumnId cid = field->id();
+        cid_to_field.emplace(cid, field);
+    }
+
+    auto root = pred_tree.release_root();
+    PredicateAndNode new_root;
+    ASSIGN_OR_RETURN(auto rewrite_status, root.visit(RewritePredicateTreeVisitor{*this, cid_to_field, pool}, new_root));
+
+    switch (rewrite_status) {
+    case RewriteStatus::ALWAYS_TRUE:
+        pred_tree = PredicateTree();
+        break;
+    case RewriteStatus::ALWAYS_FALSE:
+        _scan_range = _scan_range.intersection(SparseRange<>());
+        pred_tree = PredicateTree();
+        break;
+    case RewriteStatus::CHANGED:
+        pred_tree = PredicateTree::create(std::move(new_root));
+        break;
+    case RewriteStatus::UNCHANGED:
+        [[fallthrough]];
+    default:
+        pred_tree = PredicateTree::create(std::move(root));
+        break;
     }
     return Status::OK();
 }
 
-StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPtr& field) {
-    auto cid = field->id();
+StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewrite_predicate(
+        ObjectPool* pool, const FieldPtr& field, const ColumnPredicate* pred, ColumnPredicate** dest_pred) {
+    const auto cid = field->id();
+    if (!_need_rewrite[cid]) {
+        return RewriteStatus::UNCHANGED;
+    }
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
-    auto iter = _predicates.find(cid);
-    if (iter == _predicates.end()) {
-        return false;
+
+    if (PredicateType::kEQ == pred->type()) {
+        Datum value = pred->value();
+        int code = _column_iterators[cid]->dict_lookup(value.get_slice());
+        if (code < 0) {
+            return RewriteStatus::ALWAYS_FALSE;
+        }
+        *dest_pred = new_column_eq_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
+        return RewriteStatus::CHANGED;
     }
-    PredicateList& preds = iter->second;
-    // the predicate has been erased, because of bitmap index filter.
-    RETURN_IF(preds.empty(), false);
 
-    // TODO: use pair<slice,int>
-    std::vector<std::pair<std::string, int>> sorted_dicts{};
-
-    std::vector<const ColumnPredicate*> remove_list;
-
-    for (auto& i : preds) {
-        const ColumnPredicate* pred = i;
-        if (PredicateType::kEQ == pred->type()) {
-            Datum value = pred->value();
-            int code = _column_iterators[cid]->dict_lookup(value.get_slice());
-            if (code < 0) {
-                // predicate always false, clear scan range, this will make `get_next` return EOF directly.
-                _scan_range = _scan_range.intersection(SparseRange<>());
-                continue;
-            }
-            auto ptr = new_column_eq_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
-            i = pool->add(ptr);
-            continue;
-        }
-        if (PredicateType::kNE == pred->type()) {
-            Datum value = pred->value();
-            int code = _column_iterators[cid]->dict_lookup(value.get_slice());
-            if (code < 0) {
-                if (!field->is_nullable()) {
-                    // predicate always true, clear this predicate.
-                    remove_list.push_back(i);
-                    continue;
-                } else {
-                    // convert this predicate to `not null` predicate.
-                    auto ptr = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
-                    i = pool->add(ptr);
-                    continue;
-                }
-            }
-            auto ptr = new_column_ne_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
-            i = pool->add(ptr);
-            continue;
-        }
-        if (PredicateType::kInList == pred->type()) {
-            std::vector<Datum> values = pred->values();
-            std::vector<int> codewords;
-            for (const auto& value : values) {
-                if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                    codewords.emplace_back(code);
-                }
-            }
-            if (codewords.empty()) {
-                // predicate always false, clear scan range.
-                _scan_range = _scan_range.intersection(SparseRange<>());
-                continue;
-            }
-            std::vector<std::string> str_codewords;
-            str_codewords.reserve(codewords.size());
-            for (int code : codewords) {
-                str_codewords.emplace_back(std::to_string(code));
-            }
-            auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-            i = pool->add(ptr);
-        }
-        if (PredicateType::kNotInList == pred->type()) {
-            std::vector<Datum> values = pred->values();
-            std::vector<int> codewords;
-            for (const auto& value : values) {
-                if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                    codewords.emplace_back(code);
-                }
-            }
-            if (codewords.empty()) {
-                if (!field->is_nullable()) {
-                    // predicate always true, clear this predicate.
-                    remove_list.push_back(i);
-                    continue;
-                } else {
-                    // convert this predicate to `not null` predicate.
-                    auto ptr = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
-                    i = pool->add(ptr);
-                    continue;
-                }
-            }
-            std::vector<std::string> str_codewords;
-            str_codewords.reserve(codewords.size());
-            for (int code : codewords) {
-                str_codewords.emplace_back(std::to_string(code));
-            }
-            auto ptr = new_column_not_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-            i = pool->add(ptr);
-        }
-        if (PredicateType::kGE == pred->type() || PredicateType::kGT == pred->type()) {
-            RETURN_IF_ERROR(_get_segment_dict(&sorted_dicts, _column_iterators[cid].get()));
-            // use non-padding string value.
-            auto value = pred->values()[0].get_slice().to_string();
-            auto iter = std::lower_bound(
-                    sorted_dicts.begin(), sorted_dicts.end(), value,
-                    [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
-            std::vector<std::string> str_codewords;
-            // X > 3.5 find 4, range(4, inf)
-            // X > 3 find 3, range(3, inf)
-            // X >= 3.5 find 4, range(4, inf)
-            // X >= 3 find 3, range(3, inf)
-            if (PredicateType::kGT == pred->type() && iter != sorted_dicts.end() && iter->first == value) {
-                iter++;
-            }
-            while (iter != sorted_dicts.end()) {
-                str_codewords.push_back(std::to_string(iter->second));
-                iter++;
-            }
-            if (!str_codewords.empty()) {
-                auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-                i = pool->add(ptr);
+    if (PredicateType::kNE == pred->type()) {
+        Datum value = pred->value();
+        int code = _column_iterators[cid]->dict_lookup(value.get_slice());
+        if (code < 0) {
+            if (!field->is_nullable()) {
+                return RewriteStatus::ALWAYS_TRUE;
             } else {
-                _scan_range = _scan_range.intersection(SparseRange<>());
-                continue;
+                // convert this predicate to `not null` predicate.
+                *dest_pred = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
+                return RewriteStatus::CHANGED;
             }
         }
-        if (PredicateType::kLE == pred->type() || PredicateType::kLT == pred->type()) {
-            RETURN_IF_ERROR(_get_segment_dict(&sorted_dicts, _column_iterators[cid].get()));
-            // use non-padding string value.
-            auto value = pred->values()[0].get_slice().to_string();
-            auto iter = std::lower_bound(
-                    sorted_dicts.begin(), sorted_dicts.end(), value,
-                    [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
-            std::vector<std::string> str_codewords;
-            auto begin_iter = sorted_dicts.begin();
-            // X < 3.5 find 4, range(-inf, 3)
-            // X < 3 find 3, range(-inf, 2)
-            // X <= 3.5 find 4, range(-inf, 3)
-            // X <= 3 find 3, range(-inf, 3)
-            if (!(PredicateType::kLE == pred->type() && iter != sorted_dicts.end() && iter->first == value)) {
-                iter--;
+        *dest_pred = new_column_ne_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
+        return RewriteStatus::CHANGED;
+    }
+
+    if (PredicateType::kInList == pred->type()) {
+        std::vector<Datum> values = pred->values();
+        std::vector<int> codewords;
+        for (const auto& value : values) {
+            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
+                codewords.emplace_back(code);
             }
-            while (begin_iter <= iter && begin_iter != sorted_dicts.end()) {
-                str_codewords.push_back(std::to_string(begin_iter->second));
-                begin_iter++;
+        }
+        if (codewords.empty()) {
+            return RewriteStatus::ALWAYS_FALSE;
+        }
+        std::vector<std::string> str_codewords;
+        str_codewords.reserve(codewords.size());
+        for (int code : codewords) {
+            str_codewords.emplace_back(std::to_string(code));
+        }
+        *dest_pred = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
+        return RewriteStatus::CHANGED;
+    }
+
+    if (PredicateType::kNotInList == pred->type()) {
+        std::vector<Datum> values = pred->values();
+        std::vector<int> codewords;
+        for (const auto& value : values) {
+            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
+                codewords.emplace_back(code);
             }
-            if (!str_codewords.empty()) {
-                auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-                i = pool->add(ptr);
+        }
+        if (codewords.empty()) {
+            if (!field->is_nullable()) {
+                return RewriteStatus::ALWAYS_TRUE;
             } else {
-                _scan_range = _scan_range.intersection(SparseRange<>());
-                continue;
+                // convert this predicate to `not null` predicate.
+                *dest_pred = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
+                return RewriteStatus::CHANGED;
             }
+        }
+        std::vector<std::string> str_codewords;
+        str_codewords.reserve(codewords.size());
+        for (int code : codewords) {
+            str_codewords.emplace_back(std::to_string(code));
+        }
+        *dest_pred = new_column_not_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
+        return RewriteStatus::CHANGED;
+    }
+
+    if (PredicateType::kGE == pred->type() || PredicateType::kGT == pred->type()) {
+        ASSIGN_OR_RETURN(const auto* sorted_dicts_ptr, _get_or_load_segment_dict(cid));
+        const auto& sorted_dicts = *sorted_dicts_ptr;
+
+        // use non-padding string value.
+        auto value = pred->values()[0].get_slice().to_string();
+        auto iter =
+                std::lower_bound(sorted_dicts.begin(), sorted_dicts.end(), value,
+                                 [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
+        std::vector<std::string> str_codewords;
+        // X > 3.5 find 4, range(4, inf)
+        // X > 3 find 3, range(3, inf)
+        // X >= 3.5 find 4, range(4, inf)
+        // X >= 3 find 3, range(3, inf)
+        if (PredicateType::kGT == pred->type() && iter != sorted_dicts.end() && iter->first == value) {
+            iter++;
+        }
+        while (iter != sorted_dicts.end()) {
+            str_codewords.push_back(std::to_string(iter->second));
+            iter++;
+        }
+        if (!str_codewords.empty()) {
+            *dest_pred = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
+            return RewriteStatus::CHANGED;
+        } else {
+            return RewriteStatus::ALWAYS_FALSE;
         }
     }
 
-    bool load_seg_dict_vec = false;
-    ColumnPtr dict_column;
-    ColumnPtr code_column;
-    for (auto& i : preds) {
-        const ColumnPredicate* pred = i;
-        if (PredicateType::kExpr == pred->type()) {
-            if (!load_seg_dict_vec) {
-                load_seg_dict_vec = true;
-                RETURN_IF_ERROR(_get_segment_dict_vec(_column_iterators[cid].get(), &dict_column, &code_column,
-                                                      field->is_nullable()));
-            }
+    if (PredicateType::kLE == pred->type() || PredicateType::kLT == pred->type()) {
+        ASSIGN_OR_RETURN(const auto* sorted_dicts_ptr, _get_or_load_segment_dict(cid));
+        const auto& sorted_dicts = *sorted_dicts_ptr;
 
-            ColumnPredicate* ptr;
-            ASSIGN_OR_RETURN(bool non_empty,
-                             _rewrite_expr_predicate(pool, pred, dict_column, code_column, field->is_nullable(), &ptr));
-            if (!non_empty) {
-                _scan_range = _scan_range.intersection(SparseRange<>());
-            } else {
-                i = pool->add(ptr);
-            }
+        // use non-padding string value.
+        auto value = pred->values()[0].get_slice().to_string();
+        auto iter =
+                std::lower_bound(sorted_dicts.begin(), sorted_dicts.end(), value,
+                                 [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
+        std::vector<std::string> str_codewords;
+        auto begin_iter = sorted_dicts.begin();
+        // X < 3.5 find 4, range(-inf, 3)
+        // X < 3 find 3, range(-inf, 2)
+        // X <= 3.5 find 4, range(-inf, 3)
+        // X <= 3 find 3, range(-inf, 3)
+        if (!(PredicateType::kLE == pred->type() && iter != sorted_dicts.end() && iter->first == value)) {
+            iter--;
+        }
+        while (begin_iter <= iter && begin_iter != sorted_dicts.end()) {
+            str_codewords.push_back(std::to_string(begin_iter->second));
+            begin_iter++;
+        }
+        if (!str_codewords.empty()) {
+            *dest_pred = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
+            return RewriteStatus::CHANGED;
+        } else {
+            return RewriteStatus::ALWAYS_FALSE;
         }
     }
 
-    for (const auto pred_will_remove : remove_list) {
-        auto willrm = std::find(preds.begin(), preds.end(), pred_will_remove);
-        preds.erase(willrm);
+    if (PredicateType::kExpr == pred->type()) {
+        ASSIGN_OR_RETURN(const auto* dict_and_codes_ptr, _get_or_load_segment_dict_vec(cid, field));
+        const auto& [dict_column, code_column] = *dict_and_codes_ptr;
+
+        return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
 
-    return true;
+    return RewriteStatus::UNCHANGED;
+}
+
+StatusOr<const ColumnPredicateRewriter::SortedDicts*> ColumnPredicateRewriter::_get_or_load_segment_dict(ColumnId cid) {
+    auto it = _cid_to_sorted_dicts.find(cid);
+    if (it == _cid_to_sorted_dicts.end()) {
+        it = _cid_to_sorted_dicts.emplace(cid, SortedDicts{}).first;
+        RETURN_IF_ERROR(_load_segment_dict(&it->second, _column_iterators[cid].get()));
+    }
+
+    return &it->second;
 }
 
 // This function is only used to rewrite the LE/LT/GE/GT condition.
 // For the greater than or less than condition,
 // you need to get the values of all ordered dictionaries and rewrite them as `InList` expressions
-Status ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::string, int>>* dicts,
-                                                  ColumnIterator* iter) {
+Status ColumnPredicateRewriter::_load_segment_dict(std::vector<std::pair<std::string, int>>* dicts,
+                                                   ColumnIterator* iter) {
     // We already loaded dicts, no need to do once more.
     if (!dicts->empty()) {
         return Status::OK();
@@ -268,8 +357,21 @@ Status ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::str
     return Status::OK();
 }
 
-Status ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
-                                                      ColumnPtr* code_column, bool field_nullable) {
+StatusOr<const ColumnPredicateRewriter::DictAndCodes*> ColumnPredicateRewriter::_get_or_load_segment_dict_vec(
+        ColumnId cid, const FieldPtr& field) {
+    auto it = _cid_to_vec_sorted_dicts.find(cid);
+    if (it == _cid_to_vec_sorted_dicts.end()) {
+        it = _cid_to_vec_sorted_dicts.emplace(cid, std::make_pair(nullptr, nullptr)).first;
+        auto& [dict_column, code_column] = it->second;
+        RETURN_IF_ERROR(
+                _load_segment_dict_vec(_column_iterators[cid].get(), &dict_column, &code_column, field->is_nullable()));
+    }
+
+    return &it->second;
+}
+
+Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
+                                                       ColumnPtr* code_column, bool field_nullable) {
     auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
@@ -300,14 +402,13 @@ Status ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, Colu
     return Status::OK();
 }
 
-StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate* raw_pred,
-                                                                const ColumnPtr& raw_dict_column,
-                                                                const ColumnPtr& raw_code_column, bool field_nullable,
-                                                                ColumnPredicate** ptr) {
-    *ptr = nullptr;
+StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewrite_expr_predicate(
+        ObjectPool* pool, const ColumnPtr& raw_dict_column, const ColumnPtr& raw_code_column, bool field_nullable,
+        const ColumnPredicate* src_pred, ColumnPredicate** dest_pred) {
+    *dest_pred = nullptr;
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
-    const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
+    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
     size_t chunk_size = std::min<size_t>(pred->runtime_state()->chunk_size(), std::numeric_limits<uint16_t>::max());
 
     if (value_size <= chunk_size) {
@@ -340,13 +441,12 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     size_t false_count = SIMD::count_zero(selection);
     size_t true_count = (value_size - false_count);
     if (true_count == 0) {
-        return false;
+        return RewriteStatus::ALWAYS_FALSE;
     }
 
     if (false_count == 0) {
         // always true.
-        *ptr = new ColumnTruePredicate(get_type_info(kDictCodeType), pred->column_id());
-        return true;
+        return RewriteStatus::ALWAYS_TRUE;
     }
 
     // TODO(yan): use eq/ne predicates when only one item, but it's very very hard to construct ne/eq expr.
@@ -383,86 +483,151 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
 
     DCHECK_IF_ERROR(filter->prepare(state));
     DCHECK_IF_ERROR(filter->open(state));
-    ASSIGN_OR_RETURN(*ptr, ColumnExprPredicate::make_column_expr_predicate(
-                                   get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc()))
+    ASSIGN_OR_RETURN(*dest_pred,
+                     ColumnExprPredicate::make_column_expr_predicate(get_type_info(kDictCodeType), pred->column_id(),
+                                                                     state, filter, pred->slot_desc()))
     filter->close(state);
 
-    return true;
+    return RewriteStatus::CHANGED;
 }
 
-// member function for GlobalDictPredicatesRewriter
+// ------------------------------------------------------------------------------------
+// GlobalDictPredicatesRewriter
+// ------------------------------------------------------------------------------------
 
-Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
+StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::_rewrite_predicate(const ColumnPredicate* pred,
+                                                                              std::vector<uint8_t>& selection) {
+    if (!_column_need_rewrite(pred->column_id())) {
+        return nullptr;
+    }
+
+    const auto& dict = _dict_maps.at(pred->column_id());
+    ChunkPtr temp_chunk = std::make_shared<Chunk>();
+
+    auto [binary_column, codes] = extract_column_with_codes(*dict);
+
+    size_t dict_rows = codes.size();
+    selection.resize(dict_rows);
+
+    RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
+
+    std::vector<uint8_t> code_mapping;
+    code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
+    for (size_t i = 0; i < codes.size(); ++i) {
+        code_mapping[codes[i]] = selection[i];
+    }
+
+    auto* new_pred =
+            new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(), std::move(code_mapping));
+    new_pred->set_index_filter_only(pred->is_index_filter_only());
+    return std::unique_ptr<ColumnPredicate>(new_pred);
+}
+
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool, ConjunctivePredicates& predicates) {
     std::vector<uint8_t> selection;
-    auto pred_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
+    auto preds_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
         for (auto& pred : preds) {
-            if (column_need_rewrite(pred->column_id())) {
-                const auto& dict = _dict_maps.at(pred->column_id());
-                ChunkPtr temp_chunk = std::make_shared<Chunk>();
-
-                auto [binary_column, codes] = extract_column_with_codes(*dict);
-
-                size_t dict_rows = codes.size();
-                selection.resize(dict_rows);
-
-                RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
-
-                std::vector<uint8_t> code_mapping;
-                code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
-                for (size_t i = 0; i < codes.size(); ++i) {
-                    code_mapping[codes[i]] = selection[i];
-                }
-
-                pred = new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(),
-                                                         std::move(code_mapping));
-                pool->add(const_cast<ColumnPredicate*>(pred));
+            ASSIGN_OR_RETURN(auto new_pred, _rewrite_predicate(pred, selection));
+            if (new_pred != nullptr) {
+                pred = pool->add(new_pred.release());
             }
         }
         return Status::OK();
     };
 
-    RETURN_IF_ERROR(pred_rewrite(_predicates.non_vec_preds()));
-    RETURN_IF_ERROR(pred_rewrite(_predicates.vec_preds()));
+    RETURN_IF_ERROR(preds_rewrite(predicates.non_vec_preds()));
+    RETURN_IF_ERROR(preds_rewrite(predicates.vec_preds()));
 
     return Status::OK();
 }
 
-Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool,
-                                                        const std::unordered_map<ColumnId, PredicateList>& src,
-                                                        std::unordered_map<ColumnId, PredicateList>* dst) {
-    DCHECK(dst != nullptr);
-    for (auto& [cid, preds] : src) {
-        dst->insert({cid, {}});
-        auto& preds_after_rewrite = dst->at(cid);
-        RETURN_IF_ERROR(rewrite_predicate_list(pool, preds, &preds_after_rewrite));
+struct GlobalDictPredicateTreeVisitor {
+    Status operator()(PredicateColumnNode& node) const {
+        ASSIGN_OR_RETURN(auto new_col_pred, parent->_rewrite_predicate(node.col_pred(), selection));
+        if (new_col_pred != nullptr) {
+            node.set_col_pred(pool->add(new_col_pred.release()));
+        }
+        return Status::OK();
     }
+
+    template <CompoundNodeType Type>
+    Status operator()(PredicateCompoundNode<Type>& node) const {
+        for (auto child : node.children()) {
+            RETURN_IF_ERROR(child.visit(*this));
+        }
+        return Status::OK();
+    }
+
+    GlobalDictPredicatesRewriter* parent;
+    ObjectPool* pool;
+    std::vector<uint8_t>& selection;
+};
+
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree) {
+    std::vector<uint8_t> selection;
+    auto root = pred_tree.release_root();
+    RETURN_IF_ERROR(root.visit(GlobalDictPredicateTreeVisitor{this, pool, selection}));
+    pred_tree = PredicateTree::create(std::move(root));
     return Status::OK();
 }
 
-Status ZonemapPredicatesRewriter::rewrite_predicate_list(ObjectPool* pool, const PredicateList& src,
-                                                         PredicateList* dst) {
-    DCHECK(dst != nullptr);
-    for (auto& pred : src) {
-        if (pred->is_expr_predicate()) {
-            std::vector<const ColumnExprPredicate*> new_preds;
-            RETURN_IF_ERROR(_rewrite_column_expr_predicates(pool, pred, &new_preds));
-            if (!new_preds.empty()) {
-                dst->insert(dst->end(), new_preds.begin(), new_preds.end());
-            } else {
-                dst->emplace_back(pred);
+// ------------------------------------------------------------------------------------
+// ZonemapPredicatesRewriter
+// ------------------------------------------------------------------------------------
+
+struct ZonemapPredicatesRewriterVisitor {
+    template <CompoundNodeType ParentType>
+    Status operator()(const PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) const {
+        return ZonemapPredicatesRewriter::_rewrite_predicate(pool, node.col_pred(), parent);
+    }
+
+    template <CompoundNodeType Type, CompoundNodeType ParentType>
+    Status operator()(const PredicateCompoundNode<Type>& node, PredicateCompoundNode<ParentType>& parent) const {
+        PredicateCompoundNode<Type> new_node;
+        for (const auto& child : node.children()) {
+            RETURN_IF_ERROR(child.visit(*this, new_node));
+        }
+        parent.add_child(std::move(new_node));
+        return Status::OK();
+    }
+
+    ObjectPool* pool;
+};
+
+Status ZonemapPredicatesRewriter::rewrite_predicate_tree(ObjectPool* pool, const PredicateTree& src_pred_tree,
+                                                         PredicateTree& dst_pred_tree) {
+    PredicateAndNode new_pred_root;
+    RETURN_IF_ERROR(src_pred_tree.visit(ZonemapPredicatesRewriterVisitor{pool}, new_pred_root));
+    dst_pred_tree = PredicateTree::create(std::move(new_pred_root));
+    return Status::OK();
+}
+
+template <CompoundNodeType ParentType>
+Status ZonemapPredicatesRewriter::_rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
+                                                     PredicateCompoundNode<ParentType>& dst_node) {
+    if (!src_pred->is_expr_predicate()) {
+        dst_node.add_child(PredicateColumnNode{src_pred});
+    } else {
+        std::vector<const ColumnExprPredicate*> new_preds;
+        RETURN_IF_ERROR(_rewrite_column_expr_predicate(pool, src_pred, new_preds));
+        if (!new_preds.empty()) {
+            PredicateAndNode new_and_node;
+            for (auto* new_pred : new_preds) {
+                new_and_node.add_child(PredicateColumnNode{new_pred});
             }
+            dst_node.add_child(std::move(new_and_node));
         } else {
-            dst->emplace_back(pred);
+            dst_node.add_child(PredicateColumnNode{src_pred});
         }
     }
     return Status::OK();
 }
 
-Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred,
-                                                                  std::vector<const ColumnExprPredicate*>* new_preds) {
-    DCHECK(new_preds != nullptr);
-    const auto* column_expr_pred = static_cast<const ColumnExprPredicate*>(pred);
-    return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
+Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
+                                                                 std::vector<const ColumnExprPredicate*>& dst_preds) {
+    DCHECK(src_pred != nullptr);
+    const auto* column_expr_pred = down_cast<const ColumnExprPredicate*>(src_pred);
+    return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, &dst_preds);
 }
 
 } // namespace starrocks

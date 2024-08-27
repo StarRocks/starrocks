@@ -6,6 +6,10 @@ displayed_sidebar: "Chinese"
 
 `columns` 包含有关所有表（或视图）中列的信息。
 
+:::note
+[同步物化视图](../../using_starrocks/Materialized_view-single_table.md) 的元数据并未在 `columns` 中记录。您可以通过执行 `SHOW PROC '/dbs/db/table/index_schema'` 查看同步物化视图的元数据。
+:::
+
 `columns` 提供以下字段：
 
 | 字段                     | 描述                                                         |

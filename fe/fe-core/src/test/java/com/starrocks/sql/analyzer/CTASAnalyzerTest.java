@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -330,7 +330,8 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
         createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
-        createTableStmt.createTable(ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt.getCreateTableStmt(), ctx);
+
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 =
@@ -428,7 +429,7 @@ public class CTASAnalyzerTest {
     }
 
     @Test
-    public void testCtasWithNullale() throws Exception {
+    public void testCtasWithNullable() throws Exception {
         {
             String createSql = "create table emps (\n" +
                     "    empid int null,\n" +

@@ -40,7 +40,7 @@ public class ViewAnalyzer {
         new ViewAnalyzer.ViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             // normalize & validate view name
@@ -49,7 +49,10 @@ public class ViewAnalyzer {
             FeNameFormat.checkTableName(tableName);
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
-
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
             String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
@@ -65,6 +68,10 @@ public class ViewAnalyzer {
             FeNameFormat.checkTableName(tableName);
 
             Table table = MetaUtils.getTable(stmt.getTableName());
+            if (table.isConnectorView()) {
+                throw new SemanticException("cannot alter connector view");
+            }
+
             if (!(table instanceof View)) {
                 throw new SemanticException("The specified table [" + tableName + "] is not a view");
             }
@@ -73,6 +80,10 @@ public class ViewAnalyzer {
             AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
             Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
 
             List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
                     alterViewClause.getColWithComments());
@@ -104,8 +115,9 @@ public class ViewAnalyzer {
                 for (int i = 0; i < colWithComments.size(); ++i) {
                     Column col = viewColumns.get(i);
                     ColWithComment colWithComment = colWithComments.get(i);
-                    col.setName(colWithComment.getColName());
-                    col.setComment(colWithComment.getComment());
+                    Column newColumn = new Column(colWithComment.getColName(), col.getType(), col.isAllowNull());
+                    newColumn.setComment(colWithComment.getComment());
+                    viewColumns.set(i, newColumn);
                 }
             }
 

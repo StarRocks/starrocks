@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_reader.h"
 
+#include <future>
 #include <utility>
 
 #include "column/datum_convert.h"
@@ -32,10 +33,12 @@
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
+#include "util/json_flattener.h"
 
 namespace starrocks::lake {
 
@@ -49,18 +52,29 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
         : ChunkIterator(std::move(schema)), _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(metadata)) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                           std::vector<RowsetPtr> rowsets)
+                           bool need_split, bool could_split_physically)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
+          _need_split(need_split),
+          _could_split_physically(could_split_physically) {}
+
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                           std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema)
+        : ChunkIterator(std::move(schema)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
+          _tablet_schema(std::move(tablet_schema)),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                           std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer)
+                           std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
+                           std::shared_ptr<const TabletSchema> tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
+          _tablet_schema(std::move(tablet_schema)),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
@@ -74,7 +88,9 @@ TabletReader::~TabletReader() {
 }
 
 Status TabletReader::prepare() {
-    _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    if (_tablet_schema == nullptr) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    }
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("failed to construct tablet schema");
     }
@@ -91,8 +107,135 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
-    Status st = init_collector(read_params);
-    return st;
+    RETURN_IF_ERROR(init_compaction_column_paths(read_params));
+
+    if (_need_split) {
+        std::vector<BaseTabletSharedPtr> tablets;
+        auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
+        // to avoid list tablet metadata by set version_hint
+        tablet_shared_ptr->set_version_hint(_tablet_metadata->version());
+        tablets.emplace_back(tablet_shared_ptr);
+
+        std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+        tablet_rowsets.emplace_back();
+        auto& rss = tablet_rowsets.back();
+        int64_t tablet_num_rows = 0;
+        for (auto& rowset : _rowsets) {
+            tablet_num_rows += rowset->num_rows();
+            rss.emplace_back(rowset);
+        }
+
+        // not split for data skew between tablet
+        if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
+            // set _need_split false to make iterator can get data this round if split do not happen,
+            // otherwise, iterator will return empty.
+            _need_split = false;
+            return init_collector(read_params);
+        }
+
+        std::vector<std::unique_ptr<pipeline::ScanMorsel>> morsels;
+        morsels.emplace_back(
+                std::make_unique<pipeline::ScanMorsel>(read_params.plan_node_id, *(read_params.scan_range)));
+
+        std::shared_ptr<pipeline::SplitMorselQueue> split_morsel_queue = nullptr;
+
+        if (_could_split_physically) {
+            split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
+                    std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+        } else {
+            // logical
+            split_morsel_queue = std::make_shared<pipeline::LogicalSplitMorselQueue>(
+                    std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+        }
+
+        // do prepare
+        split_morsel_queue->set_tablets(std::move(tablets));
+        split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
+        split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
+                                           read_params.end_key);
+
+        while (true) {
+            auto split = split_morsel_queue->try_get().value();
+            if (split != nullptr) {
+                auto ctx = std::make_unique<pipeline::LakeSplitContext>();
+
+                if (_could_split_physically) {
+                    auto physical_split = dynamic_cast<pipeline::PhysicalSplitScanMorsel*>(split.get());
+                    ctx->rowid_range = physical_split->get_rowid_range_option();
+                } else {
+                    auto logical_split = dynamic_cast<pipeline::LogicalSplitScanMorsel*>(split.get());
+                    ctx->short_key_range = logical_split->get_short_key_ranges_option();
+                }
+                ctx->split_morsel_queue = split_morsel_queue;
+                _split_tasks.emplace_back(std::move(ctx));
+            } else {
+                break;
+            }
+        }
+
+    } else {
+        return init_collector(read_params);
+    }
+
+    return Status::OK();
+}
+
+Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read_params) {
+    if (!config::enable_compaction_flat_json || !is_compaction(read_params.reader_type) ||
+        read_params.column_access_paths == nullptr) {
+        return Status::OK();
+    }
+
+    if (!read_params.column_access_paths->empty()) {
+        VLOG(3) << "Lake Compaction flat json paths exists: " << read_params.column_access_paths->size();
+        return Status::OK();
+    }
+
+    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
+           read_params.column_access_paths->empty());
+    int num_readers = 0;
+    for (const auto& rowset : _rowsets) {
+        auto segments = rowset->get_segments();
+        std::for_each(segments.begin(), segments.end(),
+                      [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
+    }
+
+    std::vector<const ColumnReader*> readers;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        auto col_name = std::string(col.name());
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+            continue;
+        }
+        readers.clear();
+        for (const auto& rowset : _rowsets) {
+            for (const auto& segment : rowset->get_segments()) {
+                if (segment->num_rows() == 0) {
+                    continue;
+                }
+                auto reader = segment->column_with_uid(col.unique_id());
+                if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
+                    nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
+                    readers.emplace_back(reader);
+                }
+            }
+        }
+        if (readers.size() == num_readers) {
+            // must all be flat json type
+            JsonPathDeriver deriver;
+            deriver.derived(readers);
+            auto paths = deriver.flat_paths();
+            auto types = deriver.flat_types();
+            VLOG(3) << "Lake Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
+            ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, std::string(col.name()), i));
+            for (size_t j = 0; j < paths.size(); j++) {
+                ColumnAccessPath::insert_json_path(res.get(), types[j], paths[j]);
+            }
+            res->set_from_compaction(true);
+            read_params.column_access_paths->emplace_back(std::move(res));
+        }
+    }
+    return Status::OK();
 }
 
 void TabletReader::close() {
@@ -107,13 +250,32 @@ void TabletReader::close() {
 
 Status TabletReader::do_get_next(Chunk* chunk) {
     DCHECK(!_is_vertical_merge);
+    if (_need_split) {
+        // return eof
+        return Status::EndOfFile("split morsel");
+    }
     RETURN_IF_ERROR(_collect_iter->get_next(chunk));
     return Status::OK();
 }
 
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+    return _collect_iter->get_next(chunk, rssid_rowids);
+}
+
 Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     DCHECK(_is_vertical_merge);
+    if (_need_split) {
+        // return eof
+        return Status::EndOfFile("split morsel");
+    }
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
+    return Status::OK();
+}
+
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                                 std::vector<uint64_t>* rssid_rowids) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
     return Status::OK();
 }
 
@@ -126,9 +288,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
-    rs_opts.predicates = _pushdown_predicates;
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
-                                                                     &rs_opts.predicates_for_zone_map));
+    rs_opts.pred_tree = params.pred_tree;
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
@@ -149,18 +312,62 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.version = _tablet_metadata->version();
     }
 
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
+
+    rs_opts.rowid_range_option = params.rowid_range_option;
+    rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+
+    rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.has_preaggregation = true;
+    if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
+        rs_opts.has_preaggregation = true;
+    } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+               (keys_type == UNIQUE_KEYS && params.skip_aggregation)) {
+        rs_opts.has_preaggregation = false;
+    }
+
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+
+    std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
-        iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
+            continue;
+        }
+
+        if (config::enable_load_segment_parallel) {
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
+                    [&, rowset]() { return enhance_error_prompt(rowset->read(schema(), rs_opts)); });
+
+            auto packaged_func = [task]() { (*task)(); };
+            if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+                !st.ok()) {
+                // try load rowset serially if sumbit_func failed
+                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                             << ", try to load rowset serially, rowset_id: " << rowset->id();
+                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+                iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+            } else {
+                futures.push_back(task->get_future());
+            }
+        } else {
+            ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+            iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+        }
+    }
+
+    for (auto& future : futures) {
+        auto seg_iters_or = future.get();
+        if (!seg_iters_or.ok()) {
+            return seg_iters_or.status();
+        }
+        iters->insert(iters->end(), seg_iters_or.value().begin(), seg_iters_or.value().end());
     }
     return Status::OK();
 }
 
 Status TabletReader::init_predicates(const TabletReaderParams& params) {
-    for (const ColumnPredicate* pred : params.predicates) {
-        _pushdown_predicates[pred->column_id()].emplace_back(pred);
-    }
     return Status::OK();
 }
 
@@ -277,7 +484,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = new_heap_merge_iterator(
+                    seg_iters,
+                    (keys_type == PRIMARY_KEYS) && StorageEngine::instance()->enable_light_pk_compaction_publish());
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {
@@ -296,6 +505,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
+        if (!_is_asc_hint) {
+            std::reverse(seg_iters.begin(), seg_iters.end());
+        }
         //             UnionIterator
         //                   |
         //       +-----------+-----------+

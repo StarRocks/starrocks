@@ -59,8 +59,10 @@ struct UserFunctionCacheEntry;
 class UserFunctionCache {
 public:
     static constexpr const char* JAVA_UDF_SUFFIX = ".jar";
+    static constexpr const char* PY_UDF_SUFFIX = ".py.zip";
     static constexpr int UDF_TYPE_UNKNOWN = -1;
     static constexpr int UDF_TYPE_JAVA = 1;
+    static constexpr int UDF_TYPE_PYTHON = 2;
 
     using UserFunctionCacheEntryPtr = std::shared_ptr<UserFunctionCacheEntry>;
     // local_dir is the directory which contain cached library.
@@ -89,7 +91,7 @@ private:
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
     Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
     template <class Loader>
-    Status _load_cache_entry_internal(UserFunctionCacheEntryPtr& entry, Loader&& loader);
+    Status _load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
     std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
     void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
 

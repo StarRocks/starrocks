@@ -17,8 +17,7 @@ PARTITION p202008 VALUES [('2020-07-01'), ('2020-07-29')),
 PARTITION p202012 VALUES [('2020-08-01'), (MAXVALUE)))
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -35,8 +34,7 @@ COMMENT "OLAP"
 PARTITION BY date_trunc('month', d2)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result

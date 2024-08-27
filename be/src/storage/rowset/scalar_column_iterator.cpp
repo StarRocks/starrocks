@@ -206,6 +206,13 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
                 break;
             }
         }
@@ -243,6 +250,13 @@ Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
                 break;
             }
             end_ord = _page->first_ordinal() + _page->num_rows();
@@ -358,32 +372,54 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                        const ColumnPredicate* del_predicate,
-                                                        SparseRange<>* row_ranges) {
+                                                        const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                        CompoundNodeType pred_relation) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
+        if (!_delete_partial_satisfied_pages.has_value()) {
+            _delete_partial_satisfied_pages.emplace();
+        }
+
         IndexReadOptions opts;
         opts.use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
         opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
-        RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
-                                                 row_ranges, opts));
+        RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages.value(),
+                                                 row_ranges, opts, pred_relation));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }
     return Status::OK();
 }
 
+bool ScalarColumnIterator::has_original_bloom_filter_index() const {
+    return _reader->has_original_bloom_filter_index();
+}
+
+bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
+    return _reader->has_ngram_bloom_filter_index();
+}
+
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                             SparseRange<>* row_ranges) {
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
-    bool support = false;
-    for (const auto* pred : predicates) {
-        support = support | pred->support_bloom_filter();
+
+    bool support_original_bloom_filter = false;
+    bool support_ngram_bloom_filter = false;
+    // bloom filter index can only be either original bloom filter or ngram bloom filter
+    if (_reader->has_original_bloom_filter_index()) {
+        support_original_bloom_filter =
+                std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_original_bloom_filter(); });
+    } else if (_reader->has_ngram_bloom_filter_index()) {
+        support_ngram_bloom_filter =
+                std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_ngram_bloom_filter(); });
     }
-    RETURN_IF(!support, Status::OK());
+
+    if (!support_original_bloom_filter && !support_ngram_bloom_filter) {
+        return Status::OK();
+    }
 
     IndexReadOptions opts;
     opts.use_page_cache = !config::disable_storage_page_cache;
@@ -391,7 +427,12 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
-    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
+    // filter data using bloom filter or ngram bloom filter
+    if (support_original_bloom_filter) {
+        RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, row_ranges, opts));
+    } else {
+        RETURN_IF_ERROR(_reader->ngram_bloom_filter(predicates, row_ranges, opts));
+    }
     return Status::OK();
 }
 
@@ -600,8 +641,8 @@ int ScalarColumnIterator::dict_size() {
 }
 
 bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {
-    if (_reader->has_zone_map()) {
-        return _delete_partial_satisfied_pages.count(page_index) > 0;
+    if (_reader->has_zone_map() && _delete_partial_satisfied_pages.has_value()) {
+        return _delete_partial_satisfied_pages->contains(page_index);
     }
     // if there is no zone map should be treated as DEL_PARTIAL_SATISFIED
     return true;

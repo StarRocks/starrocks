@@ -14,18 +14,25 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
@@ -40,6 +47,9 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
+
+import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
@@ -499,5 +509,137 @@ public class CreateSyncMaterializedViewTest {
             starRocksAssert.query(query).explainWithout("test_mv_with_where1");
         }
         starRocksAssert.dropMaterializedView("test_mv_with_where1");
+    }
+
+    @Test
+    public void testCreateMVWithAggregateTable1() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("CREATE TABLE t1 \n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "AGGREGATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT\n" +
+                "DATE_FORMAT(a.k1, '%Y-%m') AS month, \n" +
+                "sum(v1) AS cnt\n" +
+                "FROM \n" +
+                "t1 a \n" +
+                "WHERE a.k2 > 200\n" +
+                "GROUP BY DATE_FORMAT(a.k1, '%Y-%m')");
+        OlapTable olapTable= (OlapTable) starRocksAssert.getTable("test", "t1");
+        Assert.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
+        List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
+        Assert.assertTrue(materializedIndices.size() == 2);
+        MaterializedIndexMeta mvIndexMeta = materializedIndices.stream()
+                .filter(x -> x.getIndexId() != olapTable.getBaseIndexId())
+                .findAny().get();
+        List<Column> columns = mvIndexMeta.getSchema();
+        Set<String> keyColumns = ImmutableSet.of("mv_month");
+        for (Column column : columns) {
+            System.out.println(column.getAggregationType());
+            if (keyColumns.contains(column.getName())) {
+                Assert.assertTrue(column.isKey());
+                Assert.assertFalse(column.isAggregated());
+            } else {
+                Assert.assertFalse(column.isKey());
+                Assert.assertTrue(column.isAggregated());
+                Assert.assertTrue(column.getAggregationType() != AggregateType.NONE);
+            }
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
+    }
+
+    @Test
+    public void testCreateMVWithAggregateTable2() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT sum DEFAULT \"0\"\n" +
+                ")\n" +
+                "AGGREGATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT\n" +
+                "  a.k3,\n" +
+                "  DATE_FORMAT(a.k4, '%Y-%m') AS month, \n" +
+                "  sum(v1) AS cnt\n" +
+                "FROM \n" +
+                "t1 a \n" +
+                "WHERE\n" +
+                "    k2 = '200'\n" +
+                "GROUP BY\n" +
+                "    a.k3, DATE_FORMAT(a.k4, '%Y-%m')");
+        OlapTable olapTable= (OlapTable) starRocksAssert.getTable("test", "t1");
+        Assert.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
+        List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
+        Assert.assertTrue(materializedIndices.size() == 2);
+        MaterializedIndexMeta mvIndexMeta = materializedIndices.stream()
+                .filter(x -> x.getIndexId() != olapTable.getBaseIndexId())
+                .findAny().get();
+        List<Column> columns = mvIndexMeta.getSchema();
+        Set<String> keyColumns = ImmutableSet.of("k3", "mv_month");
+        for (Column column : columns) {
+            System.out.println(column.getAggregationType());
+            if (keyColumns.contains(column.getName())) {
+                Assert.assertTrue(column.isKey());
+                Assert.assertFalse(column.isAggregated());
+            } else {
+                Assert.assertFalse(column.isKey());
+                Assert.assertTrue(column.isAggregated());
+                Assert.assertTrue(column.getAggregationType() != AggregateType.NONE);
+            }
+        }
+
+        executeInsertSql(connectContext, "insert into t1 values ('200', 'a', 11.00, '2024-08-06', 1);");
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
+    public void testCreateMVWithAggregateTable3() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT sum DEFAULT \"0\"\n" +
+                ")\n" +
+                "AGGREGATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT\n" +
+                    "  a.k1,\n" +
+                    "  DATE_FORMAT(a.k4, '%Y-%m') AS month, \n" +
+                    "  sum(k3) AS cnt\n" +
+                    "FROM     \n" +
+                    "t1 a \n" +
+                    "WHERE\n" +
+                    "    k2 = '200'\n" +
+                    "GROUP BY\n" +
+                    "    a.k1, DATE_FORMAT(a.k4, '%Y-%m')");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("The column[mv_sum_k3] must be the key of materialized view"));
+        }
+        starRocksAssert.dropTable("t1");
     }
 }

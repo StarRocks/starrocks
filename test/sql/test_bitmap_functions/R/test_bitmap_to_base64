@@ -1,0 +1,9 @@
+-- name: test_bitmap_to_base64
+select bitmap_to_base64(null);
+-- result:
+None
+-- !result
+select bitmap_to_base64(bitmap_from_string("abc"));
+-- result:
+None
+-- !result

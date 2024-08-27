@@ -3,7 +3,7 @@ PLAN FRAGMENT 0(F09)
   DOP: 16
   INSTANCES
     INSTANCE(0-F09#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F08)
   DOP: 16
@@ -175,6 +175,7 @@ PLAN FRAGMENT 1
   |  
   19:SORT
   |  order by: <slot 1> 1: p_partkey ASC
+  |  analytic partition by: 1: p_partkey
   |  offset: 0
   |  
   18:EXCHANGE
@@ -326,4 +327,3 @@ PLAN FRAGMENT 5
      cardinality=1
      avgRowSize=29.0
 [end]
-

@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/current_thread.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
@@ -44,6 +45,7 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
+    ONCE_DETECT(_set_finishing_once);
     auto defer = DeferOp([this]() {
         COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
         _aggregator->sink_complete();
@@ -78,6 +80,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
 
 Status AggregateBlockingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 
@@ -94,7 +97,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     // try to build hash table if has group by keys
     if (!_aggregator->is_none_group_by_exprs()) {
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _agg_group_by_with_limit));
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _shared_limit_countdown, _agg_group_by_with_limit));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
 
@@ -130,7 +133,8 @@ Status AggregateBlockingSinkOperatorFactory::prepare(RuntimeState* state) {
 OperatorPtr AggregateBlockingSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     // init operator
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
-    auto op = std::make_shared<AggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id, driver_sequence);
+    auto op = std::make_shared<AggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id, driver_sequence,
+                                                              _aggregator_factory->get_shared_limit_countdown());
     return op;
 }
 

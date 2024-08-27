@@ -69,6 +69,27 @@ static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggr
     return STORAGE_AGGREGATE_NONE;
 }
 
+static Status validate_tablet_schema(const TabletSchemaPB& schema_pb) {
+#if !defined(NDEBUG) || defined(BE_TEST)
+    std::unordered_set<std::string> column_names;
+    std::unordered_set<int64_t> column_ids;
+    for (const auto& col : schema_pb.column()) {
+        DCHECK(col.has_unique_id()) << col.DebugString();
+        if (auto [it, ok] = column_ids.insert(col.unique_id()); !ok) {
+            LOG(ERROR) << "Duplicate column unique id: " << col.unique_id() << " schema: " << schema_pb.DebugString();
+            return Status::InvalidArgument("Duplicate column id found in tablet schema");
+        }
+        if (auto [it, ok] = column_names.insert(col.name()); !ok) {
+            LOG(ERROR) << "Duplicate column name: " << col.name() << " schema: " << schema_pb.DebugString();
+            return Status::InvalidArgument("Duplicate column name found in tablet schema");
+        }
+    }
+    return Status::OK();
+#else
+    return Status::OK();
+#endif
+}
+
 // This function is used to initialize ColumnPB for subfield like element of Array.
 static void init_column_pb_for_sub_field(ColumnPB* field) {
     const int32_t kFakeUniqueId = -1;
@@ -125,6 +146,9 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
             // All struct fields all nullable now
             RETURN_IF_ERROR(type_desc_to_pb(types, index, field_pb));
             field_pb->set_name(field.name);
+            if (field.__isset.id && field.id >= 0) {
+                field_pb->set_unique_id(field.id);
+            }
         }
         return Status::OK();
     }
@@ -215,8 +239,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     case TKeysType::PRIMARY_KEYS:
         schema->set_keys_type(KeysType::PRIMARY_KEYS);
         break;
-    default:
-        CHECK(false) << "unsupported keys type " << tablet_schema.keys_type;
     }
 
     switch (compression_type) {
@@ -289,7 +311,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                 index_pb->set_index_type(IndexType::GIN);
 
                 const auto& index_col_name = index.columns[0];
-                const auto& mit = column_map.find(index_col_name);
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
 
                 // TODO: Fix abnormal scenes when index column can not be found
                 if (mit != column_map.end()) {
@@ -298,11 +320,53 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                     LOG(WARNING) << "index " << index_col_name << " can not be found in table columns";
                 }
 
-                std::map<std::string, std::map<std::string, std::string>> properties_map;
-                properties_map.emplace(COMMON_PROPERTIES, index.common_properties);
-                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
-                properties_map.emplace(SEARCH_PROPERTIES, index.search_properties);
-                properties_map.emplace(EXTRA_PROPERTIES, index.extra_properties);
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {COMMON_PROPERTIES, index.common_properties},
+                        {INDEX_PROPERTIES, index.index_properties},
+                        {SEARCH_PROPERTIES, index.search_properties},
+                        {EXTRA_PROPERTIES, index.extra_properties}};
+                index_pb->set_index_properties(to_json(properties_map));
+            } else if (index.index_type == TIndexType::type::NGRAMBF) {
+                RETURN_IF(index.columns.size() != 1,
+                          Status::Cancelled("NGRAM_BF index " + index.index_name +
+                                            " do not support to build with more than one column"));
+
+                index_pb->set_index_type(IndexType::NGRAMBF);
+                const auto& index_col_name = index.columns[0];
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
+
+                if (mit != column_map.end()) {
+                    mit->second->set_is_bf_column(true);
+                    index_pb->add_col_unique_id(mit->second->unique_id());
+                } else {
+                    return Status::Cancelled(
+                            strings::Substitute("index column $0 can not be found in table columns", index_col_name));
+                }
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {INDEX_PROPERTIES, index.index_properties}};
+                std::string str = to_json(properties_map);
+                index_pb->set_index_properties(str);
+            } else if (index.index_type == TIndexType::type::VECTOR) {
+                RETURN_IF(index.columns.size() != 1,
+                          Status::Cancelled("VECTOR index " + index.index_name +
+                                            " do not support to build with more than one column"));
+                index_pb->set_index_type(IndexType::VECTOR);
+
+                const auto& index_col_name = index.columns[0];
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
+
+                if (mit != column_map.end()) {
+                    index_pb->add_col_unique_id(mit->second->unique_id());
+                } else {
+                    return Status::Cancelled(
+                            strings::Substitute("index column $0 can not be found in table columns", index_col_name));
+                }
+
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {COMMON_PROPERTIES, index.common_properties},
+                        {INDEX_PROPERTIES, index.index_properties},
+                        {SEARCH_PROPERTIES, index.search_properties},
+                        {EXTRA_PROPERTIES, index.extra_properties}};
                 index_pb->set_index_properties(to_json(properties_map));
             } else {
                 std::string index_type;
@@ -327,7 +391,16 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     if (has_bf_columns && tablet_schema.__isset.bloom_filter_fpp) {
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);
     }
-    return Status::OK();
+    return validate_tablet_schema(*schema);
 }
 
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TCompressionType::type compression_type,
+                                     TabletSchemaPB* out_schema) {
+    auto col_idx_to_unique_id = std::unordered_map<uint32_t, uint32_t>{};
+    auto next_unique_id = t_schema.columns.size();
+    for (auto col_idx = uint32_t{0}; col_idx < next_unique_id; ++col_idx) {
+        col_idx_to_unique_id[col_idx] = col_idx;
+    }
+    return convert_t_schema_to_pb_schema(t_schema, next_unique_id, col_idx_to_unique_id, out_schema, compression_type);
+}
 } // namespace starrocks

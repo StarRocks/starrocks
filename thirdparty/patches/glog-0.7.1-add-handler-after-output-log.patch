@@ -1,0 +1,48 @@
+diff --git a/src/glog/logging.h b/src/glog/logging.h
+index 8b90782..c4a569d 100644
+--- a/src/glog/logging.h
++++ b/src/glog/logging.h
+@@ -1740,6 +1740,8 @@ GLOG_EXPORT bool IsFailureSignalHandlerInstalled();
+ GLOG_EXPORT void InstallFailureWriter(void (*writer)(const char* data,
+                                                      size_t size));
+
++GLOG_EXPORT void InstallFailureHandlerAfterOutputLog(void (*handler)());
++
+ // Dump stack trace as a string.
+ GLOG_EXPORT std::string GetStackTrace();
+
+diff --git a/src/signalhandler.cc b/src/signalhandler.cc
+index c5bae59..96df08d 100644
+--- a/src/signalhandler.cc
++++ b/src/signalhandler.cc
+@@ -166,6 +166,8 @@ void WriteToStderr(const char* data, size_t size) {
+ // The writer function can be changed by InstallFailureWriter().
+ void (*g_failure_writer)(const char* data, size_t size) = WriteToStderr;
+
++void (*g_failure_handler_after_output_log)() = nullptr;
++
+ // Dumps time information.  We don't dump human-readable time information
+ // as localtime() is not guaranteed to be async signal safe.
+ void DumpTimeInfo() {
+@@ -333,6 +335,10 @@ static void HandleSignal(int signal_number
+   // causes problems.
+   FlushLogFilesUnsafe(GLOG_INFO);
+
++  if (g_failure_handler_after_output_log != nullptr) {
++    (*g_failure_handler_after_output_log)();
++  }
++
+   // Kill ourself by the default signal handler.
+   InvokeDefaultSignalHandler(signal_number);
+ }
+@@ -399,4 +405,10 @@ void InstallFailureWriter(void (*writer)(const char* data, size_t size)) {
+ #endif  // HAVE_SIGACTION
+ }
+
++void InstallFailureHandlerAfterOutputLog(void (*handler)()) {
++#if defined(HAVE_SIGACTION) || defined(GLOG_OS_WINDOWS)
++  g_failure_handler_after_output_log = handler;
++#endif  // HAVE_SIGACTION
++}
++
+ }  // namespace google

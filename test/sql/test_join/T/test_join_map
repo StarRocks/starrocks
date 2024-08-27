@@ -11,8 +11,7 @@ map5  map<INT, STRUCT<c INT, b string>>
 DUPLICATE KEY(pk)
 DISTRIBUTED BY HASH(pk) BUCKETS 3
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 
 insert into map_test values (0, map(0,'ab'),map(0,'ab'),map(0,['1','2']),map('1',map(1,'abc')),map(1,json_object('name','abc','age',23)),map(0, row(1,'a')));

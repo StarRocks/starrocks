@@ -26,7 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
@@ -159,7 +159,7 @@ public class ResourceGroupAnalyzer {
             String value = e.getValue();
             if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT)) {
                 int cpuCoreLimit = Integer.parseInt(value);
-                int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
                 if (cpuCoreLimit <= 0 || cpuCoreLimit > avgCoreNum) {
                     throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
                 }
@@ -168,7 +168,7 @@ public class ResourceGroupAnalyzer {
             }
             if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
                 int maxCpuCores = Integer.parseInt(value);
-                int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
                 if (maxCpuCores > avgCoreNum) {
                     throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
                 }

@@ -14,15 +14,18 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Enums;
+import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -30,6 +33,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PlanMode;
+import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
@@ -115,6 +120,11 @@ public class SetStmtAnalyzer {
             }
         }
 
+        // Check variable chunk_size value if valid
+        if (variable.equalsIgnoreCase(SessionVariable.CHUNK_SIZE)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.CHUNK_SIZE, 1L, 65535L);
+        }
+
         // Check variable load_mem_limit value is valid
         if (variable.equalsIgnoreCase(SessionVariable.LOAD_MEM_LIMIT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.LOAD_MEM_LIMIT, 0L, null);
@@ -193,6 +203,28 @@ public class SetStmtAnalyzer {
                     null);
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.CHOOSE_EXECUTE_INSTANCES_MODE)) {
+            SessionVariableConstants.ChooseInstancesMode mode =
+                    Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
+                            StringUtils.upperCase(resolvedExpression.getStringValue())).orNull();
+            if (mode == null) {
+                String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
+                throw new IllegalArgumentException("Legal values of choose_execute_instances_mode are " + legalValues);
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.COMPUTATION_FRAGMENT_SCHEDULING_POLICY)) {
+            String policy = resolvedExpression.getStringValue();
+            SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy =
+                    Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                            StringUtils.upperCase(policy)).orNull();
+            if (computationFragmentSchedulingPolicy == null) {
+                String supportedList = Joiner.on(",").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+                throw new SemanticException(String.format("Unsupported computation_fragment_scheduling_policy: %s, " +
+                        "supported list is %s", policy, supportedList));
+            }
+        }
+
         // materialized_view_rewrite_mode
         if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
             String rewriteModeName = resolvedExpression.getStringValue();
@@ -260,6 +292,30 @@ public class SetStmtAnalyzer {
                 throw new SemanticException(String.format("failed to parse time value %s", timeStr));
             }
         }
+        // catalog
+        if (variable.equalsIgnoreCase(SessionVariable.CATALOG)) {
+            String catalog = resolvedExpression.getStringValue();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+                throw new SemanticException(String.format("Unknown catalog %s", catalog));
+            }
+        }
+        // connector sink compression codec
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_COMPRESSION_CODEC)) {
+            String codec = resolvedExpression.getStringValue();
+            if (CompressionUtils.getConnectorSinkCompressionType(codec).isEmpty()) {
+                throw new SemanticException(String.format("Unsupported compression codec %s." +
+                        " Use any of (uncompressed, snappy, lz4, zstd, gzip)", codec));
+            }
+        }
+        // check plan mode
+        if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
+            PlanMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check populate datacache mode
+        if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
+            DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
 
         var.setResolvedExpression(resolvedExpression);
     }
@@ -302,47 +358,9 @@ public class SetStmtAnalyzer {
         }
     }
 
-    private static void analyzeUserVariable(UserVariable var) {
+    public static void analyzeUserVariable(UserVariable var) {
         if (var.getVariable().length() > 64) {
             throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
-        }
-
-        Expr expression = var.getUnevaluatedExpression();
-        if (expression instanceof NullLiteral) {
-            var.setEvaluatedExpression(NullLiteral.create(Type.STRING));
-        } else {
-            Expr foldedExpression = Expr.analyzeAndCastFold(expression);
-            if (foldedExpression instanceof LiteralExpr) {
-                var.setEvaluatedExpression((LiteralExpr) foldedExpression);
-            } else {
-                SelectList selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(var.getUnevaluatedExpression(), null)), false);
-
-                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.NULL));
-                List<List<Expr>> rows = new ArrayList<>();
-                rows.add(row);
-                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
-                valuesRelation.setNullValues(true);
-
-                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
-                QueryStatement queryStatement = new QueryStatement(selectRelation);
-                Analyzer.analyze(queryStatement, ConnectContext.get());
-
-                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
-
-                //can not apply to numeric types or complex type are not supported
-                if (variableResult.getType().isOnlyMetricType() || variableResult.getType().isFunctionType()
-                        || variableResult.getType().isComplexType()) {
-                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
-                }
-
-                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems().set(0,
-                        new SelectListItem(new CastExpr(Type.VARCHAR, variableResult), null));
-
-                Subquery subquery = new Subquery(queryStatement);
-                subquery.setType(variableResult.getType());
-                var.setUnevaluatedExpression(subquery);
-            }
         }
     }
 
@@ -392,5 +410,67 @@ public class SetStmtAnalyzer {
         userIdentity.analyze();
         var.setUserIdent(userIdentity);
         var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
+    }
+
+    private static boolean checkUserVariableType(Type type) {
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            PrimitiveType itemPrimitiveType = arrayType.getItemType().getPrimitiveType();
+            if (itemPrimitiveType == PrimitiveType.BOOLEAN ||
+                    itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
+                    itemPrimitiveType.isCharFamily()) {
+                return true;
+            }
+        } else if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+            if (primitiveType == PrimitiveType.BOOLEAN ||
+                    primitiveType.isDateType() || primitiveType.isNumericType() ||
+                    primitiveType.isCharFamily() || primitiveType.isJsonType()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static void calcuteUserVariable(UserVariable userVariable) {
+        Expr expression = userVariable.getUnevaluatedExpression();
+        if (expression instanceof NullLiteral) {
+            userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+        } else {
+            Expr foldedExpression;
+            foldedExpression = Expr.analyzeAndCastFold(expression);
+
+            if (foldedExpression.isLiteral()) {
+                userVariable.setEvaluatedExpression(foldedExpression);
+            } else {
+                SelectList selectList = new SelectList(Lists.newArrayList(
+                        new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
+
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
+                List<List<Expr>> rows = new ArrayList<>();
+                rows.add(row);
+                ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
+                valuesRelation.setNullValues(true);
+
+                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
+                QueryStatement queryStatement = new QueryStatement(selectRelation);
+                Analyzer.analyze(queryStatement, ConnectContext.get());
+
+                Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
+
+                Type type = variableResult.getType();
+                // can not apply to metric types or complex type except array type
+                if (!checkUserVariableType(type)) {
+                    throw new SemanticException("Can't set variable with type " + variableResult.getType());
+                }
+
+                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
+                        .set(0, new SelectListItem(variableResult, null));
+                Subquery subquery = new Subquery(queryStatement);
+                subquery.setType(variableResult.getType());
+                userVariable.setUnevaluatedExpression(subquery);
+            }
+        }
     }
 }

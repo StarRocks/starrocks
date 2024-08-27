@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # cos
 
-## 功能
+
 
 求参数 `x` 的余弦值。
 

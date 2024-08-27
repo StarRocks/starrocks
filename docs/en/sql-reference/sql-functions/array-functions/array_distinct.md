@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_distinct
 
-## Description
+
 
 Removes duplicate elements from an array.
 

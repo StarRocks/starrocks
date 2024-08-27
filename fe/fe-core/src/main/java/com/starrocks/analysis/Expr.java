@@ -211,6 +211,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     private RoaringBitmap cachedUsedSlotIds = null;
 
+    // is this Expr can be used in index filter and expr filter or only index filter
+    // passed to BE storage engine
+    private boolean isIndexOnlyFilter = false;
+
     protected Expr() {
         pos = NodePosition.ZERO;
         type = Type.INVALID;
@@ -322,6 +326,14 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public void setPrintSqlInParens(boolean b) {
         printSqlInParens = b;
+    }
+
+    public boolean isIndexOnlyFilter() {
+        return isIndexOnlyFilter;
+    }
+
+    public void setIndexOnlyFilter(boolean indexOnlyFilter) {
+        isIndexOnlyFilter = indexOnlyFilter;
     }
 
     /**
@@ -769,7 +781,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
      */
     public String toSqlWithoutTbl() {
-        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true).visit(this);
+        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true, true).visit(this);
     }
 
     public String explain() {
@@ -844,6 +856,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
+        msg.setIs_index_only_filter(isIndexOnlyFilter());
         visitor.visit(this, msg);
         container.addToNodes(msg);
         for (Expr child : children) {
@@ -1063,6 +1076,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return isConstantImpl();
     }
 
+    public final boolean isParameter() {
+        return this instanceof Parameter;
+    }
+
     /**
      * Implements isConstant() - computes the value without using 'isConstant_'.
      */
@@ -1213,7 +1230,11 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static double getConstFromExpr(Expr e) throws AnalysisException {
         Preconditions.checkState(e.isConstant());
-        double value = 0;
+        double value;
+        if (e instanceof UserVariableExpr) {
+            e = ((UserVariableExpr) e).getValue();
+        }
+
         if (e instanceof LiteralExpr) {
             LiteralExpr lit = (LiteralExpr) e;
             value = lit.getDoubleValue();

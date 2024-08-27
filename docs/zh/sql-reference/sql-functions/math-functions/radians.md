@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # radians
 
-## 功能
+
 
 将参数 `x`转为弧度，`x` 是角度。
 

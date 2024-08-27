@@ -42,7 +42,6 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -65,7 +64,6 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AlterCatalogLog;
@@ -95,12 +93,15 @@ import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DisableDiskInfo;
+import com.starrocks.persist.DisablePartitionRecoveryInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
+import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -112,8 +113,8 @@ import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -124,7 +125,6 @@ import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
-import com.starrocks.persist.SecurityIntegrationInfo;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
@@ -141,6 +141,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -152,6 +153,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -232,12 +234,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_DB: {
-                data = new Database();
-                ((Database) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_CREATE_DB_V2: {
                 data = CreateDbInfo.read(in);
                 isRead = true;
@@ -258,13 +254,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_ALTER_DB_V2:
             case OperationType.OP_RENAME_DB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DatabaseInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CREATE_MATERIALIZED_VIEW:
-            case OperationType.OP_CREATE_TABLE: {
-                data = new CreateTableInfo();
-                ((CreateTableInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -291,6 +280,16 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_DISABLE_TABLE_RECOVERY: {
+                data = DisableTableRecoveryInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
+                data = DisablePartitionRecoveryInfo.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_ADD_PARTITION_V2: {
                 data = PartitionPersistInfoV2.read(in);
                 isRead = true;
@@ -301,17 +300,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_PARTITION: {
-                data = new PartitionPersistInfo();
-                ((PartitionPersistInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_PARTITIONS: {
-                data = AddPartitionsInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_ADD_PARTITIONS_V2: {
                 data = AddPartitionsInfoV2.read(in);
                 isRead = true;
@@ -319,6 +307,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_PARTITION: {
                 data = DropPartitionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_PARTITIONS: {
+                data = DropPartitionsInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -793,6 +786,11 @@ public class JournalEntity implements Writable {
                 data = DropTaskRunsLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_ARCHIVE_TASK_RUNS: {
+                data = ArchiveTaskRunsLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);
@@ -842,6 +840,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_BUCKET_SIZE:
+            case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -962,6 +961,16 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                 data = ModifyTableColumnOperationLog.read(in);
                 isRead = true;
@@ -1047,11 +1056,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                data = SecurityIntegrationInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
                 data = UserPrivilegeCollectionInfo.read(in);
                 isRead = true;
@@ -1063,67 +1067,92 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MV_JOB_STATE:
+            case OperationType.OP_AUTH_UPGRADE_V2: {
+                // for compatibility reason, just ignore the auth upgrade log
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_MV_JOB_STATE: {
                 data = MVMaintenanceJob.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_MV_EPOCH_UPDATE:
+            }
+            case OperationType.OP_MV_EPOCH_UPDATE: {
                 data = MVEpoch.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS:
+            }
+            case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
                 data = TableAddOrDropColumnsInfo.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME:
+            }
+            case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
                 data = SetDefaultStorageVolumeLog.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_DROP_STORAGE_VOLUME:
+            }
+            case OperationType.OP_DROP_STORAGE_VOLUME: {
                 data = DropStorageVolumeLog.read(in);
                 isRead = true;
                 break;
+            }
             case OperationType.OP_CREATE_STORAGE_VOLUME:
-            case OperationType.OP_UPDATE_STORAGE_VOLUME:
+            case OperationType.OP_UPDATE_STORAGE_VOLUME: {
                 data = StorageVolume.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_PIPE:
+            }
+            case OperationType.OP_PIPE: {
                 data = PipeOpEntry.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_CREATE_DICTIONARY:
+            }
+            case OperationType.OP_CREATE_DICTIONARY: {
                 data = Dictionary.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_DROP_DICTIONARY:
+            }
+            case OperationType.OP_DROP_DICTIONARY: {
                 data = DropDictionaryInfo.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_MODIFY_DICTIONARY_MGR:
+            }
+            case OperationType.OP_MODIFY_DICTIONARY_MGR: {
                 data = DictionaryMgrInfo.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_DECOMMISSION_DISK:
+            }
+            case OperationType.OP_DECOMMISSION_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DecommissionDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_CANCEL_DECOMMISSION_DISK:
+            }
+            case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDecommissionDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_DISABLE_DISK:
+            }
+            case OperationType.OP_DISABLE_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_CANCEL_DISABLE_DISK:
+            }
+            case OperationType.OP_CANCEL_DISABLE_DISK: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
                 isRead = true;
                 break;
-            case OperationType.OP_REPLICATION_JOB:
+            }
+            case OperationType.OP_REPLICATION_JOB: {
                 data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
+            }
+            case OperationType.OP_RECOVER_PARTITION_VERSION: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
+                isRead = true;
+                break;
+            }
             default: {
                 if (Config.ignore_unknown_log_id) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

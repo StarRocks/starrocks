@@ -16,7 +16,9 @@
 
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/customized_result_writer.h"
 #include "runtime/http_result_writer.h"
+#include "runtime/metadata_result_writer.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
@@ -46,6 +48,16 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         break;
     case TResultSinkType::HTTP_PROTOCAL:
         _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
+        break;
+    case TResultSinkType::METADATA_ICEBERG:
+        _writer = std::make_shared<MetadataResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _sink_type);
+        break;
+    case TResultSinkType::CUSTOMIZED:
+        // CustomizedResultWriter is a general-purposed result writer that used by FE to executing internal
+        // query, the result is serialized in packed binary format. FE can parse the result row into object
+        // via ORM(Object-Relation Mapping) mechanism. In the future, all the internal queries should be
+        // unified to adopt this result sink type.
+        _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     default:
         return Status::InternalError("Unknown result sink type");

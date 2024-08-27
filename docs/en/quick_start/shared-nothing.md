@@ -3,12 +3,12 @@ displayed_sidebar: "English"
 sidebar_position: 1
 description: "StarRocks in Docker: Query real data with JOINs"
 ---
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsAllin1.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
-# StarRocks basics
+# Deploy StarRocks with Docker
 
 This tutorial covers:
 
@@ -45,12 +45,15 @@ You can use the SQL client provided in the Docker environment, or use one on you
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
 ---
+
 ## Terminology
 
 ### FE
+
 Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
 
 ### BE
+
 Backend nodes are responsible for both data storage and executing query plans.
 
 ---
@@ -61,7 +64,9 @@ Backend nodes are responsible for both data storage and executing query plans.
 docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 -itd \
 --name quickstart starrocks/allin1-ubuntu
 ```
+
 ---
+
 ## SQL clients
 
 <Clients />
@@ -109,6 +114,7 @@ mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ---
 
 ## Load two datasets
+
 There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
 :::tip

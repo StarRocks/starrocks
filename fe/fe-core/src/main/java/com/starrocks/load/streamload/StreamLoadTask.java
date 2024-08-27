@@ -16,10 +16,11 @@ package com.starrocks.load.streamload;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -29,6 +30,7 @@ import com.starrocks.common.Version;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
@@ -37,7 +39,10 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -46,11 +51,13 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.BackendService;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -60,11 +67,11 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
-import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TxnCommitAttachment;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,8 +81,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback
         implements Writable, GsonPostProcessable, GsonPreProcessable {
@@ -115,6 +125,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long tableId;
     @SerializedName(value = "tableName")
     private String tableName;
+    @SerializedName(value = "user")
+    private String user = "";
+    @SerializedName(value = "clientIp")
+    private String clientIp = "";
     @SerializedName(value = "errorMsg")
     private String errorMsg;
     @SerializedName(value = "trackingUrl")
@@ -149,6 +163,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long numRowsUnselected;
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
+    @SerializedName(value = "warehouseId")
+    private long warehouseId;
+
+    @SerializedName(value = "beginTxnTimeMs")
+    private long beginTxnTimeMs;
+    @SerializedName(value = "planTimeMs")
+    private long planTimeMs;
+    @SerializedName(value = "receiveDataTimeMs")
+    private long receiveDataTimeMs;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -183,9 +206,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         lock.readLock().unlock();
     }
 
-    public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, long createTimeMs, boolean isRoutineLoad) {
-        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs);
+    public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, long warehouseId) {
+        this(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, warehouseId);
         isSyncStreamLoad = true;
         if (isRoutineLoad) {
             type = Type.ROUTINE_LOAD;
@@ -194,8 +217,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
     }
 
-    public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, int channelNum, int channelId, long createTimeMs) {
+    public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
+                          long timeoutMs, int channelNum, int channelId, long createTimeMs, long warehouseId) {
         this.id = id;
         UUID uuid = UUID.randomUUID();
         this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
@@ -205,6 +228,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.tableName = table.getName();
         this.table = table;
         this.label = label;
+        this.user = user;
+        this.clientIp = clientIp;
         this.timeoutMs = timeoutMs;
         this.channelNum = channelNum;
         this.createTimeMs = createTimeMs;
@@ -218,6 +243,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.endTimeMs = -1;
         this.txnId = -1;
         this.errorMsg = null;
+        this.warehouseId = warehouseId;
 
         init();
     }
@@ -749,6 +775,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
+        loadPlanner.setWarehouseId(streamLoadInfo.getWarehouseId());
+
         loadPlanner.plan();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
@@ -771,16 +799,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     private void unprotectedFinishStreamLoadChannel(int channelId) throws UserException {
         TNetworkAddress address = channelIdToBEHTTPPort.get(channelId);
-
-        boolean ok = false;
-        BackendService.Client client = null;
         try {
-            client = ClientPool.backendPool.borrowObject(address);
             TStreamLoadChannel streamLoadChannel = new TStreamLoadChannel();
             streamLoadChannel.setLabel(label);
             streamLoadChannel.setChannel_id(channelId);
-            TStatus tStatus = client.finish_stream_load_channel(streamLoadChannel);
-            ok = true;
+
+            TStatus tStatus = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.backendPool,
+                    address,
+                    client -> client.finish_stream_load_channel(streamLoadChannel));
 
             if (tStatus.getStatus_code() != TStatusCode.OK) {
                 // ignore fail status
@@ -788,12 +815,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             LOG.info("finish stream load channel label: {} channel id {}", label, channelId);
         } catch (Exception e) {
             throw new UserException("failed to send finish stream load channel: " + e.getMessage(), e);
-        } finally {
-            if (ok) {
-                ClientPool.backendPool.returnObject(address, client);
-            } else {
-                ClientPool.backendPool.invalidateObject(address, client);
-            }
         }
     }
 
@@ -807,7 +828,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 Status status = coord.getExecStatus();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -815,7 +836,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
                 }
 
                 if (coord.isEnableLoadProfile()) {
@@ -886,7 +907,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 dbId, Lists.newArrayList(tableId), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
-                timeoutMs / 1000);
+                timeoutMs / 1000, warehouseId);
     }
 
     public void unprotectedPrepareTxn() throws UserException {
@@ -996,10 +1017,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             return;
         }
 
-        // sync stream load collect profile
-        if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
+        // sync stream load collect profile, here we collect profile only when be has reported
+        if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile();
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
 
         writeLock();
@@ -1009,8 +1029,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             this.state = State.COMMITED;
             isCommitting = false;
+            endTimeMs = System.currentTimeMillis();
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
 
@@ -1066,17 +1089,31 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
         }
 
-        ProfileManager.getInstance().pushLoadProfile(profile);
+        ProfileManager.getInstance().pushProfile(null, profile);
     }
 
-    public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,
-                             String errorLogUrl, String errorMsg) {
-        this.numRowsNormal = loadRows;
-        this.numRowsAbnormal = filteredRows;
-        this.numRowsUnselected = unselectedRows;
-        this.numLoadBytesTotal = loadBytes;
-        this.trackingUrl = errorLogUrl;
+    public void setLoadState(TxnCommitAttachment attachment, String errorMsg) {
         this.errorMsg = errorMsg;
+        if (attachment != null) {
+            if (attachment instanceof ManualLoadTxnCommitAttachment) {
+                ManualLoadTxnCommitAttachment manualLoadTxnCommitAttachment = (ManualLoadTxnCommitAttachment) attachment;
+                this.numRowsNormal = manualLoadTxnCommitAttachment.getLoadedRows();
+                this.numRowsAbnormal = manualLoadTxnCommitAttachment.getFilteredRows();
+                this.numRowsUnselected = manualLoadTxnCommitAttachment.getUnselectedRows();
+                this.numLoadBytesTotal = manualLoadTxnCommitAttachment.getLoadedBytes();
+                this.trackingUrl = manualLoadTxnCommitAttachment.getErrorLogUrl();
+                this.beginTxnTimeMs = manualLoadTxnCommitAttachment.getBeginTxnTime();
+                this.receiveDataTimeMs = manualLoadTxnCommitAttachment.getReceiveDataTime();
+                this.planTimeMs = manualLoadTxnCommitAttachment.getPlanTime();
+            } else if (attachment instanceof RLTaskTxnCommitAttachment) {
+                RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = (RLTaskTxnCommitAttachment) attachment;
+                this.numRowsNormal = rlTaskTxnCommitAttachment.getLoadedRows();
+                this.numRowsAbnormal = rlTaskTxnCommitAttachment.getFilteredRows();
+                this.numRowsUnselected = rlTaskTxnCommitAttachment.getUnselectedRows();
+                this.numLoadBytesTotal = rlTaskTxnCommitAttachment.getLoadedBytes();
+                this.trackingUrl = rlTaskTxnCommitAttachment.getErrorLogUrl();
+            }
+        }
     }
 
     @Override
@@ -1090,6 +1127,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             this.state = State.COMMITED;
             this.preparedChannelNum = this.channelNum;
+            this.endTimeMs = txnState.getCommitTime();
         } finally {
             writeUnlock();
         }
@@ -1100,10 +1138,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             throws UserException {
         if (!txnOperated) {
             return;
-        }
-
-        if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
 
         writeLock();
@@ -1125,6 +1159,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
 
@@ -1287,6 +1323,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return state.name();
     }
 
+    public TUniqueId getTUniqueId() {
+        return this.loadId;
+    }
+
     public void setTUniqueId(TUniqueId loadId) {
         this.loadId = loadId;
     }
@@ -1426,7 +1466,74 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         loadIdLo = loadId.getLo();
     }
 
-    public TStreamLoadInfo toThrift() {
+    public String toRuntimeDetails() {
+        TreeMap<String, Object> runtimeDetails = Maps.newTreeMap();
+        if (!clientIp.equals("")) {
+            runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_CLIENT_IP, clientIp);
+        }
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, DebugUtil.printId(loadId));
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ID, txnId);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_BEGIN_TXN_TIME_MS, beginTxnTimeMs);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_RECEIVE_DATA_TIME_MS, receiveDataTimeMs);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_PLAN_TIME_MS, planTimeMs);
+        Gson gson = new Gson();
+        return gson.toJson(runtimeDetails);
+    }
+
+    public String toProperties() {
+        TreeMap<String, Object> properties = Maps.newTreeMap();
+        properties.put(LoadConstants.PROPERTIES_TIMEOUT, timeoutMs / 1000);
+        Gson gson = new Gson();
+        return gson.toJson(properties);
+    }
+
+    public TLoadInfo toThrift() {
+        readLock();
+        try {
+            TLoadInfo info = new TLoadInfo();
+            info.setJob_id(id);
+            info.setLabel(label);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            info.setDb(dbName);
+            info.setTable(tableName);
+            info.setUser(user);
+            info.setState(state.name());
+            info.setError_msg(errorMsg);
+            info.setRuntime_details(toRuntimeDetails());
+            info.setProperties(toProperties());
+            if (state == State.FINISHED) {
+                info.setProgress("100%");
+            } else {
+                info.setProgress("0%");
+            }
+
+            // tracking url
+            if (trackingUrl != null) {
+                info.setUrl(trackingUrl);
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            info.setPriority(LoadPriority.NORMAL);
+
+            info.setNum_sink_rows(numRowsNormal);
+            info.setNum_filtered_rows(numRowsAbnormal);
+            info.setNum_unselected_rows(numRowsUnselected);
+            info.setNum_scan_bytes(numLoadBytesTotal);
+
+            info.setCreate_time(TimeUtils.longToTimeString(createTimeMs));
+            info.setLoad_start_time(TimeUtils.longToTimeString(startLoadingTimeMs));
+            info.setLoad_commit_time(TimeUtils.longToTimeString(finishPreparingTimeMs));
+            info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
+
+            info.setType(getStringByType());
+            return info;
+        } finally {
+            readUnlock();
+        }
+
+    }
+
+    public TStreamLoadInfo toStreamLoadThrift() {
         readLock();
         try {
             TStreamLoadInfo info = new TStreamLoadInfo();

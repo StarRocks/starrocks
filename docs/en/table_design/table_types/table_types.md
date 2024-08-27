@@ -16,17 +16,13 @@ StarRocks provides four table types: Duplicate Key table, Aggregate table, Uniqu
 
 When data is loaded into a table created by using a certain table type, data is sorted and stored according to one or more columns defined as the sort key when the table is created. The sort key is usually one or more columns that are frequently used as filter conditions in queries, thereby accelerating queries.
 
-In the Duplicate Key table, the sort key specified by `DUPLICATE KEY` is used to sort data and is not assigned a UNIQUE constraint.
-In the Aggregate table, the sort key specified by `AGGREGATE KEY` is used to sort data and is assigned a UNIQUE constraint.
-In the Unique Key table, the sort key specified by `UNIQUE KEY` is used to sort data and is assigned a UNIQUE constraint.
-In the Primary Key table, the primary key and sort key are decoupled. The primary key specified by `PRIMARY KEY` is assigned UNIQUE and NOT NULL constraints. The sort key specified by `ORDER BY` is used for sorting data.
+Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
-> **NOTE**
->
-> - In versions earlier than v3.0, the Primary Key table does not support defining the primary key and sort key separately.
-> - For more descriptions of sort keys, see [Sort keys and prefix indexes](../indexes/Prefix_index_sort_key.md).
+For more descriptions of sort keys, see [Sort keys and prefix indexes](../indexes/Prefix_index_sort_key.md).
 
 ## Precautions
+
+- After a table is created, you cannot modify its table types. For example, you cannot change a Duplicate Key table to a Primary Key table. You must create a new Primary Key table.
 
 - Sort key columns must be defined prior to the other columns in the statement for table creation.
 

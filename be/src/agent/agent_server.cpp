@@ -70,6 +70,17 @@ const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
 const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
 
+static int calc_max_replication_threads(int replication_threads) {
+    if (replication_threads == 0) {
+        replication_threads = -4;
+    }
+    if (replication_threads < 0) {
+        replication_threads = -replication_threads;
+        replication_threads *= CpuInfo::num_cores();
+    }
+    return replication_threads;
+}
+
 class AgentServer::Impl {
 public:
     explicit Impl(ExecEnv* exec_env, bool is_compute_node) : _exec_env(exec_env), _is_compute_node(is_compute_node) {}
@@ -91,6 +102,8 @@ public:
     void update_max_thread_by_type(int type, int new_val);
 
     ThreadPool* get_thread_pool(int type) const;
+
+    void stop_task_worker_pool(TaskWorkerType type) const;
 
     DISALLOW_COPY_AND_MOVE(Impl);
 
@@ -130,7 +143,7 @@ private:
     std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
     std::unique_ptr<ReportDataCacheMetricsTaskWorkerPool> _report_datacache_metrics_workers;
 
-    // Compute node only need _report_resource_usage_workers.
+    // Compute node only need _report_resource_usage_workers and _report_task_workers
     const bool _is_compute_node;
 };
 
@@ -171,11 +184,12 @@ void AgentServer::Impl::init_or_die() {
         }
         max_publish_version_worker_count =
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
-        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
-                                       max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+        int min_publish_version_worker_count =
+                std::max(config::transaction_publish_version_thread_pool_num_min, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", min_publish_version_worker_count,
+                                       max_publish_version_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_publish_version);
-        REGISTER_GAUGE_STARROCKS_METRIC(publish_version_queue_count,
-                                        [this]() { return _thread_pool_publish_version->num_queued_tasks(); });
+        REGISTER_THREAD_POOL_METRICS(publish_version, _thread_pool_publish_version);
 #endif
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, config::drop_tablet_worker_count, std::numeric_limits<int>::max(),
@@ -236,9 +250,8 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL(
-                "replication", 0, config::replication_threads > 0 ? config::replication_threads : CpuInfo::num_cores(),
-                std::numeric_limits<int>::max(), _thread_pool_replication);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("replication", 0, calc_max_replication_threads(config::replication_threads),
+                                       std::numeric_limits<int>::max(), _thread_pool_replication);
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -256,7 +269,6 @@ void AgentServer::Impl::init_or_die() {
                               config::push_worker_count_high_priority + config::push_worker_count_normal_priority)
         CREATE_AND_START_POOL(_delete_workers, DeleteTaskWorkerPool,
                               config::delete_worker_count_normal_priority + config::delete_worker_count_high_priority)
-        CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_disk_state_workers, ReportDiskStateTaskWorkerPool, REPORT_DISK_STATE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_tablet_workers, ReportOlapTableTaskWorkerPool, REPORT_OLAP_TABLE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_workgroup_workers, ReportWorkgroupTaskWorkerPool, REPORT_WORKGROUP_WORKER_COUNT)
@@ -265,6 +277,7 @@ void AgentServer::Impl::init_or_die() {
                           REPORT_RESOURCE_USAGE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_datacache_metrics_workers, ReportDataCacheMetricsTaskWorkerPool,
                           REPORT_DATACACHE_METRICS_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
 
@@ -298,13 +311,13 @@ void AgentServer::Impl::stop() {
         // Both PUSH and REALTIME_PUSH type use _push_workers
         STOP_POOL(PUSH, _push_workers);
         STOP_POOL(DELETE, _delete_workers);
-        STOP_POOL(REPORT_TASK, _report_task_workers);
         STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
         STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
         STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
     STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
+    STOP_POOL(REPORT_TASK, _report_task_workers);
 #undef STOP_POOL
 }
 
@@ -578,12 +591,49 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         break;
     case TTaskType::REMOTE_SNAPSHOT:
     case TTaskType::REPLICATE_SNAPSHOT:
-        st = _thread_pool_replication->update_max_threads(new_val > 0 ? new_val : CpuInfo::num_cores());
+        st = _thread_pool_replication->update_max_threads(calc_max_replication_threads(new_val));
         break;
     default:
         break;
     }
     LOG_IF(ERROR, !st.ok()) << st;
+}
+
+#define STOP_IF_NOT_NULL(worker_pool) \
+    if (worker_pool != nullptr) {     \
+        worker_pool->stop();          \
+    }
+
+void AgentServer::Impl::stop_task_worker_pool(TaskWorkerType type) const {
+    switch (type) {
+    case TaskWorkerType::PUSH:
+        STOP_IF_NOT_NULL(_push_workers);
+        break;
+    case TaskWorkerType::PUBLISH_VERSION:
+        STOP_IF_NOT_NULL(_publish_version_workers);
+        break;
+    case TaskWorkerType::DELETE:
+        STOP_IF_NOT_NULL(_delete_workers);
+        break;
+    case TaskWorkerType::REPORT_TASK:
+        STOP_IF_NOT_NULL(_report_task_workers);
+        break;
+    case TaskWorkerType::REPORT_DISK_STATE:
+        STOP_IF_NOT_NULL(_report_disk_state_workers);
+        break;
+    case TaskWorkerType::REPORT_OLAP_TABLE:
+        STOP_IF_NOT_NULL(_report_tablet_workers);
+        break;
+    case TaskWorkerType::REPORT_WORKGROUP:
+        STOP_IF_NOT_NULL(_report_workgroup_workers);
+        STOP_IF_NOT_NULL(_report_resource_usage_workers);
+        break;
+    case TaskWorkerType::REPORT_DATACACHE_METRICS:
+        STOP_IF_NOT_NULL(_report_datacache_metrics_workers);
+        break;
+    default:
+        break;
+    }
 }
 
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
@@ -690,6 +740,10 @@ void AgentServer::update_max_thread_by_type(int type, int new_val) {
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {
     return _impl->get_thread_pool(type);
+}
+
+void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
+    return _impl->stop_task_worker_pool(type);
 }
 
 void AgentServer::init_or_die() {

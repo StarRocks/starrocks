@@ -34,7 +34,7 @@ public class BasicDbStmtAnalyzer {
         new BasicDbStmtAnalyzerVisitor().analyze(statement, session);
     }
 
-    private static class BasicDbStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    private static class BasicDbStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

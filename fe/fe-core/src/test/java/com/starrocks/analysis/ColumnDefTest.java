@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.AggregateType;
@@ -214,7 +215,54 @@ public class ColumnDefTest {
         }
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
+    public void testFloatDefaultValue() throws AnalysisException {
+        ColumnDef column1 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1")),
+                        "");
+        column1.analyze(true);
+        Assert.assertEquals("1", column1.getDefaultValue());
+
+        ColumnDef column2 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.1")),
+                        "");
+        column2.analyze(true);
+        Assert.assertEquals("1.1", column2.getDefaultValue());
+
+        ColumnDef column3 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.100000000")),
+                        "");
+        Assert.assertEquals("1.100000000", column3.getDefaultValue());
+
+        ColumnDef column4 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.1234567")),
+                        "");
+        Assert.assertEquals("1.1234567", column4.getDefaultValue());
+
+        ColumnDef column5 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.12345678")),
+                        "");
+        try {
+            column5.analyze(true);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Default value will loose precision: 1.12345678"));
+        }
+
+        ColumnDef column6 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("123456789")),
+                        "");
+        try {
+            column6.analyze(true);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Default value will loose precision: 123456789"));
+        }
+        ColumnDef column7 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.99E38")),
+                        "");
+        Assert.assertEquals("1.99E38", column7.getDefaultValue());
+    }
+
+    @Test(expected = SemanticException.class)
     public void testArrayHLL() throws AnalysisException {
         ColumnDef column =
                 new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), false, null, true, DefaultValueDef.NOT_SET,
@@ -222,7 +270,7 @@ public class ColumnDefTest {
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testArrayBitmap() throws AnalysisException {
         ColumnDef column =
                 new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), false, null, true,
@@ -231,22 +279,22 @@ public class ColumnDefTest {
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testArrayPercentile() throws AnalysisException {
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testInvalidVarcharInsideArray() throws AnalysisException {
-        Type tooLongVarchar = ScalarType.createVarchar(ScalarType.OLAP_MAX_VARCHAR_LENGTH + 1);
+        Type tooLongVarchar = ScalarType.createVarchar(ScalarType.getOlapMaxVarcharLength() + 1);
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testInvalidDecimalInsideArray() throws AnalysisException {
         Type invalidDecimal = ScalarType.createDecimalV2Type(100, -1);
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(invalidDecimal)), false, null, true,

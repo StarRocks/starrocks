@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # month
 
-## Description
+
 
 Returns the month for a given date. The return value ranges from 1 to 12.
 

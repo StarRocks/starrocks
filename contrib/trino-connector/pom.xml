@@ -15,7 +15,7 @@
         <dep.airlift.version>230</dep.airlift.version>
         <dep.airlift.units.version>1.8</dep.airlift.units.version>
         <dep.jackson.version>2.15.0</dep.jackson.version>
-        <dep.guava.version>31.1-jre</dep.guava.version>
+        <dep.guava.version>32.0.0-jre</dep.guava.version>
         <dep.guice.version>6.0.0</dep.guice.version>
         <dep.drift.version>1.14</dep.drift.version>
         <dep.antlr.version>4.12.0</dep.antlr.version>
@@ -109,9 +109,9 @@
         </dependency>
 
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.22</version>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <version>3.3.2</version>
         </dependency>
 
         <dependency>
@@ -295,13 +295,6 @@
             <groupId>org.jetbrains</groupId>
             <artifactId>annotations</artifactId>
             <version>19.0.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>mysql</artifactId>
-            <version>1.16.3</version>
             <scope>test</scope>
         </dependency>
 

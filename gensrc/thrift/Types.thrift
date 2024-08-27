@@ -126,6 +126,7 @@ struct TScalarType {
 struct TStructField {
     1: optional string name
     2: optional string comment
+    3: optional i32 id
 }
 
 struct TTypeNode {
@@ -277,7 +278,10 @@ enum TFunctionBinaryType {
   IR,
 
   // StarRocks customized UDF in jar.
-  SRJAR
+  SRJAR,
+  
+  // 
+  PYTHON
 }
 
 // Represents a fully qualified function name.
@@ -319,6 +323,8 @@ struct TAggregateFunction {
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
   2: optional string symbol
+  // Table function left join
+  3: optional bool is_left_join
 }
 
 // Represents a function in the Catalog.
@@ -364,6 +370,8 @@ struct TFunction {
   // Ignore nulls
   33: optional bool ignore_nulls
   34: optional bool isolated
+  35: optional string input_type
+  36: optional string content
 }
 
 enum TLoadJobState {
@@ -398,7 +406,15 @@ enum TTableType {
     FILE_TABLE,
     DELTALAKE_TABLE,
     TABLE_FUNCTION_TABLE,
-    ODPS_TABLE
+    ODPS_TABLE,
+    LOGICAL_ICEBERG_METADATA_TABLE,
+    ICEBERG_REFS_TABLE,
+    ICEBERG_HISTORY_TABLE,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE,
+    ICEBERG_SNAPSHOTS_TABLE,
+    ICEBERG_MANIFESTS_TABLE,
+    ICEBERG_FILES_TABLE,
+    ICEBERG_PARTITIONS_TABLE
 }
 
 enum TKeysType {
@@ -565,4 +581,15 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+}
+
+struct TSnapshotInfo {
+    1: optional TBackend backend
+    2: optional string snapshot_path
+    3: optional bool incremental_snapshot
+}
+
+enum TTxnType {
+    TXN_NORMAL = 0,
+    TXN_REPLICATION = 1
 }

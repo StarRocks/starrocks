@@ -40,6 +40,8 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
+import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -57,6 +59,8 @@ public abstract class ScanNode extends PlanNode {
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
+    protected DataCacheOptions dataCacheOptions = null;
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     protected ScanOptimzeOption scanOptimzeOption;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -72,6 +76,14 @@ public abstract class ScanNode extends PlanNode {
         this.columnAccessPaths = columnAccessPaths;
     }
 
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
     public void setScanOptimzeOption(ScanOptimzeOption opt) {
         this.scanOptimzeOption = opt.copy();
     }
@@ -82,6 +94,10 @@ public abstract class ScanNode extends PlanNode {
 
     public String getTableName() {
         return desc.getTable().getName();
+    }
+
+    public boolean isLocalNativeTable() {
+        return false;
     }
 
     /**

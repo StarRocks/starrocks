@@ -20,8 +20,8 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -61,7 +61,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
-            " FROM `$dbName`.`$tableName` partition `$partitionName`";
+            " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
 
     private final List<Long> partitionIdList;
 
@@ -75,12 +75,23 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         this.partitionIdList = partitionIdList;
     }
 
+    public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
+                                    List<Type> columnTypes, StatsConstants.AnalyzeType type,
+                                    StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+        this.partitionIdList = partitionIdList;
+    }
+
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long finishedSQLNum = 0;
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
         List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
         long totalCollectSQL = collectSQLList.size();
+        if (table.isTemporaryTable()) {
+            context.setSessionId(((OlapTable) table).getSessionId());
+        }
+        context.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
 
         // First, the collection task is divided into several small tasks according to the column name and partition,
         // and then the multiple small tasks are aggregated into several tasks
@@ -125,7 +136,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
+            Partition partition = table.getPartition(data.getPartitionId());
+            if (partition == null) {
+                continue;
+            }
+            String partitionName = StringEscapeUtils.escapeSql(partition.getName());
 
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
@@ -227,40 +242,43 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                 // statistics job doesn't lock DB, partition may be dropped, skip it
                 continue;
             }
-            for (String columnName : columns) {
-                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnName));
+            for (int i = 0; i < columnNames.size(); i++) {
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnNames.get(i),
+                        columnTypes.get(i)));
             }
         }
 
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
-    private String buildBatchCollectFullStatisticSQL(Table table, Partition partition, String columnName) {
+    private String buildBatchCollectFullStatisticSQL(Table table, Partition partition, String columnName,
+                                                     Type columnType) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
-        Column column = table.getColumn(columnName);
 
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
-        String quoteColumnName = StatisticUtils.quoting(columnName);
+        String quoteColumnName = StatisticUtils.quoting(table, columnName);
+        String quoteColumnKey = "`column_key`";
 
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
         context.put("partitionId", partition.getId());
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", fullAnalyzeGetDataSize(column));
+        context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnKey, columnType));
         context.put("partitionName", partition.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
+        context.put("quoteColumnName", quoteColumnName);
 
-        if (!column.getType().canStatistic()) {
+        if (!columnType.canStatistic()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty())))");
-            context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
-            context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
-            context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
+            context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnKey + "), hll_empty())))");
+            context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnKey + ")");
+            context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnKey, true));
+            context.put("minFunction", getMinMaxFunction(columnType, quoteColumnKey, false));
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));

@@ -25,7 +25,7 @@ import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.options.Options;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.IntType;
 import org.junit.Assert;
@@ -75,8 +75,17 @@ public class PaimonConnectorTest {
     }
 
     @Test
+    public void testCreateDLFPaimonConnector() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "dlf");
+        properties.put("dlf.catalog.id", "dlf_test");
+
+        new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+    }
+
+    @Test
     public void testCreatePaimonTable(@Mocked Catalog paimonNativeCatalog,
-                                      @Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+                                      @Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         Map<String, String> properties = new HashMap<>();
         properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
         properties.put("paimon.catalog.type", "filesystem");

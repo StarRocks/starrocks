@@ -18,7 +18,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TpchSQL;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.utframe.StarRocksAssert;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -27,6 +30,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
 
@@ -907,6 +913,38 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_single_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_multi_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`, `big_value`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
 
@@ -916,12 +954,14 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setEnableShortCircuit(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
     }
 
     @AfterClass
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
     }
 
     public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
@@ -939,5 +979,15 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                         testDb.getFullName(), testDb.getMaterializedViews().size());
             }
         }
+    }
+
+    public static List<TScanRangeParams> collectAllScanRangeParams(DefaultCoordinator coordinator) {
+        List<TScanRangeParams> scanRangeParams = new ArrayList<>();
+        for (FragmentInstance instance : coordinator.getExecutionDAG().getInstances()) {
+            for (List<TScanRangeParams> x : instance.getNode2ScanRanges().values()) {
+                scanRangeParams.addAll(x);
+            }
+        }
+        return scanRangeParams;
     }
 }

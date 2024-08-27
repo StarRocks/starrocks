@@ -18,21 +18,19 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessController;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -47,18 +45,14 @@ import java.util.Optional;
 import java.util.Set;
 
 public class Authorizer {
-    private static final AccessControlProvider INSTANCE;
+    private final AccessControlProvider accessControlProvider;
 
-    static {
-        if (Config.access_control.equals("ranger")) {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
-        } else {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
-        }
+    public Authorizer(AccessControlProvider accessControlProvider) {
+        this.accessControlProvider = accessControlProvider;
     }
 
     public static AccessControlProvider getInstance() {
-        return INSTANCE;
+        return GlobalStateMgr.getCurrentState().getAuthorizer().accessControlProvider;
     }
 
     public static void check(StatementBase statement, ConnectContext context) {
@@ -143,11 +137,11 @@ public class Authorizer {
         getInstance().getAccessControlOrDefault(catalog).checkAnyActionOnTable(currentUser, roleIds, tableName);
     }
 
-    public static void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
-                                          TableName tableName, Set<String> columns,
-                                          PrivilegeType privilegeType) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnsAction(currentUser, roleIds,
-                tableName, columns, privilegeType);
+    public static void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds,
+                                         TableName tableName, String column,
+                                         PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnAction(currentUser, roleIds,
+                tableName, column, privilegeType);
     }
 
     public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
@@ -183,21 +177,23 @@ public class Authorizer {
     }
 
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                                       Table tbl) throws AccessDeniedException {
-        doCheckTableLikeObject(currentUser, roleIds, dbName, tbl, null);
+                                                       BasicTable tableBasicInfo) throws AccessDeniedException {
+        doCheckTableLikeObject(currentUser, roleIds, dbName, tableBasicInfo, null);
     }
 
     private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                               Table tbl, PrivilegeType privilegeType) throws AccessDeniedException {
+                                               BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
+            case OLAP_EXTERNAL:
             case CLOUD_NATIVE:
             case MYSQL:
             case ELASTICSEARCH:
             case HIVE:
             case HIVE_VIEW:
             case ICEBERG:
+            case ICEBERG_VIEW:
             case HUDI:
             case JDBC:
             case DELTALAKE:
@@ -205,6 +201,7 @@ public class Authorizer {
             case SCHEMA:
             case PAIMON:
             case ODPS:
+            case KUDU:
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
                     checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));

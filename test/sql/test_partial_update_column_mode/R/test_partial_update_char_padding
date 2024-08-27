@@ -26,19 +26,19 @@ insert into tab1 values (1, 'aaa', 'aaa', 'aaa'),
 select * from tab1;
 -- result:
 2	aaa	aaa	aaa
+3	aaa	aaa	aaa
 1	aaa	aaa	aaa
 4	aaa	aaa	aaa
-3	aaa	aaa	aaa
 -- !result
 update tab1 set v1 = 'bbb' where k1 = 2;
 -- result:
 -- !result
 select * from tab1;
 -- result:
-1	aaa	aaa	aaa
-4	aaa	aaa	aaa
-3	aaa	aaa	aaa
 2	bbb	aaa	aaa
+1	aaa	aaa	aaa
+3	aaa	aaa	aaa
+4	aaa	aaa	aaa
 -- !result
 select * from tab1 where v1 = 'bbb';
 -- result:
@@ -46,9 +46,9 @@ select * from tab1 where v1 = 'bbb';
 -- !result
 select * from tab1 where v1 <> 'bbb';
 -- result:
-4	aaa	aaa	aaa
-1	aaa	aaa	aaa
 3	aaa	aaa	aaa
+1	aaa	aaa	aaa
+4	aaa	aaa	aaa
 -- !result
 update tab1 set v2 = 'bbb' where k1 = 3;
 -- result:
@@ -56,9 +56,9 @@ update tab1 set v2 = 'bbb' where k1 = 3;
 select * from tab1;
 -- result:
 1	aaa	aaa	aaa
-3	aaa	bbb	aaa
 2	bbb	aaa	aaa
 4	aaa	aaa	aaa
+3	aaa	bbb	aaa
 -- !result
 select * from tab1 where v2 = 'bbb';
 -- result:
@@ -77,8 +77,8 @@ select * from tab1;
 -- result:
 1	aaa	aaa	aaa
 2	bbb	aaa	aaa
-3	aaa	bbb	aaa
 4	aaa	aaa	bbb
+3	aaa	bbb	aaa
 -- !result
 select * from tab1 where v3 = 'bbb';
 -- result:
@@ -87,6 +87,6 @@ select * from tab1 where v3 = 'bbb';
 select * from tab1 where v3 <> 'bbb';
 -- result:
 1	aaa	aaa	aaa
-2	bbb	aaa	aaa
 3	aaa	bbb	aaa
+2	bbb	aaa	aaa
 -- !result

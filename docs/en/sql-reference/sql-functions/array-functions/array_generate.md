@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_generate
 
-## Description
+
 
 Returns an array of distinct values within the range specified by `start` and `end`, with an increment of `step`.
 

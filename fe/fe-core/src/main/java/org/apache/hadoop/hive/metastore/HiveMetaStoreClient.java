@@ -157,12 +157,11 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
 
-import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -182,6 +181,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.security.auth.login.LoginException;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
 
@@ -362,7 +362,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                         JavaUtils.getClassLoader());
                 return (URIResolverHook) ReflectionUtils.newInstance(uriResolverClass, null);
             } catch (Exception e) {
-                LOG.error("Exception loading uri resolver hook" + e);
+                LOG.error("Exception loading uri resolver hook", e);
                 return null;
             }
         }
@@ -571,7 +571,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                     + "Continuing without it.", e);
                         }
                     }
-                } catch (MetaException e) {
+                } catch (MetaException | TTransportException e) {
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }

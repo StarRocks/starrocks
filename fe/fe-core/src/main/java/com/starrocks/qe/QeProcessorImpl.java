@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
+import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
@@ -49,6 +50,8 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -162,6 +165,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             }
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+                    .customQueryId(context.getCustomQueryId())
                     .queryId(queryIdStr)
                     .executionId(info.getConnectContext().getExecutionId())
                     .queryStartTime(info.getStartExecTime())
@@ -170,7 +174,9 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .connId(String.valueOf(context.getConnectionId()))
                     .db(context.getDatabase())
                     .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
-                    .profile(info.getCoord().getQueryProfile()).build();
+                    .profile(info.getCoord().getQueryProfile())
+                    .warehouseName(info.coord.getWarehouseName()).build();
+
             querySet.put(queryIdStr, item);
         }
         return querySet;
@@ -286,6 +292,22 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params) {
+        final TReportFragmentFinishResponse result = new TReportFragmentFinishResponse();
+        final QueryInfo info = coordinatorMap.get(params.query_id);
+        if (info == null) {
+            LOG.debug("reportFragmentFinish() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            result.setStatus(new TStatus(TStatusCode.OK));
+            return result;
+        }
+        final TUniqueId fragment_instance_id = params.fragment_instance_id;
+        Status status = info.getCoord().scheduleNextTurn(fragment_instance_id);
+        result.setStatus(status.toThrift());
+        return result;
+    }
+
+    @Override
     public long getCoordinatorCount() {
         return coordinatorMap.size();
     }
@@ -297,7 +319,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryInfo", (long) coordinatorMap.size());
+        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
     }
 
     public static final class QueryInfo {

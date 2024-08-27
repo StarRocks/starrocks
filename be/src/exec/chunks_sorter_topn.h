@@ -66,11 +66,11 @@ public:
     ~ChunksSorterTopn() override;
 
     // Append a Chunk for sort.
-    [[nodiscard]] Status update(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    [[nodiscard]] Status do_done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     // get_next only works after done().
-    [[nodiscard]] Status get_next(ChunkPtr* chunk, bool* eos) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     size_t get_output_rows() const override;
 
@@ -83,35 +83,32 @@ public:
 private:
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
-    [[nodiscard]] Status _sort_chunks(RuntimeState* state);
+    Status _sort_chunks(RuntimeState* state);
 
     // build data for top-n
-    [[nodiscard]] Status _build_sorting_data(RuntimeState* state, Permutation& permutation_second,
-                                             DataSegments& segments);
+    Status _build_sorting_data(RuntimeState* state, Permutation& permutation_second, DataSegments& segments);
 
-    [[nodiscard]] Status _hybrid_sort_first_time(RuntimeState* state, Permutation& new_permutation,
-                                                 DataSegments& segments);
+    Status _hybrid_sort_first_time(RuntimeState* state, Permutation& new_permutation, DataSegments& segments);
 
-    [[nodiscard]] Status _hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
-                                             DataSegments& segments);
+    Status _hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
+                               DataSegments& segments);
 
-    [[nodiscard]] Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
-                                            size_t sorted_size, Permutation& new_permutation);
+    Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
+                              size_t sorted_size, Permutation& new_permutation);
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 
     static void _set_permutation_complete(std::pair<Permutation, Permutation>&, size_t size,
                                           std::vector<std::vector<uint8_t>>& filter_array);
 
-    [[nodiscard]] Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                               DataSegments& segments);
+    Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                 DataSegments& segments);
 
-    [[nodiscard]] Status _merge_sort_data_as_merged_segment(RuntimeState* state,
-                                                            std::pair<Permutation, Permutation>& new_permutation,
-                                                            DataSegments& segments);
+    Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
+                                              DataSegments& segments);
 
-    [[nodiscard]] Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                                DataSegments& segments);
+    Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                  DataSegments& segments);
 
     // For rank type topn, it may keep more data than we need during processing,
     // therefor, pruning should be performed when processing is finished

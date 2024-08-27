@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_map
 
-## Description
+
 
 array_map() is a higher-order SQL function that can take lambda functions as arguments.It applies the lambda function to the input arrays and returns a new array.
 

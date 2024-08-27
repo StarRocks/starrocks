@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.TableVersionRange;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -29,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.catalog.Table.TableType.JDBC;
 
 public class MockedJDBCMetadata implements ConnectorMetadata {
     private final AtomicLong idGen = new AtomicLong(0L);
@@ -134,6 +137,11 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return JDBC;
+    }
+
+    @Override
     public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
         readLock();
         try {
@@ -154,7 +162,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName) {
+    public List<String> listPartitionNames(String dbName, String tableName, TableVersionRange versionRange) {
         readLock();
         try {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {

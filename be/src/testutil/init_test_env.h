@@ -47,7 +47,7 @@ int init_test_env(int argc, char** argv) {
         exit(-1);
     }
     std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
-    if (!config::init(conffile.c_str(), false)) {
+    if (!config::init(conffile.c_str())) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
@@ -92,6 +92,7 @@ int init_test_env(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
+    engine->start_schedule_apply_thread();
     auto* global_env = GlobalEnv::GetInstance();
     config::disable_storage_page_cache = true;
     auto st = global_env->init();

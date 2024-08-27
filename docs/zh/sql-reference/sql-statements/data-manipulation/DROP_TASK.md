@@ -15,14 +15,15 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-DROP TASK `<task_name>`
+DROP TASK `<task_name>` [FORCE]
 ```
 
 ## 参数说明
 
-| **参数**  | **说明**       |
-| --------- | -------------- |
-| task_name | 待删除任务名。为避免解析失败，请使用反括号（`）包裹任务名。 |
+| **参数**  | **必须** | **说明**       |
+| --------- | ------- | -------------- |
+| task_name | 是      | 待删除任务名。为避免解析失败，请使用反括号（`）包裹任务名。 |
+| FORCE     | 否      | 强制删除任务。   |
 
 ## 使用说明
 
@@ -33,6 +34,13 @@ SELECT * FROM INFORMATION_SCHEMA.tasks;
 SELECT * FROM information_schema.tasks WHERE task_name = '<task_name>';
 SELECT * FROM information_schema.task_runs;
 SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
+```
+
+您可以通过 SHOW MATERIALIZED VIEWS 语句获取物化视图刷新任务的 `task_name`。
+
+```SQL
+SHOW MATERIALIZED VIEWS;
+SHOW MATERIALIZED VIEWS WHERE name = '<mv_name>';
 ```
 
 ## 示例

@@ -22,7 +22,9 @@
 #include "column/type_traits.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "runtime/runtime_state.h"
+#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type_infra.h"
+#include "udf/java/java_udf.h"
 
 namespace starrocks {
 
@@ -130,6 +132,13 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     }
 }
 
+void FunctionContext::release_mems() {
+    if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
+        auto env = JVMFunctionHelper::getInstance().getEnv();
+        _jvm_udaf_ctxs->states->clear(this, env);
+    }
+}
+
 void FunctionContext::set_error(const char* error_msg, const bool is_udf) {
     std::lock_guard<std::mutex> lock(_error_msg_mutex);
     if (_error_msg.empty()) {
@@ -158,6 +167,10 @@ const char* FunctionContext::error_msg() const {
 
 bool FunctionContext::error_if_overflow() const {
     return _state != nullptr && _state->error_if_overflow();
+}
+
+bool FunctionContext::allow_throw_exception() const {
+    return _state != nullptr && _state->query_options().allow_throw_exception;
 }
 
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {

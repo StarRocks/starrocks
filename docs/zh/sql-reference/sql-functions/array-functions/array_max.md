@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_max
 
-## 功能
+
 
 求取一个ARRAY中的所有数据中的最大值，返回这个结果。
 

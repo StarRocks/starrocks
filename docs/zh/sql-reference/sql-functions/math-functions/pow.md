@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # pow, power, dpow, fpow
 
-## 功能
+
 
 返回参数 `x` 的 `y` 次方。
 

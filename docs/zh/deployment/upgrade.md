@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['shengji']
 ---
 
 # 升级 StarRocks
@@ -13,6 +14,10 @@ displayed_sidebar: "Chinese"
 ### StarRocks 版本
 
 StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，例如 `2.5.4`。第一个数字代表 StarRocks 的重大版本，第二个数字代表大版本，第三个数字代表小版本。
+
+> **注意**
+>
+> 请注意，已有存算一体集群无法直接升级为存算分离集群，反之亦然。您需要重新部署一套存算分离集群。
 
 ### 升级路径
 
@@ -52,7 +57,7 @@ StarRocks 支持**滚动升级**，允许您在不停止服务的情况下升级
 
 - **通用兼容性配置**
 
-升级前，请关闭 Tablet Clone。
+升级前，请关闭 Tablet Clone。如果您已经关闭 Balancer，可以跳过该步骤。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");

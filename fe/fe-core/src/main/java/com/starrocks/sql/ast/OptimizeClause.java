@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;

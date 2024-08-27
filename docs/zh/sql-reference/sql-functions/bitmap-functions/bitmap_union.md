@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bitmap_union
 
-## 功能
+
 
 输入一组 bitmap 值，求这一组 bitmap 值的并集。
 

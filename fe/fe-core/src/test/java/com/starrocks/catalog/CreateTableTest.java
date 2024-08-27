@@ -34,15 +34,16 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.alter.AlterJobException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -56,7 +57,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -101,7 +101,7 @@ public class CreateTableTest {
 
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -165,6 +165,12 @@ public class CreateTableTest {
                 () -> createTable("create table test.lp_tbl1\n" + "(k1 bigint, k2 varchar(16) not null," +
                         " dt varchar(10) not null)\n duplicate key(k1)\n"
                         + "partition by list(k2,dt)\n" + "(partition p1 values in ((\"2022-04-01\", \"shanghai\")) )\n"
+                        + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.list_lp_tbl1\n" + "(k1 bigint, k2 varchar(16)," +
+                        " dt varchar(10))\n duplicate key(k1)\n"
+                        + "partition by list(k2, dt)\n" + "(partition p1 values in ((\"2022-04-01\", \"shanghai\")) )\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
         ExceptionChecker.expectThrowsNoException(
@@ -325,6 +331,10 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table str2dateTable = db.getTable("partition_str2date");
+        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(str2dateTable));
+
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_from_unixtime (\n" +
                         "        create_time bigint,\n" +
@@ -345,6 +355,8 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
+        Table fromUnixtimeTable = db.getTable("partition_from_unixtime");
+        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(fromUnixtimeTable));
     }
 
     @Test
@@ -420,8 +432,7 @@ public class CreateTableTest {
 
         ExceptionChecker
                 .expectThrowsWithMsg(AnalysisException.class,
-                        "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
-                                "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
+                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
                         () -> createTable(
                                 "create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
                                         + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
@@ -443,7 +454,7 @@ public class CreateTableTest {
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Generated Column "
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illegal expression type for Generated Column "
                         + "Column Type: INT, Expression Type: DOUBLE",
                 () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
@@ -625,7 +636,7 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
                 "Invalid bloom filter column 'k3': unsupported type JSON",
                 () -> alterTableWithNewParser(
                         "ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
@@ -884,8 +895,8 @@ public class CreateTableTest {
         String showSql = "show create table test.`test_location_no_prop`";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        
+        ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -916,8 +927,7 @@ public class CreateTableTest {
         showSql = "show create table test.`test_location_no_backend_prop`";
         showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
-        showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        showResultSet = showExecutor.execute();
+        showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -989,8 +999,7 @@ public class CreateTableTest {
                 showSql = "show create table test.`test_location_prop_" + i + "`";
                 showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                         connectContext);
-                showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-                showResultSet = showExecutor.execute();
+                showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
                 System.out.println(showResultSet.getResultRows());
                 Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                         PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + expectedAnalyzedProp + "\""));
@@ -1020,7 +1029,7 @@ public class CreateTableTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
 
         createTable("CREATE TABLE test.`test_location_persist_t1` (\n" +
                 "    k1 int,\n" +
@@ -1037,11 +1046,11 @@ public class CreateTableTest {
 
         // make final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getImageWriter());
 
         // ** test replay from edit log
         LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        localMetastoreFollower.load(initialImage.getMetaBlockReader());
         CreateTableInfo info = (CreateTableInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
         localMetastoreFollower.replayCreateTable(info);
@@ -1052,9 +1061,9 @@ public class CreateTableTest {
         Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
 
         // ** test load from image(simulate restart)
-        localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
-        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+        LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreLeader.load(finalImage.getMetaBlockReader());
+        olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
         System.out.println(olapTable.getLocation());
         Assert.assertEquals(1, olapTable.getLocation().size());
@@ -1216,7 +1225,7 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
                 "Invalid bloom filter column 'k3': unsupported type VARBINARY",
                 () -> alterTableWithNewParser(
                         "ALTER TABLE test.t_varbinary_bf set (\"bloom_filter_columns\"= \"k3\");"));
@@ -1274,7 +1283,7 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
                 "Invalid bloom filter column 'k3': unsupported type VARBINARY",
                 () -> alterTableWithNewParser("ALTER TABLE test.t_binary_bf set (\"bloom_filter_columns\"= \"k3\");"));
 
@@ -1381,32 +1390,6 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testTemporaryTable() throws Exception {
-        Config.enable_experimental_temporary_table = true;
-        createTable(
-                "CREATE TABLE test.base_tbl (\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ")"
-        );
-
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
-                "create temporary table test.temp_table select * from test.base_tbl",
-                connectContext);
-        // String sql = stmt.toSql();
-        // Assert.assertEquals("hehe", sql);
-
-        // drop table
-        UtFrameUtils.parseStmtWithNewParser("drop temporary table test.base_tbl", connectContext);
-    }
-
-    @Test
     public void testCreateTableWithConstraint() {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table1(\n" +
@@ -1428,9 +1411,9 @@ public class CreateTableTest {
         Assert.assertTrue(table.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint = table.getUniqueConstraints();
         Assert.assertEquals(1, uniqueConstraint.size());
-        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumns().get(0));
-        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumns().get(1));
+        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumnNames().size());
+        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumnNames().get(0));
+        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumnNames().get(1));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table2(\n" +
@@ -1451,10 +1434,10 @@ public class CreateTableTest {
         Assert.assertTrue(table2.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint2 = table2.getUniqueConstraints();
         Assert.assertEquals(2, uniqueConstraint2.size());
-        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumns().get(0));
-        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumns().size());
-        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumns().get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumnNames().size());
+        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumnNames().get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumnNames().size());
+        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumnNames().get(0));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_primary_key_table1(\n" +
@@ -1748,6 +1731,14 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testDropTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "cannot drop table in system database: information_schema",
+                () -> starRocksAssert.dropTable("information_schema.tables")
+        );
+    }
+
+    @Test
 
     public void testCreatePartitionByExprTable() {
         ExceptionChecker.expectThrowsNoException(
@@ -1769,6 +1760,61 @@ public class CreateTableTest {
                                 "\"storage_format\" = \"DEFAULT\"\n" +
                                 ");"
                 ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.`bill_detail_1` (\n" +
+                        "  `day` datetime \n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`day`)\n" +
+                        "PARTITION BY RANGE(cast(substr(day, 1, 10) as datetime))\n" +
+                        "(PARTITION p201704 VALUES LESS THAN (\"20170501\"),\n" +
+                        "PARTITION p201705 VALUES LESS THAN (\"20170601\"),\n" +
+                        "PARTITION p201706 VALUES LESS THAN (\"20170701\"))\n" +
+                        "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                        "PROPERTIES (\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.`bill_detail_2` (\n" +
+                        "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`bill_code`)\n" +
+                        "PARTITION BY RANGE(cast(substr(bill_code, '3', 13) as bigint))\n" +
+                        "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                        "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                        "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                        "PARTITION p4 VALUES [('15000000'), ('20000000')),\n" +
+                        "PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.`bill_detail_3` (\n" +
+                        "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`bill_code`)\n" +
+                        "PARTITION BY RANGE(cast(substr(bill_code, 3, '13') as bigint))\n" +
+                        "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                        "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                        "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                        "PARTITION p4 VALUES [('15000000'), ('20000000')),\n" +
+                        "PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        ");"
+        ));
     }
 
     @Test
@@ -2006,5 +2052,45 @@ public class CreateTableTest {
                 " Detail message: Column name [__op] is a system reserved name." +
                 " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
                 () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testDefaultValueHasEscapeString() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE `news_rt` (\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
+                "  `title` varchar(65533) NOT NULL DEFAULT \"\\\"\" COMMENT \"title\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`id`)\n" +
+                "COMMENT \"news\"\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt;");
+        starRocksAssert.dropTable("news_rt");
+        starRocksAssert.withTable(createTableSql);
+    }
+
+    @Test
+    public void testDefaultValueHasEscapeStringNonPK() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE `news_rt_non_pk` (\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
+                "  `title` varchar(65533) NOT NULL DEFAULT \"\\\"\" COMMENT \"title\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "COMMENT \"news\"\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt_non_pk;");
+        starRocksAssert.dropTable("news_rt_non_pk");
+        starRocksAssert.withTable(createTableSql);
     }
 }

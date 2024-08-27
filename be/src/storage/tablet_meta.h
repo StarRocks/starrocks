@@ -92,10 +92,10 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                                       uint32_t next_unique_id,
-                                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                                       TabletMetaSharedPtr* tablet_meta);
+    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                         uint32_t next_unique_id,
+                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                         TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create();
 
@@ -109,23 +109,25 @@ public:
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
                TTabletType::type tabletType, TCompressionType::type compression_type,
-               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type);
+               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type, int compression_level);
 
     virtual ~TabletMeta();
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    [[nodiscard]] Status create_from_file(const std::string& file_path);
-    [[nodiscard]] Status create_from_memory(std::string_view data);
-    [[nodiscard]] Status save(const std::string& file_path);
-    [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
+    Status create_from_file(const std::string& file_path);
+    // Note that create_from_memory will not use tablet schema map to share the tablet schemas with same schema id,
+    // it's the difference from create_from_file
+    Status create_from_memory(std::string_view data);
+    Status save(const std::string& file_path);
+    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    [[nodiscard]] Status save_meta(DataDir* data_dir);
+    Status save_meta(DataDir* data_dir);
 
-    [[nodiscard]] Status serialize(std::string* meta_binary);
-    [[nodiscard]] Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+    Status serialize(std::string* meta_binary);
+    Status deserialize(std::string_view data);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -356,7 +358,7 @@ inline size_t TabletMeta::num_rows() const {
 inline size_t TabletMeta::tablet_footprint() const {
     size_t total_size = 0;
     for (auto& rs : _rs_metas) {
-        total_size += rs->data_disk_size();
+        total_size += rs->data_disk_size() + rs->index_disk_size();
     }
     return total_size;
 }

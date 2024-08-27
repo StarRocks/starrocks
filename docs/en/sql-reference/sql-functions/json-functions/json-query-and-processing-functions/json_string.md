@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # json_string
 
-## Description
+
 
 Converting JSON object to JSON string
 

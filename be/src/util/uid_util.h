@@ -144,6 +144,7 @@ TUniqueId generate_uuid();
 
 std::ostream& operator<<(std::ostream& os, const UniqueId& uid);
 
+std::string print_id(const UniqueId& id);
 std::string print_id(const TUniqueId& id);
 std::string print_id(const PUniqueId& id);
 

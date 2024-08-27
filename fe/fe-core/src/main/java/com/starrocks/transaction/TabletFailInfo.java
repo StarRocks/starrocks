@@ -31,6 +31,9 @@ public class TabletFailInfo implements Writable {
     private long tabletId;
     private long backendId;
 
+    public TabletFailInfo() {
+    }
+
     public TabletFailInfo(long tabletId, long backendId) {
         super();
         this.tabletId = tabletId;
@@ -41,8 +44,16 @@ public class TabletFailInfo implements Writable {
         return tabletId;
     }
 
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
     public long getBackendId() {
         return backendId;
+    }
+
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
     }
 
     @NotNull

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_or
 
-## Description
+
 
 Calculates the union of two input bitmaps and return a new bitmap.
 

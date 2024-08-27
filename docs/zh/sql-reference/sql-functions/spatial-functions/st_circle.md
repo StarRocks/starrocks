@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # ST_Circle
 
-## 功能
+
 
 将一个 WKT(Well Known Text)转化为地球球面上的一个圆。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # arrays_overlap
 
-## Description
+
 
 Checks whether the intersection of two arrays is empty. The arrays that you specify must be of the same data type. If the intersection is empty, this function returns `0`. Otherwise, this function returns `1`.
 

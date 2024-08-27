@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <thread>
@@ -29,6 +30,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "util/blocking_queue.hpp"
 #include "util/ref_count_closure.h"
+#include "util/system_metrics.h"
 #include "util/uid_util.h"
 namespace starrocks {
 
@@ -48,6 +50,7 @@ public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
     void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
     void publish_runtime_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
+    void publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
     // receiver runtime filter allocated in this fragment instance(broadcast join generate it)
     // or allocated in this query(shuffle join generate global runtime filter)
     void receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf);
@@ -112,6 +115,35 @@ private:
     const bool _is_pipeline;
 };
 
+enum EventType {
+    RECEIVE_TOTAL_RF = 0,
+    CLOSE_QUERY = 1,
+    OPEN_QUERY = 2,
+    RECEIVE_PART_RF = 3,
+    SEND_PART_RF = 4,
+    SEND_BROADCAST_GRF = 5,
+    MAX_COUNT,
+};
+
+inline std::string EventTypeToString(EventType type) {
+    switch (type) {
+    case RECEIVE_TOTAL_RF:
+        return "RECEIVE_TOTAL_RF";
+    case CLOSE_QUERY:
+        return "CLOSE_QUERY";
+    case OPEN_QUERY:
+        return "OPEN_QUERY";
+    case RECEIVE_PART_RF:
+        return "RECEIVE_PART_RF";
+    case SEND_PART_RF:
+        return "SEND_PART_RF";
+    case SEND_BROADCAST_GRF:
+        return "SEND_BROADCAST_GRF";
+    default:
+        break;
+    }
+    __builtin_unreachable();
+}
 // RuntimeFilterWorker works in a separated thread, and does following jobs:
 // 1. deserialize runtime filters.
 // 2. merge runtime filters.
@@ -123,6 +155,24 @@ private:
 // - send partitioned RF(for hash join node)
 // - close a query(delete runtime filter merger)
 struct RuntimeFilterWorkerEvent;
+
+struct RuntimeFilterWorkerMetrics {
+    void update_event_nums(EventType event_type, int64_t delta) { event_nums[event_type] += delta; }
+
+    void update_rf_bytes(EventType event_type, int64_t delta) { runtime_filter_bytes[event_type] += delta; }
+
+    int64_t total_rf_bytes() {
+        int64_t total = 0;
+        for (int i = 0; i < EventType::MAX_COUNT; i++) {
+            total += runtime_filter_bytes[i];
+        }
+        return total;
+    }
+
+    std::array<std::atomic_int64_t, EventType::MAX_COUNT> event_nums{};
+    std::array<std::atomic_int64_t, EventType::MAX_COUNT> runtime_filter_bytes{};
+};
+
 class RuntimeFilterWorker {
 public:
     RuntimeFilterWorker(ExecEnv* env);
@@ -140,6 +190,9 @@ public:
     void send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                        const std::vector<TRuntimeFilterDestination>& destinations, int timeout_ms,
                                        int64_t rpc_http_min_size);
+
+    size_t queue_size() const;
+    const RuntimeFilterWorkerMetrics* metrics() const { return _metrics; }
 
 private:
     void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);
@@ -159,10 +212,13 @@ private:
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
                                       int64_t rpc_http_min_size);
 
+    bool _reach_queue_limit();
+
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
     ExecEnv* _exec_env;
     std::thread _thread;
+    RuntimeFilterWorkerMetrics* _metrics = nullptr;
 };
 
 }; // namespace starrocks

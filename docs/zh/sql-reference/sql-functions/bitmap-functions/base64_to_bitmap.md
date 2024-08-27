@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # base64_to_bitmap
 
-## 功能
+
 
 导入外部 bitmap 数据到 StarRocks 时，需要先对 bitmap 数据进行序列化和 Base64 编码，生成 Base64 字符串。导入字符串到 StarRocks 时再进行 Base64 到 bitmap 的转化。
 该函数用于将 Base64 编码的字符串转化为 bitmap。

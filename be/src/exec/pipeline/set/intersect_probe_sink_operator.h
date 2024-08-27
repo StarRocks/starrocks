@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/set/intersect_context.h"
+#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
@@ -51,6 +52,7 @@ public:
     }
 
     Status set_finishing(RuntimeState* state) override {
+        ONCE_DETECT(_set_finishing_once);
         _is_finished = true;
         _intersect_ctx->finish_probe_ht();
         return Status::OK();
@@ -69,6 +71,7 @@ private:
 
     bool _is_finished = false;
     const int32_t _dependency_index;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class IntersectProbeSinkOperatorFactory final : public OperatorFactory {

@@ -63,6 +63,7 @@ public:
     ~CastStringToArray() override = default;
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
 private:
     Slice _unquote(Slice slice) const;
@@ -71,6 +72,7 @@ private:
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;
     bool _throw_exception_if_err;
+    ColumnPtr _constant_res;
 };
 
 // Cast JsonArray to array<ANY>
@@ -191,7 +193,7 @@ struct CastToString {
     }
 };
 
-StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column);
+StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_throw_exception);
 
 // cast column[idx] to coresponding json type.
 StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx);

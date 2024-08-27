@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "storage/background_task.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
@@ -52,6 +54,7 @@ struct CompactionTaskInfo {
     CompactionTaskState state{COMPACTION_INIT};
     uint64_t task_id{0};
     Version output_version;
+    int64_t gtid{0};
     uint64_t elapsed_time{0};
     int64_t tablet_id{0};
     double compaction_score{0};
@@ -103,6 +106,7 @@ struct CompactionTaskInfo {
         ss << ", state:" << compaction_state_to_string(state);
         ss << ", compaction_type:" << starrocks::to_string(compaction_type);
         ss << ", output_version:" << output_version;
+        ss << ", gtid:" << gtid;
         ss << ", start_time:" << ToStringFromUnixMillis(start_time);
         ss << ", end_time:" << ToStringFromUnixMillis(end_time);
         ss << ", elapsed_time:" << elapsed_time << " us";
@@ -276,7 +280,7 @@ protected:
                 input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
             }
             std::vector<RowsetSharedPtr> to_replace;
-            _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+            _tablet->modify_rowsets_without_lock({_output_rowset}, _input_rowsets, &to_replace);
             _tablet->save_meta();
             Rowset::close_rowsets(_input_rowsets);
             for (auto& rs : to_replace) {
@@ -307,6 +311,8 @@ protected:
     std::shared_lock<std::shared_mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
 };
 
 } // namespace starrocks

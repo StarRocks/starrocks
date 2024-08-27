@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # log2
 
-## Description
+
 
 Calculates the base 2 logarithm of a number.
 

@@ -43,6 +43,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -81,6 +82,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -255,7 +257,8 @@ public class ScalarOperatorToExpr {
                     d.uncheckedCastTo(type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
-                    return new StringLiteral(literal.getVarchar());
+                    String str = literal.getVarchar();
+                    return StringLiteral.create(str);
                 } else if (type.isBinaryType()) {
                     return new VarBinaryLiteral(literal.getBinary());
                 } else {
@@ -288,6 +291,7 @@ public class ScalarOperatorToExpr {
                         buildExpr.build(predicate.getChild(0), context), null);
             }
             callExpr.setType(Type.BOOLEAN);
+            callExpr.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return callExpr;
         }
 
@@ -296,6 +300,7 @@ public class ScalarOperatorToExpr {
                     buildExpr.build(predicate.getChildren().get(0), context),
                     buildExpr.build(predicate.getChildren().get(1), context));
             call.setType(Type.BOOLEAN);
+            call.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return call;
         }
 
@@ -374,6 +379,13 @@ public class ScalarOperatorToExpr {
 
             expr.setType(Type.BOOLEAN);
             return expr;
+        }
+
+        @Override
+        public Expr visitMatchExprOperator(MatchExprOperator operator, FormatterContext context) {
+            Expr child1 = buildExpr.build(operator.getChild(0), context);
+            Expr child2 = buildExpr.build(operator.getChild(1), context);
+            return new MatchExpr(child1, child2);
         }
 
         @Override
@@ -468,6 +480,7 @@ public class ScalarOperatorToExpr {
                 case "user":
                 case "current_user":
                 case "current_role":
+                case "session_id":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
@@ -476,6 +489,19 @@ public class ScalarOperatorToExpr {
                     callExpr = new InformationFunction(fnName,
                             "",
                             ((ConstantOperator) call.getChild(0)).getBigint());
+                    break;
+                case "rand":
+                case "random":
+                case "uuid":
+                case "sleep":
+                    List<Expr> arguments = Lists.newArrayList();
+                    if (call.getChildren().size() == 2) {
+                        arguments.add(buildExpr.build(call.getChild(0), context));
+                    }
+                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
+                    Preconditions.checkNotNull(call.getFunction());
+                    callExpr.setFn(call.getFunction());
+                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
                     List<Expr> arg = call.getChildren().stream()
@@ -636,6 +662,7 @@ public class ScalarOperatorToExpr {
             dictionaryGetExpr.setDictionaryId(operator.getDictionaryId());
             dictionaryGetExpr.setDictionaryTxnId(operator.getDictionaryTxnId());
             dictionaryGetExpr.setKeySize(operator.getKeySize());
+            dictionaryGetExpr.setNullIfNotExist(operator.getNullIfNotExist());
             return dictionaryGetExpr;
         }
     }

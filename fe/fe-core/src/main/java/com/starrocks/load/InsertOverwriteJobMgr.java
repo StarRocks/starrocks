@@ -15,12 +15,15 @@
 
 package com.starrocks.load;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -38,7 +41,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
+public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobMgr.class);
 
     @SerializedName(value = "overwriteJobMap")
@@ -253,8 +255,8 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }
@@ -264,5 +266,10 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
         overwriteJobMap = catalog.overwriteJobMap;
         tableToOverwriteJobs = catalog.tableToOverwriteJobs;
         runningJobs = catalog.runningJobs;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("insertOverwriteJobs", (long) overwriteJobMap.size());
     }
 }

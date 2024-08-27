@@ -49,17 +49,12 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
 
-    auto tablet_schema_ptr = _tablet->tablet_schema();
-    _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
-
     // if column_desc come from fe, reset tablet schema
     if (_parent->_olap_scan_node.__isset.columns_desc && !_parent->_olap_scan_node.columns_desc.empty() &&
         _parent->_olap_scan_node.columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema->clear_columns();
-        for (const auto& column_desc : _parent->_olap_scan_node.columns_desc) {
-            _tablet_schema->append_column(TabletColumn(column_desc));
-        }
-        _tablet_schema->generate_sort_key_idxes();
+        _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), _parent->_olap_scan_node.columns_desc);
+    } else {
+        _tablet_schema = _tablet->tablet_schema();
     }
 
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
@@ -75,7 +70,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_conjunct_ctxs.empty() || !_predicates.empty()) {
+    if (!_conjunct_ctxs.empty() || !_pred_tree.empty()) {
         _expr_filter_timer = ADD_TIMER(_parent->_runtime_profile, "ExprFilterTime");
     }
 
@@ -153,27 +148,25 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
     auto parser = _pool.add(new PredicateParser(_tablet_schema));
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
+
+    ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
 
     // Improve for select * from table limit x, x is small
-    if (preds.empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
+    if (pred_tree.empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
         _params.chunk_size = _parent->_limit;
     } else {
         _params.chunk_size = runtime_state()->chunk_size();
     }
 
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _predicates.add(p.get());
-        }
-        _predicate_free_pool.emplace_back(std::move(p));
-    }
+    PredicateAndNode pushdown_pred_root;
+    PredicateAndNode non_pushdown_pred_root;
+    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
+                                    &pushdown_pred_root, &non_pushdown_pred_root);
+    _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+    _pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
-    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool));
+    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool, _pred_tree));
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -286,11 +279,11 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_predicates.empty()) {
+        if (!_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
@@ -376,13 +369,15 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_parent->_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_parent->_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_parent->_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_parent->_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_parent->_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_parent->_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+    COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
@@ -402,7 +397,7 @@ void TabletScanner::update_counter() {
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
     }
     if (_reader->stats().flat_json_hits.size() > 0) {
-        auto path_profile = _parent->_scan_profile->create_child("AccessPathHits");
+        auto path_profile = _parent->_scan_profile->create_child("FlatJsonHits");
 
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
@@ -410,11 +405,34 @@ void TabletScanner::update_counter() {
         }
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
-        auto path_profile = _parent->_scan_profile->create_child("AccessPathUnhits");
+        auto path_profile = _parent->_scan_profile->create_child("FlatJsonUnhits");
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }
+    }
+    if (_reader->stats().merge_json_hits.size() > 0) {
+        auto path_profile = _parent->_scan_profile->create_child("MergeJsonUnhits");
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
+            COUNTER_SET(path_counter, v);
+        }
+    }
+    if (_reader->stats().json_init_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonInit");
+        COUNTER_UPDATE(c, _reader->stats().json_init_ns);
+    }
+    if (_reader->stats().json_cast_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonCast");
+        COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+    }
+    if (_reader->stats().json_merge_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonMerge");
+        COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+    }
+    if (_reader->stats().json_flatten_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonFlatten");
+        COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
     }
     _has_update_counter = true;
 }

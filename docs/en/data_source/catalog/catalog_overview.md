@@ -17,7 +17,7 @@ StarRocks supports the catalog feature from v2.3 onwards. Catalogs enable you to
 
 Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
 
-![figure1](../../assets/3.8.1.png)
+![figure1](../../_assets/3.8.1.png)
 
 - **Internal catalog** manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default_catalog](../catalog/default_catalog.md).
 
@@ -27,12 +27,15 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
   - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.
   - [Delta Lake catalog](../catalog/deltalake_catalog.md): used to query data from Delta Lake.
   - [JDBC catalog](../catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
+  - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
+  - [Paimon catalog](../catalog/paimon_catalog.md): used to query data from Paimon. Paimon catalogs are supported from v3.1 onwards.
+  - [Unified catalog](../catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
 
   StarRocks interacts with the following two components of external data sources when you query external data:
 
   - **Metastore service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
   - **Data storage system**: used to store external data. Both distributed file systems and object
-  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations, and then return the query result.
+  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs or CNs, all BEs or CNs scan the target external data in parallel, perform calculations, and then return the query result.
 
 ## Access catalog
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # seconds_sub
 
-## Description
+
 
 Subtracts a time interval from a date value. The time interval is in seconds.
 

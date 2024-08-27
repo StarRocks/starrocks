@@ -120,6 +120,10 @@ public class ColumnStatistic {
         return this.type == StatisticType.UNKNOWN;
     }
 
+    public boolean hasNonStats() {
+        return isUnknown() && histogram == null;
+    }
+
     public boolean isInfiniteRange() {
         return this.minValue == NEGATIVE_INFINITY || this.maxValue == POSITIVE_INFINITY;
     }
@@ -146,6 +150,7 @@ public class ColumnStatistic {
                 + nullsFraction + separator
                 + averageRowSize + separator
                 + distinctValuesCount + "] "
+                + (histogram == null ? "" : histogram.getMcvString() + " ")
                 + type;
     }
 
@@ -212,12 +217,12 @@ public class ColumnStatistic {
                     averageRowSize, distinctValuesCount, histogram, type);
         }
 
-        private Builder(String maxString, String minString, double minValue, double maxValue,
+        private Builder(String minString, String maxString, double minValue, double maxValue,
                         double nullsFraction, double averageRowSize,
                         double distinctValuesCount, Histogram histogram,
                         StatisticType type) {
-            this.maxString = maxString;
             this.minString = minString;
+            this.maxString = maxString;
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.nullsFraction = nullsFraction;

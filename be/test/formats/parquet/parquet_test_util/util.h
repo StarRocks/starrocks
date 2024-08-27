@@ -57,11 +57,10 @@ public:
         tuple_desc_builder.build(&table_desc_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
 
-        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
         return row_desc->tuple_descriptors()[0];
     }
 
@@ -71,10 +70,7 @@ public:
         for (int i = 0; i < tuple_desc->slots().size(); i++) {
             SlotDescriptor* slot = tuple_desc->slots()[i];
             HdfsScannerContext::ColumnInfo c;
-            c.col_name = slot->col_name();
-            c.col_idx = i;
-            c.slot_id = slot->id();
-            c.col_type = slot->type();
+            c.idx_in_chunk = i;
             c.slot_desc = slot;
             columns->emplace_back(c);
         }
@@ -88,7 +84,7 @@ public:
         ASSERT_EQ(expected->debug_columns(), actual->debug_columns());
         for (size_t i = 0; i < expected->num_columns(); i++) {
             const auto& expected_col = expected->get_column_by_index(i);
-            const auto& actual_col = expected->get_column_by_index(i);
+            const auto& actual_col = actual->get_column_by_index(i);
             if (expected_col->debug_string() != actual_col->debug_string()) {
                 std::cout << expected_col->debug_string() << std::endl;
                 std::cout << actual_col->debug_string() << std::endl;

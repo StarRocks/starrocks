@@ -41,22 +41,33 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -114,22 +125,36 @@ public class AgentTaskTest {
 
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
-        // create tasks
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                .setId(indexId1)
+                .setKeysType(KeysType.AGG_KEYS)
+                .setShortKeyColumnCount(shortKeyNum)
+                .setSchemaHash(0)
+                .setStorageType(storageType)
+                .addColumns(columns)
+                .build().toTabletSchema();
 
-        // create
-        createReplicaTask = new CreateReplicaTask(backendId1, dbId, tableId, partitionId,
-                indexId1, tabletId1, shortKeyNum, 0,
-                version, KeysType.AGG_KEYS,
-                storageType, TStorageMedium.SSD,
-                columns, null, 0, latch, null,
-                false, false, 0, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
+        createReplicaTask = CreateReplicaTask.newBuilder()
+                .setNodeId(backendId1)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId1)
+                .setTabletId(tabletId1)
+                .setVersion(version)
+                .setStorageMedium(TStorageMedium.SSD)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .setEnableTabletCreationOptimization(false)
+                .build();
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, 0, false);
 
         // clone
         cloneTask =
-                new CloneTask(backendId1, dbId, tableId, partitionId, indexId1, tabletId1, 0,
+                new CloneTask(backendId1, "127.0.0.1", dbId, tableId, partitionId, indexId1, tabletId1, 0,
                         Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, -1, 3600);
 
         // modify tablet meta
@@ -228,13 +253,13 @@ public class AgentTaskTest {
         Assert.assertNotNull(request9.getUpdate_tablet_meta_info_req());
 
         // modify primary index cache
-        TAgentTaskRequest request10 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, 
+        TAgentTaskRequest request10 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
                 modifyPrimaryIndexCacheExpireSecTask1);
         Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request10.getTask_type());
         Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask1.getSignature(), request10.getSignature());
         Assert.assertNotNull(request10.getUpdate_tablet_meta_info_req());
 
-        TAgentTaskRequest request11 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, 
+        TAgentTaskRequest request11 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
                 modifyPrimaryIndexCacheExpireSecTask2);
         Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request11.getTask_type());
         Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask2.getSignature(), request11.getSignature());
@@ -284,5 +309,44 @@ public class AgentTaskTest {
         dropTask2.failed();
         Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
         Assert.assertEquals(2, AgentTaskQueue.getTaskNum(-1, TTaskType.DROP, true));
+    }
+
+    @Test
+    public void testBackendNoAlive() {
+        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                null, null);
+        List<CreateReplicaTask> tasks = new ArrayList<>();
+        tasks.add((CreateReplicaTask) createReplicaTask);
+
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
+        Assert.assertThrows(RuntimeException.class,
+                () -> Deencapsulation.invoke(localMetastore, "sendCreateReplicaTasks", tasks, countDownLatch));
+        Assert.assertEquals(0, countDownLatch.getCount());
+    }
+
+    @Test
+    public void testConnectionRefused() {
+        Backend be = new Backend(backendId1, "127.0.0.1", 9035);
+        be.setBePort(9036);
+        be.setAlive(true);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long backendId) {
+                return be;
+            }
+        };
+
+        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                null, null);
+        List<CreateReplicaTask> tasks = new ArrayList<>();
+        tasks.add((CreateReplicaTask) createReplicaTask);
+
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
+        try {
+            Deencapsulation.invoke(localMetastore, "sendCreateReplicaTasks", tasks, countDownLatch);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Connection refused"));
+            Assert.assertEquals(0, countDownLatch.getCount());
+        }
     }
 }

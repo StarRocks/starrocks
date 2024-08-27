@@ -45,7 +45,7 @@ The following procedures are performed on an FE instance.
       >
       > If you want to deploy multiple FE nodes in a cluster, you must assign the same `http_port` to each FE node.
 
-   c. If you want to enable IP address access for your cluster, you must add the configuration item `priority_networks` in the configuration file and assign a dedicated IP address (in the CIDR format) to the FE node. You can ignore this configuration item if you want to enable [FQDN access](../administration/enable_fqdn.md) for your cluster.
+   c. If you want to enable IP address access for your cluster, you must add the configuration item `priority_networks` in the configuration file and assign a dedicated IP address (in the CIDR format) to the FE node. You can ignore this configuration item if you want to enable [FQDN access](../administration/management/enable_fqdn.md) for your cluster.
 
       ```YAML
       priority_networks = x.x.x.x/x
@@ -53,7 +53,8 @@ The following procedures are performed on an FE instance.
 
       > **NOTE**
       >
-      > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
 
    d. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 
@@ -62,7 +63,7 @@ The following procedures are performed on an FE instance.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/FE_configuration.md#fe-configuration-items).
+   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/management/FE_configuration.md).
 
 3. Start the FE node.
 
@@ -129,7 +130,8 @@ The following procedures are performed on the BE instances.
 
       > **NOTE**
       >
-      > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
 
    d. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 
@@ -138,7 +140,7 @@ The following procedures are performed on the BE instances.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md#be-configuration-items).
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/BE_configuration.md).
 
 3. Start the BE node.
 
@@ -164,6 +166,11 @@ The following procedures are performed on the BE instances.
 > **NOTE**
 >
 > A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to a StarRocks cluster.
+> If you want to deploy just one BE node, you must set `default_replication_num` to `1` in the FE configuration file **fe/conf/fe.conf**.
+
+      ```YAML
+      default_replication_num = 1
+      ```
 
 ## Step 3: (Optional) Start the CN service
 
@@ -188,7 +195,8 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
       > **NOTE**
       >
-      > You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - You can run `ifconfig` in your terminal to view the IP address(es) owned by the instance.
+      > - From v3.3.0, StarRocks supports deployment based on IPv6.
 
    c. If you have multiple JDKs installed on the instance, and you want to use a specific JDK that is different from the one specified in the environment variable `JAVA_HOME`, you must specify the path where the chosen JDK is installed by adding the configuration item `JAVA_HOME` in the configuration file.
 
@@ -197,7 +205,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md#be-configuration-items) because most of CN's parameters are inherited from BE.
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/BE_configuration.md) because most of CN's parameters are inherited from BE.
 
 2. Start the CN node.
 

@@ -34,39 +34,26 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
-import com.staros.proto.FileCacheInfo;
-import com.staros.proto.FilePathInfo;
-import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class DropPartitionTest {
     private static ConnectContext connectContext;
@@ -79,96 +66,33 @@ public class DropPartitionTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database test;";
-        String createTableStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
-                + "PARTITION BY RANGE(d1) (PARTITION p20210201 VALUES [('2021-02-01'), ('2021-02-02')),"
-                + "PARTITION p20210202 VALUES [('2021-02-02'), ('2021-02-03')),"
-                + "PARTITION p20210203 VALUES [('2021-02-03'), ('2021-02-04'))) distributed by hash(k1) "
-                + "buckets 1 properties('replication_num' = '1');";
         createDb(createDbStmtStr);
-        createTable(createTableStr);
-
-        StarOSAgent agent = new StarOSAgent();
-
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
-                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setFsName("test-fsname");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/1/");
-        FilePathInfo pathInfo = builder.build();
-
-        new Expectations(agent) {
-            {
-                agent.allocateFilePath(anyString, anyLong, anyLong);
-                result = pathInfo;
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(10001L, 10002L, 10003L),
-                        Lists.newArrayList(10004L, 10005L, 10006L),
-                        Lists.newArrayList(10007L, 10008L, 10009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new MockUp<SharedNothingStorageVolumeMgr>() {
-            @Mock
-            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public String getStorageVolumeIdOfTable(long tableId) {
-                return fsInfo.getFsKey();
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
-        String createLakeTableStr = "create table test.lake_table(k1 date, k2 int, k3 smallint, v1 varchar(2048), "
-                + "v2 datetime default '2014-02-04 15:36:00')"
-                + " duplicate key(k1, k2, k3)"
-                + " PARTITION BY RANGE(k1, k2, k3)"
-                + " (PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),"
-                + " PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\")))"
-                + " DISTRIBUTED BY HASH(k2) BUCKETS 3"
-                + " PROPERTIES ( \"datacache.enable\" = \"true\")";
-        createTable(createLakeTableStr);
     }
 
     private static void createDb(String sql) throws Exception {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
     }
-
-    private static void createTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    @Before
+    public void createTable() throws Exception {
+        String createTableStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
+                + "PARTITION BY RANGE(d1) (PARTITION p20210201 VALUES [('2021-02-01'), ('2021-02-02')),"
+                + "PARTITION p20210202 VALUES [('2021-02-02'), ('2021-02-03')),"
+                + "PARTITION p20210203 VALUES [('2021-02-03'), ('2021-02-04'))) distributed by hash(k1) "
+                + "buckets 1 properties('replication_num' = '1');";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableStr, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
+    @After
+    public void dropTable() throws Exception {
+        String dropTableStr = "drop table if exists test.tbl1 force";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropTableStr, connectContext);
+        StarRocksAssert.utDropTableWithRetry(dropTableStmt);
+    }
 
-    private static void dropPartition(String sql) throws Exception {
+    private void dropPartition(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
     }
 
     @Test
@@ -201,17 +125,21 @@ public class DropPartitionTest {
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210202 force;";
         dropPartition(dropPartitionSql);
-        List<Replica> replicaList =
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        List<Replica> replicaList;
+        replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         partition = table.getPartition("p20210202");
-        Assert.assertTrue(replicaList.isEmpty());
+        Assert.assertFalse(replicaList.isEmpty());
         Assert.assertNull(partition);
         String recoverPartitionSql = "recover partition p20210202 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "No partition named p20210202 in table tbl1",
+                "No partition named 'p20210202' in recycle bin that belongs to table 'tbl1'",
                 () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
+
+        GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        Assert.assertTrue(replicaList.isEmpty());
     }
 
     @Test
@@ -229,44 +157,123 @@ public class DropPartitionTest {
     }
 
     @Test
-    public void testNormalDropLakePartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("lake_table");
-        Partition partition = table.getPartition("p1");
-        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
-        String dropPartitionSql = " alter table test.lake_table drop partition p1;";
-        dropPartition(dropPartitionSql);
-        List<Replica> replicaList =
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
-        partition = table.getPartition("p1");
-        Assert.assertNull(partition);
-        String recoverPartitionSql = "recover partition p1 from test.lake_table";
-        RecoverPartitionStmt recoverPartitionStmt =
-                (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt);
-        partition = table.getPartition("p1");
-        Assert.assertNotNull(partition);
-        Assert.assertEquals("p1", partition.getName());
+    public void testNormalDropMultiRangePartition() throws Exception {
+        String dbName = "test";
+        String tableName = "tbl1";
+        String dropPartitionSql = "alter table %s.%s DROP PARTITIONS " +
+                "IF EXISTS START(\"2021-02-01\") END(\"2021-02-03\") EVERY (INTERVAL 1 DAY);";
+        checkNormalDropPartitions(dbName, tableName, dropPartitionSql);
     }
 
     @Test
-    public void testForceDropLakePartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("lake_table");
-        Partition partition = table.getPartition("p1");
-        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
-        String dropPartitionSql = " alter table test.lake_table drop partition p1 force;";
+    public void testForceDropMultiRangePartition() throws Exception {
+        String dropPartitionSql = "alter table test.tbl1 DROP PARTITIONS " +
+                "IF EXISTS START(\"2021-02-01\") END(\"2021-02-03\") EVERY (INTERVAL 1 DAY) force;";
+        checkForceDropPartitions(dropPartitionSql);
+    }
+
+    @Test
+    public void testNormalDropIdentifierListPartition() throws Exception {
+        String dbName = "test";
+        String tableName = "tbl1";
+        String dropPartitionSql = "alter table %s.%s DROP PARTITIONS " +
+                "IF EXISTS (p20210201,p20210202) ";
+        checkNormalDropPartitions(dbName, tableName, dropPartitionSql);
+    }
+
+    @Test
+    public void testForceDropIdentifierListPartition() throws Exception {
+        String dropPartitionSql = "alter table test.tbl1 DROP PARTITIONS " +
+                "IF EXISTS (p20210201,p20210202) force;";
+        checkForceDropPartitions(dropPartitionSql);
+    }
+
+    private void checkNormalDropPartitions(String dbName, String tableName, String dropPartitionSql) throws Exception {
+        List<String> partitionNames = new ArrayList<>();
+        partitionNames.add("p20210201");
+        partitionNames.add("p20210202");
+        List<Long> tabletIds = new ArrayList<>();
+        for (String partitionName : partitionNames) {
+            Table table = getTable(dbName, tableName);
+            Partition partition = table.getPartition(partitionName);
+            long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            tabletIds.add(tabletId);
+        }
+        dropPartition(String.format(dropPartitionSql, dbName, tableName));
+        for (int i = 0; i < partitionNames.size(); i++) {
+            String partitionName = partitionNames.get(i);
+            long tabletId = tabletIds.get(i);
+            checkBeforeDrop(dbName, tableName, partitionName, tabletId);
+            checkAfterRecover(dbName, tableName, partitionName);
+        }
+    }
+
+    private void checkForceDropPartitions(String dropPartitionSql) throws Exception {
+        List<String> partitionNames = new ArrayList<>();
+        List<Long> tabletIds = new ArrayList<>();
+        String dbName = "test";
+        String tableName = "tbl1";
+        partitionNames.add("p20210201");
+        partitionNames.add("p20210202");
+        for (String partitionName : partitionNames) {
+            Table table = getTable(dbName, tableName);
+            Partition partition = table.getPartition(partitionName);
+            long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            tabletIds.add(tabletId);
+        }
         dropPartition(dropPartitionSql);
+        Table table = getTable(dbName, tableName);
+        for (int i = 0; i < partitionNames.size(); i++) {
+            String partitionName = partitionNames.get(i);
+            long tabletId = tabletIds.get(i);
+            List<Replica> replicaList =
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+            Partition partition = table.getPartition(partitionName);
+            Assert.assertFalse(replicaList.isEmpty());
+            Assert.assertNull(partition);
+            String recoverPartitionSql = "recover partition %s from test.tbl1";
+            RecoverPartitionStmt recoverPartitionStmt =
+                    (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(String.format(recoverPartitionSql,
+                            partitionName), connectContext);
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    String.format("No partition named '%s' in recycle bin that belongs to table '%s'", partitionName, "tbl1"),
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
+        }
+        //该方法会立马删除partition
+        GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        for (int i = 0; i < partitionNames.size(); i++) {
+            long tabletId = tabletIds.get(i);
+            List<Replica> replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+            Assert.assertTrue(replicaList.isEmpty());
+        }
+    }
+
+    private void checkBeforeDrop(String dbName, String tableName, String partitionName, long tabletId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
-        partition = table.getPartition("p1");
-        Assert.assertTrue(replicaList.isEmpty());
+        Partition partition = table.getPartition(partitionName);
+        Assert.assertEquals(1, replicaList.size());
         Assert.assertNull(partition);
-        String recoverPartitionSql = "recover partition p1 from test.lake_table";
+    }
+
+    private void checkAfterRecover(String dbName, String tableName, String partitionName) throws Exception {
+        Partition partition = recoverPartition(dbName, tableName, partitionName);
+        Assert.assertNotNull(partition);
+        Assert.assertEquals(partitionName, partition.getName());
+    }
+
+    private Partition recoverPartition(String db, String table, String partitionName) throws Exception {
+        String recoverPartitionSql = String.format("recover partition %s from %s.%s", partitionName, db, table);
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "No partition named p1 in table lake_table",
-                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
+        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt);
+        return getTable(db, table).getPartition(partitionName);
+    }
+
+    private Table getTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        return (OlapTable) db.getTable(tableName);
     }
 }

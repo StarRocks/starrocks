@@ -301,9 +301,9 @@ int64_t AdaptiveNullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return NullableColumn::xor_checksum(from, to);
 }
 
-void AdaptiveNullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void AdaptiveNullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     materialized_nullable();
-    NullableColumn::put_mysql_row_buffer(buf, idx);
+    NullableColumn::put_mysql_row_buffer(buf, idx, is_binary_protocol);
 }
 
 } // namespace starrocks

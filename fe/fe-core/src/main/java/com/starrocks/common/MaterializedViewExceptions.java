@@ -16,6 +16,9 @@ package com.starrocks.common;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Set;
 
 /**
  * Encapsulate error message and exceptions for materialized view
@@ -27,6 +30,10 @@ public class MaterializedViewExceptions {
      */
     public static String inactiveReasonForBaseTableNotExists(String tableName) {
         return "base-table dropped: " + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableNotExists(long tableId) {
+        return "base-table not exist: " + tableId;
     }
 
     public static String inactiveReasonForBaseTableRenamed(String tableName) {
@@ -45,7 +52,23 @@ public class MaterializedViewExceptions {
         return "base-view changed: " + tableName;
     }
 
+    public static String inactiveReasonForBaseInfoMissed() {
+        return "base-info missed";
+    }
+
+    public static String inactiveReasonForDbNotExists(long dbId) {
+        return "db not exists: " + dbId;
+    }
+
+    public static String inactiveReasonForColumnNotCompatible(String existingType, String newType) {
+        return String.format("column schema not compatible: (%s) and (%s)", existingType, newType);
+    }
+
+    public static String inactiveReasonForColumnChanged(Set<String> columns) {
+        return "base table schema changed for columns: " + StringUtils.join(columns, ",");
+    }
+
     public static SemanticException reportBaseTableNotExists(BaseTableInfo baseTableInfo) {
-        return new SemanticException("base-table not dropped: " + baseTableInfo.getTableName());
+        return new SemanticException(inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
     }
 }

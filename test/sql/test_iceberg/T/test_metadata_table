@@ -1,0 +1,50 @@
+-- name: test_metadata_table
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (k1 int);
+
+-- iceberg refs table
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1;
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} create branch test_branch;
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 2;
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} create tag test_tag;
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 3;
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} create branch test_branch_2;
+
+select name, type from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$refs order by name;
+select name, type from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$refs where name="test_branch_2" order by name;
+select name, type from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$refs where type="TAG" order by name;
+
+-- iceberg history table
+select is_current_ancestor from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$history where parent_id is not null order by is_current_ancestor;
+
+-- iceberg metadata log entries table
+select latest_schema_id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$metadata_log_entries where latest_schema_id is not null order by latest_schema_id;
+select latest_schema_id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$metadata_log_entries where latest_schema_id is not null limit 1;
+
+-- iceberg manifests table
+select added_data_files_count,added_rows_count,existing_data_files_count,partitions from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$manifests order by added_data_files_count;
+
+-- iceberg files table
+select record_count,lower_bounds from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$files order by element_at(lower_bounds, 1);
+
+-- iceberg snapshots table
+select operation from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$snapshots order by operation;
+
+-- iceberg partitions table
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} (k1 int, p1 int, p2 int) partition by (p1, p2);
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 1,1,2;
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 3,3,4;
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} select 3,3,4;
+
+select partition_value,record_count,file_count from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions where partition_value.p2=4;
+
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions;
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$partitions;
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} force;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

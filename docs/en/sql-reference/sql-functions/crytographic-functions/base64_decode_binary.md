@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # base64_decode_binary
 
-## Description
+
 
 Decodes a Base64-encoded string and return a BINARY.
 

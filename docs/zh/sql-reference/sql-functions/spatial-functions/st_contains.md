@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # ST_Contains
 
-## 功能
+
 
 判断几何图形 `shape1` 是否完全能够包含几何图形 `shape2`。
 

@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
  * MTable means Mocked-Table and is used to mock SR's table so can be used for FE's unit tests.
  */
 public class MTable {
+    private String dbName;
     private String tableName;
     private List<String> columns;
     private String distCol;
@@ -108,6 +109,10 @@ public class MTable {
         this.replicateNum = replicateNum;
     }
 
+    public String getDbName() {
+        return this.dbName;
+    }
+
     public MTable withValues(String value) {
         String[] arr = value.split(",");
         return withValues(List.of(arr));
@@ -127,8 +132,13 @@ public class MTable {
         return this;
     }
 
+    public MTable withDbName(String dbName) {
+        this.dbName = dbName;
+        return this;
+    }
+
     public String getCreateTableSql() {
-        String  sql = String.format("CREATE TABLE `%s` (\n" +
+        String sql = String.format("CREATE TABLE IF NOT EXISTS `%s` (\n" +
                         " %s" +
                         "\n" +
                         ") ENGINE=OLAP\n",

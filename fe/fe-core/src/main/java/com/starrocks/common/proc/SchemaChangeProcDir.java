@@ -35,6 +35,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,11 +45,17 @@ import java.util.HashMap;
 import java.util.List;
 
 public class SchemaChangeProcDir implements ProcDirInterface {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("JobId").add("TableName").add("CreateTime").add("FinishTime")
-            .add("IndexName").add("IndexId").add("OriginIndexId").add("SchemaVersion")
-            .add("TransactionId").add("State").add("Msg").add("Progress").add("Timeout")
-            .build();
+    public static final ImmutableList<String> TITLE_NAMES;
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("JobId").add("TableName").add("CreateTime").add("FinishTime")
+                .add("IndexName").add("IndexId").add("OriginIndexId").add("SchemaVersion")
+                .add("TransactionId").add("State").add("Msg").add("Progress").add("Timeout");
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            builder.add("Warehouse");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeProcDir.class);
 

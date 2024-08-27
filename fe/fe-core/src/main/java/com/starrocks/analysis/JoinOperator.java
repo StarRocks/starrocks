@@ -110,6 +110,10 @@ public enum JoinOperator {
         return this == LEFT_ANTI_JOIN || this == NULL_AWARE_LEFT_ANTI_JOIN;
     }
 
+    public boolean isNullAwareLeftAntiJoin() {
+        return this == NULL_AWARE_LEFT_ANTI_JOIN;
+    }
+
     public boolean isRightSemiJoin() {
         return this == RIGHT_SEMI_JOIN;
     }
@@ -164,6 +168,10 @@ public enum JoinOperator {
 
     public static Set<JoinOperator> innerCrossJoinSet() {
         return Sets.newHashSet(INNER_JOIN, CROSS_JOIN);
+    }
+
+    public boolean canGenerateRuntimeFilter() {
+        return !(isLeftOuterJoin() || isFullOuterJoin() || isLeftAntiJoin());
     }
 }
 

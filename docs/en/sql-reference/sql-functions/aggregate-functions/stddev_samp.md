@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # stddev_samp
 
-## Description
+
 
 Returns the sample standard deviation of an expression. Since v2.5.10, this function can also be used as a window function.
 
@@ -22,7 +22,7 @@ STDDEV_SAMP(expr)
 
 Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
 
-![image](../../../assets/stddevsamp_formula.png)
+![image](../../../_assets/stddevsamp_formula.png)
 
 ## Examples
 

@@ -422,6 +422,15 @@ TEST_F(RowsetTest, ConditionUpdateWithMultipleSegmentsTest) {
     test_final_merge(true);
 }
 
+TEST_F(RowsetTest, UnSupportFuncTest) {
+    Chunk chunk;
+    std::vector<uint64_t> rssid_rowids;
+    std::vector<uint32_t> column_indexes;
+    RowsetWriter writer;
+    ASSERT_TRUE(writer.add_chunk(chunk, rssid_rowids).is_not_supported());
+    ASSERT_TRUE(writer.add_columns(chunk, column_indexes, true, rssid_rowids).is_not_supported());
+}
+
 TEST_F(RowsetTest, FinalMergeVerticalTest) {
     auto tablet = create_tablet(12345, 1111);
     RowsetSharedPtr rowset;
@@ -961,8 +970,8 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     auto dst_file_name = Rowset::segment_temp_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
 
     std::vector<uint32_t> column_ids{3};
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, auto_increment_partial_update_state,
-                                       column_ids, &write_columns));
+    ASSERT_OK(SegmentRewriter::rewrite_auto_increment(file_name, dst_file_name, tablet_schema,
+                                                      auto_increment_partial_update_state, column_ids, &write_columns));
 
     auto segment = *Segment::open(fs, FileInfo{dst_file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);

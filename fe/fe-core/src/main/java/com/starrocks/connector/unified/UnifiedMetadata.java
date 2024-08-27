@@ -23,11 +23,18 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -45,6 +52,7 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Table.TableType.KUDU;
 import static java.util.Objects.requireNonNull;
 
 public class UnifiedMetadata implements ConnectorMetadata {
@@ -91,6 +99,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
         if (isDeltaLakeTable(table.getProperties())) {
             return DELTALAKE;
         }
+        if (table.isKuduTable()) {
+            return KUDU;
+        }
         return HIVE;
     }
 
@@ -105,7 +116,23 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     private ConnectorMetadata metadataOfTable(Table table) {
         Table.TableType type = getTableType(table);
+        if (table.isHiveView()) {
+            type = HIVE;
+        }
         return metadataMap.get(type);
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return HIVE;
+    }
+
+    @Override
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override
@@ -119,9 +146,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
+    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange versionRange) {
         ConnectorMetadata metadata = metadataOfTable(databaseName, tableName);
-        return metadata.listPartitionNames(databaseName, tableName);
+        return metadata.listPartitionNames(databaseName, tableName, versionRange);
     }
 
     @Override
@@ -139,15 +166,26 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.tableExists(dbName, tblName);
+        return hiveMetadata.tableExists(dbName, tblName);
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
-                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+        return metadata.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFilesAsync(table, params);
+    }
+
+    @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
+        ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
+        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
     }
 
     @Override
@@ -157,22 +195,23 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getPrunedPartitions(table, predicate, limit);
+        return metadata.getPrunedPartitions(table, predicate, limit, version);
     }
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange version) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
+        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
     }
 
     @Override
-    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         ConnectorMetadata metadata = metadataOfTable(item.getTable());
-        return metadata.prepareMetadata(item, tracers);
+        return metadata.prepareMetadata(item, tracers, connectContext);
     }
 
     @Override
@@ -225,9 +264,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
-        metadata.finishSink(dbName, table, commitInfos);
+        metadata.finishSink(dbName, table, commitInfos, branch);
     }
 
     @Override

@@ -19,6 +19,9 @@
 #include <vector>
 #ifdef __SSE2__
 #include <emmintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
 #endif
 
 namespace SIMD {
@@ -51,6 +54,44 @@ inline size_t count_zero(const int8_t* data, size_t size) {
         count += (*data == 0);
     }
     return count;
+}
+
+inline size_t count_zero(const uint32_t* data, size_t size) {
+    size_t count = 0;
+    const uint32_t* end = data + size;
+
+#if defined(__SSE2__) && defined(__POPCNT__)
+    // count per 16 int
+    const __m128i zero16 = _mm_setzero_si128();
+    const uint32_t* end16 = data + (size / 16 * 16);
+
+    for (; data < end16; data += 16) {
+        count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                              _mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16)))) |
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 4)), zero16))))
+                                       << 4u) |
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 8)), zero16))))
+                                       << 8u) |
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 12)), zero16))))
+                                       << 12u));
+    }
+#endif
+
+    for (; data < end; ++data) {
+        count += (*data == 0);
+    }
+    return count;
+}
+
+inline size_t count_zero(const std::vector<uint32_t>& nums) {
+    return count_zero(nums.data(), nums.size());
+}
+
+inline size_t count_nonzero(const std::vector<uint32_t>& nums) {
+    return nums.size() - count_zero(nums.data(), nums.size());
 }
 
 // Count the number of zeros of 8-bit unsigned integers.
@@ -151,5 +192,19 @@ inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start, size
     size_t pos = find_nonzero(list, start, count);
     return pos < list.size() && pos < start + count;
 }
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+
+/// Returns a 64-bit mask, each 4-bit represents a byte of the input.
+/// The input containes 16 bytes and is expected to either 0x00 or 0xff for each byte.
+/// The returned 4-bit is 0x if the corresponding byte of the input is 0x00, otherwise it is 0xf.
+inline uint64_t get_nibble_mask(uint8x16_t values) {
+    // vshrn_n_u16(values, 4) operates on each 16 bits. It right shifts 4 bits and then keeps the low 8 bits.
+    // Therefore, 2 bytes of value can be compressed into 1 byte.
+    // For example, 0x00'00 -> 0x00, 0xff'00 -> 0xf0, 0x00'ff -> 0x0f, 0xff'ff -> 0xff,
+    return vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(values), 4)), 0);
+}
+
+#endif
 
 } // namespace SIMD

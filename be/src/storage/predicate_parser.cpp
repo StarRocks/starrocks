@@ -21,6 +21,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
 
@@ -39,6 +40,22 @@ bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
     const TabletColumn& column = _schema->column(index);
     return _schema->keys_type() == KeysType::PRIMARY_KEYS ||
            column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
+}
+
+struct CanPushDownVisitor {
+    bool operator()(const PredicateColumnNode& node) const { return parent->can_pushdown(node.col_pred()); }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::all_of(node.children().begin(), node.children().end(),
+                           [this](const auto& child) { return child.visit(*this); });
+    }
+
+    const PredicateParser* parent;
+};
+
+bool PredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) const {
+    return pred_tree.visit(CanPushDownVisitor{this});
 }
 
 ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition) const {

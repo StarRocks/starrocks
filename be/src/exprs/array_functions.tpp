@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include <memory>
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -18,10 +19,12 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/type_traits.h"
+#include "exec/sorting/sorting.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
@@ -139,7 +142,9 @@ public:
             return _array_difference<TYPE_LARGEINT>(ctx, columns);
         } else if constexpr (lt_is_decimalv2<LT>) {
             return _array_difference<TYPE_DECIMALV2>(ctx, columns);
-        } else if constexpr (lt_is_decimal32<LT> || lt_is_decimal64<LT>) {
+        } else if constexpr (lt_is_decimal32<LT>) {
+            return _array_difference<TYPE_DECIMAL32>(ctx, columns);
+        } else if constexpr (lt_is_decimal64<LT>) {
             return _array_difference<TYPE_DECIMAL64>(ctx, columns);
         } else if constexpr (lt_is_decimal128<LT>) {
             return _array_difference<TYPE_DECIMAL128>(ctx, columns);
@@ -1036,6 +1041,7 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 2);
+
         if (columns[0]->only_null() || columns[1]->only_null()) {
             return columns[0];
         }

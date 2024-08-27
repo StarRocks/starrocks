@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -66,7 +67,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected String createInternalNoLock(String name, String svType, List<String> locations,
                                           Map<String, String> params, Optional<Boolean> enabled,
-                                          String comment) {
+                                          String comment) throws DdlException {
         String id = UUID.randomUUID().toString();
         StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
         GlobalStateMgr.getCurrentState().getEditLog().logCreateStorageVolume(sv);

@@ -27,9 +27,9 @@ import java.util.stream.Collectors;
 
 public class ObjectType {
     @SerializedName("id")
-    private final int id;
+    protected final int id;
 
-    private ObjectType(int id) {
+    protected ObjectType(int id) {
         this.id = id;
     }
 
@@ -119,7 +119,7 @@ public class ObjectType {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+        if (!(o instanceof ObjectType)) {
             return false;
         }
         ObjectType that = (ObjectType) o;

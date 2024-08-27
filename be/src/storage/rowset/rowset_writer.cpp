@@ -53,10 +53,12 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/merge_iterator.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
@@ -115,8 +117,12 @@ Status RowsetWriter::init() {
     }
     *(_rowset_meta_pb->mutable_tablet_uid()) = _context.tablet_uid.to_proto();
 
+    _writer_options.segment_file_mark.rowset_path_prefix = _context.rowset_path_prefix;
+    _writer_options.segment_file_mark.rowset_id = _context.rowset_id.to_string();
+
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
+    _writer_options.is_compaction = _context.is_compaction;
 
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
         (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column)) {
@@ -124,6 +130,14 @@ Status RowsetWriter::init() {
     }
 
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+
+    if (_context.is_pk_compaction) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+        if (tablet != nullptr) {
+            _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(
+                    local_rows_mapper_filename(tablet.get(), _context.rowset_id.to_string()));
+        }
+    }
     return Status::OK();
 }
 
@@ -142,6 +156,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     _rowset_meta_pb->set_num_segments(_num_segment);
     // newly created rowset do not have rowset_id yet, use 0 instead
     _rowset_meta_pb->set_rowset_seg_id(0);
+    _rowset_meta_pb->set_gtid(_context.gtid);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         DCHECK(_delfile_idxes.size() == _num_delfile);
@@ -151,6 +166,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
         _rowset_meta_pb->set_num_update_files(_num_uptfile);
         _rowset_meta_pb->set_total_update_row_size(_total_update_row_size);
+        _rowset_meta_pb->set_num_rows_upt(_num_rows_upt);
         if (_num_segment <= 1) {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
@@ -221,6 +237,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     RowsetSharedPtr rowset;
     RETURN_IF_ERROR(
             RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->finalize());
+    }
     _already_built = true;
     return rowset;
 }
@@ -275,6 +294,59 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
 
     VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
 
+    return Status::OK();
+}
+
+Status RowsetWriter::_flush_index_files(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    for (const auto& index : segment_pb.seg_indexes()) {
+        // 1. create segment file
+        auto res = IndexDescriptor::get_index_file_path(index.index_type(), _context.rowset_path_prefix,
+                                                        _context.rowset_id.to_string(), segment_pb.segment_id(),
+                                                        index.index_id());
+        if (!res.ok()) {
+            if (res.status().is_not_supported()) {
+                return Status::OK();
+            } else {
+                return res.status();
+            }
+        }
+
+        auto path = res.value();
+
+        // use MUST_CREATE make sure atomic
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path))
+
+        // 2. flush segment file
+        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+        butil::IOBuf index_data;
+        int64_t remaining_bytes = data.cutn(&index_data, index.index_file_size());
+        if (remaining_bytes != index.index_file_size()) {
+            return Status::InternalError(fmt::format("segment index {} file size {} not equal attachment size {}", path,
+                                                     remaining_bytes, index.index_file_size()));
+        }
+        while (remaining_bytes > 0) {
+            auto written_bytes = index_data.cut_into_writer(writer.get(), remaining_bytes);
+            if (written_bytes < 0) {
+                return io::io_error(wfile->filename(), errno);
+            }
+            remaining_bytes -= written_bytes;
+        }
+        if (remaining_bytes != 0) {
+            return Status::InternalError(fmt::format("index segment {} write size {} not equal expected size {}",
+                                                     wfile->filename(), index.index_file_size() - remaining_bytes,
+                                                     index.index_file_size()));
+        }
+        RETURN_IF_ERROR(wfile->close());
+
+        // 3. update statistic
+        {
+            std::lock_guard<std::mutex> l(_lock);
+            _num_indexfile++;
+        }
+
+        VLOG(2) << "Flush segment index " << index.index_id() << " to " << path << " size " << index.index_file_size();
+    }
     return Status::OK();
 }
 
@@ -368,10 +440,13 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
 }
 
 Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
-    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size()) {
+    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size() +
+                               segment_pb.seg_index_data_size()) {
         return Status::InternalError(fmt::format(
-                "segment size {} + delete file size {} + update file size {} not equal attachment size {}",
-                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(), data.size()));
+                "segment size {} + delete file size {} + update file size {} + seg_index file size {} not equal "
+                "attachment size {}",
+                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(),
+                segment_pb.seg_index_data_size(), data.size()));
     }
 
     if (segment_pb.has_path()) {
@@ -384,6 +459,10 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
 
     if (segment_pb.has_update_path()) {
         RETURN_IF_ERROR(_flush_update_file(segment_pb, data));
+    }
+
+    if (!segment_pb.seg_indexes().empty()) {
+        RETURN_IF_ERROR(_flush_index_files(segment_pb, data));
     }
 
     return Status::OK();
@@ -427,6 +506,23 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                         << "Fail to delete file=" << path << ", " << st.to_string();
             }
         }
+
+        if (_context.tablet_schema != nullptr) {
+            const auto& indexes = *_context.tablet_schema->indexes();
+            if (!indexes.empty()) {
+                for (int i = 0; i < _num_segment; i++) {
+                    for (const auto& index : indexes) {
+                        if (index.index_type() == GIN) {
+                            std::string index_path = IndexDescriptor::inverted_index_file_path(
+                                    _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
+                            auto index_st = _fs->delete_dir_recursive(index_path);
+                            LOG_IF(WARNING, !(index_st.ok() || index_st.is_not_found()))
+                                    << "Fail to delete file=" << index_path << ", " << index_st.to_string();
+                        }
+                    }
+                }
+            }
+        }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
         StorageEngine::instance()->release_rowset_id(_context.rowset_id);
     }
@@ -453,6 +549,11 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
 }
 
 Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
+    std::vector<uint64_t> empty_rssid_rowids;
+    return add_chunk(chunk, empty_rssid_rowids);
+}
+
+Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) {
     if (_segment_writer == nullptr) {
         ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
@@ -462,6 +563,9 @@ Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
     }
 
     RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+    }
     _num_rows_written += static_cast<int64_t>(chunk.num_rows());
     _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
     return Status::OK();
@@ -1016,6 +1120,22 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         seg_info->set_index_size(index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
         seg_info->set_path((*segment_writer)->segment_path());
+        if (_context.tablet_schema && !_context.tablet_schema->indexes()->empty()) {
+            auto mutable_indexes = seg_info->mutable_seg_indexes();
+            for (const auto& index : *(_context.tablet_schema->indexes())) {
+                if (index.index_type() == VECTOR) {
+                    SegmentIndexPB seg_index_pb;
+                    seg_index_pb.set_index_id(index.index_id());
+                    auto index_path = IndexDescriptor::vector_index_file_path(
+                            _writer_options.segment_file_mark.rowset_path_prefix,
+                            _writer_options.segment_file_mark.rowset_id, (*segment_writer)->segment_id(),
+                            index.index_id());
+                    seg_index_pb.set_index_path(index_path);
+                    seg_index_pb.set_index_type(index.index_type());
+                    mutable_indexes->Add(std::move(seg_index_pb));
+                }
+            }
+        }
     }
 
     (*segment_writer).reset();
@@ -1035,6 +1155,20 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
             auto st = _fs->delete_file(path);
             LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                     << "Fail to delete file=" << path << ", " << st.to_string();
+            if (_context.tablet_schema != nullptr) {
+                const auto* indexes = _context.tablet_schema->indexes();
+                if (!indexes->empty()) {
+                    for (const auto& index : *indexes) {
+                        if (index.index_type() == GIN) {
+                            std::string index_path = IndexDescriptor::inverted_index_file_path(
+                                    _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
+                            auto index_st = _fs->delete_dir_recursive(index_path);
+                            LOG_IF(WARNING, !(index_st.ok() || index_st.is_not_found()))
+                                    << "Fail to delete file=" << index_path << ", " << index_st.to_string();
+                        }
+                    }
+                }
+            }
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
         StorageEngine::instance()->release_rowset_id(_context.rowset_id);
@@ -1042,6 +1176,12 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
 }
 
 Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
+    std::vector<uint64_t> empty_rssid_rowids;
+    return add_columns(chunk, column_indexes, is_key, empty_rssid_rowids);
+}
+
+Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
+                                         const std::vector<uint64_t>& rssid_rowids) {
     const size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
@@ -1050,6 +1190,9 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
         _segment_writers.emplace_back(std::move(segment_writer).value());
         _current_writer_index = 0;
         RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
+        if (_rows_mapper_builder != nullptr) {
+            RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+        }
     } else if (is_key) {
         // key columns
         if (_segment_writers[_current_writer_index]->num_rows_written() + chunk_num_rows >=
@@ -1061,6 +1204,9 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
             ++_current_writer_index;
         }
         RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
+        if (_rows_mapper_builder != nullptr) {
+            RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+        }
     } else {
         // non key columns
         uint32_t num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();

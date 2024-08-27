@@ -24,7 +24,7 @@ SHOW LOAD [ FROM db_name ]
 
 > **说明**
 >
-> 返回结果中的字段较多，可使用`\G`分行，如 `SHOW LOAD WHERE LABEL = "label1"\G;`。详情参见[示例一](#示例)。
+> 返回结果中的字段较多，可使用`\G`分行，如 `SHOW LOAD WHERE LABEL = "label1"\G`。详情参见[示例一](#示例)。
 
 ## 参数说明
 

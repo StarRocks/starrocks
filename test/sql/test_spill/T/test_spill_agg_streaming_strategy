@@ -1,0 +1,27 @@
+-- name: test_spill_agg_streaming_strategy @sequential
+
+set enable_spill=true;
+set spill_mode="force";
+set streaming_preaggregation_mode="force_streaming";
+set pipeline_dop=1;
+
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(20))
+DUPLICATE KEY(k1)
+PROPERTIES('replication_num'='1');
+
+-- always streaming
+insert into t1 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+
+set enable_agg_spill_preaggregation=true;
+
+admin enable failpoint 'spill_always_streaming';
+select avg(k1) x from (select * from t1 union all select * from t1)t group by k2 order by x limit 10;
+admin disable failpoint 'spill_always_streaming';
+
+admin enable failpoint 'spill_always_selection_streaming';
+select avg(k1) x from (select * from t1 union all select * from t1)t group by k2 order by x limit 10;
+select count(*), sum(x) from (select sum(k1) x from (select * from t1 union all SELECT generate_series + 40960, generate_series + 40960 FROM TABLE(generate_series(1,  40960)))t group by k2 ) t;
+admin disable failpoint 'spill_always_selection_streaming';
+

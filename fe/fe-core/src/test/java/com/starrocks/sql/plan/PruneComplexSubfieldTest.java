@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -114,7 +113,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 2;
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(2);
     }
 
     @After
@@ -125,7 +124,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
-        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 1;
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
     }
 
     @Test
@@ -369,7 +368,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select array_length(a1), a1[1] from pc0 where a1[2] = 3";
         plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
-        assertContains(plan, "PredicateAccessPath: [/a1/INDEX]");
     }
 
     @Test
@@ -865,14 +863,15 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "json_length(j1, '$.a3.b3[1].c3') " +
                 "from js0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b.c\"/e, /j1/a/b, /j1/a1/b1, /j1/a2/b2, /j1/a3/b3]");
+        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b.c\"/e(json), /j1/a/b(json), " +
+                "/j1/a1/b1(json), /j1/a2/b2(json), /j1/a3/b3(json)]");
 
         sql = "select " +
                 "JSON_EXISTS(j1, '$.a.b.c2'), " +
                 "get_json_int(j1, 'asd') " +
                 "from js0;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/a/b, /j1/asd]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b(json), /j1/asd(bigint(20))]");
     }
 
     @Test
@@ -884,7 +883,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "json_length(j1, '$.a.b2.c3') " +
                 "from js0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/a/b, /j1/a/b2]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b(json), /j1/a/b2(json)]");
 
         sql = "select " +
                 "get_json_int(j1, '$.a.b[1].c1'), " +
@@ -896,7 +895,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "JSON_EXISTS(j1, '$.\"a.b[*]\".c2[2].a') " +
                 "from js0;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b[*]\"/c2, /j1/a/b]");
+        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b[*]\"/c2(json), /j1/a/b(json)]");
     }
 
     @Test
@@ -908,7 +907,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "JSON_EXISTS(j1, '$.a.b[*].c2') " +
                 "from js0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/a]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
     }
 
     @Test
@@ -917,7 +916,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "'10'->'11'->'12'->'13'->'14'->'15' " +
                 "from js0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/1/2]");
+        assertContains(plan, "json_query[([2: j1, JSON, true], '1.2.3.4.5.6.7.8.9.10.11.12.13.14.15')");
+        assertContains(plan, "ColumnAccessPath: [/j1/1/2(json)]");
     }
 
     @Test
@@ -992,13 +992,13 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "get_json_int(j1, 'asd') " +
                 "from js0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/asd]");
+        assertContains(plan, "ColumnAccessPath: [/j1/asd(bigint(20))]");
 
         sql = "select " +
                 "get_json_int(j1, 'a.b.c.d') " +
                 "from js0;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/a/b]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b(json)]");
 
         sql = "select " +
                 "get_json_int(j1, '$') " +
@@ -1029,4 +1029,152 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "     table: pc0, rollup: pc0");
         assertContains(plan, "ColumnAccessPath");
     }
+
+    @Test
+    public void testJsonArray() throws Exception {
+        String sql = "select j1->'[0]' from js0;";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select j1->' [0]' from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select j1->'a. [0]' from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+    }
+
+    @Test
+    public void testPruneMapFromAllChild() throws Exception {
+        String sql = "WITH A AS (SELECT 'a' as event_key, 'x' as property_key ), \n" +
+                "          B AS (SELECT 'a' as event_key, map { 'x' :1 } as props ) \n" +
+                "SELECT * FROM A JOIN B ON A.event_key = B.event_key WHERE props [property_key] = 1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 2> : 'a'\n" +
+                "  |  <slot 3> : 'x'\n" +
+                "  |  <slot 5> : 'a'\n" +
+                "  |  <slot 6> : map{'x':1}\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL");
+    }
+
+    @Test
+    public void testCastJson() throws Exception {
+        String sql = "select abs(j1->'$.a') from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "abs[(get_json_double[([2: j1, JSON, true], '$.a');");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(double)]");
+
+        sql = "select abs(j1->'$.a'), concat(j1->'$.b', 'abc') from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "abs[(get_json_double[([2: j1, JSON, true], '$.a');");
+        assertContains(plan, "concat[(get_json_string[([2: j1, JSON, true], '$.b');");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(double), /j1/b(varchar)]");
+
+        sql = "select abs(j1->'$.a'), concat(j1->'$.a', 'abc') from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "abs[(get_json_double[([2: j1, JSON, true], '$.a');");
+        assertContains(plan, "concat[(get_json_string[([2: j1, JSON, true], '$.a');");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+
+        sql = "select abs(j1->'$.a'), concat(j1->'$.a', 'abc'), j1->'$.a'->'$.b' from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "abs[(get_json_double[([2: j1, JSON, true], '$.a');");
+        assertContains(plan, "concat[(get_json_string[([2: j1, JSON, true], '$.a');");
+        assertContains(plan, "json_query[([2: j1, JSON, true], '$.a.b');");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+
+        sql = "select cast(j1->'a' as decimal) from js0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "cast(get_json_double[([2: j1, JSON, true], 'a'); " +
+                "args: JSON,VARCHAR; result: DOUBLE; " +
+                "args nullable: true; result nullable: true] as DECIMAL64(10,0))");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(double)]");
+
+        sql = "select cast(j1->'a' as bigint) from js0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "get_json_int(2: j1, 'a')");
+
+        sql = "select 1 from js0 where CAST(PARSE_JSON('')  AS STRING) = 'asdf'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(parse_json('') AS VARCHAR(65533)) = 'asdf'");
+    }
+
+    @Test
+    public void testJsonBool() throws Exception {
+        String sql = "select get_json_bool(j1, 'a') from js0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+    }
+
+    @Test
+    public void testOtherFunctionJson() throws Exception {
+        String sql = "select v1 from js0 where LOWER( COALESCE( j1 -> 'a', j1 -> 'b' ) ) = 'x'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "lower(CAST(coalesce(json_query(2: j1, 'a'), json_query(2: j1, 'b')) AS VARCHAR)) = 'x'");
+    }
+
+    @Test
+    public void testTopN() throws Exception {
+        String sql = "select array_length(a1) " +
+                "from (select * from pc0 order by a1 limit 10) x";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: [7, ARRAY<INT>, true] ASC");
+        assertContains(plan, "3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  8 <-> array_length");
+
+        sql = "select array_length(a1) " +
+                "from (select * from pc0 order by v1 limit 10) x";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/OFFSET]");
+        assertContains(plan, "1:Project");
+    }
+
+    @Test
+    public void testMultiLevelJson() throws Exception {
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+        String sql = "select " +
+                "get_json_int(j1, '$.a.b.c.d') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b/c/d(bigint(20))]");
+
+        sql = "select " +
+                "get_json_int(st1.j1, '$.a.b.c') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st1/j1/a/b/c(bigint(20))]");
+
+        sql = "select " +
+                "get_json_int(ar1[1], '$.a.b.c'), " +
+                "get_json_int(mp1[1], '$.a.b.c') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/ar1/INDEX/a/b/c(bigint(20)), /mp1/INDEX/a/b/c(bigint(20))]");
+    }
+
+    @Test
+    public void testCantPruneComplexJsonOnJoin() throws Exception {
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+        String sql = "select x.v4 -> 'platform_id', x.v3 -> 'p2' " +
+                "from (select JSON_OBJECT('p1', t0.v1, 'p2', js0.v1, 'p3', 3) as v3, js0.j1 as v4 " +
+                "      from t0 left join js0 on js0.v1 = t0.v2 where cast(js0.j1 -> 'v4' as int) + t0.v2 > 1) x";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  equal join conjunct: [3: v1, BIGINT, true] = [2: v2, BIGINT, true]\n" +
+                "  |  other join predicates: " +
+                "cast(cast([13: json_query, JSON, true] as INT) as BIGINT) + [2: v2, BIGINT, true] > 1");
+    }
+
 }

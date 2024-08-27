@@ -19,12 +19,14 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
+#include "io/input_stream.h"
+#include "util/runtime_profile.h"
 #include "util/slice.h"
 
 namespace starrocks::spill {
 
 class BlockReader;
-
+class BlockReaderOptions;
 // Block represents a continuous storage space and is the smallest storage unit of flush and restore in spill task.
 // Block only supports append writing and sequential reading, and neither writing nor reading of Block is guaranteed to be thread-safe.
 class Block {
@@ -37,28 +39,51 @@ public:
     // flush block to somewhere
     virtual Status flush() = 0;
 
-    virtual std::shared_ptr<BlockReader> get_reader() = 0;
+    virtual StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const = 0;
+
+    virtual std::shared_ptr<BlockReader> get_reader(const BlockReaderOptions& options) = 0;
 
     virtual std::string debug_string() const = 0;
 
     size_t size() const { return _size; }
+    size_t num_rows() const { return _num_rows; }
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
+    virtual bool preallocate(size_t write_size) = 0;
+
+    bool exclusive() const { return _exclusive; }
+    void set_exclusive(bool exclusive) { _exclusive = exclusive; }
+
+    void inc_num_rows(size_t num_rows) { _num_rows += num_rows; }
+
 protected:
+    size_t _num_rows{};
     size_t _size{};
     bool _is_remote = false;
+    bool _exclusive{};
 };
 
 using BlockPtr = std::shared_ptr<Block>;
 
+struct BlockReaderOptions {
+    bool enable_buffer_read = false;
+    size_t max_buffer_bytes = std::numeric_limits<size_t>::max();
+
+    RuntimeProfile::Counter* read_io_timer = nullptr;
+    RuntimeProfile::Counter* read_io_count = nullptr;
+    RuntimeProfile::Counter* read_io_bytes = nullptr;
+};
+
 class BlockReader {
 public:
-    BlockReader(const Block* block) : _block(block) {}
+    BlockReader(const Block* block, const BlockReaderOptions& options)
+            : _block(block), _length(block->size()), _options(options) {}
+
     virtual ~BlockReader() = default;
     // read exacly the specified length of data from Block,
     // if the Block has reached the end, should return EndOfFile status
-    virtual Status read_fully(void* data, int64_t count) = 0;
+    virtual Status read_fully(void* data, int64_t count);
 
     virtual std::string debug_string() = 0;
 
@@ -66,6 +91,14 @@ public:
 
 protected:
     const Block* _block = nullptr;
+    std::unique_ptr<io::InputStreamWrapper> _readable;
+    size_t _length = 0;
+    size_t _offset = 0;
+
+    // used for buffer read
+    std::unique_ptr<uint8_t[]> _buffer;
+    Slice _slice;
+    BlockReaderOptions _options;
 };
 
 struct AcquireBlockOptions {
@@ -74,6 +107,8 @@ struct AcquireBlockOptions {
     int32_t plan_node_id;
     std::string name;
     bool direct_io = false;
+    // The block will occupy the entire container, making it easier to remove the block.
+    bool exclusive = false;
     size_t block_size = 0;
 };
 
@@ -89,6 +124,6 @@ public:
     // acquire a block from BlockManager, return error if BlockManager can't allocate one.
     virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) = 0;
     // return Block to BlockManager
-    virtual Status release_block(const BlockPtr& block) = 0;
+    virtual Status release_block(BlockPtr block) = 0;
 };
 } // namespace starrocks::spill

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # date_sub,subdate
 
-## 功能
+
 
 从日期中减去指定的时间间隔。
 

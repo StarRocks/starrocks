@@ -2,6 +2,7 @@
 #include "util/failpoint/fail_point.h"
 
 #include <filesystem>
+#include <utility>
 
 #include "fmt/format.h"
 #include "simdjson.h"
@@ -17,7 +18,7 @@ int check_fail_point(const char* name, int* failnum, void** failinfo, unsigned i
     return fp->shouldFail();
 }
 
-FailPoint::FailPoint(const std::string& name) : _name(name) {
+FailPoint::FailPoint(std::string name) : _name(std::move(name)) {
     _trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
 }
 
@@ -119,7 +120,7 @@ FailPoint* FailPointRegistry::get(const std::string& name) {
     return iter->second;
 }
 
-void FailPointRegistry::iterate(std::function<void(FailPoint*)> callback) {
+void FailPointRegistry::iterate(const std::function<void(FailPoint*)>& callback) {
     for (const auto& [_, fp] : _fps) {
         callback(fp);
     }
@@ -178,6 +179,7 @@ bool init_failpoint_from_conf(const std::string& conf_file) {
     return false;
 }
 
+// NOLINTNEXTLINE(modernize-use-equals-default)
 FailPointRegistry::FailPointRegistry() {
 #ifdef FIU_ENABLE
     fiu_init(0);
@@ -189,5 +191,6 @@ FailPointRegisterer::FailPointRegisterer(FailPoint* fp) {
 }
 
 DEFINE_FAIL_POINT(random_error);
+DEFINE_FAIL_POINT(output_stream_io_error);
 
 } // namespace starrocks::failpoint

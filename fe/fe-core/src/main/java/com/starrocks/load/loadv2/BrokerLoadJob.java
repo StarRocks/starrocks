@@ -49,6 +49,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -131,7 +132,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond);
+                        timeoutSecond, warehouseId);
     }
 
     @Override
@@ -304,12 +305,14 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
+                        .setWarehouseId(warehouseId)
                         .build();
 
                 task.prepare();
 
                 // update total loading task scan range num
                 idToTasks.put(task.getSignature(), task);
+                loadIds.add(DebugUtil.printId(loadId));
                 // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
                 // use newLoadingTasks to save new created loading tasks and submit them later.
                 newLoadingTasks.add(task);
@@ -357,9 +360,9 @@ public class BrokerLoadJob extends BulkLoadJob {
                 return;
             }
 
+            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason + ". Retry again");
+            LOG.warn("Retry timeout load jobs. job: {}, remaining retryTime: {}", id, retryTime);
             retryTime--;
-            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason);
-            LOG.warn("Retry timeout load jobs. job: {}, retryTime: {}", id, retryTime);
             unprotectedClearTasksBeforeRetry(failMsg);
             try {
                 state = JobState.PENDING;
@@ -367,6 +370,29 @@ public class BrokerLoadJob extends BulkLoadJob {
             } catch (Exception e) {
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
             }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * This method is used to replay the cancelled state of load job
+     *
+     * @param txnState
+     */
+    @Override
+    public void replayOnAborted(TransactionState txnState) {
+        writeLock();
+        try {
+            replayTxnAttachment(txnState);
+            failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
+            finishTimestamp = txnState.getFinishTime();
+            state = JobState.CANCELLED;
+            if (retryTime <= 0 || !failMsg.getMsg().contains("timeout") || !isTimeout()) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+                return;
+            }
+            retryTime--;
         } finally {
             writeUnlock();
         }

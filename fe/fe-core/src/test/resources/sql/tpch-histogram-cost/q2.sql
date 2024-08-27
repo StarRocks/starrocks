@@ -105,6 +105,7 @@ OutPut Exchange Id: 25
 |
 20:SORT
 |  order by: [1, INT, false] ASC
+|  analytic partition by: [1: P_PARTKEY, INT, false]
 |  offset: 0
 |  cardinality: 80240
 |  column statistics:
@@ -314,8 +315,8 @@ cardinality: 100300
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
 * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
-* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 1.0] ESTIMATE
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
+* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 1.0] MCV: [[10:417700][14:415300][30:412700][3:412300][16:410300]] ESTIMATE
 
 PLAN FRAGMENT 5(F01)
 
@@ -358,8 +359,8 @@ cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (27: N_REGIONKEY)
 column statistics:
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 6(F02)
@@ -384,6 +385,5 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[EUROPE:1][AFRICA:1][AMERICA:1][ASIA:1][MIDDLE EAST:1]] ESTIMATE
 [end]
-

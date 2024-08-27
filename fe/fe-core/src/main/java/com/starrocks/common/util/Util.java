@@ -41,6 +41,8 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,7 +52,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.management.ThreadInfo;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
@@ -312,28 +313,6 @@ public class Util {
         return Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
     }
 
-    public static String dumpThread(Thread t, int lineNum) {
-        return dumpThread(t.getName(), t.getId(), t.getStackTrace(), lineNum);
-    }
-
-    public static String dumpThread(ThreadInfo t, int lineNum) {
-        return dumpThread(t.getThreadName(), t.getThreadId(), t.getStackTrace(), lineNum);
-    }
-
-    public static String dumpThread(String name, long id, StackTraceElement[] elements, int lineNum) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("dump thread: ").append(name).append(", id: ").append(id).append("\n");
-        int count = lineNum;
-        for (StackTraceElement element : elements) {
-            if (count == 0) {
-                break;
-            }
-            sb.append("    ").append(element.toString()).append("\n");
-            --count;
-        }
-        return sb.toString();
-    }
-
     // get response body as a string from the given url.
     // "encodedAuthInfo", the base64 encoded auth info. like:
     //      Base64.encodeBase64String("user:passwd".getBytes());
@@ -473,5 +452,14 @@ public class Util {
             dos.write(input);
         }
         return outputStream.toByteArray();
+    }
+
+    public static ConnectContext getOrCreateConnectContext() {
+        if (ConnectContext.get() != null) {
+            return ConnectContext.get();
+        }
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        return ctx;
     }
 }

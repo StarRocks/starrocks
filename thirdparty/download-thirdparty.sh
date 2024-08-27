@@ -247,7 +247,13 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch 
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-add-handler-after-output-log.patch
+    touch $PATCHED_MARK
+fi
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -289,6 +295,14 @@ fi
 cd -
 echo "Finished patching $LZ4_SOURCE"
 
+cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $ROCKSDB_SOURCE"
+
 # brpc patch to disable shared library
 cd $TP_SOURCE_DIR/$BRPC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
@@ -305,6 +319,10 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
+    patch < $TP_PATCH_DIR/brpc-1.9.0.patch
+    touch $PATCHED_MARK
+fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
 
@@ -314,6 +332,7 @@ if [ ! -f $PATCHED_MARK ]; then
     patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0.patch
     # replace uint64 with uint64_t to make compiler happy
     patch -p0 < $TP_PATCH_DIR/s2geometry-0.9.0-uint64.patch
+    patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0-cxx17.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -393,41 +412,20 @@ else
 fi
 
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; then
+if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
-    patch -p0 < $TP_PATCH_DIR/aws-sdk-cpp-1.9.179.patch    
-    # Fix crt BB, refer to https://github.com/aws/s2n-tls/issues/3166
-    patch -p1 -f -i $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-s2n-compile-error.patch
-    # refer to https://github.com/aws/aws-sdk-cpp/issues/1824
-    patch -p1 < $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-LINK_LIBRARIES_ALL.patch
-    touch $PATCHED_MARK
-    echo "Finished patching $AWS_SDK_CPP_SOURCE"
-else
-    echo "$AWS_SDK_CPP_SOURCE not patched"
 fi
 
-cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.10.36" ]; then
-    if [ ! -f prefetch_crt_dep_ok ]; then
-        bash ./prefetch_crt_dependency.sh
-        touch prefetch_crt_dep_ok
-    fi
-    # Fix InstanceProfile deadlock, refer to https://github.com/aws/aws-sdk-cpp/issues/2251
-    patch -p1 < $TP_PATCH_DIR/aws-sdk-cpp-1.10.36-instance-profile-deadlock.patch   
-    touch $PATCHED_MARK
-    echo "Finished patching $AWS_SDK_CPP_SOURCE"
-else
-    echo "$AWS_SDK_CPP_SOURCE not patched"
-fi
 
 # patch jemalloc_hook
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
     patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
     patch -p0 < $TP_PATCH_DIR/jemalloc_nallocx.patch
+    patch -p0 < $TP_PATCH_DIR/jemalloc_nodump.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -499,6 +497,11 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-parquet-map-key.patch
         touch $PATCHED_MARK
     fi
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-16.1.0" ] ; then
+        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-parquet-map-key.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.0.patch
+        touch $PATCHED_MARK
+    fi
     cd -
     echo "Finished patching $ARROW_SOURCE"
 fi
@@ -512,4 +515,26 @@ if [[ -d $TP_SOURCE_DIR/$BZIP_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $BZIP_SOURCE"
+fi
+
+# patch bitshuffle
+if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BITSHUFFLE_SOURCE == "bitshuffle-0.5.1" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/bitshuffle-0.5.1.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $BITSHUFFLE_SOURCE"
+fi
+
+#patch poco
+if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$POCO_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $POCO_SOURCE == "poco-1.12.5-release" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-ca.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $POCO_SOURCE"
 fi

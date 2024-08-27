@@ -1,0 +1,37 @@
+-- name: test_str_to_date
+select str_to_date('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');
+-- result:
+2014-12-21 12:34:56
+-- !result
+SELECT str_to_date('20141221','%Y%m%d');
+-- result:
+2014-12-21
+-- !result
+select str_to_date('200442 Monday', '%X%V %W');
+-- result:
+2004-10-18
+-- !result
+select str_to_date("1997-01-01 00:00:00", '%H %k %I %r %T %S %w');
+-- result:
+None
+-- !result
+select str_to_date("1997-01-01 00:00:00", '%H %k %I %T %S %w');
+-- result:
+None
+-- !result
+select str_to_date("10:10:10 PM 10:11:10 PM", '%r');
+-- result:
+None
+-- !result
+select str_to_date("10:10:10 PM 2020-01-01", '%r %Y-%m-%d');
+-- result:
+2020-01-01 22:10:10
+-- !result
+select str_to_date("10:10:10 PM  2020-01-01", '%r %Y-%m-%d');
+-- result:
+2020-01-01 22:10:10
+-- !result
+select str_to_date("10:10:10 2020-01-01", '%r %Y-%m-%d');
+-- result:
+2020-01-01 10:10:10
+-- !result

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # year
 
-## 功能
+
 
 返回指定日期中的年份。
 

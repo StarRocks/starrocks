@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -54,11 +53,15 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
+    private final int queryStartIndex;
     private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
+    // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
-
+    // simple view definition of the mv which has been rewritten by AstToSQLBuilder#buildSimple
     private String simpleViewDef;
+    // original view definition of the mv query without any rewrite which can be used in text based rewrite.
+    private String originalViewDefineSql;
     private List<BaseTableInfo> baseTableInfos;
 
     // Maintenance information
@@ -88,7 +91,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
-                                           QueryStatement queryStatement, NodePosition pos) {
+                                           QueryStatement queryStatement,
+                                           int queryStartIndex,
+                                           NodePosition pos) {
         super(pos);
         this.tableName = tableName;
         this.colWithComments = colWithComments;
@@ -100,6 +105,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
+        this.queryStartIndex = queryStartIndex;
         this.queryStatement = queryStatement;
     }
 
@@ -193,6 +199,18 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setSimpleViewDef(String simpleViewDef) {
         this.simpleViewDef = simpleViewDef;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
     }
 
     public QueryStatement getQueryStatement() {

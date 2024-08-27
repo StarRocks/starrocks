@@ -67,6 +67,10 @@ public:
     // if all id in check are ready. return true
     bool are_all_left(TicketIdType id);
 
+    // there are more tickets of this `id`
+    // and we have to clear ALL_READY_BIT;
+    void more_tickets(TicketIdType id);
+
 private:
     DISALLOW_COPY_AND_MOVE(TicketChecker);
     SpinLock _lock;

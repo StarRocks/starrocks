@@ -131,7 +131,7 @@ Status ReplicationUtils::make_remote_snapshot(const std::string& host, int32_t b
                                               const std::vector<Version>* missed_versions,
                                               const std::vector<int64_t>* missing_version_ranges,
                                               std::string* remote_snapshot_path) {
-    if (StorageEngine::instance()->bg_worker_stopped()) {
+    if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The make remote snapshot will stop");
     }
 
@@ -200,7 +200,7 @@ Status ReplicationUtils::make_remote_snapshot(const std::string& host, int32_t b
 
 Status ReplicationUtils::release_remote_snapshot(const std::string& ip, int32_t port,
                                                  const std::string& src_snapshot_path) {
-    if (StorageEngine::instance()->bg_worker_stopped()) {
+    if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The release remote snapshot will stop");
     }
 
@@ -223,7 +223,7 @@ Status ReplicationUtils::download_remote_snapshot(
         const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(const std::string& file_name,
                                                                            uint64_t file_size)>& file_converters,
         DataDir* data_dir) {
-    if (StorageEngine::instance()->bg_worker_stopped()) {
+    if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The download remote snapshot will stop");
     }
 
@@ -306,7 +306,7 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
         const std::string& host, int32_t http_port, const std::string& remote_token,
         const std::string& remote_snapshot_path, TTabletId remote_tablet_id, TSchemaHash remote_schema_hash,
         const std::string& file_name, uint64_t timeout_sec) {
-    if (StorageEngine::instance()->bg_worker_stopped()) {
+    if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The download remote snapshot file will stop");
     }
 
@@ -336,14 +336,9 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 
 Status ReplicationUtils::convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,
                                                  const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
-    for (auto& column_unique_id : *rowset_txn_meta->mutable_partial_update_column_unique_ids()) {
-        auto iter = column_unique_id_map.find(column_unique_id);
-        if (iter == column_unique_id_map.end()) {
-            LOG(ERROR) << "Column not found, column unique id: " << column_unique_id;
-            return Status::InternalError("Column not found");
-        }
-        column_unique_id = iter->second;
-    }
+    RETURN_IF_ERROR(convert_column_unique_ids(rowset_txn_meta->mutable_partial_update_column_unique_ids(),
+                                              column_unique_id_map));
+
     if (rowset_txn_meta->has_auto_increment_partial_update_column_uid()) {
         auto iter = column_unique_id_map.find(rowset_txn_meta->auto_increment_partial_update_column_uid());
         if (iter == column_unique_id_map.end()) {

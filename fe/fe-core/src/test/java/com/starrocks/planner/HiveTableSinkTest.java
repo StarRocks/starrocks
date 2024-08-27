@@ -115,9 +115,9 @@ public class HiveTableSinkTest {
         Assert.assertTrue(tHiveTableSink.is_static_partition_sink);
         Assert.assertEquals(TCloudType.DEFAULT, tHiveTableSink.getCloud_configuration().cloud_type);
 
-        builder.setStorageFormat(HiveStorageFormat.ORC);
+        builder.setStorageFormat(HiveStorageFormat.AVRO);
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Writing to hive table in [ORC] format is not supported",
+                "Writing to hive table in [AVRO] format is not supported",
                 () ->new HiveTableSink(builder.build(), desc, true, new SessionVariable()));
     }
 }

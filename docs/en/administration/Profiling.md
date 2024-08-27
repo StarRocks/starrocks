@@ -33,7 +33,7 @@ CREATE TABLE session_data
     city        CHAR(20),
     province    CHAR(20),
     ip          varchar(32),
-    brower      CHAR(20),
+    browser      CHAR(20),
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
@@ -73,7 +73,7 @@ CREATE TABLE colocate_table
     city        CHAR(20),
     province    CHAR(20),
     ip          varchar(32),
-    brower      CHAR(20),
+    browser      CHAR(20),
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
@@ -123,7 +123,7 @@ When creating a table, it is recommended to place common filter fields at the be
 
 A VARCHAR field must placed at the end of a sparse index because the index gets truncated from the VARCHAR field. If the VARCHAR field appears first, the index may be less than 36 bytes.
 
-Use the above `site_visit` table as an example. The table has four columns: `siteid, city, username, pv`. The sort key contains three columns `siteid，city，username`, which occupy 4, 2, and 32 bytes respectively. So the prefix index (sparse index) can be the first 30 bytes of `siteid + city + username`.
+Use the above `site_visit` table as an example. The table has four columns: `siteid, city, username, pv`. The sort key contains three columns `siteid, city, username`, which occupy 4, 2, and 32 bytes respectively. So the prefix index (sparse index) can be the first 30 bytes of `siteid + city + username`.
 
 In addition to sparse indexes, StarRocks also provides bloomfilter indexes, which are effective for filtering columns with high discrimination. If you want to place VARCHAR fields before other fields, you can create bloomfilter indexes.
 
@@ -150,15 +150,15 @@ A rollup is essentially a materialized index of the original table (base table).
 - The prefix index in the base table cannot be hit, because the way the base table is built cannot cover all the query patterns. In this case, you may consider creating a rollup to adjust the column order. Use the above `session_data` table as an example:
 
   ~~~sql
-  session_data(visitorid, sessionid, visittime, city, province, ip, brower, url)
+  session_data(visitorid, sessionid, visittime, city, province, ip, browser, url)
   ~~~
 
   If there are cases where you need to analyze visits by `browser` and `province` in addition to `visitorid`, you can create a separate rollup:
 
   ~~~sql
   ALTER TABLE session_data
-  ADD ROLLUP rollup_brower(brower,province,ip,url)
-  DUPLICATE KEY(brower,province);
+  ADD ROLLUP rollup_browser(browser,province,ip,url)
+  DUPLICATE KEY(browser,province);
   ~~~
 
 ## Schema change

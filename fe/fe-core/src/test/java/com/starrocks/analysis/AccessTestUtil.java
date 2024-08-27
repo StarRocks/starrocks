@@ -78,11 +78,10 @@ public class AccessTestUtil {
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         Partition partition = new Partition(20000L, "testTbl", baseIndex, distributionInfo);
         List<Column> baseSchema = new LinkedList<Column>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
-                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getNodeMgr().getClusterId(),
-                null);
+                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, null);
         table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.addPartition(partition);

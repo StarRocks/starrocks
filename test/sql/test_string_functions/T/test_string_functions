@@ -145,20 +145,20 @@ select crc32(c0) from crc01;
 select crc32(c1) from crc01;
 select crc32(c2) from crc01;
 
--- function: ngram_search
+-- name: test_ngram_search
 -- case1: const/const  normal case
-select ngram_search("chinese","china");
+select ngram_search("chinese","china",4);
 
-select ngram_search("chinese","CHINESE");
-select ngram_search_case_insensitive("chinese","CHINESE");
-select ngram_search_case_insensitive("CHINESE","chinese");
+select ngram_search("chinese","CHINESE",4);
+select ngram_search_case_insensitive("chinese","CHINESE",4);
+select ngram_search_case_insensitive("CHINESE","chinese",4);
 
 -- case 2:const/const corner case
-select ngram_search("chinese","");
-select ngram_search("","chinese");
-select ngram_search("","");
+select ngram_search("chinese","",4);
+select ngram_search("","chinese",4);
+select ngram_search("","",4);
 -- this is because length("chi") < 4
-select ngram_search("chi","chi");
+select ngram_search("chi","chi",4);
 
 -- case3: column/const
 CREATE TABLE `string_table` (
@@ -181,9 +181,61 @@ insert into string_table values
 ("2548c7aa-d94f-46bf-b0a4-d769f248cbb2"),
 ("1bd32347-274f-4a30-93f3-9087594de9cd");
 
-select ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd") as a from string_table order by a;
-select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757") as a from string_table order by a;
+select ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd",4) as a from string_table order by a;
+select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757",4) as a from string_table order by a;
 
 -- case4: only support (column,const) and (const,const)
-select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey) from string_table;
+select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string_table;
 
+-- case5: gram_num is 0
+select ngram_search("chi","chi",0);
+select ngram_search("chi","chi",-1);
+
+-- only support string,string
+select ngram_search(date('2020-06-23'), "2020", 4);
+
+-- const value with two chunk
+select sum(result) from ( select ngram_search("normal_string", "normal_string", 5) as result from (   select generate_series    from TABLE(generate_series(0, 4097 - 1)) ) as t1) as t2;
+
+
+-- name: test_ngram_search_with_low_cardinality
+CREATE TABLE __row_util_1 (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into __row_util_1 select generate_series from TABLE(generate_series(0, 5000));
+
+
+-- id随机，nation低基数，exsit_hot_value中1%随机，99%的低基（只有5种取值）
+CREATE TABLE left_table (
+    id int,
+    nation string,
+    exsit_hot_value int
+)
+ENGINE=olap
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) buckets 32
+PROPERTIES (
+    "replication_num" = "1" 
+);
+
+insert into left_table 
+select
+    cast(rand() * 100000000 as int),
+    CASE 
+        WHEN RAND() > 0.8 THEN 'china'
+        WHEN RAND() > 0.6 THEN 'usa'
+        WHEN RAND() > 0.4 THEN 'russian'
+        WHEN RAND() > 0.2 THEN 'canada'
+        ELSE 'japan'
+    END,
+   case when RAND() > 0.99 THEN k1
+       ELSE k1 % 5 
+   END
+from __row_util_1;
+select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from left_table)t0;

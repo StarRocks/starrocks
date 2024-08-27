@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -21,8 +22,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CaseExpr;
+import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.OrderByElement;
@@ -30,10 +35,10 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -48,12 +53,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
+import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -63,9 +71,13 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PivotAggregation;
+import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
@@ -84,12 +96,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.analyzer.AstToStringBuilder.getAliasName;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
@@ -113,7 +128,7 @@ public class QueryAnalyzer {
         new Visitor().process(node, parent);
     }
 
-    private class Visitor extends AstVisitor<Scope, Scope> {
+    private class Visitor implements AstVisitor<Scope, Scope> {
         public Visitor() {
         }
 
@@ -198,6 +213,8 @@ public class QueryAnalyzer {
                 throw unsupportedException("Table function must be used with lateral join");
             }
             selectRelation.setRelation(resolvedRelation);
+            //for avoid init column meta, try to prune unused columns
+            pruneScanColumns(selectRelation, resolvedRelation);
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
 
@@ -218,6 +235,7 @@ public class QueryAnalyzer {
             }.visit(resolvedRelation);
             analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
+            selectRelation.accept(new RewriteAliasVisitor(sourceScope, session), null);
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(
                     analyzeState,
@@ -234,6 +252,32 @@ public class QueryAnalyzer {
             return analyzeState.getOutputScope();
         }
 
+        // for reduce meta initialization, only support simple query relation, like: select x1, x2 from t;
+        private void pruneScanColumns(SelectRelation selectRelation, Relation fromRelation) {
+            if (!session.getSessionVariable().isEnableAnalyzePhasePruneColumns() ||
+                    !(fromRelation instanceof TableRelation) ||
+                    !Objects.isNull(selectRelation.getGroupByClause()) ||
+                    !Objects.isNull(selectRelation.getHavingClause()) ||
+                    !Objects.isNull(selectRelation.getWhereClause()) ||
+                    (!Objects.isNull(selectRelation.getOrderBy()) && !selectRelation.getOrderBy().isEmpty())) {
+                return;
+            }
+
+            List<String> scanColumns = new ArrayList<>();
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                if (item.isStar() || !(item.getExpr() instanceof SlotRef)) {
+                    return;
+                }
+
+                if (((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed() != null) {
+                    // avoid struct column pruned
+                    return;
+                }
+                scanColumns.add(((SlotRef) item.getExpr()).getColumnName().toLowerCase());
+            }
+            ((TableRelation) fromRelation).setPruneScanColumns(scanColumns);
+        }
+
         private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
@@ -244,6 +288,10 @@ public class QueryAnalyzer {
                     join.setLateral(true);
                 }
                 return join;
+            } else if (relation instanceof PivotRelation) {
+                PivotRelation pivotRelation = (PivotRelation) relation;
+                pivotRelation.setQuery(resolveTableRef(pivotRelation.getQuery(), scope, aliasSet));
+                return pivotRelation;
             } else if (relation instanceof FileTableFunctionRelation) {
                 FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
                 Table table = resolveTableFunctionTable(tableFunctionRelation.getProperties());
@@ -301,25 +349,38 @@ public class QueryAnalyzer {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+
+                    // If tableRelation is an object that needs to be rewritten by policy,
+                    // then when it is changed to ViewRelation, both the view and the table
+                    // after the view is parsed also need to inherit this rewriting logic.
+                    if (tableRelation.isNeedRewrittenByPolicy()) {
+                        viewRelation.setNeedRewrittenByPolicy(true);
+
+                        new AstTraverser<Void, Void>() {
+                            @Override
+                            public Void visitRelation(Relation relation, Void context) {
+                                relation.setNeedRewrittenByPolicy(true);
+                                return null;
+                            }
+                        }.visit(queryStatement);
+                    }
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
-                } else if (table instanceof HiveView) {
-                    HiveView hiveView = (HiveView) table;
-                    QueryStatement queryStatement = hiveView.getQueryStatement();
-                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema());
-                    view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
+                } else if (table instanceof ConnectorView) {
+                    ConnectorView connectorView = (ConnectorView) table;
+                    QueryStatement queryStatement = connectorView.getQueryStatement();
+                    View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
+                            connectorView.getType());
+                    view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
                 } else {
-                    if (tableRelation.getTemporalClause() != null) {
-                        if (table.getType() != Table.TableType.MYSQL) {
-                            throw unsupportedException(
-                                    "Unsupported table type for temporal clauses: " + table.getType() +
-                                            "; only external MYSQL tables support temporal clauses");
-                        }
+                    if (tableRelation.getQueryPeriodString() != null && !table.isTemporal()) {
+                        throw unsupportedException("Unsupported table type for temporal clauses, table type: " +
+                                table.getType());
                     }
 
                     if (table.isSupported()) {
@@ -330,7 +391,7 @@ public class QueryAnalyzer {
                     }
                 }
 
-                if (r.isPolicyRewritten()) {
+                if (!r.isNeedRewrittenByPolicy()) {
                     return r;
                 }
                 assert tableName != null;
@@ -338,9 +399,13 @@ public class QueryAnalyzer {
                 if (policyRewriteQuery == null) {
                     return r;
                 } else {
-                    r.setPolicyRewritten(true);
+                    r.setNeedRewrittenByPolicy(false);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
-                    subqueryRelation.setAlias(tableName);
+
+                    // If an alias exists, rewrite the alias into subquery to ensure
+                    // that the original expression can be resolved correctly.
+                    // `select v1 from tbl t` is rewritten as `select t.v1 from (select tbl.v1 from tbl) t`
+                    subqueryRelation.setAlias(resolveTableName);
                     return subqueryRelation;
                 }
             } else {
@@ -374,18 +439,50 @@ public class QueryAnalyzer {
                     fields.add(field);
                 }
             } else {
-                List<Column> fullSchema = node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
+                List<Column> fullSchema = table.getFullSchema();
+                Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
+
+                List<String> pruneScanColumns = node.getPruneScanColumns();
+                boolean needPruneScanColumns = pruneScanColumns != null && !pruneScanColumns.isEmpty();
+                if (needPruneScanColumns) {
+                    Set<String> fullColumnNames = new HashSet<>(fullSchema.size());
+                    for (Column column : fullSchema) {
+                        if (column.isGeneratedColumn()) {
+                            needPruneScanColumns = false;
+                            break;
+                        }
+                        fullColumnNames.add(column.getName().toLowerCase());
+                    }
+                    needPruneScanColumns &= fullColumnNames.containsAll(pruneScanColumns);
+                }
+
+                Set<String> bucketColumns = table.getDistributionColumnNames();
+                List<String> partitionColumns = table.getPartitionColumnNames();
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
+                    if (needPruneScanColumns && !column.isKey() &&
+                            !bucketColumns.contains(column.getName()) &&
+                            !partitionColumns.contains(column.getName()) &&
+                            !pruneScanColumns.contains(column.getName().toLowerCase())) {
+                        // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
+                        continue;
+                    }
                     boolean visible = baseSchema.contains(column);
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                     Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
                             column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
+                }
+
+                if (node.isBinlogQuery()) {
+                    for (Column column : getBinlogMetaColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
                 }
             }
 
@@ -415,8 +512,8 @@ public class QueryAnalyzer {
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
-                if (column.generatedColumnExpr() != null) {
-                    Expr materializedExpression = column.generatedColumnExpr();
+                Expr materializedExpression = column.getGeneratedColumnExpr(table.getIdToColumn());
+                if (materializedExpression != null) {
                     ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
@@ -428,8 +525,8 @@ public class QueryAnalyzer {
             return scope;
         }
 
-        private List<Column> appendBinlogMetaColumns(List<Column> schema) {
-            List<Column> columns = new ArrayList<>(schema);
+        private List<Column> getBinlogMetaColumns() {
+            List<Column> columns = new ArrayList<>();
             columns.add(new Column(BINLOG_OP_COLUMN_NAME, Type.TINYINT));
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, Type.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));
@@ -484,10 +581,24 @@ public class QueryAnalyzer {
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
                 if (!(join.getRight() instanceof TableFunctionRelation)) {
                     throw new SemanticException("Only support lateral join with UDTF");
-                }
-
-                if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin()) {
+                } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin() &&
+                        !((TableFunctionRelation) join.getRight()).getFunctionName().getFunction().
+                                equalsIgnoreCase("unnest")) {
+                    // not inner join && not cross join && not unnest
                     throw new SemanticException("Not support lateral join except inner or cross");
+                } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin()) {
+                    // must be unnest and not inner join and not corss join
+                    if (join.getJoinOp().isLeftOuterJoin()) {
+                        if (join.getOnPredicate() instanceof BoolLiteral &&
+                                ((BoolLiteral) join.getOnPredicate()).getValue()) {
+                            // left join on true
+                            ((TableFunctionRelation) join.getRight()).setIsLeftJoin(true);
+                        } else {
+                            throw new SemanticException("left join unnest only support on true");
+                        }
+                    } else {
+                        throw new SemanticException("unnest support inner join, cross join and left join on true");
+                    }
                 }
                 rightScope = process(join.getRight(), leftScope);
             } else {
@@ -629,11 +740,20 @@ public class QueryAnalyzer {
                         throw new SemanticException("Skew join column must be a column reference");
                     }
                     analyzeExpression(join.getSkewColumn(), new AnalyzeState(), join.getLeft().getScope());
+                } else {
+                    throw new SemanticException("Skew join column must be specified");
                 }
                 if (join.getSkewValues() != null) {
                     if (join.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
                         throw new SemanticException("skew join values must be constant");
                     }
+                    List<Expr> newSkewValues = new ArrayList<>();
+                    for (Expr expr : join.getSkewValues()) {
+                        newSkewValues.add(TypeManager.addCastExpr(expr, join.getSkewColumn().getType()));
+                    }
+                    join.setSkewValues(newSkewValues);
+                } else {
+                    throw new SemanticException("Skew join values must be specified");
                 }
             } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
@@ -708,13 +828,26 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            boolean isRelationAliasCaseInSensitive = false;
+            if (ConnectContext.get() != null) {
+                isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
+                // For hive view, relation alias is case-insensitive
+                if (node.getView().isHiveView()) {
+                    ConnectContext.get().setRelationAliasCaseInSensitive(true);
+                }
+            }
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
+            } finally {
+                if (ConnectContext.get() != null && node.getView().isHiveView()) {
+                    ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                }
             }
+
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
@@ -850,6 +983,119 @@ public class QueryAnalyzer {
         }
 
         @Override
+        public Scope visitPivotRelation(PivotRelation node, Scope context) {
+            AnalyzeState analyzeState = new AnalyzeState();
+            Scope queryScope = process(node.getQuery(), context);
+
+            List<Pair<String, Expr>> aggAliasExprs = new ArrayList<>();
+            for (PivotAggregation pivotAggregation : node.getAggregateFunctions()) {
+                analyzeExpression(pivotAggregation.getFunctionCallExpr(), analyzeState, queryScope);
+                if (!pivotAggregation.getFunctionCallExpr().isAggregateFunction()) {
+                    throw new SemanticException("Measure expression in PIVOT must use aggregate function");
+                }
+                String alias = pivotAggregation.getAlias() == null
+                        ? getAliasName(pivotAggregation.getFunctionCallExpr(), false, false)
+                        : pivotAggregation.getAlias();
+                aggAliasExprs.add(new Pair<>(alias, pivotAggregation.getFunctionCallExpr()));
+            }
+
+            for (SlotRef column : node.getPivotColumns()) {
+                analyzeExpression(column, analyzeState, queryScope);
+            }
+            List<Type> types = node.getPivotColumns().stream()
+                    .map(SlotRef::getType)
+                    .collect(Collectors.toList());
+
+            List<String> valueAliases = new ArrayList<>();
+            for (PivotValue pivotValue : node.getPivotValues()) {
+                for (int i = 0; i < pivotValue.getExprs().size(); i++) {
+                    Expr expr = pivotValue.getExprs().get(i);
+                    analyzeExpression(expr, analyzeState, queryScope);
+                    if (!Type.canCastTo(expr.getType(), types.get(i))) {
+                        throw new SemanticException("Pivot value type %s is not compatible with pivot column type %s",
+                                expr.getType(), types.get(i));
+                    }
+                }
+                String alias = pivotValue.getAlias();
+                if (alias == null) {
+                    if (pivotValue.getExprs().size() == 1) {
+                        alias = getAliasName(pivotValue.getExprs().get(0), false, false);
+                    } else {
+                        alias = "{" + Joiner.on(",")
+                                .join(pivotValue.getExprs().stream()
+                                        .map(e -> getAliasName(e, false, false))
+                                        .collect(Collectors.toList())) + "}";
+                    }
+                }
+                valueAliases.add(alias);
+
+                // construct agg(case when)
+                for (int i = 0; i < node.getAggregateFunctions().size(); i++) {
+                    PivotAggregation pivotAggregation = node.getAggregateFunctions().get(i);
+                    List<Expr> predicates = new ArrayList<>();
+                    for (int j = 0; j < node.getPivotColumns().size(); j++) {
+                        predicates.add(new BinaryPredicate(
+                                BinaryType.EQ,
+                                node.getPivotColumns().get(j),
+                                pivotValue.getExprs().get(j)));
+                    }
+
+                    Expr whenExpr;
+                    if (predicates.size() > 1) {
+                        whenExpr = new CompoundPredicate(
+                                CompoundPredicate.Operator.AND, predicates.get(0), predicates.get(1));
+                        for (int j = 2; j < predicates.size(); j++) {
+                            whenExpr = new CompoundPredicate(
+                                    CompoundPredicate.Operator.AND, whenExpr, predicates.get(j));
+                        }
+                    } else {
+                        whenExpr = predicates.get(0);
+                    }
+
+                    // special case: count(), count(*)
+                    Expr thenExpr = pivotAggregation.getFunctionCallExpr().getChild(0) == null
+                            ? new IntLiteral(1) : pivotAggregation.getFunctionCallExpr().getChild(0);
+                    CaseWhenClause caseWhenClause =
+                            new CaseWhenClause(whenExpr, thenExpr);
+                    List<CaseWhenClause> clauses = Lists.newArrayList(caseWhenClause);
+
+                    CaseExpr caseWhen = new CaseExpr(null, clauses, null);
+                    FunctionCallExpr functionCallExpr = new FunctionCallExpr(
+                            pivotAggregation.getFunctionCallExpr().getFnName(), Lists.newArrayList(caseWhen));
+                    analyzeExpression(functionCallExpr, analyzeState, queryScope);
+                    node.addRewrittenAggFunction(functionCallExpr);
+                }
+            }
+
+            List<Field> queryFields = queryScope.getRelationFields().getAllFields();
+            Set<String> usedColumns = node.getUsedColumns().keySet();
+            ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
+            ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+            for (Field field : queryFields) {
+                if (!usedColumns.contains(field.getName())) {
+                    outputExpressionBuilder.add(field.getOriginExpression());
+                    outputFields.add(field);
+                    Expr expr = field.getOriginExpression().clone();
+                    analyzeExpression(expr, analyzeState, queryScope);
+                    node.addGroupByKey(expr);
+                }
+            }
+
+            for (String valueAlias : valueAliases) {
+                for (Pair<String, Expr> pair : aggAliasExprs) {
+                    Expr aggExpr = pair.second;
+                    String name = aggAliasExprs.size() == 1 ? valueAlias : valueAlias + "_" + pair.first;
+                    outputFields.add(new Field(name, aggExpr.getType(), null, aggExpr, true, aggExpr.isNullable()));
+                }
+            }
+
+            Scope scope = new Scope(RelationId.of(node), new RelationFields(outputFields.build()));
+            scope.setParent(queryScope);
+            node.setScope(scope);
+            return scope;
+        }
+
+        @Override
         public Scope visitTableFunction(TableFunctionRelation node, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
             List<Expr> args = node.getFunctionParams().exprs();
@@ -899,6 +1145,7 @@ public class QueryAnalyzer {
             }
 
             TableFunction tableFunction = (TableFunction) fn;
+            tableFunction.setIsLeftJoin(node.getIsLeftJoin());
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
@@ -949,7 +1196,7 @@ public class QueryAnalyzer {
 
     }
 
-    private Table resolveTable(TableRelation tableRelation) {
+    public Table resolveTable(TableRelation tableRelation) {
         TableName tableName = tableRelation.getName();
         try {
             MetaUtils.normalizationTableName(session, tableName);
@@ -964,32 +1211,46 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
 
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db;
+            try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
+                db = metadataMgr.getDb(catalogName, dbName);
+            }
+
             MetaUtils.checkDbNullAndReport(db, dbName);
             Locker locker = new Locker();
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
-                Pair<Table, MaterializedIndexMeta> materializedIndex =
-                        metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
-                if (materializedIndex != null) {
-                    Table mvTable = materializedIndex.first;
-                    Preconditions.checkState(mvTable != null);
-                    Preconditions.checkState(mvTable instanceof OlapTable);
-                    try {
-                        // Add read lock to avoid concurrent problems.
-                        locker.lockDatabase(db, LockType.READ);
-                        OlapTable mvOlapTable = new OlapTable();
-                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
-                        // Copy the necessary olap table meta to avoid changing original meta;
-                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
-                        table = mvOlapTable;
-                    } finally {
-                        locker.unLockDatabase(db, LockType.READ);
+                try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
+                    Pair<Table, MaterializedIndexMeta> materializedIndex =
+                            metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                    if (materializedIndex != null) {
+                        Table mvTable = materializedIndex.first;
+                        Preconditions.checkState(mvTable != null);
+                        Preconditions.checkState(mvTable instanceof OlapTable);
+                        try {
+                            // Add read lock to avoid concurrent problems.
+                            locker.lockDatabase(db, LockType.READ);
+                            OlapTable mvOlapTable = new OlapTable();
+                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                            // Copy the necessary olap table meta to avoid changing original meta;
+                            mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                            table = mvOlapTable;
+                        } finally {
+                            locker.unLockDatabase(db, LockType.READ);
+                        }
                     }
                 }
             } else {
-                table = metadataMgr.getTable(catalogName, dbName, tbName);
+                // treat it as a temporary table first
+                try (Timer ignored = Tracers.watchScope("AnalyzeTemporaryTable")) {
+                    table = metadataMgr.getTemporaryTable(session.getSessionId(), catalogName, db.getId(), tbName);
+                }
+                if (table == null) {
+                    try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                        table = metadataMgr.getTable(catalogName, dbName, tbName);
+                    }
+                }
             }
 
             if (table == null) {
@@ -1015,7 +1276,7 @@ public class QueryAnalyzer {
                         Partition partition = table.getPartition(partitionName, isTemp);
                         if (partition == null) {
                             throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
-                                        table.getName());
+                                    table.getName());
                         }
                     }
                 }
@@ -1050,6 +1311,124 @@ public class QueryAnalyzer {
             for (Expr child : expr.getChildren()) {
                 checkJoinEqual(child);
             }
+        }
+    }
+
+    // Support alias referring to select item
+    // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1
+    // Note: alias in where clause is not handled now
+    // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1 where a != 'x'
+    private static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
+        private final Map<String, Expr> aliases = new HashMap<>();
+        private final Set<String> aliasesMaybeAmbiguous = new HashSet<>();
+        private final Map<String, Expr> resolvedAliases = new HashMap<>();
+        private final LinkedList<String> resolvingAlias = new LinkedList<>();
+        private final Scope sourceScope;
+        private final ConnectContext session;
+
+        public RewriteAliasVisitor(Scope sourceScope, ConnectContext session) {
+            this.sourceScope = sourceScope;
+            this.session = session;
+        }
+
+        @Override
+        public Expr visitExpression(Expr expr, Void context) {
+            for (int i = 0; i < expr.getChildren().size(); ++i) {
+                expr.setChild(i, visit(expr.getChild(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitSlot(SlotRef slotRef, Void context) {
+            // We treat it as column name rather than alias when table name is specified
+            if (slotRef.getTblNameWithoutAnalyzed() != null) {
+                return slotRef;
+            }
+            // Alias is case-insensitive
+            String ref = slotRef.getColumnName().toLowerCase();
+            Expr e = aliases.get(ref);
+            // Ignore slot rewrite if the `slotRef` is not in alias map
+            if (e == null) {
+                return slotRef;
+            }
+            // If alias is same with table column name where this alias is defined, we directly use table column name.
+            // eg: DATE(pt) as pt
+            if (ref.equals(resolvingAlias.peekLast())) {
+                return slotRef;
+            }
+            // If alias is same with table column name, we directly use table column name.
+            // Otherwise, we treat it as alias.
+            // It behaves the same as that in `SelectAnalyzer.RewriteAliasVisitor`
+            // eg: select trim(t1a) as t1c, concat(t1c,','),t1c from test_all_type
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
+                    !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
+                return slotRef;
+            }
+            // Referring to a duplicated alias is ambiguous
+            if (aliasesMaybeAmbiguous.contains(ref)) {
+                throw new SemanticException("Column " + ref + " is ambiguous", slotRef.getPos());
+            }
+            // Use short circuit to avoid duplicated resolving of same alias
+            if (resolvedAliases.containsKey(ref)) {
+                return resolvedAliases.get(ref);
+            }
+            if (resolvingAlias.contains(ref)) {
+                throw new SemanticException("Cyclic aliases: " + ref, slotRef.getPos());
+            }
+
+            // Use resolvingAliases to detect cyclic aliases
+            resolvingAlias.add(ref);
+            e = visit(e);
+            resolvedAliases.put(ref, e);
+            resolvingAlias.removeLast();
+            return e;
+        }
+
+        @Override
+        public Expr visitSelect(SelectRelation selectRelation, Void context) {
+            // Collect alias in select relation
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                String alias = item.getAlias();
+                if (item.getAlias() == null) {
+                    continue;
+                }
+                // Ignore c1 as c1
+                if (item.getExpr() instanceof SlotRef &&
+                        alias.equalsIgnoreCase(((SlotRef) item.getExpr()).getColumnName())) {
+                    continue;
+                }
+                // Alias is case-insensitive
+                Expr lastAssociatedExpr = aliases.putIfAbsent(alias.toLowerCase(), item.getExpr());
+                if (lastAssociatedExpr != null) {
+                    // Duplicate alias is allowed, eg: select a.v1 as v, a.v2 as v from t0 a,
+                    // But it should not be ambiguous, eg: select a.v1 as v, a.v2 as v from t0 a order by v
+                    aliasesMaybeAmbiguous.add(alias.toLowerCase());
+                }
+            }
+            if (aliases.isEmpty()) {
+                return null;
+            }
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                if (item.getExpr() == null) {
+                    continue;
+                }
+                if (item.getAlias() == null) {
+                    item.setExpr(visit(item.getExpr()));
+                    continue;
+                }
+                // Alias is case-insensitive
+                String alias = item.getAlias().toLowerCase();
+                resolvingAlias.add(alias);
+                // Can't use computeIfAbsent here due to resolvedAliases is also modified in `visitSlot`,
+                // otherwise `ConcurrentModificationException` will be thrown
+                Expr rewrittenExpr = resolvedAliases.containsKey(alias) && !aliasesMaybeAmbiguous.contains(alias)
+                        ? resolvedAliases.get(alias) : visit(item.getExpr());
+                resolvedAliases.putIfAbsent(alias, rewrittenExpr);
+                item.setExpr(rewrittenExpr);
+                resolvingAlias.removeLast();
+            }
+            return null;
         }
     }
 }

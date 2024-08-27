@@ -46,10 +46,13 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -257,7 +260,7 @@ public class PropertyAnalyzerTest {
         Assert.assertEquals(false, ret.first);
         Assert.assertEquals(true, ret.second);
         Config.enable_persistent_index_by_default = true;
-        
+
         // non primary key
         Map<String, String> property7 = new HashMap<>();
         ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property7, false);
@@ -268,21 +271,21 @@ public class PropertyAnalyzerTest {
     @Test
     public void testDefaultTableCompression() throws AnalysisException {
         // No session
-        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
 
         // Default in the session
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setThreadLocalInfo();
-        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
 
         // Set in the session
         ctx.getSessionVariable().setDefaultTableCompression("zstd");
-        Assert.assertEquals(TCompressionType.ZSTD, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+        Assert.assertEquals(TCompressionType.ZSTD, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
 
         // Set in the property
         Map<String, String> property = new HashMap<>();
         property.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "zlib");
-        Assert.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property)));
+        Assert.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property).first));
     }
 
     @Test
@@ -325,5 +328,22 @@ public class PropertyAnalyzerTest {
             String regex = PropertyAnalyzer.SINGLE_LOCATION_LABEL_REGEX;
             Assert.assertEquals(Pattern.compile(regex).matcher(loc).matches(), analyzeSuccess[i++]);
         }
+    }
+
+    @Test
+    public void testAnalyzeVersionInfo() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_VERSION_INFO, "1000");
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Does not support the table property \"version_info\" in share data mode, please remove " +
+                        "it from the statement", () -> {
+                    PropertyAnalyzer.analyzeVersionInfo(properties);
+                });
     }
 }

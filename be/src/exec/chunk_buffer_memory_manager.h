@@ -51,11 +51,18 @@ public:
 
     bool is_full() const { return _memory_usage >= _max_memory_usage || _buffered_num_rows > _max_buffered_rows; }
 
+    bool is_half_full() const { return _memory_usage * 2 >= _max_memory_usage; }
+
     size_t get_max_input_dop() const { return _max_input_dop; }
 
     void update_max_memory_usage(size_t max_memory_usage) {
         DCHECK(max_memory_usage > 0);
         _max_memory_usage = max_memory_usage;
+    }
+
+    void clear() {
+        _memory_usage = 0;
+        _buffered_num_rows = 0;
     }
 
 private:

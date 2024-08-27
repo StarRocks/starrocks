@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['suoyin']
 ---
 
 # DROP INDEX
@@ -30,7 +31,7 @@ DROP INDEX index_name ON [db_name.]table_name
 
 ## 示例
 
-例如为表`sales_records`中的`item_id`列创建位图索引，索引名称为`index3`。
+例如为表 `sales_records` 中的 `item_id` 列创建位图索引，索引名称为 `index3`。
 
 ```SQL
 CREATE INDEX index3 ON sales_records (item_id);

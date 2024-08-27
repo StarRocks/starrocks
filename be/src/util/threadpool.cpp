@@ -487,6 +487,19 @@ Status ThreadPool::update_max_threads(int max_threads) {
     return Status::OK();
 }
 
+Status ThreadPool::update_min_threads(int min_threads) {
+    if (min_threads > this->_max_threads) {
+        std::string err_msg = strings::Substitute("invalid min threads num $0 :  max threads num: $1",
+                                                  std::to_string(min_threads), std::to_string(this->_max_threads));
+        LOG(WARNING) << err_msg;
+        return Status::InvalidArgument(err_msg);
+    } else {
+        _min_threads.store(min_threads, std::memory_order_release);
+        LOG(INFO) << "ThreadPool " << _name << " update min threads : " << _min_threads.load(std::memory_order_acquire);
+    }
+    return Status::OK();
+}
+
 void ThreadPool::dispatch_thread() {
     std::unique_lock l(_lock);
     auto current_thread = Thread::current_thread();
@@ -557,6 +570,7 @@ void ThreadPool::dispatch_thread() {
 
         l.unlock();
 
+        MonoTime start_time = MonoTime::Now();
         // Execute the task
         task.runnable->run();
         current_thread->inc_finished_tasks();
@@ -568,6 +582,12 @@ void ThreadPool::dispatch_thread() {
         // In the worst case, the destructor might even try to do something
         // with this threadpool, and produce a deadlock.
         task.runnable.reset();
+        MonoTime finish_time = MonoTime::Now();
+
+        _total_executed_tasks.increment(1);
+        _total_pending_time_ns.increment(start_time.GetDeltaSince(task.submit_time).ToNanoseconds());
+        _total_execute_time_ns.increment(finish_time.GetDeltaSince(start_time).ToNanoseconds());
+
         l.lock();
         _last_active_timestamp = MonoTime::Now();
 

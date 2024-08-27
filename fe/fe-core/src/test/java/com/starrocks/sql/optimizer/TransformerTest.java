@@ -132,6 +132,11 @@ public class TransformerTest {
         runUnitTest("subquery");
     }
 
+    @Test
+    public void testPivot() {
+        runUnitTest("pivot");
+    }
+
     public static void analyzeAndBuildOperator(String originStmt, String operatorString, String except,
                                                ErrorCollector collector) {
         try {

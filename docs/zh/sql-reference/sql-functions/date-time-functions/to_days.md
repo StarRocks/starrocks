@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # to_days
 
-## 功能
+
 
 返回指定日期距离 `0000-01-01` 的天数。
 

@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 # where to put generated binaries
@@ -48,6 +44,7 @@ set(EXPR_FILES
   array_element_expr.cpp
   array_expr.cpp
   array_functions.cpp
+  arrow_function_call.cpp
   binary_predicate.cpp
   bitmap_functions.cpp
   case_expr.cpp
@@ -85,6 +82,7 @@ set(EXPR_FILES
   runtime_filter_bank.cpp
   runtime_filter.cpp
   split.cpp
+  regexp_split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
@@ -104,6 +102,7 @@ set(EXPR_FILES
   runtime_filter_layout.cpp
   dictionary_get_expr.cpp
   ngram.cpp
+  match_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

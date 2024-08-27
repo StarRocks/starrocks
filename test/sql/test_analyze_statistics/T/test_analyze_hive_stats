@@ -1,0 +1,47 @@
+-- name: test_analyze_hive_stats
+create external catalog analyze_hive_stats PROPERTIES (
+     "type"="hive",
+     "hive.metastore.uris"="${hive_metastore_uris}",
+     "aws.s3.access_key"="${oss_ak}",
+     "aws.s3.secret_key"="${oss_sk}",
+     "aws.s3.endpoint"="${oss_endpoint}"
+ );
+
+--analyze hive basic stats
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy;
+
+--check stats
+select count(1) from default_catalog._statistics_.external_column_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name='hive_oss_par_parquet_snappy';
+--function: assert_explain_costs_contains('select * from analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy', 'ESTIMATE')
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 5, "desc": "wait fe cache stats finished"}
+  result=explain costs select * from analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy;
+  CHECK: re.search("col_int.*ESTIMATE", ${result}) != None
+} END LOOP
+
+--analyze hive histogram
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy update histogram on col_int,col_string,col_date;
+
+--check stats meta
+show histogram meta where `table` = 'hive_oss_par_parquet_snappy';
+
+--check mcv
+select count(1) from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy';
+select mcv from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy' and column_name = 'col_int';
+select mcv from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy' and column_name = 'col_string';
+select mcv from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy' and column_name = 'col_date';
+
+--drop stats
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy drop histogram on col_int,col_string;
+
+--check stats meta
+show histogram meta where `table` = 'hive_oss_par_parquet_snappy';
+
+--check mcv
+select (1) from default_catalog._statistics_.external_histogram_statistics where catalog_name = 'analyze_hive_stats' and db_name = 'hive_oss_db' and table_name = 'hive_oss_par_parquet_snappy';
+
+--drop stats
+analyze table analyze_hive_stats.hive_oss_db.hive_oss_par_parquet_snappy drop histogram on col_date;
+
+--drop catalog
+drop catalog analyze_hive_stats

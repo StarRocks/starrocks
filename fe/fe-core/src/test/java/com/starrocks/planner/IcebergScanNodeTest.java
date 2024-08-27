@@ -41,6 +41,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
@@ -69,7 +70,7 @@ public class IcebergScanNodeTest extends TableTestBase {
     public void testGetScanRangeLocations() throws Exception {
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableC, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableC, Maps.newHashMap());
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -79,6 +80,7 @@ public class IcebergScanNodeTest extends TableTestBase {
         mockedNativeTableC.newRowDelta().addRows(FILE_B_1).addDeletes(FILE_C_1).commit();
         mockedNativeTableC.refresh();
 
+        scanNode.setSnapshotId(Optional.of(mockedNativeTableC.currentSnapshot().snapshotId()));
         scanNode.setupScanRangeLocations(descTable);
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
@@ -97,7 +99,7 @@ public class IcebergScanNodeTest extends TableTestBase {
     public void testEqualityDelete() throws UserException {
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableA, Maps.newHashMap());
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -108,8 +110,9 @@ public class IcebergScanNodeTest extends TableTestBase {
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         // FILE_A_DELETES = positionalDelete / FILE_A2_DELETES = equalityDelete
         mockedNativeTableA.newRowDelta().addDeletes(FILE_A_DELETES).addDeletes(FILE_A2_DELETES).commit();
-        mockedNativeTableC.refresh();
+        mockedNativeTableA.refresh();
 
+        scanNode.setSnapshotId(Optional.of(mockedNativeTableA.currentSnapshot().snapshotId()));
         scanNode.setupScanRangeLocations(descTable);
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
@@ -120,7 +123,7 @@ public class IcebergScanNodeTest extends TableTestBase {
         Assert.assertEquals("/path/to/data-a.parquet", hdfsScanRange.full_path);
         Assert.assertEquals(2, hdfsScanRange.delete_files.size());
         TIcebergDeleteFile tDeleteFile = hdfsScanRange.delete_files.get(0);
-        Assert.assertEquals("/path/to/data-a2-deletes.parquet", tDeleteFile.full_path);
+        Assert.assertEquals("/path/to/data-a2-deletes.orc", tDeleteFile.full_path);
         Assert.assertEquals(TIcebergFileContent.EQUALITY_DELETES, tDeleteFile.file_content);
         Assert.assertEquals(2147473647, hdfsScanRange.delete_column_slot_ids.get(0).intValue());
         Assert.assertEquals(1, hdfsScanRange.delete_column_slot_ids.size());

@@ -244,7 +244,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable);
-        this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec);
+        this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec, false);
         this.epochCoordinator = new TxnBasedEpochCoordinator(this);
     }
 

@@ -71,11 +71,12 @@ public:
     Status remove(ColumnFamilyIndex column_family_index, const std::string& key);
 
     Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                   std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec = -1);
+                   std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                   int64_t timeout_sec = -1);
 
     Status iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
                          const std::string& upper_bound,
-                         std::function<bool(std::string_view, std::string_view)> const& func);
+                         std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func);
 
     const std::string& root_path() const { return _root_path; }
 
@@ -92,6 +93,13 @@ public:
     std::string get_root_path();
 
     ColumnFamilyHandle* handle(ColumnFamilyIndex column_family_index) { return _handles[column_family_index]; }
+
+    // Becayse `DeleteRange` provided by rocksdb will generate too many tomestones and it will slow down rocksdb.
+    // So we provide an opt version `DeleteRange` named `OptDeleteRange` here, it will :
+    // 1. scan and get keys to be deleted first.
+    // 2. and then generate write batch with batch delete.
+    Status OptDeleteRange(ColumnFamilyIndex column_family_index, const std::string& begin_key,
+                          const std::string& end_key, WriteBatch* batch);
 
 private:
     std::string _root_path;

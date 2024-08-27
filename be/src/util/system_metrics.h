@@ -30,6 +30,8 @@ class NetMetrics;
 class FileDescriptorMetrics;
 class SnmpMetrics;
 class QueryCacheMetrics;
+class VectorIndexCacheMetrics;
+class RuntimeFilterMetrics;
 
 class MemoryMetrics {
 public:
@@ -61,6 +63,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
@@ -133,6 +136,14 @@ private:
 
     void _update_query_cache_metrics();
 
+    void _install_runtime_filter_metrics(MetricRegistry* registry);
+
+    void _update_runtime_filter_metrics();
+
+    void _install_vector_index_cache_metrics(MetricRegistry* registry);
+
+    void _update_vector_index_cache_metrics();
+
 private:
     static const char* const _s_hook_name;
 
@@ -142,6 +153,8 @@ private:
     std::map<std::string, NetMetrics*> _net_metrics;
     std::unique_ptr<FileDescriptorMetrics> _fd_metrics;
     std::unique_ptr<QueryCacheMetrics> _query_cache_metrics;
+    std::unique_ptr<VectorIndexCacheMetrics> _vector_index_cache_metrics;
+    std::map<std::string, RuntimeFilterMetrics*> _runtime_filter_metrics;
     int _proc_net_dev_version = 0;
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
 

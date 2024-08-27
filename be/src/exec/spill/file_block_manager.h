@@ -34,22 +34,20 @@ using FileBlockContainerPtr = std::shared_ptr<FileBlockContainer>;
 class FileBlockManager : public BlockManager {
 public:
     FileBlockManager(const TUniqueId& query_id, DirManager* dir_manager);
-    ~FileBlockManager() override;
+    ~FileBlockManager() override = default;
 
     Status open() override;
     void close() override;
     StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
-    Status release_block(const BlockPtr& block) override;
+    Status release_block(BlockPtr block) override;
 
 private:
-    // @TODO(silverbullet233): some information is needed to uniquely identify each BE
-    StatusOr<FileBlockContainerPtr> get_or_create_container(DirPtr dir, TUniqueId fragment_instance_id,
+    StatusOr<FileBlockContainerPtr> get_or_create_container(const DirPtr& dir, const TUniqueId& fragment_instance_id,
                                                             int32_t plan_node_id, const std::string& plan_node_name);
 
     TUniqueId _query_id;
     std::atomic<uint64_t> _next_container_id = 0;
 
-    std::vector<FileBlockContainerPtr> _containers;
     DirManager* _dir_mgr = nullptr;
 };
 

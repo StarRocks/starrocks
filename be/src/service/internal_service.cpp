@@ -381,6 +381,24 @@ void PInternalServiceImplBase<T>::tablet_writer_add_chunks(google::protobuf::Rpc
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
+                                                                   const PHttpRequest* request,
+                                                                   PTabletWriterAddBatchResult* response,
+                                                                   google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller,
+                                                                    const PHttpRequest* request,
+                                                                    PTabletWriterAddBatchResult* response,
+                                                                    google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                                             const PTabletWriterAddSegmentRequest* request,
                                                             PTabletWriterAddSegmentResult* response,
@@ -405,6 +423,16 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+    if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
+        return Status::InvalidArgument("batch_size is not set");
+    }
+    auto batch_size = t_request.query_options.batch_size;
+    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+        return Status::InvalidArgument(
+                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                            MAX_CHUNK_SIZE, batch_size));
+    }
+
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
@@ -451,6 +479,8 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
         return "InternalError";
     case TIMEOUT:
         return "TimeOut";
+    case QUERY_FINISHED:
+        return "QueryFinished";
     default:
         return "UnknownReason";
     }
@@ -481,7 +511,13 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     Status st;
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
-    LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
+    if (cancel_query_ctx) {
+        DCHECK(request->has_query_id());
+        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+    } else {
+        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
         TUniqueId query_id;
@@ -493,19 +529,27 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         query_id.__set_hi(request->query_id().hi());
         query_id.__set_lo(request->query_id().lo());
-        auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
+
+        auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
         if (!query_ctx) {
             LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
                                              print_id(query_id), print_id(tid));
             st.to_protobuf(result->mutable_status());
             return;
         }
-        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
-        if (!fragment_ctx) {
-            LOG(INFO) << strings::Substitute("FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1",
-                                             print_id(query_id), print_id(tid));
+        if (cancel_query_ctx) {
+            // cancel query_id
+            query_ctx->cancel(Status::Cancelled(reason_string));
         } else {
-            fragment_ctx->cancel(Status::Cancelled(reason_string));
+            // cancel fragment
+            auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
+            if (!fragment_ctx) {
+                LOG(INFO) << strings::Substitute(
+                        "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
+                        print_id(tid));
+            } else {
+                fragment_ctx->cancel(Status::Cancelled(reason_string));
+            }
         }
     } else {
         if (request->has_cancel_reason()) {
@@ -614,6 +658,11 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                                                  google::protobuf::Closure* done, int timeout_ms) {
     ClosureGuard closure_guard(done);
 
+    // If we use timeout specified by user directly, there will be an issue that librakafka connect to kafka broker
+    // time out, but the BE did not have the opportunity to send the error message back to the FE , and the timer on
+    // the FE side has already timed out. This mean that the FE cannot retrieve the event message from librdkafka.
+    // Therefore, here we are reducing the actual timeout threshold of librdkafka.
+    timeout_ms = timeout_ms * 0.8;
     if (timeout_ms <= 0) {
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
@@ -1153,14 +1202,14 @@ void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcControlle
 }
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest*,
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                                         PExecShortCircuitResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_requests.get()));
     }
     ShortCircuitExecutor executor{_exec_env};
     RETURN_IF_ERROR(executor.prepare(*t_requests));

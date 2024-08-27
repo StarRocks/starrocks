@@ -105,6 +105,7 @@ OutPut Exchange Id: 25
 |
 20:SORT
 |  order by: [1, INT, false] ASC
+|  analytic partition by: [1: P_PARTKEY, INT, false]
 |  offset: 0
 |  cardinality: 80000
 |  column statistics:
