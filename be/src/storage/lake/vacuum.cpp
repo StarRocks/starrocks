@@ -14,6 +14,7 @@
 
 #include "storage/lake/vacuum.h"
 
+#include <bits/stdc++.h>
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
@@ -258,6 +259,31 @@ void run_clear_task_async(std::function<void()> task) {
 
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
                                     AsyncFileDeleter* deleter, int64_t* garbage_data_size) {
+    // check if file exist or not, if not exist, skip remove it again
+    // use a simple method, pickup one file randomly and test exist or not
+    std::vector<std::string_view> seg_files;
+    for (const auto& rowset : metadata.compaction_inputs()) {
+        for (const auto& segment : rowset.segments()) {
+            seg_files.push_back(segment);
+        }
+    }
+    if (seg_files.size() >= 1) {
+        std::vector<std::string_view> out;
+        std::sample(seg_files.begin(), seg_files.end(), std::back_inserter(out), 1,
+                    std::mt19937{std::random_device{}()});
+
+        assert(out.size() == 1);
+        auto seg_file = out.front();
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(base_dir));
+        auto st = fs->path_exists(join_path(base_dir, seg_file));
+        if (st.is_not_found()) {
+            return Status::OK();
+        }
+        if (!st.ok()) {
+            return st;
+        }
+    }
+
     for (const auto& rowset : metadata.compaction_inputs()) {
         for (const auto& segment : rowset.segments()) {
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
@@ -474,6 +500,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
     }
+
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);
     return Status::OK();

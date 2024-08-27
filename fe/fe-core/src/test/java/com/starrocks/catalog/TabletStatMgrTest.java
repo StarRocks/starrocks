@@ -254,6 +254,8 @@ public class TabletStatMgrTest {
         long tablet2NumRows = 21L;
         long tablet1DataSize = 30L;
         long tablet2DataSize = 31L;
+        long tablet1StorageSize = 50L;
+        long tablet2StorageSize = 51L;
 
         new Expectations() {
             {
@@ -290,11 +292,13 @@ public class TabletStatMgrTest {
                                 stat1.tabletId = tablet1Id;
                                 stat1.numRows = tablet1NumRows;
                                 stat1.dataSize = tablet1DataSize;
+                                stat1.storageSize = tablet1StorageSize;
                                 stats.add(stat1);
                                 TabletStat stat2 = new TabletStat();
                                 stat2.tabletId = tablet2Id;
                                 stat2.numRows = tablet2NumRows;
                                 stat2.dataSize = tablet2DataSize;
+                                stat2.storageSize = tablet2StorageSize;
                                 stats.add(stat2);
 
                                 TabletStatResponse response = new TabletStatResponse();
