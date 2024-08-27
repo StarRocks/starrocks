@@ -157,6 +157,13 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         AuditLog.getBigQueryAudit().log(sb.toString());
                     }
                 }
+                if (Config.enable_qe_slow_log && queryTime > Config.qe_slow_log_ms) {
+                    if (Config.audit_log_json_format) {
+                        AuditLog.getSlowAudit().log(objectMapper.writeValueAsString(logMap));
+                    } else {
+                        AuditLog.getSlowAudit().log(sb.toString());
+                    }
+                }
                 if (Config.audit_log_json_format) {
                     AuditLog.getQueryAudit().log(objectMapper.writeValueAsString(logMap));
                 } else {
