@@ -309,6 +309,8 @@ public class MvRewritePreprocessor {
                 sessionVariable.isEnableSyncMaterializedViewRewrite());
         logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
                 sessionVariable.isEnableViewBasedMvRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_text_match_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewTextMatchRewrite());
 
         // limit
         logMVPrepare(connectContext, "---------------------------------");

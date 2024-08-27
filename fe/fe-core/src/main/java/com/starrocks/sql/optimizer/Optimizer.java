@@ -18,7 +18,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.profile.Timer;
@@ -100,6 +99,7 @@ import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.PrepareCollectMetaTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
@@ -108,7 +108,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -156,7 +155,7 @@ public class Optimizer {
 
     public OptExpression optimize(ConnectContext connectContext,
                                   OptExpression logicOperatorTree,
-                                  Map<Operator, ParseNode> optToAstMap,
+                                  MVTransformerContext mvTransformerContext,
                                   StatementBase stmt,
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
@@ -167,14 +166,14 @@ public class Optimizer {
 
             // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
             try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
-                logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
+                logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, mvTransformerContext)
                         .transform(logicOperatorTree, context).get(0);
             }
 
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
-            logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
+            logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, mvTransformerContext)
                     .transform(logicOperatorTree, context).get(0);
 
             OptExpression result = optimizerConfig.isRuleBased() ?
