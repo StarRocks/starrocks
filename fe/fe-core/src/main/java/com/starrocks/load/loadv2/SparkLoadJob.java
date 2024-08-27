@@ -193,7 +193,7 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
-    protected void setJobProperties(Map<String, String> properties) throws DdlException {
+    public void setJobProperties(Map<String, String> properties) throws DdlException {
         super.setJobProperties(properties);
 
         if (properties != null && properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {

@@ -1,0 +1,103 @@
+-- name: test_insert_properties
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/invalid_int.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 12. OK num: 1(upload 1 files).
+-- !result
+
+create table t1 (k1 int);
+
+insert into t1 (k1) properties ("strict_mode" = "false", "max_filter_ratio" = "0")
+select $2 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+-- result:
+-- !result
+select * from t1;
+-- result:
+None
+2
+-- !result
+truncate table t1;
+-- result:
+-- !result
+
+insert into t1 (k1) properties ("strict_mode" = "true", "max_filter_ratio" = "0")
+select $2 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+-- result:
+[REGEX].*Insert has filtered data.*
+-- !result
+select * from t1;
+-- result:
+-- !result
+truncate table t1;
+-- result:
+-- !result
+
+insert into t1 (k1) properties ("strict_mode" = "true", "max_filter_ratio" = "0.5")
+select $2 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+-- result:
+-- !result
+select * from t1;
+-- result:
+2
+-- !result
+truncate table t1;
+-- result:
+-- !result
+
+insert /*+ SET_VAR(enable_insert_strict = false) */ into t1 (k1) properties ("max_filter_ratio" = "0")
+select $2 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+-- result:
+-- !result
+select * from t1;
+-- result:
+None
+2
+-- !result
+truncate table t1;
+-- result:
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

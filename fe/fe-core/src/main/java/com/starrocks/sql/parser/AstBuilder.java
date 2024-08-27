@@ -1817,7 +1817,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // process properties
             if (desc.properties() != null) {
                 if (MapUtils.isNotEmpty(properties)) {
-                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PROPERTY"), clausePos);
+                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PROPERTY", "building materialized view"),
+                            clausePos);
                 }
                 List<Property> propertyList = visit(desc.properties().property(), Property.class);
                 for (Property property : propertyList) {
@@ -1827,7 +1828,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // process refresh
             if (desc.refreshSchemeDesc() != null) {
                 if (refreshSchemeDesc != null) {
-                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("REFRESH"), clausePos);
+                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("REFRESH", "building materialized view"),
+                            clausePos);
                 }
                 refreshSchemeDesc = ((RefreshSchemeClause) visit(desc.refreshSchemeDesc()));
             }
@@ -1835,7 +1837,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // process partition by
             if (desc.primaryExpression() != null) {
                 if (expressionPartitionDesc != null) {
-                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION"), clausePos);
+                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION", "building materialized view"),
+                            clausePos);
                 }
                 Expr expr = (Expr) visit(desc.primaryExpression());
                 if (expr instanceof SlotRef) {
@@ -1853,7 +1856,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // process distribution
             if (desc.distributionDesc() != null) {
                 if (distributionDesc != null) {
-                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("DISTRIBUTION"), clausePos);
+                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("DISTRIBUTION", "building materialized view"),
+                            clausePos);
                 }
                 distributionDesc = (DistributionDesc) visit(desc.distributionDesc());
             }
@@ -2074,10 +2078,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 targetBranch = ((Identifier) visit(context.writeBranch())).getValue();
             }
 
-            InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
-                    context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
-                    getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
-                    createPos(context));
+            String label = null;
+            List<String> columnAliases = null;
+            for (StarRocksParser.InsertLabelOrColumnAliasesContext desc : ListUtils.emptyIfNull(
+                    context.insertLabelOrColumnAliases())) {
+                NodePosition clausePos = createPos(desc);
+                if (desc.label != null) {
+                    if (label != null) {
+                        throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("WITH LABEL", "insert"), clausePos);
+                    }
+                    label = ((Identifier) visit(desc.label)).getValue();
+                }
+                if (desc.columnAliases() != null) {
+                    if (columnAliases != null) {
+                        throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("COLUMN LIST", "insert"), clausePos);
+                    }
+                    columnAliases = getColumnNames(desc.columnAliases());
+                }
+            }
+
+            InsertStmt stmt = new InsertStmt(targetTableName, partitionNames, label, columnAliases, queryStatement,
+                    context.OVERWRITE() != null, getProperties(context.properties()), createPos(context));
             stmt.setHintNodes(hintMap.get(context));
             stmt.setTargetBranch(targetBranch);
             return stmt;
