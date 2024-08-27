@@ -182,6 +182,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
                 }
                 coord->reportExecStatus(res, params);
             } else {
+                (void)coord.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
@@ -296,6 +297,7 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
                 }
                 coord->mvReport(res, params);
             } else {
+                (void)coord.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
