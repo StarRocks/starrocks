@@ -1499,4 +1499,252 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, widthBucketTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        auto tc2 = DoubleColumn::create();
+        auto tc3 = DoubleColumn::create();
+        auto tc4 = Int64Column::create();
+
+        double inputs[] = {5.35,      0,         199999.99, 290000.00, 320000.00,
+                           399999.99, 400000.00, 470000.00, 510000.00, 610000.00};
+        double mins[] = {0.024, 1, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000};
+        double maxs[] = {10.06, 2, 600000, 600000, 600000, 600000, 600000, 600000, 600000, 600000};
+        int64_t buckets[] = {5, 3, 4, 4, 4, 4, 4, 4, 4, 4};
+
+        int64_t results[] = {3, 0, 0, 1, 2, 2, 3, 3, 4, 5};
+
+        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+            tc1->append(inputs[i]);
+            tc2->append(mins[i]);
+            tc3->append(maxs[i]);
+            tc4->append(buckets[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+        columns.emplace_back(tc3);
+        columns.emplace_back(tc4);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::width_bucket<TYPE_DOUBLE>(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+
+        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+            ASSERT_EQ(results[i], v->get_data()[i]);
+        }
+    }
+    {
+        Columns columns;
+
+        auto tc1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto tc2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto tc3 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto tc4 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+
+        int32_t inputs[] = {199999, 290000, 320000, 399999, 510000};
+        int32_t mins[] = {200000, 200000, 200000, 200000, 200000};
+        int64_t buckets[] = {4, 4, 4, 4, 0};
+        int32_t maxs[] = {600000, 600000, 600000, 600000, 600000};
+
+        int64_t results[] = {0, 1, 2, 2, 0};
+
+        tc1->append_datum(inputs[0]);
+        tc2->append_datum(mins[0]);
+        tc3->append_datum(maxs[0]);
+        tc4->append_datum({});
+
+        tc1->append_datum({});
+        tc2->append_datum(mins[1]);
+        tc3->append_datum(maxs[1]);
+        tc4->append_datum(buckets[1]);
+
+        tc1->append_datum(inputs[2]);
+        tc2->append_datum({});
+        tc3->append_datum(maxs[2]);
+        tc4->append_datum(buckets[2]);
+
+        tc1->append_datum(inputs[3]);
+        tc2->append_datum(mins[3]);
+        tc3->append_datum({});
+        tc4->append_datum(buckets[3]);
+
+        tc1->append_datum(inputs[4]);
+        tc2->append_datum(mins[4]);
+        tc3->append_datum(maxs[4]);
+        tc4->append_datum(buckets[4]);
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+        columns.emplace_back(tc3);
+        columns.emplace_back(tc4);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::width_bucket<TYPE_INT>(ctx.get(), columns).value();
+
+        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+            ASSERT_TRUE(result->get(i).is_null());
+        }
+    }
+    {
+        Columns columns;
+
+        auto tc1 = Int32Column::create();
+        auto tc2 = Int32Column::create();
+        auto tc3 = Int32Column::create();
+        auto tc4 = Int64Column::create();
+
+        int32_t inputs[] = {199999, 290000, 320000, 399999, 400000, 470000, 510000, 610000};
+        int32_t mins[] = {200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000};
+        int64_t buckets[] = {4, 4, 4, 4, 4, 4, 4, 4};
+        int32_t maxs[] = {600000, 600000, 600000, 600000, 600000, 600000, 600000, 600000};
+
+        int64_t results[] = {0, 1, 2, 2, 3, 3, 4, 5};
+
+        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+            tc1->append(inputs[i]);
+            tc2->append(mins[i]);
+            tc3->append(maxs[i]);
+            tc4->append(buckets[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+        columns.emplace_back(tc3);
+        columns.emplace_back(tc4);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::width_bucket<TYPE_INT>(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+
+        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+            ASSERT_EQ(results[i], v->get_data()[i]);
+        }
+    }
+    {
+        Columns columns;
+
+        auto tc1 = Int32Column::create();
+        auto tc2 = Int32Column::create();
+        auto tc3 = Int32Column::create();
+        auto tc4 = Int64Column::create();
+
+        int32_t inputs[] = {199999, 290000, 320000, 399999, 400000, 470000, 510000, 610000};
+        int32_t mins[] = {600000, 600000, 600000, 600000, 600000, 600000, 600000, 600000};
+        int64_t buckets[] = {4, 4, 4, 4, 4, 4, 4, 4};
+        int32_t maxs[] = {200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000};
+
+        int64_t results[] = {5, 4, 3, 3, 3, 2, 1, 0};
+
+        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+            tc1->append(inputs[i]);
+            tc2->append(mins[i]);
+            tc3->append(maxs[i]);
+            tc4->append(buckets[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+        columns.emplace_back(tc3);
+        columns.emplace_back(tc4);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::width_bucket<TYPE_INT>(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+
+        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+            ASSERT_EQ(results[i], v->get_data()[i]);
+        }
+    }
+}
+TEST_F(VecMathFunctionsTest, widthBucketDecimalTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DecimalV3Column<int128_t>::create(10, 3);
+        auto tc2 = DecimalV3Column<int128_t>::create(10, 3);
+        auto tc3 = DecimalV3Column<int128_t>::create(10, 3);
+        auto tc4 = Int64Column::create();
+        std::string inputs[] = {"5.35",      "0",         "199999.99", "290000.00", "320000.00",
+                                "399999.99", "400000.00", "470000.00", "510000.00", "610000.00"};
+        std::string mins[] = {"0.024",  "1",      "200000", "200000", "200000",
+                              "200000", "200000", "200000", "200000", "200000"};
+        std::string maxs[] = {"10.06",  "2",      "600000", "600000", "600000",
+                              "600000", "600000", "600000", "600000", "600000"};
+        int64_t buckets[] = {5, 3, 4, 4, 4, 4, 4, 4, 4, 4};
+
+        int64_t results[] = {3, 0, 0, 1, 2, 2, 3, 3, 4, 5};
+
+        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+            int128_t t1;
+            int128_t t2;
+            int128_t t3;
+            DecimalV3Cast::from_string<int128_t>(&t1, 10, 3, inputs[i].c_str(), inputs[i].length());
+            DecimalV3Cast::from_string<int128_t>(&t2, 10, 3, mins[i].c_str(), mins[i].length());
+            DecimalV3Cast::from_string<int128_t>(&t3, 10, 3, maxs[i].c_str(), maxs[i].length());
+            tc1->append(t1);
+            tc2->append(t2);
+            tc3->append(t3);
+            tc4->append(buckets[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+        columns.emplace_back(tc3);
+        columns.emplace_back(tc4);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::width_bucket<TYPE_DECIMAL128>(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+            ASSERT_EQ(results[i], v->get_data()[i]);
+        }
+    }
+    {
+        Columns columns;
+
+        auto tc1 = DecimalColumn::create();
+        auto tc2 = DecimalColumn::create();
+        auto tc3 = DecimalColumn::create();
+        auto tc4 = Int64Column::create();
+
+        std::string inputs[] = {"5.35",      "0",         "199999.99", "290000.00", "320000.00",
+                                "399999.99", "400000.00", "470000.00", "510000.00", "610000.00"};
+        std::string mins[] = {"0.024",  "1",      "200000", "200000", "200000",
+                              "200000", "200000", "200000", "200000", "200000"};
+        std::string maxs[] = {"10.06",  "2",      "600000", "600000", "600000",
+                              "600000", "600000", "600000", "600000", "600000"};
+        int64_t buckets[] = {5, 3, 4, 4, 4, 4, 4, 4, 4, 4};
+
+        int64_t results[] = {3, 0, 0, 1, 2, 2, 3, 3, 4, 5};
+
+        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+            tc1->append(DecimalV2Value(inputs[i]));
+            tc2->append(DecimalV2Value(mins[i]));
+            tc3->append(DecimalV2Value(maxs[i]));
+            tc4->append(buckets[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+        columns.emplace_back(tc3);
+        columns.emplace_back(tc4);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::width_bucket<TYPE_DECIMALV2>(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+
+        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+            ASSERT_EQ(results[i], v->get_data()[i]);
+        }
+    }
+}
+
 } // namespace starrocks

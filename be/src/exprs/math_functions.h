@@ -500,6 +500,67 @@ public:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
+    /**
+    * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_FLOAT,
+    *           TYPE_DOUBLE, TYPE_DECIMALV2, TYPE_DECIMALV3
+    * @param: [TypeColumn, TypeColumn, TypeColumn, BigIntColumn]
+    * @return: BigIntColumn
+    */
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> width_bucket(FunctionContext* context, const Columns& columns) {
+        auto size = columns[0]->size();
+        ColumnBuilder<TYPE_BIGINT> result(size);
+        ColumnViewer<Type> input_col(columns[0]);
+        ColumnViewer<Type> min_col(columns[1]);
+        ColumnViewer<Type> max_col(columns[2]);
+        ColumnViewer<TYPE_BIGINT> bucket_col(columns[3]);
+
+        for (int row = 0; row < size; row++) {
+            if (input_col.is_null(row) || min_col.is_null(row) || max_col.is_null(row) || bucket_col.is_null(row) ||
+                bucket_col.value(row) <= 0) {
+                result.append_null();
+                continue;
+            }
+            auto min_value = min_col.value(row);
+            auto max_value = max_col.value(row);
+            if (min_value == max_value) {
+                return Status::InvalidArgument("min_value should not equal to max_value");
+            }
+            auto input_value = input_col.value(row);
+            auto bucket_num = bucket_col.value(row);
+
+            if (min_value < max_value) {
+                auto lower = min_value;
+                auto upper = max_value;
+                if (input_value < lower) {
+                    result.append(0);
+                } else if (input_value >= upper) {
+                    result.append(bucket_num + 1);
+                } else {
+                    auto range_size = static_cast<double>(upper - lower);
+                    auto dist_from_min = static_cast<double>(input_value - lower);
+                    int64_t ret = static_cast<int64_t>(dist_from_min / (range_size / bucket_num));
+                    result.append(ret + 1);
+                }
+            } else {
+                auto lower = max_value;
+                auto upper = min_value;
+                if (input_value > upper) {
+                    result.append(0);
+                } else if (input_value <= lower) {
+                    result.append(bucket_num + 1);
+                } else {
+                    auto range_size = static_cast<double>(upper - lower);
+                    auto dist_from_min = static_cast<double>(upper - input_value);
+                    int64_t ret = static_cast<int64_t>(dist_from_min / (range_size / bucket_num));
+                    result.append(ret + 1);
+                }
+            }
+        }
+
+        return result.build(ColumnHelper::is_all_const(columns));
+    }
+
     template <DecimalRoundRule rule>
     static StatusOr<ColumnPtr> decimal_round(FunctionContext* context, const Columns& columns);
 
