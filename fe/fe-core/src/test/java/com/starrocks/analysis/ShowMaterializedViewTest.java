@@ -115,9 +115,11 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.TABLE_ROWS AS rows, " +
                         "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text, " +
                         "information_schema.materialized_views.extra_message AS extra_message, " +
-                        "information_schema.materialized_views.query_rewrite_status AS query_rewrite_status " +
+                        "information_schema.materialized_views.query_rewrite_status AS query_rewrite_status, " +
+                        "information_schema.materialized_views.creator AS creator " +
                         "FROM information_schema.materialized_views " +
-                        "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND (information_schema.materialized_views.TABLE_NAME = 'mv1')",
+                        "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') " +
+                        "AND (information_schema.materialized_views.TABLE_NAME = 'mv1')",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));
         checkShowMaterializedViewsStmt(stmt);
     }
