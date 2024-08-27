@@ -1,5 +1,4 @@
 -- name: test_jvm_udf
-set enable_group_execution = true;
 -- result:
 -- !result
 CREATE AGGREGATE FUNCTION sumbigint(bigint)
