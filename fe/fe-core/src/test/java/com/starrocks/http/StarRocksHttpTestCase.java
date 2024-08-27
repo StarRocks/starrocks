@@ -284,14 +284,6 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().getDb(db.getId());
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getLocalMetastore().getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
@@ -320,13 +312,13 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(localMetastore) {
             {
-                localMetastore.listDbNames();
+                localMetastore.getDb("testDb");
                 minTimes = 0;
-                result = Lists.newArrayList("testDb");
+                result = db;
 
-                localMetastore.getFullNameToDb();
+                localMetastore.getDb(testDbId);
                 minTimes = 0;
-                result = nameToDb;
+                result = db;
             }
         };
 
@@ -352,25 +344,9 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().getDb(db.getId());
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getLocalMetastore().getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
-
-                globalStateMgr.getLocalMetastore().getDb("emptyDb");
-                minTimes = 0;
-                result = null;
-
-                globalStateMgr.getLocalMetastore().getDb(anyString);
-                minTimes = 0;
-                result = new Database();
 
                 globalStateMgr.getLoadInstance();
                 minTimes = 0;
@@ -383,6 +359,10 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
                 result = metadataMgr;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
             }
         };
 
@@ -401,7 +381,18 @@ public abstract class StarRocksHttpTestCase {
                 result = newEmptyTable;
             }
         };
-        ;
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                localMetastore.getDb(testDbId);
+                minTimes = 0;
+                result = db;
+            }
+        };
 
         return globalStateMgr;
     }

@@ -444,7 +444,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             ")\n" +
                             "as select k1, k2 from tbl6;",
                             () -> {
-                                Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                                 MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                                 executeInsertSql(connectContext,
                                         "insert into tbl6 partition(p1) values('2022-01-02',2,10);");

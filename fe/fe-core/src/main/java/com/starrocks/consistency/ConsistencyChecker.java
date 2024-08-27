@@ -301,7 +301,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                 long startTime = System.currentTimeMillis();
                 try {
                     // sort tables
-                    List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+                    List<Table> tables = globalStateMgr.getLocalMetastore().getTables(db.getId());
                     Queue<MetaObject> tableQueue = new PriorityQueue<>(Math.max(tables.size(), 1), COMPARATOR);
                     for (Table table : tables) {
                         // Only check the OLAP table who is in NORMAL state.

@@ -58,6 +58,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.BackupRestoreAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BackupStmt;
@@ -119,8 +120,19 @@ public class BackupHandlerTest {
 
         MetricRepo.init();
 
+        try {
+            db = CatalogMocker.mockDb();
+        } catch (AnalysisException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getBrokerMgr();
                 minTimes = 0;
                 result = brokerMgr;
@@ -133,28 +145,9 @@ public class BackupHandlerTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
-            }
-        };
-
-        try {
-            db = CatalogMocker.mockDb();
-        } catch (AnalysisException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyString);
-                minTimes = 0;
-                result = db;
             }
         };
     }
@@ -176,7 +169,7 @@ public class BackupHandlerTest {
     @Test
     public void testInit(@Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
         setUpMocker(globalStateMgr, brokerMgr, editLog);
-        handler = new BackupHandler(globalStateMgr);
+        BackupHandler handler = new BackupHandler(globalStateMgr);
         handler.runAfterCatalogReady();
 
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
@@ -204,6 +197,10 @@ public class BackupHandlerTest {
 
                     }
                 };
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
             }
         };
 
@@ -253,8 +250,46 @@ public class BackupHandlerTest {
             }
         };
 
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getBrokerMgr();
+                minTimes = 0;
+                result = brokerMgr;
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = idGen++;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = invertedIndex;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            Database database = CatalogMocker.mockDb();
+
+            @Mock
+            public Database getDb(String dbName) {
+                return database;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return database.getTable(tblName);
+            }
+        };
+
         // add repo
-        handler = new BackupHandler(globalStateMgr);
+        BackupHandler handler = new BackupHandler(globalStateMgr);
         CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
                     Maps.newHashMap());
         try {

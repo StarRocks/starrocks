@@ -126,7 +126,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         Preconditions.checkState(!idToDatabase.containsKey(db.getId()));
 
         // db should be empty. all tables are recycled before
-        Preconditions.checkState(GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).isEmpty());
+        Preconditions.checkState(db.getTables().isEmpty());
 
         // erase db with same name
         eraseDatabaseWithSameName(db.getFullName());

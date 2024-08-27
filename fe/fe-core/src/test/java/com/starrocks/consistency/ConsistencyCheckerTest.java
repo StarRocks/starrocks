@@ -80,6 +80,10 @@ public class ConsistencyCheckerTest {
                 globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
                 minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTables(dbId);
+                result = database.getTables();
+                minTimes = 0;
             }
         };
 

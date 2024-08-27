@@ -82,6 +82,7 @@ import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -338,15 +339,15 @@ public class ShowExecutorTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "testMv");
+                db.getTable("testMv");
                 minTimes = 0;
                 result = mv;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "testTbl");
+                db.getTable("testTbl");
                 minTimes = 0;
                 result = table;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "emptyTable");
+                db.getTable("emptyTable");
                 minTimes = 0;
                 result = table;
 
@@ -366,19 +367,28 @@ public class ShowExecutorTest {
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
         new Expectations(globalStateMgr) {
             {
+                /*
                 globalStateMgr.getLocalMetastore().getDb("testDb");
                 minTimes = 0;
                 result = db;
+
 
                 globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
+                 */
+
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
 
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
@@ -400,6 +410,26 @@ public class ShowExecutorTest {
                             "testTbl");
                 minTimes = 0;
                 result = table;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                if (dbName.equalsIgnoreCase("emptyDb")) {
+                    return null;
+                }
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return db.getTables();
             }
         };
 
@@ -473,6 +503,7 @@ public class ShowExecutorTest {
         OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
         Database db = new Database();
 
+        /*
         new Expectations(db) {
             {
                 db.getTable(anyString);
@@ -484,6 +515,8 @@ public class ShowExecutorTest {
                 result = olapTable;
             }
         };
+
+         */
 
         new MockUp<MetaUtils>() {
             @Mock
@@ -497,6 +530,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getLocalMetastore().getDb(0);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = olapTable;
             }
         };
 

@@ -22,6 +22,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -45,6 +46,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -1663,6 +1665,18 @@ public class AuthorizationMgrTest {
 
     @Test
     public void testPartialRevoke() throws Exception {
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+            }
+        };
+
         String sql = "grant select on table db.tbl0 to test_user";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
 

@@ -108,21 +108,17 @@ public class BrokerLoadJobTest {
                 loadStmt.getLabel();
                 minTimes = 0;
                 result = labelName;
+
                 labelName.getDbName();
                 minTimes = 0;
                 result = databaseName;
-                globalStateMgr.getLocalMetastore().getDb(databaseName);
-                minTimes = 0;
-                result = database;
+
                 loadStmt.getDataDescriptions();
                 minTimes = 0;
                 result = dataDescriptionList;
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
-                minTimes = 0;
-                result = null;
             }
         };
 

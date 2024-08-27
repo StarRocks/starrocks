@@ -140,6 +140,14 @@ public class SystemInfoServiceTest {
             }
         };
 
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb(anyLong);
+                minTimes = 0;
+                result = db;
+            }
+        };
+
         new Expectations(nodeMgr) {
             {
                 systemInfoService = new SystemInfoService();

@@ -365,7 +365,8 @@ public class NativeAccessController implements AccessController {
         if (dbName == null) {
             databaseId = PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID;
         } else {
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             if (database == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }

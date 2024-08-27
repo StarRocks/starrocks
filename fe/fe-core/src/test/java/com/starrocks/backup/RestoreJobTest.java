@@ -61,6 +61,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -138,7 +139,7 @@ public class RestoreJobTest {
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
-                new BlobStorage("broker", Maps.newHashMap()));
+            new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
 
@@ -152,16 +153,15 @@ public class RestoreJobTest {
     }
 
     public void testResetPartitionForRestore() {
-        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), CatalogMocker.TEST_TBL4_ID);
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         OlapTable localTbl = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
-                    expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
-                    expectedRestoreTbl.getDefaultDistributionInfo());
+                expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
+                expectedRestoreTbl.getDefaultDistributionInfo());
 
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                    jobInfo, false, 3, 100000,
-                    globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
 
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
     }
@@ -251,8 +251,7 @@ public class RestoreJobTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), CatalogMocker.TEST_TBL4_ID);
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL4_ID;
         tblInfo.name = CatalogMocker.TEST_TBL4_NAME;
@@ -289,12 +288,29 @@ public class RestoreJobTest {
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
 
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                    jobInfo, false, 3, 100000,
-                    globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         // pending
         job.run();
@@ -326,7 +342,7 @@ public class RestoreJobTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                        task.getSignature(), taskStatus);
+                    task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
@@ -426,8 +442,7 @@ public class RestoreJobTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), CatalogMocker.TEST_TBL2_ID);
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL2_ID;
         tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
@@ -457,12 +472,29 @@ public class RestoreJobTest {
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
 
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                    jobInfo, false, 3, 100000,
-                    globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         // pending
         job.run();
@@ -494,7 +526,7 @@ public class RestoreJobTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                        task.getSignature(), taskStatus);
+                    task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
@@ -518,8 +550,7 @@ public class RestoreJobTest {
 
         Locker locker = new Locker();
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
+        OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
@@ -532,8 +563,7 @@ public class RestoreJobTest {
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
-        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), CatalogMocker.TEST_TBL4_ID);
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 
@@ -541,7 +571,7 @@ public class RestoreJobTest {
             {
                 try {
                     GlobalStateMgr.getCurrentState().getColocateTableIndex()
-                                .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
+                            .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
                 } catch (Exception e) {
                 }
                 result = true;

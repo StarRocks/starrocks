@@ -44,6 +44,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
@@ -163,19 +164,27 @@ public class RestoreJobMaterializedViewTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(UnitTestUtil.DB_NAME, MATERIALIZED_VIEW_NAME);
+                minTimes = 0;
+                result = db.getTable(MATERIALIZED_VIEW_NAME);
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                minTimes = 0;
-                result = systemInfoService;
+                //GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                //minTimes = 0;
+                //result = systemInfoService;
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getLocalMetastore().mayGetDb(anyLong);
                 minTimes = 0;
                 result = Optional.of(db);
 
@@ -301,8 +310,7 @@ public class RestoreJobMaterializedViewTest {
 
         List<Table> tbls = Lists.newArrayList();
         for (String tbl : restoreTbls) {
-            OlapTable baseTable =
-                        (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tbl);
+            OlapTable baseTable = (OlapTable) db.getTable(tbl);
             BackupTableInfo baseTblInfo = mockBackupTableInfo(baseTable);
             jobInfo.tables.put(baseTblInfo.name, baseTblInfo);
             tbls.add(baseTable);
@@ -439,6 +447,24 @@ public class RestoreJobMaterializedViewTest {
     @Order(1)
     public void testMVRestore_TestOneTable1() {
         RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
         checkJobRun(job);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
@@ -455,6 +481,22 @@ public class RestoreJobMaterializedViewTest {
     public void testMVRestore_TestMVWithBaseTable1() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
         // backup & restore
         checkJobRun(job);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
@@ -465,6 +507,22 @@ public class RestoreJobMaterializedViewTest {
     public void testMVRestore_TestMVWithBaseTable2() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME, TABLE_NAME));
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
         // backup & restore
         checkJobRun(job);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
@@ -494,6 +552,22 @@ public class RestoreJobMaterializedViewTest {
         };
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME));
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
         // backup & restore
         checkJobRun(job1);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);

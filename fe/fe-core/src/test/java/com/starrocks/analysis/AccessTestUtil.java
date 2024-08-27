@@ -137,11 +137,11 @@ public class AccessTestUtil {
 
         new Expectations(db) {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "testTable");
+                db.getTable("testTable");
                 minTimes = 0;
                 result = olapTable;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "emptyTable");
+                db.getTable("emptyTable");
                 minTimes = 0;
                 result = null;
 
@@ -166,6 +166,7 @@ public class AccessTestUtil {
 
         Database db = mockDb("testDb");
 
+        /*
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb("testDb");
@@ -185,6 +186,8 @@ public class AccessTestUtil {
                 result = null;
             }
         };
+
+         */
         return globalStateMgr;
     }
 
@@ -277,11 +280,11 @@ public class AccessTestUtil {
 
         new Expectations(db) {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t");
+                db.getTable("t");
                 minTimes = 0;
                 result = table;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "emptyTable");
+                db.getTable("emptyTable");
                 minTimes = 0;
                 result = null;
 

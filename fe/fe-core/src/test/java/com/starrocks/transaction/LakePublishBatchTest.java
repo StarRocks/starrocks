@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -225,7 +226,7 @@ public class LakePublishBatchTest {
         globalTransactionMgr.commitTransaction(db.getId(), transactionId6, transTablets,
                 Lists.newArrayList(), null);
 
-        new MockUp<GlobalStateMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
             public Database getDb(long dbId) {
                 return null;

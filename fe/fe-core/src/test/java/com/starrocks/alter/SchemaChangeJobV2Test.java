@@ -58,7 +58,7 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -254,18 +254,17 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         properties.put(DynamicPartitionProperty.BUCKETS, "30");
         alterClauses.add(new ModifyTablePropertiesClause(properties));
         Database db = CatalogMocker.mockDb();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), CatalogMocker.TEST_TBL2_ID);
+        OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         olapTable.setUseFastSchemaEvolution(false);
 
-        new MockUp<MetadataMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(String dbName) {
                 return db;
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(String dbName, String tblName) {
                 return olapTable;
             }
         };
@@ -334,17 +333,16 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         alterClauses.add(new ModifyTablePropertiesClause(properties));
 
         Database db = CatalogMocker.mockDb();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), CatalogMocker.TEST_TBL2_ID);
+        OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
 
-        new MockUp<MetadataMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(String dbName) {
                 return db;
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(String dbName, String tblName) {
                 return olapTable;
             }
         };

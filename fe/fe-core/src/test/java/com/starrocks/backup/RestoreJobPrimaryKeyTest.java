@@ -151,10 +151,6 @@ public class RestoreJobPrimaryKeyTest {
 
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = id.getAndIncrement();
@@ -230,8 +226,7 @@ public class RestoreJobPrimaryKeyTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), CatalogMocker.TEST_TBL3_ID);
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL3_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL3_ID;
         tblInfo.name = CatalogMocker.TEST_TBL3_NAME;
@@ -388,8 +383,7 @@ public class RestoreJobPrimaryKeyTest {
         sig2.update("name1".getBytes());
         System.out.println("sig2: " + Math.abs((int) sig2.getValue()));
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
+        OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));

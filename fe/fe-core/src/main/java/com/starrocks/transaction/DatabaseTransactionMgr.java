@@ -419,7 +419,7 @@ public class DatabaseTransactionMgr {
             txnSpan.addEvent("commit_start");
 
             for (Long tableId : transactionState.getTableIdList()) {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
                 if (table == null) {
                     // this can happen when tableId == -1 (tablet being dropping)
                     // or table really not exist.
@@ -551,12 +551,12 @@ public class DatabaseTransactionMgr {
 
         LOG.info("transaction:[{}] successfully rollback", transactionState);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return;
         }
         for (Long tableId : transactionState.getTableIdList()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 continue;
             }
@@ -888,7 +888,7 @@ public class DatabaseTransactionMgr {
             // check each table involved in transaction
             for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
                 long tableId = tableCommitInfo.getTableId();
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
                 // table maybe dropped between commit and publish, ignore it
                 // it will be processed in finishTransaction
                 if (table == null) {
@@ -1231,7 +1231,7 @@ public class DatabaseTransactionMgr {
         while (tableCommitInfoIterator.hasNext()) {
             TableCommitInfo tableCommitInfo = tableCommitInfoIterator.next();
             long tableId = tableCommitInfo.getTableId();
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
             // table maybe dropped between commit and publish, ignore this error
             if (table == null) {
                 transactionState.removeTable(tableId);
@@ -1615,7 +1615,7 @@ public class DatabaseTransactionMgr {
         List<List<String>> infos = new ArrayList<List<String>>();
         readLock();
         try {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 throw new AnalysisException("Database[" + dbId + "] does not exist");
             }
@@ -1658,7 +1658,7 @@ public class DatabaseTransactionMgr {
     private void updateCatalogAfterCommitted(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyCommitLog(transactionState, tableCommitInfo);
         }
@@ -1666,7 +1666,7 @@ public class DatabaseTransactionMgr {
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
             // table may be dropped by force after transaction committed
             // so that it will be a visible edit log after drop table
             if (table == null) {
@@ -1985,7 +1985,7 @@ public class DatabaseTransactionMgr {
             throws TransactionException {
         List<TransactionStateListener> stateListeners = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+            Table table = globalStateMgr.getLocalMetastore().getTable(database.getId(), tableId);
             if (table == null) {
                 // this can happen when tableId == -1 (tablet being dropping)
                 // or table really not exist.

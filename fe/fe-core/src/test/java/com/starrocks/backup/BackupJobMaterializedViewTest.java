@@ -171,6 +171,14 @@ public class BackupJobMaterializedViewTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_mv");
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
+                minTimes = 0;
+                result = null;
             }
         };
 
