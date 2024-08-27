@@ -552,9 +552,11 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+    /*
     if (this->query_ctx()->is_query_expired()) {
-        LOG(WARNING) << "begin to cancel operators for " << to_readable_string();
+        LOG_EVERY_N(WARNING, 10000) << "begin to cancel operators for " << to_readable_string();
     }
+    */
     for (auto& op : _operators) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
                       fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
