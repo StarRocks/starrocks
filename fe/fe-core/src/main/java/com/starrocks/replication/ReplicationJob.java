@@ -1015,6 +1015,14 @@ public class ReplicationJob implements GsonPostProcessable {
         AgentTaskExecutor.submit(batchTask);
     }
 
+    public int getTaskNum() {
+        return taskNum;
+    }
+
+    public int getFinishedTaskNum() {
+        return this.finishedTasks.size();
+    }
+
     private void removeRunningTasks() {
         for (AgentTask task : runningTasks.values()) {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());

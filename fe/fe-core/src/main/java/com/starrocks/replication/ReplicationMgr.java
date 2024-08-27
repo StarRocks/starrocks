@@ -121,6 +121,21 @@ public class ReplicationMgr extends FrontendDaemon {
         return abortedJobs.values();
     }
 
+    public boolean cancelRunningJob(long tableId) {
+        ReplicationJob job = this.runningJobs.get(tableId);
+        if (job == null) {
+            LOG.info("Cannot find the replication job of table {}.", tableId);
+            return false;
+        }
+        job.cancel();
+        if (job.getState().equals(ReplicationJobState.ABORTED)) {
+            this.abortedJobs.put(job.getTableId(), job);
+        }
+        this.runningJobs.remove(job.getTableId(), job);
+        LOG.info("Canceled replication job {}.", job.getJobId());
+        return true;
+    }
+
     public void cancelRunningJobs() {
         List<ReplicationJob> toRemovedJobs = Lists.newArrayList();
         for (ReplicationJob job : runningJobs.values()) {
@@ -130,6 +145,7 @@ public class ReplicationMgr extends FrontendDaemon {
                 toRemovedJobs.add(job);
                 abortedJobs.put(job.getTableId(), job);
             }
+            LOG.info("Canceled replication job {}.", job.getJobId());
         }
 
         for (ReplicationJob job : toRemovedJobs) {

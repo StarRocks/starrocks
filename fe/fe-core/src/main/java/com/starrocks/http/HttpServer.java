@@ -83,6 +83,7 @@ import com.starrocks.http.rest.ProfileAction;
 import com.starrocks.http.rest.QueryDetailAction;
 import com.starrocks.http.rest.QueryDumpAction;
 import com.starrocks.http.rest.QueryProgressAction;
+import com.starrocks.http.rest.ReplicationAction;
 import com.starrocks.http.rest.RowCountAction;
 import com.starrocks.http.rest.SetConfigAction;
 import com.starrocks.http.rest.ShowDataAction;
@@ -236,6 +237,7 @@ public class HttpServer {
         com.starrocks.http.rest.v2.TableSchemaAction.registerAction(controller);
         TablePartitionAction.registerAction(controller);
         TableQueryPlanAction.registerAction(controller);
+        ReplicationAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
 
