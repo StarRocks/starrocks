@@ -2967,6 +2967,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                         } else {
                             storageMediumMap.put(partitionId, dataProperty.getStorageMedium());
                         }
+
+                        // PRIMARY_KEYS table update cooldown time.
+                        if (dataProperty.getStorageMedium() == TStorageMedium.SSD
+                                && dataProperty.getCooldownTimeMs() < currentTimeMs
+                                && olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                            DataProperty ssd = new DataProperty(TStorageMedium.SSD);
+                            LOG.warn("partition[{}-{}-{}] cooldown time from {} to {}",
+                                    dbId, tableId, partitionId, dataProperty.getCooldownTimeMs(), ssd.getCooldownTimeMs());
+                            partitionInfo.setDataProperty(partition.getId(), ssd);
+                        }
                     } // end for partitions
                 } // end for tables
             } finally {
