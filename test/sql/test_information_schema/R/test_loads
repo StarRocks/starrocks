@@ -26,7 +26,7 @@ CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION B
 -- !result
 insert into ss values('2022-01-14', 2);
 -- result:
-[REGEX].*Insert has filtered data in strict mode.*
+[REGEX].*Insert has filtered data.*
 -- !result
 select state,type from information_schema.loads where database_name='db_${uuid1}';
 -- result:
@@ -85,7 +85,7 @@ CREATE TABLE ss (k1 bigint NOT NULL, k2 bigint NOT NULL, k3 bigint NOT NULL) dup
 -- !result
 insert into ss values(null, null, null);
 -- result:
-[REGEX].*Insert has filtered data in strict mode.*
+[REGEX].*Insert has filtered data.*
 -- !result
 [UC]id2=select job_id from information_schema.loads where database_name='db_${uuid2}';
 -- result:

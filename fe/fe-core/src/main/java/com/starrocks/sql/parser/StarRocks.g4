@@ -1055,9 +1055,20 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
+<<<<<<< HEAD
     : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
         (WITH LABEL label=identifier)? columnAliases?
+=======
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName writeBranch? partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
+        insertLabelOrColumnAliases* properties?
+>>>>>>> dbd37ef118 ([Enhancement] Support insert properties (#49978))
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
+    ;
+
+// for compatibility with the case 'LABEL before columnAliases'
+insertLabelOrColumnAliases
+    : WITH LABEL label=identifier
+    | columnAliases
     ;
 
 updateStatement

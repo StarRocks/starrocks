@@ -63,6 +63,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -263,7 +264,46 @@ public class InsertLoadJob extends LoadJob {
         this.estimateScanRow = rows;
     }
 
+    public void updateLoadingStatus(Map<String, String> counters) {
+        this.loadingStatus.getCounters().putAll(counters);
+    }
+
     public void setTransactionId(long txnId) {
         this.transactionId = txnId;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void beforeCommitted(TransactionState txnState) throws TransactionException {
+    }
+
+    @Override
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+        if (!txnOperated) {
+            return;
+        }
+        loadCommittedTimestamp = System.currentTimeMillis();
+    }
+
+    @Override
+    public void replayOnCommitted(TransactionState txnState) {
+    }
+
+    @Override
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+    }
+
+    @Override
+    public void replayOnAborted(TransactionState txnState) {
+    }
+
+    @Override
+    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+    }
+
+    @Override
+    public void replayOnVisible(TransactionState txnState) {
+    }
+>>>>>>> dbd37ef118 ([Enhancement] Support insert properties (#49978))
 }
