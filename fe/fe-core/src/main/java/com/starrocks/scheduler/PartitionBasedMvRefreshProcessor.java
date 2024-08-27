@@ -580,9 +580,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setQueryTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
         }
 
-        // set enable_insert_strict by default
-        if (!isMVPropertyContains(SessionVariable.ENABLE_INSERT_STRICT)) {
-            mvSessionVariable.setEnableInsertStrict(Config.enable_mv_refresh_insert_strict);
+        // set insert_max_filter_ratio by default
+        if (!isMVPropertyContains(SessionVariable.INSERT_MAX_FILTER_RATIO)) {
+            mvSessionVariable.setInsertMaxFilterRatio(Config.mv_refresh_fail_on_filter_data ? 0 : 1);
         }
         // enable profile by default for mv refresh task
         if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
