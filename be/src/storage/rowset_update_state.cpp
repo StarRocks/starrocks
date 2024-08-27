@@ -451,6 +451,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     if (_auto_increment_partial_update_states.size() == 0) {
         _auto_increment_partial_update_states.resize(rowset->num_segments());
     }
+    if (column_id.size() == 0) {
+        LOG(INFO) << "column id is empty";
+    }
     DCHECK_EQ(column_id.size(), 1);
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, column_id);
