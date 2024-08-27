@@ -15,15 +15,11 @@
 #include "exprs/agg/aggregate_factory.h"
 
 #include <memory>
-#include <tuple>
-#include <unordered_map>
 
-#include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "types/logical_type.h"
-#include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
@@ -40,6 +36,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_approx();
     register_others();
     register_retract_functions();
+    register_hypothesis_testing();
 }
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
