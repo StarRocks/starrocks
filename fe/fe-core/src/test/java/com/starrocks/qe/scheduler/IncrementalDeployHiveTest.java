@@ -37,11 +37,27 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
 
     @Test
     public void testSchedule() throws Exception {
-        String sql = "select * from hive0.file_split_db.file_split_tbl";
+        // test different settings.
         connectContext.getSessionVariable().setEnableConnectorIncrementalScanRanges(true);
-        connectContext.getSessionVariable().setConnectorIncrementalScanRangeNumber(20);
-        //        connectContext.getSessionVariable().setConnectorMaxSplitSize(1024 * 1024 * 1024);
+        {
+            connectContext.getSessionVariable().setConnectorIncrementalScanRangeNumber(20);
+            runSchedule();
+        }
+        {
+            connectContext.getSessionVariable().setConnectorIncrementalScanRangeNumber(1000);
+            runSchedule();
+        }
+        {
+            connectContext.getSessionVariable().setConnectorIncrementalScanRangeNumber(20);
+            connectContext.getSessionVariable().setEnablePhasedScheduler(true);
+            runSchedule();
+        }
+    }
+
+    public void runSchedule() throws Exception {
+        String sql = "select * from hive0.file_split_db.file_split_tbl";
         List<TExecPlanFragmentParams> requests = new ArrayList<>();
+        int maxScanRangeNumber = connectContext.getSessionVariable().getConnectorIncrementalScanRangeNumber();
         // deploy
         new MockUp<Deployer>() {
             @Mock
@@ -49,10 +65,15 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
                 System.out.println("----- deploy fragments ------");
                 final List<List<FragmentInstanceExecState>> state =
                         deployState.getThreeStageExecutionsToDeploy();
+                int scanRangeNumber = 0;
                 for (List<FragmentInstanceExecState> execStates : state) {
                     for (FragmentInstanceExecState execState : execStates) {
                         {
                             TPlanFragmentExecParams params = execState.getRequestToDeploy().params;
+                            // there is a placeholder
+                            if (!params.getPer_node_scan_ranges().isEmpty()) {
+                                scanRangeNumber += params.getPer_node_scan_rangesSize() - 1;
+                            }
                             for (List<TScanRangeParams> v : params.getPer_node_scan_ranges().values()) {
                                 for (TScanRangeParams p : v) {
                                     System.out.println(p + ", " + System.identityHashCode(p));
@@ -63,6 +84,7 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
                         requests.add(execState.getRequestToDeploy().deepCopy());
                     }
                 }
+                Assert.assertTrue(scanRangeNumber <= maxScanRangeNumber);
             }
         };
         final DefaultCoordinator coordinator = startScheduling(sql);
