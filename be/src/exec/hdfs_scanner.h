@@ -97,6 +97,46 @@ struct HdfsScanStats {
     int64_t iceberg_delete_file_build_filter_ns = 0;
 };
 
+class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
+public:
+    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
+
+    ~CountedSeekableInputStream() override = default;
+
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        _stats->bytes_read += size;
+        return _stream->read_at_fully(offset, data, size);
+    }
+
+    StatusOr<std::string_view> peek(int64_t count) override {
+        auto st = _stream->peek(count);
+        return st;
+    }
+
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    HdfsScanStats* _stats;
+};
+
 class HdfsParquetProfile;
 
 struct HdfsScanProfile {
@@ -243,7 +283,7 @@ struct HdfsScannerContext {
         return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    std::vector<SlotDescriptor*> slot_descs;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -347,6 +387,7 @@ public:
     int64_t io_time_spent() const { return _app_stats.io_ns; }
     virtual int64_t estimated_mem_usage() const;
     void update_counter();
+    void update_iceberg_delete_file_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {}
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
