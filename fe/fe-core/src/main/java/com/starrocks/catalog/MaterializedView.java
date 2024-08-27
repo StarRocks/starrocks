@@ -1645,6 +1645,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public Map<String, String> getProperties() {
         Map<String, String> properties = super.getProperties();
+        return properties;
+    }
+
+    /**
+     * Get session properties from materialized view's table property.
+     * @return session properties that are ensured to be not null
+     */
+    public Map<String, String> getSessionProperties() {
+        Map<String, String> properties = Maps.newHashMap();
         // For materialized view, add into session variables into properties.
         if (super.getTableProperty() != null && super.getTableProperty().getProperties() != null) {
             for (Map.Entry<String, String> entry : super.getTableProperty().getProperties().entrySet()) {

@@ -1224,6 +1224,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
 
+    @ConfField(mutable = true, comment = "Whether to ignore task run history replay error in querying information_schema" +
+            ".task_runs")
+    public static boolean ignore_task_run_history_replay_error = false;
+
     /**
      * whether backup materialized views in backing databases. If not, will skip backing materialized views.
      */
