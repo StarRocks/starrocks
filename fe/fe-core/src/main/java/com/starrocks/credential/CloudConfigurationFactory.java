@@ -96,7 +96,7 @@ public class CloudConfigurationFactory {
         if (clientFactory != null && clientFactory.contains(icebergAwsClientFactoryClassName)) {
             return buildCloudConfigurationForStorage(copiedProperties);
         }
-        if (sessionAk != null && sessionSk != null && sessionToken != null && region != null){
+        if (sessionAk != null && sessionSk != null && sessionToken != null && region != null) {
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
