@@ -168,7 +168,7 @@ if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
 if [[ -z ${JEMALLOC_DEBUG} ]]; then
-    JEMALLOC_DEBUG=OFF
+    JEMALLOC_DEBUG=ON
 fi
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache

@@ -81,7 +81,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # JEMALLOC enable DEBUG 
-# export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
+export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
 # Set JEMALLOC_CONF environment variable if not already set
 if [[ -z "$JEMALLOC_CONF" ]]; then
     if [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
