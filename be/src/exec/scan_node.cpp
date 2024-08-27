@@ -145,10 +145,10 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
         if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
+            bool has_more = morsel_queue->has_more();
             auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
-                                                                            /*could_local_shuffle*/ true,
-                                                                            morsel_queue->has_more());
+                                                                            /*could_local_shuffle*/ true, has_more);
         } else {
             if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
                 scan_dop = pipeline_dop;
