@@ -227,22 +227,6 @@ public class OptExpressionDuplicator {
                     }
                 }
             } else {
-<<<<<<< HEAD
-                try {
-                    if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-                        // refresh iceberg table's metadata
-                        Table refBaseTable = scanOperator.getTable();
-                        IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
-                        String catalogName = cachedIcebergTable.getCatalogName();
-                        String dbName = cachedIcebergTable.getRemoteDbName();
-                        TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                        Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
-                        if (currentTable == null) {
-                            return null;
-                        }
-                        // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
-                        scanBuilder.setTable(currentTable);
-=======
                 if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
                     // refresh iceberg table's metadata
                     Table refBaseTable = scanOperator.getTable();
@@ -253,13 +237,8 @@ public class OptExpressionDuplicator {
                     Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
                     if (currentTable == null) {
                         return null;
->>>>>>> 556928ff43 ([Enhancement] Optimize view based mv rewrite performance (#50256))
                     }
                     scanBuilder.setTable(currentTable);
-                    TableVersionRange versionRange = TableVersionRange.withEnd(
-                            Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
-                                    .map(Snapshot::snapshotId));
-                    scanBuilder.setTableVersionRange(versionRange);
                 }
             }
 
