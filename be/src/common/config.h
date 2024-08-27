@@ -1369,5 +1369,7 @@ CONF_mBool(enable_core_file_size_optimization, "true");
 CONF_mBool(skip_lake_pk_preload, "false");
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "false");
+CONF_mBool(core_1, "true");
+CONF_mBool(core_2, "true");
 
 } // namespace starrocks::config

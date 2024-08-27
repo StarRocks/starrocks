@@ -197,7 +197,9 @@ Status BinaryDictPageDecoder<Type>::init() {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);
         _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data));
     } else {
-        LOG(WARNING) << "invalid encoding type:" << _encoding_type;
+        if (config::core_1) {
+            LOG(FATAL) << "invalid encoding type:" << _encoding_type;
+        }
         return Status::Corruption(strings::Substitute("invalid encoding type:$0", _encoding_type));
     }
 
