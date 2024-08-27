@@ -2090,14 +2090,8 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         coord);
-<<<<<<< HEAD
-=======
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
-                if (txnState != null) {
-                    txnState.setCallbackId(jobId);
-                }
->>>>>>> dbd37ef118 ([Enhancement] Support insert properties (#49978))
             }
 
             coord.setLoadJobId(jobId);

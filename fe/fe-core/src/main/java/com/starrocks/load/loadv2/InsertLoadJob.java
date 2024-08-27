@@ -271,39 +271,4 @@ public class InsertLoadJob extends LoadJob {
     public void setTransactionId(long txnId) {
         this.transactionId = txnId;
     }
-<<<<<<< HEAD
-=======
-
-    @Override
-    public void beforeCommitted(TransactionState txnState) throws TransactionException {
-    }
-
-    @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
-        if (!txnOperated) {
-            return;
-        }
-        loadCommittedTimestamp = System.currentTimeMillis();
-    }
-
-    @Override
-    public void replayOnCommitted(TransactionState txnState) {
-    }
-
-    @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
-    }
-
-    @Override
-    public void replayOnAborted(TransactionState txnState) {
-    }
-
-    @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-    }
-
-    @Override
-    public void replayOnVisible(TransactionState txnState) {
-    }
->>>>>>> dbd37ef118 ([Enhancement] Support insert properties (#49978))
 }

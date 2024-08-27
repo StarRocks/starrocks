@@ -1966,17 +1966,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionNames = (PartitionNames) visit(context.partitionNames());
             }
 
-<<<<<<< HEAD
-            InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
-                    context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
-                    getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
-                    createPos(context));
-=======
-            String targetBranch = null;
-            if (context.writeBranch() != null) {
-                targetBranch = ((Identifier) visit(context.writeBranch())).getValue();
-            }
-
             String label = null;
             List<String> columnAliases = null;
             for (StarRocksParser.InsertLabelOrColumnAliasesContext desc : ListUtils.emptyIfNull(
@@ -1998,7 +1987,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             InsertStmt stmt = new InsertStmt(targetTableName, partitionNames, label, columnAliases, queryStatement,
                     context.OVERWRITE() != null, getProperties(context.properties()), createPos(context));
->>>>>>> dbd37ef118 ([Enhancement] Support insert properties (#49978))
             stmt.setHintNodes(hintMap.get(context));
             return stmt;
         }
