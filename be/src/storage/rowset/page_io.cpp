@@ -186,7 +186,9 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         uint32_t expect = decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
         uint32_t actual = crc32c::Value(page_slice.data, page_slice.size - 4);
         if (expect != actual) {
-            LOG(FATAL) << "check sum mismatch";
+            if (config::core_2) {
+                LOG(FATAL) << "check sum mismatch";
+            }
             return Status::Corruption(
                     strings::Substitute("Bad page: checksum mismatch (actual=$0 vs expect=$1), file=$2", actual, expect,
                                         opts.read_file->filename()));
