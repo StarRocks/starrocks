@@ -74,12 +74,6 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     """
 
     _multiprocess_can_split_ = True
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super(TestSQLCases, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
 
     def __init__(self, *args, **kwargs):
         """

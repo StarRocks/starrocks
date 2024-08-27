@@ -24,7 +24,6 @@ sr api lib in this module
 """
 import base64
 import bz2
-import configparser
 import copy
 import datetime
 import json
@@ -170,6 +169,7 @@ class StarrocksSQLApiLib(object):
         self.thread_res_log = {}
 
         self.component_status = {}
+        self.data_status = {}
 
         # trino client config
         self.trino_host = ""
@@ -191,6 +191,10 @@ class StarrocksSQLApiLib(object):
         self.log = []
         self.res_log = []
 
+        # check data dir
+        self.check_data_dir()
+
+        # read conf
         config_path = os.environ.get("config_path")
         if config_path is None or config_path == "":
             self.read_conf("conf/sr.conf")
@@ -404,6 +408,34 @@ class StarrocksSQLApiLib(object):
     def setUpClass(cls) -> None:
         pass
 
+    def check_data_dir(self):
+
+        def _sort_by_len_and_alph(n):
+            return
+
+        for _data_path in os.listdir(self.data_path):
+            # check data files exist
+            _this_data_path = os.path.join(self.data_path, _data_path)
+
+            # check dirs not empty
+            _files = os.listdir(_this_data_path)
+            if all(_file.startswith(".") for _file in _files):
+                self.data_status[_data_path] = False
+                continue
+            else:
+                self.data_status[_data_path] = True
+
+        if not StarrocksSQLApiLib._instance:
+            self_print(f"\n{'-' * 30}\n[Data check]\n{'-' * 30}", color=ColorEnum.BLUE, logout=True, bold=True)
+            _data_names = sorted(list(self.data_status.keys()))
+
+            for _data_name in _data_names:
+                if self.data_status[_data_name]:
+                    self_print("▶ %-20s ... YES" % str(_data_name).upper(), color=ColorEnum.CYAN, bold=True)
+                else:
+                    self_print("▶ %-20s ... NO" % str(_data_name).upper(), color=ColorEnum.YELLOW, bold=True)
+            self_print(f"{'-' * 30}", color=ColorEnum.BLUE, logout=True, bold=True)
+
     def read_conf(self, path):
         """read conf"""
 
@@ -452,18 +484,22 @@ class StarrocksSQLApiLib(object):
                 comp_conf_dict = _get_value(config_parser, "client", each_comp)
 
             self.component_status[each_comp] = {
-                "status": False,
+                "status": None,
                 "keys": list(comp_conf_dict.keys())
             }
 
-            if "" in comp_conf_dict.values():
-                self.component_status[each_comp]["status"] = False
-                if not StarrocksSQLApiLib._instance:
-                    self_print("▶ %-20s ... NO" % str(each_comp).upper(), color=ColorEnum.YELLOW, bold=True)
-            else:
+            for com_k, com_v in comp_conf_dict.items():
+                if str(com_v).strip() == "" and "passwd" not in com_k.lower() and "passwd" not in com_k.lower():
+                    self.component_status[each_comp]["status"] = False
+                    if not StarrocksSQLApiLib._instance:
+                        self_print("▶ %-20s ... NO" % str(each_comp).upper(), color=ColorEnum.YELLOW, bold=True)
+                    break
+
+            if self.component_status[each_comp]["status"] is None:
                 self.component_status[each_comp]["status"] = True
                 if not StarrocksSQLApiLib._instance:
                     self_print("▶ %-20s ... YES" % str(each_comp).upper(), color=ColorEnum.BLUE, bold=True)
+
         if not StarrocksSQLApiLib._instance:
             self_print(f"{'-' * 30}", color=ColorEnum.BLUE, logout=True, bold=True)
 
