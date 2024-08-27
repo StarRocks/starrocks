@@ -100,7 +100,7 @@ public class ArrowFlightSqlJDBCTest {
         System.out.println("Test Case:" + TEST_CASE_NUM);
         System.out.println("Executing query:" + sql);
         stmt.executeUpdate(sql);
-        System.out.println("Result: Success" );
+        System.out.println("Result: Success");
         TEST_CASE_NUM++;
         System.out.println();
     }
