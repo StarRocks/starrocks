@@ -108,6 +108,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -1216,15 +1217,10 @@ public class MvUtils {
         }
     }
 
-    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
-                                                               QueryMaterializationContext queryMaterializationContext) {
-        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
-        if (viewScans == null) {
-            return queryExpression;
-        }
+    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
         // add a LogicalTreeAnchorOperator to replace the tree easier
         OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
-        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
         List<Operator> viewScanOperators = Lists.newArrayList();
         MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
         if (!viewScanOperators.isEmpty()) {
@@ -1235,20 +1231,18 @@ public class MvUtils {
         return newQuery;
     }
 
-    private static void doReplaceLogicalViewScanOperator(
-            OptExpression parent,
-            int index,
-            OptExpression queryExpression,
-            List<LogicalViewScanOperator> viewScans) {
+    private static void doReplaceLogicalViewScanOperator(OptExpression parent,
+                                                         int index,
+                                                         OptExpression queryExpression) {
         LogicalOperator op = queryExpression.getOp().cast();
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
+            OptExpression viewPlan = viewScanOperator.getOriginalPlanEvaluator();
             parent.setChild(index, viewPlan);
             return;
         }
         for (int i = 0; i < queryExpression.getInputs().size(); i++) {
-            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
+            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i));
         }
     }
 
@@ -1525,5 +1519,26 @@ public class MvUtils {
             values.add(upperBound);
         }
         return MvUtils.convertToInPredicate(partitionColRef, values);
+    }
+
+    /**
+     * Optimize the inlined view plan.
+     * @param logicalTree logical opt expression tree which has not been optimized
+     * @param connectContext connect context
+     * @param requiredColumns required columns
+     * @param columnRefFactory query column ref factory
+     * @return optimized view plan which has been rule based optimized
+     */
+    public static OptExpression optimizeViewPlan(OptExpression logicalTree,
+                                                 ConnectContext connectContext,
+                                                 ColumnRefSet requiredColumns,
+                                                 ColumnRefFactory columnRefFactory) {
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
+        Optimizer optimizer = new Optimizer(optimizerConfig);
+        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
+                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
+        return optimizedViewPlan;
     }
 }
