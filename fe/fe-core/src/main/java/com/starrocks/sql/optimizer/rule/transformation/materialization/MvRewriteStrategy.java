@@ -73,7 +73,7 @@ public class MvRewriteStrategy {
 
         private boolean isEnableRBOSingleViewRewrite() {
             return optimizerContext.getQueryMaterializationContext() != null
-                    && optimizerContext.getQueryMaterializationContext().getLogicalTreeWithView() != null
+                    && optimizerContext.getQueryMaterializationContext().getQueryOptPlanWithView() != null
                     && sessionVariable.isEnableViewBasedMvRewrite()
                     && !sessionVariable.isEnableCBOViewBasedMvRewrite();
         }

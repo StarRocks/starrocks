@@ -160,7 +160,9 @@ public class OptExpressionDuplicator {
             ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
 
-            return OptExpression.create(opBuilder.build());
+            // process external table scan operator's predicates
+            LogicalScanOperator newScanOperator = (LogicalScanOperator) opBuilder.build();
+            return OptExpression.create(newScanOperator);
         }
 
         @Override
