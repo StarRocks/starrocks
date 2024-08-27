@@ -56,11 +56,11 @@ public class QueryMaterializationContext {
     // MV with the cached timeliness update info which should be initialized once in one query context.
     private Map<MaterializedView, MvUpdateInfo> mvTimelinessInfos = Maps.newHashMap();
 
-    // used by view based mv rewrite
-    // query's logical plan with view
-    private OptExpression logicalTreeWithView;
-    // collect LogicalViewScanOperators
-    private List<LogicalViewScanOperator> viewScans;
+    // query's logical plan with view: replace all inlined query plans with LogicalViewScanOperators which is used by
+    // view-based mv rewrite
+    private OptExpression queryOptPlanWithView;
+    // collect all query opt expression's LogicalViewScanOperators
+    private List<LogicalViewScanOperator> queryViewScanOps;
 
     // `mvQueryContextCache` is designed for a common cache which is used during the query's rewrite lifecycle, so can be
     // managed in a more unified mode. In the current situation, it's used in two ways:
@@ -150,20 +150,20 @@ public class QueryMaterializationContext {
         return queryCacheStats;
     }
 
-    public OptExpression getLogicalTreeWithView() {
-        return logicalTreeWithView;
+    public OptExpression getQueryOptPlanWithView() {
+        return queryOptPlanWithView;
     }
 
-    public void setLogicalTreeWithView(OptExpression logicalTreeWithView) {
-        this.logicalTreeWithView = logicalTreeWithView;
+    public void setQueryOptPlanWithView(OptExpression queryOptPlanWithView) {
+        this.queryOptPlanWithView = queryOptPlanWithView;
     }
 
-    public void setViewScans(List<LogicalViewScanOperator> viewScans) {
-        this.viewScans = viewScans;
+    public void setQueryViewScanOps(List<LogicalViewScanOperator> queryViewScanOps) {
+        this.queryViewScanOps = queryViewScanOps;
     }
 
-    public List<LogicalViewScanOperator> getViewScans() {
-        return viewScans;
+    public List<LogicalViewScanOperator> getQueryViewScanOps() {
+        return queryViewScanOps;
     }
 
     /**
