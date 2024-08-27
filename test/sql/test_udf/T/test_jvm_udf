@@ -1,7 +1,5 @@
 -- name: test_jvm_udf
 
-set enable_group_execution = true;
-
 CREATE AGGREGATE FUNCTION sumbigint(bigint)
 RETURNS bigint
 symbol = "Sumbigint"
