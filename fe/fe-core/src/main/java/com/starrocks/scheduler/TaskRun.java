@@ -175,7 +175,10 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             MaterializedView materializedView = (MaterializedView) table;
             Preconditions.checkState(materializedView != null);
-            newProperties.putAll(materializedView.getProperties());
+            // Don't copy all table's properties to task's properties:
+            // 1. It will cause task run's meta-data to be too large
+            // 2. It may pollute the properties of task run.
+            newProperties.putAll(materializedView.getSessionProperties());
 
             Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
                     materializedView.getWarehouseId());
