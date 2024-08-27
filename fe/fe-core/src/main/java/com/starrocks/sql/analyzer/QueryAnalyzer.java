@@ -232,7 +232,7 @@ public class QueryAnalyzer {
                     if (queryRelation instanceof SelectRelation) {
                         SelectRelation childSelectRelation = (SelectRelation) queryRelation;
                         if (childSelectRelation.getGeneratedExprToColumnRef() == null ||
-                            childSelectRelation.getGeneratedExprToColumnRef().isEmpty()) {
+                                childSelectRelation.getGeneratedExprToColumnRef().isEmpty()) {
                             return null;
                         }
                         // 1. get all available generated column from subquery
