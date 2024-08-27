@@ -199,7 +199,7 @@ private:
 
     int64_t _last_write_ts = 0;
 
-    const std::map<string, string>* _column_to_expr_value;
+    const std::map<string, string>* _column_to_expr_value = nullptr;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
