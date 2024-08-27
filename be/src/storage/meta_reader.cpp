@@ -238,10 +238,6 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
 }
 
 Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
-    if (cid >= _segment->num_columns()) {
-        return Status::NotFound("error column id");
-    }
-
     const ColumnReader* col_reader = _segment->column(cid);
     if (col_reader == nullptr) {
         return Status::NotFound("don't found column");

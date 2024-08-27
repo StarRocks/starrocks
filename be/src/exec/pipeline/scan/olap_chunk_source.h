@@ -155,7 +155,6 @@ private:
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _json_flatten_timer = nullptr;
     RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
     RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };

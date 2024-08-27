@@ -181,7 +181,6 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _json_flatten_timer = nullptr;
     RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
     RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };
