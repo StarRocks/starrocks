@@ -91,7 +91,7 @@ public class PhysicalPartitionImplTest {
 
         Assert.assertTrue(p.hasMaterializedView());
         Assert.assertTrue(p.hasStorageData());
-        Assert.assertEquals(0, p.storageDataSize());
+        Assert.assertEquals(0, p.getDataSize());
         Assert.assertEquals(0, p.storageRowCount());
         Assert.assertEquals(0, p.storageReplicaCount());
         Assert.assertEquals(0, p.getTabletMaxDataSize());
@@ -128,8 +128,8 @@ public class PhysicalPartitionImplTest {
 
         p.setMinRetainVersion(1);
         Assert.assertEquals(1, p.getMinRetainVersion());
-        p.setLastVacuumTime(1);
-        Assert.assertEquals(1, p.getLastVacuumTime());
+        p.setLastSuccVacuumTime(1);
+        Assert.assertEquals(1, p.getLastSuccVacuumTime());
 
         p.setDataVersion(0);
         p.setNextDataVersion(0);

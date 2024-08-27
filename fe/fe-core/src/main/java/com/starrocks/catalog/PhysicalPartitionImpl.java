@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -105,7 +106,7 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
      */
     private long visibleTxnId = -1;
 
-    private volatile long lastVacuumTime = 0;
+    private volatile long lastSuccVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
 
@@ -176,13 +177,42 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     }
 
     @Override
-    public long getLastVacuumTime() {
-        return lastVacuumTime;
+    public long getLastSuccVacuumTime() {
+        return lastSuccVacuumTime;
     }
 
     @Override
-    public void setLastVacuumTime(long lastVacuumTime) {
-        this.lastVacuumTime = lastVacuumTime;
+    public void setLastSuccVacuumTime(long lastVacuumTime) {
+        this.lastSuccVacuumTime = lastVacuumTime;
+    }
+
+    @Override
+    public boolean shouldVacuum() {
+        if (System.currentTimeMillis() < getLastSuccVacuumTime() +
+                Config.lake_autovacuum_partition_naptime_seconds * 1000) {
+            return false;
+        }
+
+        long storageSize = getStorageSize();
+        long dataSize = getDataSize();
+
+        if (dataSize == 0) {
+            return false;
+        }
+
+        if (storageSize < dataSize) {
+            LOG.warn("Partition: {}, Data Size: {}, Storage Size: {}", getName(), dataSize, storageSize);
+            return false;
+        }
+
+        double magnification = (((double) storageSize - dataSize) / dataSize);
+        if ((storageSize - dataSize >= 50L * 1024 * 1024) && (magnification > 0.1)) {
+            LOG.debug("Partition: {}, storage size: {}, data size: {}, magnification: {} should vacuum now",
+                      name, getStorageSize(), getDataSize(), magnification);
+            return true;
+        }
+
+        return false;
     }
 
     @Override
@@ -378,12 +408,21 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     }
 
     @Override
-    public long storageDataSize() {
+    public long getDataSize() {
         long dataSize = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
             dataSize += mIndex.getDataSize();
         }
         return dataSize;
+    }
+
+    @Override
+    public long getStorageSize() {
+        long storageSize = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            storageSize += mIndex.getStorageSize();
+        }
+        return storageSize;
     }
 
     @Override
@@ -508,7 +547,7 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
         buffer.append("versionEpoch: ").append(versionEpoch).append("; ");
         buffer.append("versionTxnType: ").append(versionTxnType).append("; ");
 
-        buffer.append("storageDataSize: ").append(storageDataSize()).append("; ");
+        buffer.append("storageDataSize: ").append(getDataSize()).append("; ");
         buffer.append("storageRowCount: ").append(storageRowCount()).append("; ");
         buffer.append("storageReplicaCount: ").append(storageReplicaCount()).append("; ");
 

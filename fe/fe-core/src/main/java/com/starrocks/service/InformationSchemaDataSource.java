@@ -338,7 +338,7 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
-        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
+        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.getDataSize());
         partitionMetaInfo.setData_size(byteSizeValue.toString());
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
@@ -373,6 +373,9 @@ public class InformationSchemaDataSource {
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+            // storage size
+            ByteSizeValue storageSizeValue = new ByteSizeValue(physicalPartition.getStorageSize());
+            partitionMetaInfo.setStorage_size(storageSizeValue.toString());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());

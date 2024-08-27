@@ -86,7 +86,9 @@ public interface PhysicalPartition {
     // max data size of one tablet in this physical partition
     public long getTabletMaxDataSize();
     // partition data size reported by be, but may be not accurate
-    public long storageDataSize();
+    public long getDataSize();
+    // partition storage size reported by be, but may be not accurate
+    public long getStorageSize();
     // partition row count reported by be, but may be not accurate
     public long storageRowCount();
     // partition replica count, it's accurate 
@@ -99,7 +101,7 @@ public interface PhysicalPartition {
     // for lake partition
     public long getMinRetainVersion();
     public void setMinRetainVersion(long minRetainVersion);
-    public long getLastVacuumTime();
-    public void setLastVacuumTime(long lastVacuumTime);
-
+    public long getLastSuccVacuumTime();
+    public void setLastSuccVacuumTime(long lastVacuumTime);
+    public boolean shouldVacuum();
 }

@@ -777,4 +777,80 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
                         std::move(tablet_schema));
 }
 
+// collect storage size of all segment files till tablet meta version @curr_version
+// including data files have been compactioned which can been vacuumed
+StatusOr<int64_t> TabletManager::collect_tablet_storage_size(int64_t tablet_id, int64_t curr_version) {
+    auto root_dir = tablet_root_location(tablet_id);
+    auto data_dir = join_path(root_dir, lake::kSegmentDirectoryName);
+    auto version = curr_version;
+
+    int64_t total_size = 0;
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
+
+    bool collect_real_data_size = false;
+
+    while (version > 0) {
+        auto res = get_tablet_metadata(tablet_id, version, false);
+        if (res.status().is_not_found()) {
+            break;
+        } else if (!res.ok()) {
+            return res.status();
+        }
+
+        auto metadata = std::move(res).value();
+        if (!collect_real_data_size) {
+            for (const auto& rowset : metadata->rowsets()) {
+                total_size += rowset.data_size();
+                collect_real_data_size = true;
+            }
+        }
+
+        // check compaction input files removed or not by vacuum request
+        // simplify the checking, choose one file randomly and to see if this file exist or not
+        // if file dose not exist, skip add the data files into stat
+        // this is not so accurate because of partial deleted of compaction input files but it's enough
+        std::vector<std::string_view> compaction_input_seg_files;
+        for (const auto& rowset : metadata->compaction_inputs()) {
+            for (const auto& segment : rowset.segments()) {
+                compaction_input_seg_files.push_back(segment);
+            }
+        }
+        if (compaction_input_seg_files.size() >= 1) {
+            std::vector<std::string_view> out;
+            std::sample(compaction_input_seg_files.begin(), compaction_input_seg_files.end(), std::back_inserter(out),
+                        1, std::mt19937{std::random_device{}()});
+
+            assert(out.size == 1);
+            auto seg_file = out.front();
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(data_dir));
+            auto st = fs->path_exists(join_path(data_dir, seg_file));
+            // assume the compaction input files have been removed
+            if (st.is_not_found()) {
+                version = metadata->prev_garbage_version();
+                continue;
+            }
+            if (!st.ok()) {
+                return st;
+            }
+        }
+
+        for (const auto& rowset : metadata->compaction_inputs()) {
+            total_size += rowset.data_size();
+        }
+
+        // TODO: collect del file size
+        // for (const auto& del_file : rowset.del_files()) {
+        // }
+
+        for (const auto& file : metadata->orphan_files()) {
+            total_size += file.size();
+        }
+
+        version = metadata->prev_garbage_version();
+    }
+
+    return total_size;
+}
+
 } // namespace starrocks::lake

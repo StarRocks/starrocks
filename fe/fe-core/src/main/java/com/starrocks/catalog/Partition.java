@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -147,7 +148,7 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
      */
     private volatile long visibleTxnId = -1;
 
-    private volatile long lastVacuumTime = 0;
+    private volatile long lastSuccVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
 
@@ -465,7 +466,17 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         return maxDataSize;
     }
 
-    public long storageDataSize() {
+    @Override
+    public long getStorageSize() {
+        long dataSize = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            dataSize += mIndex.getStorageSize();
+        }
+        return dataSize;
+    }
+
+    @Override
+    public long getDataSize() {
         long dataSize = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
             dataSize += mIndex.getDataSize();
@@ -473,10 +484,12 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         return dataSize;
     }
 
-    public long getDataSize() {
+    public long dataSize() {
         long dataSize = 0;
         for (PhysicalPartition subPartition : getSubPartitions()) {
-            dataSize += subPartition.storageDataSize();
+            LOG.info("partition: {}, id: {}, subPartitionL {}, sub partition type: {}", getName(), getId(),
+                      subPartition.getId(), subPartition.getClass());
+            dataSize += subPartition.getDataSize();
         }
         return dataSize;
     }
@@ -614,12 +627,43 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         return buffer.toString();
     }
 
-    public long getLastVacuumTime() {
-        return lastVacuumTime;
+    @Override
+    public long getLastSuccVacuumTime() {
+        return lastSuccVacuumTime;
     }
 
-    public void setLastVacuumTime(long lastVacuumTime) {
-        this.lastVacuumTime = lastVacuumTime;
+    @Override
+    public void setLastSuccVacuumTime(long lastVacuumTime) {
+        this.lastSuccVacuumTime = lastVacuumTime;
+    }
+
+    @Override
+    public boolean shouldVacuum() {
+        if (System.currentTimeMillis() < getLastSuccVacuumTime() +
+                Config.lake_autovacuum_partition_naptime_seconds * 1000) {
+            return false;
+        }
+
+        long storageSize = getStorageSize();
+        long dataSize = getDataSize();
+
+        if (dataSize == 0) {
+            return false;
+        }
+
+        if (storageSize < dataSize) {
+            LOG.warn("Partition: {}, Data Size: {}, Storage Size: {}", getName(), dataSize, storageSize);
+            return false;
+        }
+
+        double magnification = (((double) storageSize - dataSize) / dataSize);
+        if ((storageSize - dataSize >= 50L * 1024 * 1024) && (magnification > 0.1)) {
+            LOG.debug("Partition: {}, storage size: {}, data size: {}, magnification: {} should vacuum now",
+                      name, getStorageSize(), getDataSize(), magnification);
+            return true;
+        }
+
+        return false;
     }
 
     public long getMinRetainVersion() {
