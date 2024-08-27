@@ -176,7 +176,7 @@
     "description": "The label for category Reference in sidebar docs"
   },
   "sidebar.docs.category.Data Types": {
-    "message": "Data Types",
+    "message": "数据类型",
     "description": "The label for category Data Types in sidebar docs"
   },
   "sidebar.docs.category.Numeric": {
@@ -538,5 +538,17 @@
   "sidebar.docs.category.Utility": {
     "message": "工具函数",
     "description": "The label for category Utility in sidebar docs"
+  },
+  "sidebar.docs.category.Data types": {
+    "message": "Data types",
+    "description": "The label for category Data types in sidebar docs"
+  },
+  "sidebar.docs.category.SQL statements": {
+    "message": "SQL 参考",
+    "description": "The label for category SQL statements in sidebar docs"
+  },
+  "sidebar.docs.category.系统元数据库": {
+    "message": "系统元数据库",
+    "description": "The label for category 系统元数据库 in sidebar docs"
   }
 }
