@@ -859,7 +859,7 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
     auto latch = BThreadCountDownLatch(1);
     auto st = thread_pool->submit_func([&]() {
         DeferOp defer([&] { latch.count_down(); });
-        lake::vacuum(_tablet_mgr, *request, response);
+        sleep(10);
     });
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit vacuum task: " << st;

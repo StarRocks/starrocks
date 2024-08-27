@@ -89,6 +89,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
     }
 
     private void vacuumTable(Database db, Table baseTable) {
+        if (!db.getFullName().equals("test")) {
+            return;
+        }
         OlapTable table = (OlapTable) baseTable;
         List<PhysicalPartition> partitions;
         long current = System.currentTimeMillis();
@@ -97,12 +100,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
         try {
-            partitions = table.getPhysicalPartitions().stream()
-                    .filter(p -> p.getVisibleVersionTime() > staleTime)
-                    .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
-                    .filter(p -> current >=
-                            p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
-                    .collect(Collectors.toList());
+            partitions = table.getPhysicalPartitions().stream().collect(Collectors.toList());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
         }
@@ -185,14 +183,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
         for (Future<VacuumResponse> responseFuture : responseFutures) {
             try {
                 VacuumResponse response = responseFuture.get();
-                if (response.status.statusCode != 0) {
-                    hasError = true;
-                    LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getId(),
-                            response.status.errorMsgs.get(0));
-                } else {
-                    vacuumedFiles += response.vacuumedFiles;
-                    vacuumedFileSize += response.vacuumedFileSize;
-                }
             } catch (InterruptedException e) {
                 LOG.warn("thread interrupted");
                 Thread.currentThread().interrupt();

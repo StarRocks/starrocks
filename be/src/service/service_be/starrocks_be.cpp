@@ -239,6 +239,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    LOG(INFO) << "brpc_num_threads: " << options.num_threads;
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.LakeService";
     const auto methods = {
@@ -262,6 +263,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         exit(1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start brpc server successfully";
+    LOG(INFO) << "brpc server num thread: " << bthread_getconcurrency();
 
     // Start HTTP server
     auto http_server = std::make_unique<HttpServiceBE>(exec_env, config::be_http_port, config::be_http_num_workers);

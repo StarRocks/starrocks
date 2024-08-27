@@ -304,6 +304,9 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
 
 inline Status DeltaWriterImpl::flush() {
     RETURN_IF_ERROR(flush_async());
+    if (config::test_sleep > 0) {
+        std::this_thread::sleep_for(std::chrono::seconds(config::test_sleep));
+    }
     return _flush_token->wait();
 }
 

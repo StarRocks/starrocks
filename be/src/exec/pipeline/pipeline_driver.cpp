@@ -333,9 +333,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                                                 to_readable_string()));
                         }
 
-                        maybe_chunk.value()->check_or_die();
-                        DCHECK(maybe_chunk.value()->get_slot_id_to_index_map().size() == 0);
-
                         total_rows_moved += row_num;
                         {
                             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
