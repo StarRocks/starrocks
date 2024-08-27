@@ -386,7 +386,7 @@ public:
                 _replayer->partial_update(chunk_index.first);
             }
         }
-        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+        RETURN_IF_ERROR(delta_writer->finish());
         delta_writer->close();
         // Publish version
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
