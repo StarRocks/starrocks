@@ -351,7 +351,7 @@ template <LogicalType Type>
 using RunTimeProxyContainerType = typename RunTimeTypeTraits<Type>::ProxyContainerType;
 
 template <LogicalType Type>
-using RunTimeContainerType = typename RunTimeTypeTraits<Type>::ContainerType;
+using RunTimeContainerType = typename RunTimeTypeTraits<Type>::ProxyContainerType;
 
 // Movable: rvalue reference type
 template <LogicalType Type>

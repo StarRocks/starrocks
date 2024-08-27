@@ -362,9 +362,9 @@ public:
             auto* src_column = down_cast<InputColumnType*>(src[0].get());
 
             ApproxTopKState<LT> state;
-            for (auto& value : src_column->get_data()) {
+            for (size_t i = 0; i < src_column->get_data().size(); i++) {
                 state.reset(kv.first, kv.second);
-                state.template process<false>(ctx->mem_pool(), value, 1, false);
+                state.template process<false>(ctx->mem_pool(), src_column->get_data()[i], 1, false);
                 serialize_state(state, dst_column);
             }
         }

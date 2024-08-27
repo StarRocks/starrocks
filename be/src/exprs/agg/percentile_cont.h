@@ -362,7 +362,7 @@ public:
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
         auto src_column = *down_cast<const BinaryColumn*>(src[0].get());
-        Slice* src_data = src_column.get_data().data();
+        auto& src_data = src_column.get_data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             // [rate, 1, element ith size, element ith data]

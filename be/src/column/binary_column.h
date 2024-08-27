@@ -275,17 +275,11 @@ public:
         return _slices;
     }
 
-    Container& get_data() {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
+    BinaryDataProxyContainer& get_data() {
+        return _immuable_container;
     }
-    const Container& get_data() const {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
+    const BinaryDataProxyContainer& get_data() const {
+        return _immuable_container;
     }
 
     const Container& get_slice_data() const {
