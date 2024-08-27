@@ -17,6 +17,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/type_traits.h"
+#include "gutil/casts.h"
 
 namespace starrocks {
 class FunctionContext;
@@ -35,6 +36,21 @@ public:
             return down_cast<NullableColumn*>(ptr.get())->data_column();
         }
         return ptr;
+    }
+
+    /**
+     * get data of column.
+     * @param col, row_num, data 
+     */
+    template <typename ToColumnType, typename CppType>
+    static void get_data_of_column(const Column* col, size_t row_num, CppType& data) {
+        if (col->is_constant()) {
+            auto const_col = down_cast<const ConstColumn*>(col);
+            col = const_col->data_column().get();
+            row_num = 0;
+        }
+        const auto* column = down_cast<const ToColumnType*>(col);
+        data = column->get_data()[row_num];
     }
 
     /**

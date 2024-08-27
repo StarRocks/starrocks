@@ -15,8 +15,6 @@
 #pragma once
 
 #include <memory>
-#include <tuple>
-#include <unordered_map>
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -41,6 +39,7 @@
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
 #include "exprs/agg/intersect_count.h"
+#include "exprs/agg/mann_whitney.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/nullable_aggregate.h"
@@ -118,6 +117,10 @@ public:
 
     static AggregateFunctionPtr MakeGroupConcatAggregateFunctionV2() {
         return std::make_shared<GroupConcatAggregateFunctionV2>();
+    }
+
+    static auto MakeMannWhitneyUTestAggregateFunction() {
+        return std::make_shared<MannWhitneyUTestAggregateFunction>();
     }
 
     template <LogicalType LT>
