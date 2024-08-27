@@ -136,7 +136,7 @@ static void dontdump_unused_pages() {
     start_dump = true;
 }
 
-static void failure_writer(const char* data, int size) {
+static void failure_writer(const char* data, size_t size) {
     if (config::enable_core_file_size_optimization) {
         dontdump_unused_pages();
     }
