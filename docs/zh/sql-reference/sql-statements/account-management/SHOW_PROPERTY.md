@@ -66,4 +66,4 @@ SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 
 ## 相关操作
 
-如要设置用户属性，请参见 [ALTER USER](./SET_PROPERTY.md)。
+如要设置用户属性，请参见 [ALTER USER](./ALTER_USER.md)。
