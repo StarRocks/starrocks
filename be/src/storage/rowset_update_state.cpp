@@ -372,6 +372,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     int64_t t_start = MonotonicMillis();
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
 
+    _column_to_expr_value.clear();
     for (auto& entry : txn_meta.column_to_expr_value()) {
         _column_to_expr_value.insert({entry.first, entry.second});
     }
