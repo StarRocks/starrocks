@@ -53,16 +53,20 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
     }
 }
 
-void MetaFileBuilder::append_dcg(uint32_t rssid, const std::vector<std::string>& filenames,
+void MetaFileBuilder::append_dcg(uint32_t rssid,
+                                 const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                                  const std::vector<std::vector<ColumnUID>>& unique_column_id_list) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
 
     // 1. append new dcgs
-    DCHECK(filenames.size() == unique_column_id_list.size());
-    for (int i = 0; i < filenames.size(); i++) {
-        new_dcg_ver.add_column_files(filenames[i]);
+    DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
+    for (int i = 0; i < file_with_encryption_metas.size(); i++) {
+        new_dcg_ver.add_column_files(file_with_encryption_metas[i].first);
+        if (!file_with_encryption_metas[i].second.empty()) {
+            new_dcg_ver.add_encryption_metas(file_with_encryption_metas[i].second);
+        }
         DeltaColumnGroupColumnIdsPB unique_cids;
         for (const ColumnUID uid : unique_column_id_list[i]) {
             unique_cids.add_column_ids(uid);
@@ -127,6 +131,12 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // For now, op_offset is always max segment's id
         del_file_with_rid.set_op_offset(std::max(op_write.rowset().segments_size(), 1) - 1);
+        if (op_write.del_encryption_metas_size() > 0) {
+            CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
+                    << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
+                                   op_write.dels_size());
+            del_file_with_rid.set_encryption_meta(op_write.del_encryption_metas(i));
+        }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
     // if rowset don't contain segment files, still inc next_rowset_id
