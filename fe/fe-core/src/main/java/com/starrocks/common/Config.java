@@ -1085,6 +1085,12 @@ public class Config extends ConfigBase {
     public static int max_broker_load_job_concurrency = 5;
 
     /**
+     * Push down target table schema to files() in `insert from files()`
+     */
+    @ConfField(mutable = true)
+    public static boolean files_enable_insert_push_down_schema = true;
+
+    /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
      */
     @ConfField(mutable = true)
