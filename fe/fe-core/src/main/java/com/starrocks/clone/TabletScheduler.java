@@ -1176,6 +1176,7 @@ public class TabletScheduler extends FrontendDaemon {
         //2. delete the duplicate location replica
         if (dupReplica != null) {
             deleteReplicaInternal(tabletCtx, dupReplica, "duplicate location", force);
+            return true;
         }
 
         return false;
