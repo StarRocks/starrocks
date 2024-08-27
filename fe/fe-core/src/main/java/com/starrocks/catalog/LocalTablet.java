@@ -505,6 +505,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return dataSize;
     }
 
+    @Override
+    public long getStorageSize(boolean singleReplica) {
+        return getDataSize(singleReplica);
+    }
+
     // Get max row count of all replicas which version catches up.
     @Override
     public long getRowCount(long version) {

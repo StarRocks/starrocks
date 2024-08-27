@@ -687,11 +687,17 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                 data_size += file.size();
             }
 
+            auto st = _tablet_mgr->collect_tablet_storage_size(tablet_id, version);
+            if (!st.ok()) {
+                return;
+            }
+
             std::lock_guard l(response_mtx);
             auto tablet_stat = response->add_tablet_stats();
             tablet_stat->set_tablet_id(tablet_id);
             tablet_stat->set_num_rows(num_rows);
             tablet_stat->set_data_size(data_size);
+            tablet_stat->set_storage_size(*st);
         };
         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
         if (auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline); !st.ok()) {

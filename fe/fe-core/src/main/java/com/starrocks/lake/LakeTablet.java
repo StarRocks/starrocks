@@ -49,6 +49,7 @@ public class LakeTablet extends Tablet {
     private static final Logger LOG = LogManager.getLogger(LakeTablet.class);
 
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
+    private static final String JSON_KEY_STORAGE_SIZE = "storageSize";
     private static final String JSON_KEY_ROW_COUNT = "rowCount";
     private static final String JSON_KEY_DATA_SIZE_UPDATE_TIME = "dataSizeUpdateTime";
 
@@ -58,6 +59,9 @@ public class LakeTablet extends Tablet {
     private volatile long rowCount = 0L;
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
+
+    @SerializedName(value = JSON_KEY_STORAGE_SIZE)
+    private volatile long storageSize = 0L;
 
     public LakeTablet(long id) {
         super(id);
@@ -75,6 +79,15 @@ public class LakeTablet extends Tablet {
 
     public void setDataSize(long dataSize) {
         this.dataSize = dataSize;
+    }
+
+    @Override
+    public long getStorageSize(boolean singleReplica) {
+        return storageSize;
+    }
+
+    public void setStorageSize(long storageSize) {
+        this.storageSize = storageSize;
     }
 
     public void setDataSizeUpdateTime(long dataSizeUpdateTime) {
