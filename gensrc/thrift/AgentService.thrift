@@ -400,6 +400,7 @@ struct TRemoteSnapshotRequest {
      11: optional Types.TSchemaHash src_schema_hash
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+     14: optional binary encryption_meta
  }
 
 enum TTabletMetaType {

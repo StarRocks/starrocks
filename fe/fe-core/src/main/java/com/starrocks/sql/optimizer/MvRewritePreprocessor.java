@@ -57,7 +57,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -67,7 +66,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
@@ -305,6 +303,8 @@ public class MvRewritePreprocessor {
                 sessionVariable.isEnableSyncMaterializedViewRewrite());
         logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
                 sessionVariable.isEnableViewBasedMvRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_text_match_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewTextMatchRewrite());
 
         // limit
         logMVPrepare(connectContext, "---------------------------------");
@@ -343,58 +343,49 @@ public class MvRewritePreprocessor {
         }
         List<LogicalViewScanOperator> viewScans = Lists.newArrayList();
         // process equivalent operator，construct logical plan with view
-        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans, columnRefFactory);
+        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans);
         if (viewScans.isEmpty()) {
             // means there is no plan with view
             return;
         }
         // optimize logical plan with view
-        OptExpression optimizedPlan = optimizeViewPlan(
+        OptExpression optimizedPlan = MvUtils.optimizeViewPlan(
                 logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
-        queryMaterializationContext.setLogicalTreeWithView(optimizedPlan);
-        queryMaterializationContext.setViewScans(viewScans);
+        queryMaterializationContext.setQueryOptPlanWithView(optimizedPlan);
+        queryMaterializationContext.setQueryViewScanOps(viewScans);
     }
 
-    private OptExpression optimizeViewPlan(OptExpression logicalTree,
-                                           ConnectContext connectContext,
-                                           ColumnRefSet requiredColumns,
-                                           ColumnRefFactory columnRefFactory) {
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
-        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
-                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
-        return optimizedViewPlan;
-    }
 
     private OptExpression extractLogicalPlanWithView(OptExpression logicalTree,
-                                                     List<LogicalViewScanOperator> viewScans,
-                                                     ColumnRefFactory columnRefFactory) {
+                                                     List<LogicalViewScanOperator> viewScans) {
         List<OptExpression> inputs = Lists.newArrayList();
         if (logicalTree.getOp().getEquivalentOp() != null) {
             LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
-            // collect LogicalViewScanOperator to original logical tree,
-            // which will be used in mv union rewrite
-            // should use cloned plan because the following optimizeViewPlan will change the plan
+            // If the view scan operator is not rewritten, needs to use the original plan to replace the view scan operator.
+            // We don't need to evaluate the original plan directly, if view-based-rewrite successes, the original plan will
+            // not be used, so use Lazy Evaluator here.
+            // 1. Collect LogicalViewScanOperator to an original logical tree which will be used in mv union rewrite.
+            // 2. Clone the original plan because the following optimizeViewPlan will change the plan
             OptExpression clonePlan = MvUtils.cloneExpression(logicalTree);
-            OptExpression optimizedViewPlan = optimizeViewPlan(
-                    clonePlan, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
-            viewScanOperator.setOriginalPlan(optimizedViewPlan);
+            viewScanOperator.setOriginalPlanEvaluator(new LogicalViewScanOperator.OptPlanEvaluator(clonePlan,
+                    connectContext, viewScanOperator.getOutputColumnSet(), queryColumnRefFactory));
             viewScans.add(viewScanOperator);
+
+            // replace the original plan with a new view scan operator
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
             builder.setProjection(null);
-            LogicalViewScanOperator clone = builder.build();
-            OptExpression viewScanExpr = OptExpression.create(clone);
-            // should add a projection to make predicate pushdown rules work right
+            LogicalViewScanOperator clonedViewScanOp = builder.build();
+            OptExpression viewScanExpr = OptExpression.create(clonedViewScanOp);
+
+            // add a projection to make predicate push-down rules work.
             Projection projection = viewScanOperator.getProjection();
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
             OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
             return projectionExpr;
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
-                OptExpression newInput = extractLogicalPlanWithView(input, viewScans, columnRefFactory);
+                OptExpression newInput = extractLogicalPlanWithView(input, viewScans);
                 inputs.add(newInput);
             }
             Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());

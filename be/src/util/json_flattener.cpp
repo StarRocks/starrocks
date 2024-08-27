@@ -492,20 +492,33 @@ void JsonPathDeriver::_finalize() {
         } else {
             update_stack.push_back(node);
             for (auto& [key, child] : node->children) {
-                stack.emplace_back(child.get(), path + "." + std::string(key));
+                if (key.size() > 0) {
+                    // ignore empty key, it's invalid path in SQL
+                    stack.emplace_back(child.get(), path + "." + std::string(key));
+                } else {
+                    node->remain = true;
+                    _has_remain |= true;
+                }
             }
         }
     }
 
     // sort by name, just for stable order
     size_t limit = config::json_flat_column_max > 0 ? config::json_flat_column_max : std::numeric_limits<size_t>::max();
+    std::sort(hit_leaf.begin(), hit_leaf.end(), [&](const auto& a, const auto& b) {
+        auto desc_a = _derived_maps[a.first];
+        auto desc_b = _derived_maps[b.first];
+        return desc_a.hits > desc_b.hits;
+    });
+    for (size_t i = limit; i < hit_leaf.size(); i++) {
+        hit_leaf[i].first->remain = true;
+    }
+    if (hit_leaf.size() > limit) {
+        _has_remain |= true;
+        hit_leaf.resize(limit);
+    }
     std::sort(hit_leaf.begin(), hit_leaf.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
     for (auto& [node, path] : hit_leaf) {
-        if (_paths.size() >= limit) {
-            node->remain = true;
-            _has_remain |= true;
-            continue;
-        }
         node->index = _paths.size();
         _paths.emplace_back(path.substr(1));
         _types.emplace_back(node->type);

@@ -91,12 +91,12 @@ public:
         }
     }
 
-    void random_cols(int64_t N, vector<int>* v0, vector<int>* v1) {
-        v0->resize(N);
-        v1->resize(N);
-        for (int i = 0; i < N; i++) {
-            (*v0)[i] = (int)random_number();
-            (*v1)[i] = (int)random_number();
+    void random_cols(int64_t N, vector<vector<int>>* cols) {
+        for (auto& each_col : *cols) {
+            each_col.resize(N);
+            for (int i = 0; i < N; i++) {
+                each_col[i] = (int)random_number();
+            }
         }
     }
 

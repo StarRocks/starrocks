@@ -43,7 +43,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
@@ -66,8 +65,6 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -414,42 +411,6 @@ public class ExportMgr implements MemoryTrackable {
             readUnlock();
         }
         return size;
-    }
-
-    public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
-        long currentTimeMs = System.currentTimeMillis();
-        long newChecksum = checksum;
-        int size = dis.readInt();
-        newChecksum = checksum ^ size;
-        for (int i = 0; i < size; ++i) {
-            long jobId = dis.readLong();
-            newChecksum ^= jobId;
-            ExportJob job = new ExportJob();
-            job.readFields(dis);
-            // discard expired job right away
-            if (isJobExpired(job, currentTimeMs)) {
-                LOG.info("discard expired job: {}", job);
-                continue;
-            }
-            unprotectAddJob(job);
-        }
-        LOG.info("finished replay exportJob from image");
-        return newChecksum;
-    }
-
-    public long saveExportJob(DataOutputStream dos, long checksum) throws IOException {
-        Map<Long, ExportJob> idToJob = getIdToJob();
-        int size = idToJob.size();
-        checksum ^= size;
-        dos.writeInt(size);
-        for (ExportJob job : idToJob.values()) {
-            long jobId = job.getId();
-            checksum ^= jobId;
-            dos.writeLong(jobId);
-            job.write(dos);
-        }
-
-        return checksum;
     }
 
     public void saveExportJobV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

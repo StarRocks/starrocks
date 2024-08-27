@@ -12,13 +12,11 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 create database hive_sink_${uuid0}.hive_sink_db_${uuid0} properties (
     "location" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}"
 );
 -- result:
-[]
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
     "file_format" = "parquet"
@@ -31,11 +29,9 @@ as select * from files (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 admin enable failpoint 'output_stream_io_error' with 0.5 probability;
 -- result:
-[]
 -- !result
 [UC] insert into hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} select * from files (
     "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet",
@@ -69,7 +65,6 @@ E: (5025, 'injected output_stream_io_error')
 -- !result
 admin disable failpoint 'output_stream_io_error';
 -- result:
-[]
 -- !result
 [UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 -- result:
@@ -86,15 +81,12 @@ admin disable failpoint 'output_stream_io_error';
 -- !result
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 -- result:
-[]
 -- !result
 drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 drop catalog hive_sink_${uuid0};
 -- result:
-[]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
 -- result:
@@ -115,13 +107,11 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 create database hive_sink_${uuid0}.hive_sink_db_${uuid0} properties (
     "location" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}"
 );
 -- result:
-[]
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
     "file_format" = "orc"
@@ -134,11 +124,9 @@ as select * from files (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 admin enable failpoint 'output_stream_io_error' with 0.5 probability;
 -- result:
-[]
 -- !result
 [UC] insert into hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} select * from files (
     "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet",
@@ -172,7 +160,6 @@ E: (5025, 'injected output_stream_io_error')
 -- !result
 admin disable failpoint 'output_stream_io_error';
 -- result:
-[]
 -- !result
 [UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 -- result:
@@ -189,15 +176,12 @@ admin disable failpoint 'output_stream_io_error';
 -- !result
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 -- result:
-[]
 -- !result
 drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 drop catalog hive_sink_${uuid0};
 -- result:
-[]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
 -- result:
@@ -218,13 +202,11 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
     "aws.s3.endpoint"  =  "${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 create database hive_sink_${uuid0}.hive_sink_db_${uuid0} properties (
     "location" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}"
 );
 -- result:
-[]
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
     "file_format" = "textfile"
@@ -238,11 +220,9 @@ as select * from files (
     
 );
 -- result:
-[]
 -- !result
 admin enable failpoint 'output_stream_io_error' with 0.5 probability;
 -- result:
-[]
 -- !result
 [UC] insert into hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} select * from files (
     "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet",
@@ -276,7 +256,6 @@ E: (5025, 'injected output_stream_io_error')
 -- !result
 admin disable failpoint 'output_stream_io_error';
 -- result:
-[]
 -- !result
 [UC] select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} order by 1, 2, 3 limit 10;
 -- result:
@@ -293,15 +272,12 @@ admin disable failpoint 'output_stream_io_error';
 -- !result
 drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
 -- result:
-[]
 -- !result
 drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 -- result:
-[]
 -- !result
 drop catalog hive_sink_${uuid0};
 -- result:
-[]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/tpch_lineitem.parquet > /dev/null
 -- result:

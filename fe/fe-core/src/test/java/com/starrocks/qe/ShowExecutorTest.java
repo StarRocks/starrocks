@@ -1030,14 +1030,15 @@ public class ShowExecutorTest {
         Assert.assertEquals("", resultSet.getString(12));
         Assert.assertEquals("false", resultSet.getString(13));
         System.out.println(resultSet.getResultRows());
-        for (int i = 14; i < mvSchemaTable.size() - 4; i++) {
+        for (int i = 14; i < mvSchemaTable.size() - 5; i++) {
             System.out.println(i);
             Assert.assertEquals("", resultSet.getString(i));
         }
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 4));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 3));
-        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 5));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 4));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 3));
+        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 

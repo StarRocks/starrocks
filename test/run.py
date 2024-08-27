@@ -28,6 +28,9 @@ import sys
 
 import nose
 
+from lib.sr_sql_lib import self_print
+from lib import ColorEnum
+
 if not os.environ.get("version"):
     version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     os.environ["version"] = version
@@ -189,7 +192,7 @@ if __name__ == "__main__":
     argv = [
         "nosetests",
         "test_sql_cases.py",
-        "-vv",
+        "-v",
         "-s",
         "--nologcapture",
     ]
@@ -224,7 +227,7 @@ if __name__ == "__main__":
     if collect:
         argv += ["--collect-only"]
 
-    print("Test cmd: %s" % " ".join(argv))
+    self_print("Test cmd: %s" % " ".join(argv), ColorEnum.GREEN)
 
     nose.run(argv=argv)
 

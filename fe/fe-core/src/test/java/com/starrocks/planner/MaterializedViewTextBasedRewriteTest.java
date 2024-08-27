@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -355,5 +356,21 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
                 sql(query).nonMatch("mv0");
             }
         });
+    }
+
+    @Test
+    public void testTextMatchRewriteWithSubQueryFilter() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by  random" +
+                " as select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id,time;",
+                () -> {
+                    String query = "select * from (select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by " +
+                            " user_id,time) s where user_id != 'xxxx'";
+                    String plan = getQueryPlan(query);
+                    PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                            "     TABLE: mv0\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     PREDICATES: CAST(6: user_id AS VARCHAR(1048576)) != 'xxxx'");
+                });
     }
 }

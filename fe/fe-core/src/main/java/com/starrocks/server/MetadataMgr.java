@@ -696,7 +696,7 @@ public class MetadataMgr {
                 connectorTableColumnStats = new ConnectorTableColumnStats(
                         ColumnStatistic.buildFrom(columnStatisticList.get(i).getColumnStatistic()).
                                 setHistogram(histogram).build(),
-                        columnStatisticList.get(i).getRowCount());
+                        columnStatisticList.get(i).getRowCount(), columnStatisticList.get(i).getUpdateTime());
             } else {
                 connectorTableColumnStats = columnStatisticList.get(i);
             }

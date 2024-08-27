@@ -17,7 +17,7 @@ PROPERTIES (
 );
 insert into bill_detail values('JT2921712368984');
 desc bill_detail;
-explain select * from bill_detail where bill_code='JT2921712368984';
+[UC]explain select * from bill_detail where bill_code='JT2921712368984';
 select * from bill_detail where bill_code='JT2921712368984';
 drop table bill_detail;
 CREATE TABLE `bill_detail` (

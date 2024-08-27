@@ -833,6 +833,13 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testLike() throws Exception {
+        String sql = "select count(*) from supplier where S_ADDRESS like 'k' AND S_ADDRESS like S_COMMENT";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "DictDecode(12: S_ADDRESS, [<place-holder> = 'k'])");
+    }
+
+    @Test
     public void testScanPredicate() throws Exception {
         String sql;
         String plan;
@@ -1922,5 +1929,18 @@ public class LowCardinalityTest extends PlanTestBase {
         } finally {
             FeConstants.unitTestView = true;
         }
+    }
+
+    @Test
+    public void testExistRequiredDistribution() throws Exception {
+        String sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY) from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        ExecPlan execPlan = getExecPlan(sql);
+        Assert.assertTrue("joinNode is in the same fragment with a table contains global dict, " +
+                        "we cannot change its distribution", execPlan.getOptExpression(3).isExistRequiredDistribution());
+        Assert.assertTrue("table contains global dict, we cannot change its distribution",
+                execPlan.getOptExpression(0).isExistRequiredDistribution());
+
+        Assert.assertFalse("table doesn't contain global dict, we can change its distribution",
+                execPlan.getOptExpression(1).isExistRequiredDistribution());
     }
 }

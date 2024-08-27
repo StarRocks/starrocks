@@ -28,8 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -169,28 +167,6 @@ public class GlobalFunctionMgr {
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
-    }
-
-    public long loadGlobalFunctions(DataInputStream dis, long checksum) throws IOException {
-        int count = dis.readInt();
-        checksum ^= count;
-        for (long i = 0; i < count; ++i) {
-            Function f = Function.read(dis);
-            replayAddFunction(f);
-        }
-        return checksum;
-    }
-
-    public long saveGlobalFunctions(DataOutputStream dos, long checksum) throws IOException {
-        List<Function> functions = getFunctions();
-        int size = functions.size();
-        checksum ^= size;
-        dos.writeInt(size);
-
-        for (Function f : functions) {
-            f.write(dos);
-        }
-        return checksum;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

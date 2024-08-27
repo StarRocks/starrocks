@@ -94,8 +94,8 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported expr ''{0}'' in {1} clause. {2}")
     String unsupportedExprWithInfoAndExplain(String a0, String a1, String a2);
 
-    @BaseMessage("Cannot use duplicated {0} clause in building materialized view")
-    String duplicatedClause(String a0);
+    @BaseMessage("Cannot use duplicated {0} clause in {1}")
+    String duplicatedClause(String a0, String a1);
 
     @BaseMessage("''{0}'' cannot support ''{1}'' in materialized view")
     String forbidClauseInMV(String a0, String a1);
