@@ -91,8 +91,12 @@ public abstract class JDBCSchemaResolver {
                     columnSet.getInt("DECIMAL_DIGITS"));
 
             String comment = "";
-            if (columnSet.getString("REMARKS") != null) {
-                comment = columnSet.getString("REMARKS");
+            // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
+            try{
+                if (columnSet.getString("REMARKS") != null) {
+                    comment = columnSet.getString("REMARKS");
+                }
+            } catch (SQLException ignored) {
             }
 
             fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
