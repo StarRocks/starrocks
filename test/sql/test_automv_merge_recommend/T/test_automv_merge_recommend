@@ -3,6 +3,7 @@
 function: prepare_data("ssb", "${db[0]}")
 
 create tunespace ts0;
+function: wait_partitions_available("ts0", 4)
 
 alter tunespace ts0 append "Q1.1" select sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
@@ -24,6 +25,8 @@ where d_weeknuminyear = 6 and d_year = 1994
 and lo_discount between 5 and 7
 and lo_quantity between 26 and 35;
 
+
+set automv_card_rowcount_ratio_hwm = 1.0;
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
 
 -- name: test_automv_merge_recommend_with_default_names
@@ -31,6 +34,7 @@ function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
 function: prepare_data("ssb", "${db[0]}")
 
 create tunespace ts0;
+function: wait_partitions_available("ts0", 4)
 
 alter tunespace ts0 append  select sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
@@ -54,6 +58,8 @@ and lo_quantity between 26 and 35;
 
 [UC]shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
 
+
+set automv_card_rowcount_ratio_hwm = 1.0;
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
 
 -- name: test_automv_merge_recommend_with_legacy_mv
@@ -102,6 +108,7 @@ GROUP BY
 REFRESH MATERIALIZED VIEW _mv_947cbb72498e2d35811884752afda5734ac8024e  WITH SYNC MODE;
 
 create tunespace ts0;
+function: wait_partitions_available("ts0", 4)
 
 alter tunespace ts0 append "Q1.1" select sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
@@ -124,6 +131,7 @@ and lo_discount between 5 and 7
 and lo_quantity between 26 and 35;
 
 alter tunespace ts0 populate from database ${db[0]};
+
 set automv_card_rowcount_ratio_hwm = 1.0;
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3,_mv_947cbb72498e2d35811884752afda5734ac8024e")
 
@@ -132,6 +140,7 @@ function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3,_mv_947cbb72498e2d
 function: prepare_data("ssb", "${db[0]}")
 
 create tunespace ts0;
+function: wait_partitions_available("ts0", 4)
 
 alter tunespace ts0 append "query" 
 select "Q1.1" as label, sum(lo_revenue) as revenue
@@ -160,6 +169,7 @@ function: check_automv_merge_recommend("ts0", "query.part.0,query.part.1,query.p
 function: prepare_data("ssb", "${db[0]}")
 
 create tunespace ts0;
+function: wait_partitions_available("ts0", 4)
 
 alter tunespace ts0 append 
 select "Q1.1" as label, sum(lo_revenue) as revenue
@@ -184,4 +194,5 @@ set automv_card_rowcount_ratio_hwm = 1.0;
 select assert_true(cast(traits->'name' as string) not like '%.part.%') from ts0;
 [UC]shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
 
+set automv_card_rowcount_ratio_hwm = 1.0;
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")

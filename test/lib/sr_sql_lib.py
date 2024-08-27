@@ -2477,6 +2477,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_true(len(accelerated_queries_list) > 0, "The number of AcceleratedQueries list should not be empty")
         tools.assert_true(any(map(lambda qs: qs == expect_queries, accelerated_queries_list)), "At least one of AcceleratedQueries should be %s" % (expect_queries))
 
+    def wait_partitions_available(self, table, num_partitions):
+        max_times = 10
+        times = 0
+        sql = 'show partitions from ' + table
+        while times < max_times:
+            result = self.execute_sql(sql, True)
+            tools.assert_true(result["status"])
+            if len(result["result"]) >= num_partitions:
+                return;
+            time.sleep(1)
+            times += 1
+
+        tools.assert_true(False, "partitions of %s are not avaiable" % table);
+
     def wait_table_rowcount_not_empty(self, table, max_times=300):
         times = 0
         rc = 0

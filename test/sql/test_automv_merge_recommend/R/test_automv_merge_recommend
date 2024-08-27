@@ -6,6 +6,10 @@ None
 create tunespace ts0;
 -- result:
 -- !result
+function: wait_partitions_available("ts0", 4)
+-- result:
+None
+-- !result
 alter tunespace ts0 append "Q1.1" select sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
 where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25;
@@ -27,6 +31,9 @@ and lo_discount between 5 and 7
 and lo_quantity between 26 and 35;
 -- result:
 -- !result
+set automv_card_rowcount_ratio_hwm = 1.0;
+-- result:
+-- !result
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
 -- result:
 None
@@ -38,6 +45,10 @@ None
 -- !result
 create tunespace ts0;
 -- result:
+-- !result
+function: wait_partitions_available("ts0", 4)
+-- result:
+None
 -- !result
 alter tunespace ts0 append  select sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
@@ -63,7 +74,10 @@ and lo_quantity between 26 and 35;
 [UC]shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
 -- result:
 0
-id#1,id#100002,id#100001
+id#100001,id#2,id#1
+-- !result
+set automv_card_rowcount_ratio_hwm = 1.0;
+-- result:
 -- !result
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
 -- result:
@@ -118,6 +132,10 @@ REFRESH MATERIALIZED VIEW _mv_947cbb72498e2d35811884752afda5734ac8024e  WITH SYN
 create tunespace ts0;
 -- result:
 -- !result
+function: wait_partitions_available("ts0", 4)
+-- result:
+None
+-- !result
 alter tunespace ts0 append "Q1.1" select sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
 where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25;
@@ -157,6 +175,10 @@ None
 create tunespace ts0;
 -- result:
 -- !result
+function: wait_partitions_available("ts0", 4)
+-- result:
+None
+-- !result
 alter tunespace ts0 append "query" 
 select "Q1.1" as label, sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
@@ -192,6 +214,10 @@ None
 create tunespace ts0;
 -- result:
 -- !result
+function: wait_partitions_available("ts0", 4)
+-- result:
+None
+-- !result
 alter tunespace ts0 append 
 select "Q1.1" as label, sum(lo_revenue) as revenue
 from lineorder join dates on lo_orderdate = d_datekey
@@ -224,7 +250,10 @@ select assert_true(cast(traits->'name' as string) not like '%.part.%') from ts0;
 [UC]shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
 -- result:
 0
-id#2,id#3,id#1
+id#1,id#2,id#3
+-- !result
+set automv_card_rowcount_ratio_hwm = 1.0;
+-- result:
 -- !result
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
 -- result:
