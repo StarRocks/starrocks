@@ -16,6 +16,7 @@ package com.starrocks.credential;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudCredential;
@@ -26,6 +27,7 @@ import com.starrocks.credential.hdfs.StrictHDFSCloudConfigurationProvider;
 import com.starrocks.credential.tencent.TencentCloudConfigurationProvider;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsClientProperties;
+import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
 
 import java.util.HashMap;
@@ -89,7 +91,12 @@ public class CloudConfigurationFactory {
         String sessionSk = properties.getOrDefault(S3FileIOProperties.SECRET_ACCESS_KEY, null);
         String sessionToken = properties.getOrDefault(S3FileIOProperties.SESSION_TOKEN, null);
         String region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION, null);
-        if (sessionAk != null && sessionSk != null && sessionToken != null && region != null) {
+        String clientFactory = properties.getOrDefault(AwsProperties.CLIENT_FACTORY, null);
+        String icebergAwsClientFactoryClassName = IcebergAwsClientFactory.class.getSimpleName();
+        if (clientFactory != null && clientFactory.contains(icebergAwsClientFactoryClassName)) {
+            return buildCloudConfigurationForStorage(copiedProperties);
+        }
+        if (sessionAk != null && sessionSk != null && sessionToken != null && region != null){
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
