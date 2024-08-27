@@ -1,5 +1,5 @@
 -- name: testHiveScanRanges
-set enable_connector_incremental_scan_ranges = false;
+set enable_connector_incremental_scan_ranges = true;
 -- result:
 []
 -- !result
