@@ -92,12 +92,11 @@ public abstract class JDBCSchemaResolver {
 
             String comment = "";
             // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
-            try{
+            try {
                 if (columnSet.getString("REMARKS") != null) {
                     comment = columnSet.getString("REMARKS");
                 }
-            } catch (SQLException ignored) {
-            }
+            } catch (SQLException ignored) { }
 
             fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
                     columnSet.getString("IS_NULLABLE").equals("YES"), comment));
