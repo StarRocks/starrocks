@@ -63,10 +63,6 @@ public class JoinTuningGuide implements TuningGuide {
 
     @Override
     public Optional<OptExpression> apply(OptExpression optExpression) {
-        if (optExpression.isExistRequiredDistribution()) {
-            return Optional.empty();
-        }
-
         if (optExpression.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
             return Optional.empty();
         }
@@ -101,6 +97,9 @@ public class JoinTuningGuide implements TuningGuide {
 
 
         if (type == EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED) {
+            if (optExpression.isExistRequiredDistribution()) {
+                return Optional.empty();
+            }
             if (isBroadcastJoin(rightChildNode)) {
                 if (leftNodeExecStats.getPushRows() < BROADCAST_THRESHOLD && leftSize < rightSize
                         && !commuteJoinHelper.onlyShuffle()) {
@@ -169,6 +168,10 @@ public class JoinTuningGuide implements TuningGuide {
             } else if (isShuffleJoin(leftChildNode, rightChildNode)) {
                 if (leftNodeExecStats.getPushRows() < BROADCAST_THRESHOLD &&
                         leftSize < rightSize && !commuteJoinHelper.onlyShuffle()) {
+                    if (optExpression.isExistRequiredDistribution()) {
+                        return Optional.empty();
+                    }
+
                     // original plan: small table(shuffle) inner join large table(shuffle)
                     // rewrite to: large table inner join small table(broadcast)
                     PhysicalDistributionOperator broadcastOp = new PhysicalDistributionOperator(
@@ -193,6 +196,9 @@ public class JoinTuningGuide implements TuningGuide {
         } else if (type == EstimationErrorType.RIGHT_INPUT_OVERESTIMATED) {
             if (isShuffleJoin(leftChildNode, rightChildNode)) {
                 if (rightNodeExecStats.getPushRows() < BROADCAST_THRESHOLD && !originalHelper.onlyShuffle()) {
+                    if (optExpression.isExistRequiredDistribution()) {
+                        return Optional.empty();
+                    }
                     // original plan: large table(shuffle) inner join small table(shuffle)
                     // rewrite to: large table inner join small table(broadcast)
                     PhysicalDistributionOperator broadcastOp = new PhysicalDistributionOperator(
