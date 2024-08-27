@@ -614,6 +614,7 @@ Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
         }
     }
     RETURN_IF_ERROR(_morsel_queue->append_morsels(std::move(morsels)));
+    return Status::OK();
 }
 
 // ==================== ConnectorChunkSource ====================
