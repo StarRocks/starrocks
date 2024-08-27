@@ -15,6 +15,8 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Stopwatch;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,6 +33,7 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         starRocksAssert.withTable(
@@ -72,6 +75,7 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
                                     "\"compression\"=\"LZ4\"\n" +
                                     ")", i));
         }
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
     }
 
     @ParameterizedTest(name = "{index}-{0}")
@@ -96,7 +100,8 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
         starRocksAssert.withMaterializedView(createMv);
         Stopwatch watch = Stopwatch.createStarted();
         // Make sure it's not empty
-        starRocksAssert.query(viewQuery).explainContains(mvName);
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, viewQuery);
+        PlanTestBase.assertContains(plan, mvName);
         LOG.info("query takes {}ms: {}", watch.elapsed(TimeUnit.MILLISECONDS), query);
         starRocksAssert.dropView(viewName);
         starRocksAssert.dropMaterializedView(mvName);
