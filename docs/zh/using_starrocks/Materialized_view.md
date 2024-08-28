@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['wuhua', 'Wuhuashitu']
 ---
 
@@ -153,7 +153,7 @@ GROUP BY order_id;
 
 ### 基于查询语句创建异步物化视图
 
-您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md) 语句为特定查询语句创建物化视图。
+您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) 语句为特定查询语句创建物化视图。
 
 以下示例根据上述查询语句，基于表 `goods` 和表 `order_list` 创建一个“以订单 ID 为分组，对订单中所有商品价格求和”的异步物化视图，并设定其刷新方式为 ASYNC，每天自动刷新。
 
@@ -175,7 +175,7 @@ GROUP BY order_id;
 > - 异步物化视图支持分区上卷。例如，基表基于天做分区方式，您可以设置异步物化视图按月做分区。
 > - 异步物化视图暂不支持使用 List 分区策略，亦不支持基于使用 List 分区的基表创建。
 > - 创建物化视图的查询语句不支持非确定性函数，其中包括 rand()、random()、uuid() 和 sleep()。
-> - 异步物化视图支持多种数据类型。有关详细信息，请参阅 [CREATE MATERIALIZED VIEW - 支持数据类型](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md#支持数据类型)。
+> - 异步物化视图支持多种数据类型。有关详细信息，请参阅 [CREATE MATERIALIZED VIEW - 支持数据类型](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md#支持数据类型)。
 > - 默认情况下，执行 CREATE MATERIALIZED VIEW 语句后，StarRocks 将立即开始刷新任务，这将会占用一定系统资源。如需推迟刷新时间，请添加 REFRESH DEFERRED 参数。
 
 - **异步物化视图刷新机制**
@@ -190,7 +190,7 @@ GROUP BY order_id;
   - 支持设置数据变更不会触发对应物化视图自动刷新的基表。
   - 支持为刷新任务设置资源组。
   
-  详细信息，请参阅 [CREATE MATERIALIZED VIEW - 参数](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md#参数) 中的 **PROPERTIES** 部分。您还可以使用 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 修改现有异步物化视图的刷新机制。
+  详细信息，请参阅 [CREATE MATERIALIZED VIEW - 参数](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md#参数) 中的 **PROPERTIES** 部分。您还可以使用 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md) 修改现有异步物化视图的刷新机制。
 
   > **注意**
   >
@@ -206,7 +206,7 @@ GROUP BY order_id;
 
 ## 手动刷新异步物化视图
 
-您可以通过 [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH_MATERIALIZED_VIEW.md) 命令手动刷新指定异步物化视图。StarRocks v2.5 版本中，异步物化视图支持手动刷新部分分区。在 v3.1 版本中，StarRocks 支持同步调用刷新任务。
+您可以通过 [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/REFRESH_MATERIALIZED_VIEW.md) 命令手动刷新指定异步物化视图。StarRocks v2.5 版本中，异步物化视图支持手动刷新部分分区。在 v3.1 版本中，StarRocks 支持同步调用刷新任务。
 
 ```SQL
 -- 异步调用刷新任务。
@@ -215,7 +215,7 @@ REFRESH MATERIALIZED VIEW order_mv;
 REFRESH MATERIALIZED VIEW order_mv WITH SYNC MODE;
 ```
 
-您可以通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 取消异步调用的刷新任务。
+您可以通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 取消异步调用的刷新任务。
 
 ## 直接查询异步物化视图
 
@@ -251,7 +251,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
 
 ### 修改异步物化视图
 
-您可以通过 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 命令修改异步物化视图属性。
+您可以通过 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md) 命令修改异步物化视图属性。
 
 - 启用被禁用的异步物化视图（将物化视图的状态设置为 Active）。
 
@@ -273,7 +273,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
 
 ### 查看异步物化视图
 
-您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 或查询 Information Schema 中的系统元数据视图来查看数据库中的异步物化视图。
+您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) 或查询 Information Schema 中的系统元数据视图来查看数据库中的异步物化视图。
 
 - 查看当前数据仓库内所有异步物化视图。
 
@@ -293,7 +293,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
   SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
-- 通过 Information Schema 中的系统元数据视图 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../reference/information_schema/materialized_views.md)。
+- 通过 Information Schema 中的系统元数据视图 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../sql-reference/information_schema/materialized_views.md)。
 
   ```SQL
   SELECT * FROM information_schema.materialized_views;
@@ -301,7 +301,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
 
 ### 查看异步物化视图创建语句
 
-您可以通过 [SHOW CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md) 命令查看异步物化视图创建语句。
+您可以通过 [SHOW CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/SHOW_CREATE_MATERIALIZED_VIEW.md) 命令查看异步物化视图创建语句。
 
 ```SQL
 SHOW CREATE MATERIALIZED VIEW order_mv;
@@ -309,7 +309,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### 查看异步物化视图的执行状态
 
-您可以通过查询 StarRocks 的 [Information Schema](../reference/overview-pages/information_schema.md) 中的 [`tasks`](../reference/information_schema/tasks.md) 和 [`task_runs`](../reference/information_schema/task_runs.md) 元数据视图来查看异步物化视图的执行（构建或刷新）状态。
+您可以通过查询 StarRocks 的 [Information Schema](../sql-reference/information_schema/information_schema.md) 中的 [`tasks`](../sql-reference/information_schema/tasks.md) 和 [`task_runs`](../sql-reference/information_schema/task_runs.md) 元数据视图来查看异步物化视图的执行（构建或刷新）状态。
 
 以下示例查看最新创建的异步物化视图的执行状态：
 
@@ -352,7 +352,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### 删除异步物化视图
 
-您可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的异步物化视图。
+您可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的异步物化视图。
 
 ```SQL
 DROP MATERIALIZED VIEW order_mv;

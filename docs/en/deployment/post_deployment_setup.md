@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Post-deployment setup
@@ -77,7 +77,7 @@ To allow your StarRocks cluster to work properly in production, you need to set 
   SET GLOBAL pipeline_dop = 0;
   ```
 
-For more information about system variables, see [System variables](../reference/System_variable.md).
+For more information about system variables, see [System variables](../sql-reference/System_variable.md).
 
 ## Set user property
 

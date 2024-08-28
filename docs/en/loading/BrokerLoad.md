@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Load data from HDFS or cloud storage
@@ -8,7 +8,7 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides the loading method MySQL-based Broker Load to help you load a large amount of data from HDFS or cloud storage into StarRocks.
 
-Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) statement or the `curl` command to check the result of the job.
+Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) statement or the `curl` command to check the result of the job.
 
 Broker Load supports single-table loads and multi-table loads. You can load one or multiple data files into one or multiple destination tables by running one Broker Load job. Broker Load ensures the transactional atomicity of each load job that is run to load multiple data files. Atomicity means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
 
@@ -22,7 +22,7 @@ In v2.4 and earlier, StarRocks depends on brokers to set up connections between 
 
 From v2.5 onwards, StarRocks no longer depends on brokers to set up connections between your StarRocks cluster and your external storage system when it runs a Broker Load job. Therefore, you no longer need to specify a broker in the load statement, but you still need to retain the `WITH BROKER` keyword. This is called "broker-free loading."
 
-When your data is stored in HDFS, you may encounter situations where broker-free loading does not work. This can happen when your data is stored across multiple HDFS clusters or when you have configured multiple Kerberos users. In these situations, you can resort to using broker-based loading instead. To do this successfully, make sure that at least one independent broker group is deployed. For information about how to specify authentication configuration and HA configuration in these situations, see [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs).
+When your data is stored in HDFS, you may encounter situations where broker-free loading does not work. This can happen when your data is stored across multiple HDFS clusters or when you have configured multiple Kerberos users. In these situations, you can resort to using broker-based loading instead. To do this successfully, make sure that at least one independent broker group is deployed. For information about how to specify authentication configuration and HA configuration in these situations, see [HDFS](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs).
 
 ## Supported data file formats
 
@@ -67,7 +67,7 @@ The following figure shows the workflow of a Broker Load job.
 
 ### Create a multi-table load job
 
-This topic uses CSV as an example to describe how to load multiple data files into multiple tables. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+This topic uses CSV as an example to describe how to load multiple data files into multiple tables. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
@@ -152,7 +152,7 @@ PROPERTIES
 );
 ```
 
-In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs).
 
 #### Load data from AWS S3
 
@@ -181,7 +181,7 @@ WITH BROKER
 >
 > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as the file path with `s3a://`.
 
-In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#aws-s3).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#aws-s3).
 
 From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the TABLE keyword, saving you from the trouble of creating an external table first. For more information, see [Load data using INSERT > Insert data directly from files in an external source using TABLE keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 
@@ -212,7 +212,7 @@ WITH BROKER
 >
 > Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
 
-In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#google-gcs).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#google-gcs).
 
 #### Load data from other S3-compatible storage system
 
@@ -237,7 +237,7 @@ WITH BROKER
 );
 ```
 
-In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#other-s3-compatible-storage-system).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#other-s3-compatible-storage-system).
 
 #### Load data from Microsoft Azure Storage
 
@@ -274,7 +274,7 @@ WITH BROKER
   >   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   >   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
-In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#microsoft-azure-storage).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#microsoft-azure-storage).
 
 #### Query data
 
@@ -343,7 +343,7 @@ WITH BROKER
 );
 ```
 
-In the preceding examples, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#aws-s3).
+In the preceding examples, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#aws-s3).
 
 ### View a load job
 
@@ -351,7 +351,7 @@ Broker Load allows you to view a lob job by using the SHOW LOAD statement or the
 
 #### Use SHOW LOAD
 
-For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md).
+For more information, see [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md).
 
 #### Use curl
 
@@ -394,7 +394,7 @@ The following table describes the parameters in `jobInfo`.
 
 ### Cancel a load job
 
-When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) statement to cancel the job.
+When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/loading_unloading/CANCEL_LOAD.md) statement to cancel the job.
 
 For example, you can execute the following statement to cancel a load job, whose label is `label1`, in the database `test_db`:
 
@@ -430,4 +430,4 @@ The [FE configuration item](../administration/management/FE_configuration.md) `m
 
 In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
 
-Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
+Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/loading_unloading/ALTER_LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.

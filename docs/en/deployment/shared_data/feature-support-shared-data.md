@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_label: "Feature Support"
 ---
 
@@ -182,7 +182,7 @@ CANCEL COMPACTION WHERE TXN_ID = 123;
 
 ### Manual Compaction
 
-From v3.1, StarRocks offers a SQL statement for manual Compaction. You can specify the table or partitions for compaction. For more information, refer to [Manual Compaction](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#manual-compaction).
+From v3.1, StarRocks offers a SQL statement for manual Compaction. You can specify the table or partitions for compaction. For more information, refer to [Manual Compaction](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#manual-compaction).
 
 ## Primary Key tables
 

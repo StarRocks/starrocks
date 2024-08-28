@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
@@ -7,7 +7,7 @@ toc_max_heading_level: 5
 
 A Delta Lake catalog is a kind of external catalog that enables you to query data from Delta Lake without ingestion.
 
-Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
+Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
 
 To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster must be able to access the storage system and metastore of your Delta Lake cluster. StarRocks supports the following storage systems and metastores:
 
@@ -761,13 +761,13 @@ PROPERTIES
 
 ## View Delta Lake catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Delta Lake catalog named `deltalake_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Delta Lake catalog named `deltalake_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG deltalake_catalog_glue;
@@ -777,7 +777,7 @@ SHOW CREATE CATALOG deltalake_catalog_glue;
 
 You can use one of the following methods to switch to a Delta Lake catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Delta Lake catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify a Delta Lake catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -786,7 +786,7 @@ You can use one of the following methods to switch to a Delta Lake catalog and a
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Delta Lake catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to a Delta Lake catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -794,7 +794,7 @@ You can use one of the following methods to switch to a Delta Lake catalog and a
 
 ## Drop a Delta Lake catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Delta Lake catalog named `deltalake_catalog_glue`:
 
@@ -820,7 +820,7 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 ## Query a Delta Lake table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Delta Lake cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Delta Lake cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -828,7 +828,7 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 2. [Switch to a Delta Lake Catalog and a database in it](#switch-to-a-delta-lake-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
