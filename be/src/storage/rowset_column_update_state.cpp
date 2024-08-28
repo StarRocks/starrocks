@@ -528,13 +528,11 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
         const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
 
         bool has_default_value = tablet_column.has_default_value();
-        std::string default_value;
+        std::string default_value = has_default_value ? tablet_column.default_value() : "";
         auto iter = _column_to_expr_value.find(std::string(tablet_column.name()));
         if (iter != _column_to_expr_value.end()) {
             has_default_value = true;
             default_value = iter->second;
-        } else if (has_default_value) {
-            default_value = tablet_column.default_value();
         }
         if (has_default_value) {
             const TypeInfoPtr& type_info = get_type_info(tablet_column);

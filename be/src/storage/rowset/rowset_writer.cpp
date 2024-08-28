@@ -203,6 +203,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             _rowset_txn_meta_pb->set_partial_update_mode(_context.partial_update_mode);
             if (_context.column_to_expr_value != nullptr) {
                 for (auto& [name, value] : (*_context.column_to_expr_value)) {
+                    LOG(INFO) << "rowset writer set column";
                     _rowset_txn_meta_pb->mutable_column_to_expr_value()->insert({name, value});
                 }
             }
