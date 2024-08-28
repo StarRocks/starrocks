@@ -384,7 +384,7 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         IndexReadOptions opts;
         opts.use_page_cache = !_opts.temporary_data &&
                               (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
-        opts.kept_in_memory = !opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
+        opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
