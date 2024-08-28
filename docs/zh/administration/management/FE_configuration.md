@@ -2203,11 +2203,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-<<<<<<< HEAD
-- 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/data-definition/RECOVER.md) 语句恢复。
-=======
 - 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 - 引入版本：-
 
 ##### enable_auto_tablet_distribution
@@ -2271,23 +2267,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Schema Change 超时时间。
 - 引入版本：-
 
-<<<<<<< HEAD
-=======
-##### enable_fast_schema_evolution
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`。开启后增删列时可以提高 Schema Change 速度并降低资源使用。
-- 引入版本：v3.2.0
-
-> **说明**
->
-> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
-> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ##### recover_with_empty_tablet
 
 - 默认值：false

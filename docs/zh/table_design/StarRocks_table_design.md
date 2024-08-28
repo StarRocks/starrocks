@@ -30,19 +30,11 @@ StarRocks 表设计原理如下图所示。
 
 - 列级数据块
 
-<<<<<<< HEAD
   表中每列数据都按 64 KB 分块存储。数据块作为一个单位单独编码、压缩，也作为 I/O 单位，整体写回设备或者读出。
-=======
-执行 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看表结构。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 - 列级索引
 
-<<<<<<< HEAD
   表中每列数据都有一个独立的行号索引。行号索引表中，该列的数据块和行号一一对应。每个行号索引项由对应数据块的起始行号、位置和长度信息构成。用某行数据的行号查找行号索引表，可以获取包含该行号对应的数据块所在的位置，读取目标数据块后，可以进一步查找数据。
-=======
-执行 [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) 来查看建表语句。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 由此可见，通过某行数据的维度列所构成的前缀查找该行数据的过程包含以下五个步骤：
 
@@ -76,65 +68,4 @@ StarRocks 支持布隆过滤器 (Bloom Filter)、ZoneMap 索引和 位图 (Bitma
 
 - ZoneMap 索引有助于通过数据范围快速过滤出待查找的值。
 
-<<<<<<< HEAD
 - 位图索引有助于快速计算出枚举类型的列满足一定条件的行。
-=======
-StarRocks 提供两种分桶方式：
-
-- 哈希分桶：根据数据的分桶键值，将数据划分至分桶。选择查询时经常使用的条件列组成分桶键，能有效提高查询效率。
-- 随机分桶：随机划分数据至分桶。这种分桶方式更加简单易用。
-
-### [数据类型](../sql-reference/data-types/README.md)
-
-除了基本的数据类型，如数值、日期和字符串类型，StarRocks 还支持复杂的半结构化数据类型，包括 ARRAY、JSON、MAP、STRUCT。
-
-### [索引](./indexes/indexes_overview.md)
-
-索引是一种特殊的数据结构，相当于数据的目录。查询条件命中索引列时，StarRocks 能够快速定位到满足条件的数据的位置。
-
-StarRocks 提供内置索引，包括前缀索引、Ordinal 索引和 ZoneMap 索引。也支持用户手动创建索引，以提高查询效率，包括 Bitmap 和 Bloom Filter 索引。
-
-### 约束
-
-约束用于确保数据的完整性、一致性和准确性。主键表的 Primary Key 列具有唯一非空约束，聚合表的 Aggregate Key 列和更新表的 Unique Key 列具有唯一约束。 
-
-### 临时表
-
-在处理数据时，您可能需要保存中间计算结果以便后续复用。先前版本中，StarRocks 仅支持在单个查询内利用 CTE（公用表表达式）来定义临时计算结果。然而，CTE 仅是逻辑概念，不会在物理上存储计算结果，且无法在不同查询间共享，存在一定局限性。如果您选择自行创建表来保存中间结果，需要自行维护表的生命周期，使用成本较高。
-
-为了解决上述问题，StarRocks 在 v3.3.1 中引入了临时表。临时表允许您将临时数据暂存在表中（例如 ETL 计算的中间结果），其生命周期与 Session 绑定，并由 StarRocks 管理。Session 结束时，临时表会被自动清除。临时表仅在当前 Session 内可见，不同的 Session 内可以创建同名的临时表。
-
-#### 使用临时表
-
-您可以在以下 SQL 语句中添加 `TEMPORARY` 关键字创建或删除临时表：
-
-- [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)
-- [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)
-- [CREATE TABLE LIKE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md)
-- [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md)
-
-:::note
-
-与其他类型的内表类似，临时表必须在属于在 Default Catalog 内的特定 Database 下创建。但由于临时表基于 Session，因此命名时不受唯一性约束。您可以在不同 Session 中创建同名临时表，或创建与其他内表同名的临时表。
-
-如果同一 Database 中同时存在同名的临时表和非临时表，临时表具有最高访问优先级。在该 Session 内，所有针对同名表的查询和操作仅对临时表生效。
-
-:::
-
-#### 限制
-
-临时表的使用方式与普通内表基本相同，但存在一些限制和差异：
-
-- 临时表必须创建在 Default Catalog 中。
-- 不支持设置 Colocate Group，若建表时显式指定了 `colocate_with` 属性，该属性将被忽略。
-- 建表时 `ENGINE` 必须指定为 `olap`。
-- 不支持 ALTER TABLE 语句。
-- 不支持基于临时表创建视图和物化视图。
-- 不支持 EXPORT 语句导出。
-- 不支持 SELECT INTO OUTFILE 语句导出。
-- 不支持基于临时表通过 SUBMIT TASK 语句提交异步任务。
-
-###  更多特性
-
-除了上述常用的特性之外，您还可以根据业务需求使用更多的特性，设计更加健壮的表结构，例如通过 Bitmap 和 HLL 列来加速去重计数，指定生成列或者自增列来加速部分查询，配置灵活的数据自动降冷策略来降低运维成本，配置 Colocate Join 来加速多表 JOIN 查询。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))

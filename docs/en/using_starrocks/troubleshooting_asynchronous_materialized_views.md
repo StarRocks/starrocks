@@ -348,11 +348,7 @@ To stop a refresh task that occupies too many resources, you can:
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-<<<<<<< HEAD
 - Terminate the running refresh task by using SHOW PROCESSLIST and KILL:
-=======
-- Terminate the running refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md):
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
   ```SQL
   -- Get the ConnectionId of the running refresh task.

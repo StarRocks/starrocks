@@ -24,14 +24,10 @@ PROPERTIES ("key"="value"[, ...])
 
 ### resource_name
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_RESOURCE.md
 资源名称。命名要求如下：
 
 - 必须由数字(0-9)、下划线(_)或字母(a-z或A-Z)组成，且只能以字母开头。
 - 总长度不能超过 64 个字符。
-=======
-资源名称。命名要求参见[系统限制](../../System_limit.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/Resource/CREATE_RESOURCE.md
 
 ### PROPERTIES
 

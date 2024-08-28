@@ -1,10 +1,5 @@
 ---
-<<<<<<< HEAD
-
-displayed_sidebar: "Chinese"
-=======
 displayed_sidebar: docs
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # 使用 Apache Ranger 管理权限

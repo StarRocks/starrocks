@@ -16,15 +16,9 @@ DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE]
 
 说明：
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/DROP_TABLE.md
-1. 执行 DROP TABLE 后一段时间内（默认 1 天），可以通过 [RECOVER](../data-definition/RECOVER.md) 语句恢复被删除的表。
+1. 执行 DROP TABLE 后一段时间内（默认 1 天），可以通过 [RECOVER](./RECOVER.md) 语句恢复被删除的表。
 
 2. 如果执行 `DROP TABLE FORCE`，则系统不会检查该表是否存在未完成的事务，表将直接被删除并且不能被恢复，一般不建议执行此操作。
-=======
-- 执行 DROP TABLE 后一段时间内（默认 1 天），可以通过 [RECOVER](../backup_restore/RECOVER.md) 语句恢复被删除的表。
-- 如果执行 `DROP TABLE FORCE`，则系统不会检查该表是否存在未完成的事务，表将直接被删除并且不能被恢复，一般不建议执行此操作。
-- 临时表删除后不可以通过 RECOVER 语句恢复。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md
 
 ## 示例
 

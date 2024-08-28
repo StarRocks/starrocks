@@ -8,11 +8,7 @@ displayed_sidebar: docs
 
 为远程存储系统创建存储卷。该功能自 v3.1 起支持。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md
-存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../deployment/deploy_shared_data.md)中创建数据库和云原生表时引用存储卷。
-=======
-存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../../deployment/shared_data/shared_data.mdx)中创建数据库和云原生表时引用存储卷。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md
+存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../../deployment/shared_data/s3.md)中创建数据库和云原生表时引用存储卷。
 
 > **注意**
 >
@@ -33,11 +29,7 @@ PROPERTIES
 
 | **参数**            | **说明**                                                     |
 | ------------------- | ------------------------------------------------------------ |
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md
 | storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。 |
-=======
-| storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。有关 storage volume 的命名要求，参见[系统限制](../../../System_limit.md)。 |
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md
 | TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 和 `HDFS`。`S3` 代表AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage（自 v3.1.1 起支持）。`HDFS` 代表 HDFS 集群。 |
 | LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>HDFS：`hdfs://<ip>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li></ul> |
 | COMMENT             | 存储卷的注释。                                               |

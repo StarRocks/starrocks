@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD
-displayed_sidebar: "Chinese"
-=======
 displayed_sidebar: docs
 sidebar_label: Datadog
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # StarRocks 集成 Datadog

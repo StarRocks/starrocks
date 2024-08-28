@@ -102,17 +102,11 @@ For Hive Catalog, Iceberg Catalog (starting from v3.1.4), and JDBC catalog (star
 
 - Ensure data consistency to some extent during query rewrite. If there are data changes in the base table in the data lake, the query will not be rewritten to use the materialized view.
 
-<<<<<<< HEAD
-  > **NOTE**
-  >
-  > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
-=======
 :::tip
 
 You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
 :::
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 Please note that if you need to refresh by partition, the partitioning keys of the materialized view must be included in that of the base table.
 

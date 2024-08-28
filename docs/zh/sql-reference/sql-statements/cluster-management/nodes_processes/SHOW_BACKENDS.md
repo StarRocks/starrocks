@@ -53,14 +53,6 @@ SHOW BACKENDS
 | DataTotalCapacity     | `DataUsedCapacity` + `AvailCapacity`，即数据文件所占用的磁盘空间 + 可使用的磁盘空间。 |
 | DataUsedPct           | `DataUsedCapacity`/`DataTotalCapacity`，即数据文件所占用的磁盘空间/（数据文件所占用的磁盘空间 + 可使用的磁盘空间）。 |
 | CpuCores              | BE 机器的 CPU 核数。                                         |
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/Administration/SHOW_BACKENDS.md
-=======
-| NumRunningQueries     | BE 上正在运行的查询数量。                                      |
-| MemUsedPct            | 内存使用量百分比。                                            |
-| CpuUsedPct            | CPU 使用量百分比。                                           |
-| DataCacheMetrics      | Data Cache 状态：<ul><li>`Disabled`：未开启。</li><li>`Normal`：正常。 </li><li>`Abnormal`：异常。 </li><li>`Updating`：正在执行变更操作，例如扩缩容等。 </li></ul>                      |
-| Location              | BE 节点的标签。更多信息，参考[使用标签管理 BE 节点](../../../../administration/management/resource_management/be_label.md)。                      |
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKENDS.md
 
 ## 示例
 

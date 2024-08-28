@@ -44,19 +44,11 @@ DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES("bloom_filter_columns" = "k1,k2");
 ```
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bloomfilter_index.md
-您可以同时创建多个索引，多个索引列之间需用逗号 (`,`) 隔开。关于建表的其他参数说明，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+您可以同时创建多个索引，多个索引列之间需用逗号 (`,`) 隔开。关于建表的其他参数说明，请参见 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 ## 查看索引
 
-例如，查看表 `table1` 的索引。有关返回值说明，请参见 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md)。
-=======
-您可以同时创建多个索引，多个索引列之间需用逗号 (`,`) 隔开。关于建表的其他参数说明，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
-
-## 查看索引
-
-例如，查看表 `table1` 的索引。有关返回值说明，请参见 [SHOW CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bloomfilter_index.md
+例如，查看表 `table1` 的索引。有关返回值说明，请参见 [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md)。
 
 ```SQL
 SHOW CREATE TABLE table1;
@@ -64,11 +56,7 @@ SHOW CREATE TABLE table1;
 
 ## 修改索引
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bloomfilter_index.md
-您可以使用 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句来增加，减少和删除索引。
-=======
-您可以使用 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句来增加，减少和删除索引。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bloomfilter_index.md
+您可以使用 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句来增加，减少和删除索引。
 
 - 如下语句增加了一个 Bloom filter 索引列 `v1`。
 

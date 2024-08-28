@@ -151,11 +151,6 @@ SELECT * FROM table1;
 
 #### 导入 JSON 格式的数据
 
-<<<<<<< HEAD
-=======
-从 3.2.7 版本起，STREAM LOAD 支持在传输过程中对 JSON 数据进行压缩，减少网络带宽开销。用户可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。语法参见[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ##### 数据样例
 
 在本地文件系统中创建一个 JSON 格式的数据文件 `example2.json`。文件一共包含两个字段，分别代表城市名称和城市 ID，如下所示：
@@ -406,11 +401,7 @@ PROPERTIES
 
 在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的进度。
 
-<<<<<<< HEAD
 在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../sql-reference/information_schema.md#loads) 视图来查看 Broker Load 作业的进度：
-=======
-在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../sql-reference/information_schema/loads.md) 视图来查看 Broker Load 作业的进度：
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ```SQL
 SELECT * FROM information_schema.loads;

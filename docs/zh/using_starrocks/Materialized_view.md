@@ -273,11 +273,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
 
 ### 查看异步物化视图
 
-<<<<<<< HEAD
-您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 或查询 Information Schema 中的系统元数据表来查看数据库中的异步物化视图。
-=======
 您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) 或查询 Information Schema 中的系统元数据视图来查看数据库中的异步物化视图。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 - 查看当前数据仓库内所有异步物化视图。
 
@@ -297,11 +293,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
   SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
-<<<<<<< HEAD
 - 通过 Information Schema 中的系统元数据表 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../sql-reference/information_schema.md#materialized_views)。
-=======
-- 通过 Information Schema 中的系统元数据视图 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../sql-reference/information_schema/materialized_views.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
   ```SQL
   SELECT * FROM information_schema.materialized_views;

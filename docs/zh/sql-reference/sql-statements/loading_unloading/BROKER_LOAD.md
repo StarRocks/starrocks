@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md
-displayed_sidebar: "Chinese"
-=======
 displayed_sidebar: docs
 toc_max_heading_level: 5
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md
 ---
 
 # BROKER LOAD
@@ -41,11 +37,7 @@ WITH BROKER
 
 ### database_name 和 label_name
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md
 `label_name` 指定导入作业的标签。
-=======
-`label_name` 指定导入作业的标签。命名要求参见[系统限制](../../System_limit.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md
 
 `database_name` 为可选，指定目标 StarRocks 表所在的数据库。
 

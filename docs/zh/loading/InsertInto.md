@@ -497,11 +497,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-<<<<<<< HEAD
 有关返回字段的说明，参见 [Information Schema > loads](../sql-reference/information_schema.md#loads)。
-=======
-有关返回字段的说明，参见 [`information_schema.loads`](../sql-reference/information_schema/loads.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ## 相关配置项
 

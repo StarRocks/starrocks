@@ -8,11 +8,7 @@ displayed_sidebar: docs
 
 该语句用于展示当前集群的配置（当前仅支持展示 FE 的配置项）。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md
-关于每个配置项的含义，参见[FE 配置项](../../../administration/management/FE_configuration.md#fe-配置项)。
-=======
-关于每个配置项的含义，参见[FE 配置项](../../../../administration/management/FE_configuration.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md
+关于每个配置项的含义，参见[FE 配置项](../../../../administration/management/FE_configuration.md#fe-配置项)。
 
 如果要动态设置或修改集群的配置项，参见 [ADMIN SET CONFIG](ADMIN_SET_CONFIG.md)。
 
