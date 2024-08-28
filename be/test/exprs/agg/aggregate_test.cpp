@@ -2654,4 +2654,29 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     ASSERT_EQ(26, offsets->get_data().back());
 }
 
+TEST_F(AggregateTest, test_get_aggregate_function_by_type) {
+    {
+        std::vector<TypeDescriptor> arg_types = {
+                AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
+                AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
+        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+        auto* array_agg_func =
+                get_aggregate_function("array_agg2", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(array_agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+        auto* agg_func =
+                get_aggregate_function("group_concat", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
+        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+        auto* agg_func = get_aggregate_function("avg", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
+}
+
 } // namespace starrocks

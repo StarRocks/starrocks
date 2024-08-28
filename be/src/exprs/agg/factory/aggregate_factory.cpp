@@ -168,4 +168,45 @@ const AggregateFunction* get_window_function(const std::string& name, LogicalTyp
     return nullptr;
 }
 
+const AggregateFunction* get_aggregate_function(const std::string& agg_func_name, const TypeDescriptor& return_type,
+                                                const std::vector<TypeDescriptor>& arg_types, bool is_result_nullable,
+                                                TFunctionBinaryType::type binary_type, int func_version) {
+    // get function
+    if (agg_func_name == "count") {
+        return get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_result_nullable);
+    } else {
+        DCHECK_GE(arg_types.size(), 1);
+        TypeDescriptor arg_type = arg_types[0];
+        // Because intersect_count have two input types.
+        // And intersect_count's first argument's type is alwasy Bitmap,
+        // so we use its second arguments type as input.
+        if (agg_func_name == "intersect_count") {
+            arg_type = arg_types[1];
+        }
+
+        // Because max_by and min_by function have two input types,
+        // so we use its second arguments type as input.
+        if (agg_func_name == "max_by" || agg_func_name == "min_by") {
+            arg_type = arg_types[1];
+        }
+
+        // Because windowfunnel have more two input types.
+        // functions registry use 2th args(datetime/date).
+        if (agg_func_name == "window_funnel") {
+            arg_type = arg_types[1];
+        }
+
+        // hack for accepting various arguments
+        if (agg_func_name == "exchange_bytes" || agg_func_name == "exchange_speed") {
+            arg_type = TypeDescriptor(TYPE_BIGINT);
+        }
+
+        if (agg_func_name == "array_union_agg" || agg_func_name == "array_unique_agg") {
+            arg_type = arg_type.children[0];
+        }
+        return get_aggregate_function(agg_func_name, arg_type.type, return_type.type, is_result_nullable, binary_type,
+                                      func_version);
+    }
+}
+
 } // namespace starrocks
