@@ -54,7 +54,6 @@ import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
@@ -749,16 +748,6 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
-            }
-
-            if (parsedStmt instanceof InsertStmt) {
-                // Revert useMetadataCache to true after executing the insert query that
-                // insert into target_table select from hive_table.
-                InsertStmt insertStmt = (InsertStmt) parsedStmt;
-                List<Table> tables = new ArrayList<>();
-                AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-                tables.stream().map(table -> (HiveTable) table)
-                         .forEach(table -> table.useMetadataCache(true));
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
