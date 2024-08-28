@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 1
 description: "StarRocks in Docker: Query real data with JOINs"
 ---
@@ -230,7 +230,7 @@ There is more to learn; we intentionally glossed over the data transformation do
 
 [Materialized views](../cover_pages/mv_use_cases.mdx)
 
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 

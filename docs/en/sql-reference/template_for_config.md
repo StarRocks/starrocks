@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+unlisted: true
 ---
 
 # Template for writing FE/BE parameters and variables

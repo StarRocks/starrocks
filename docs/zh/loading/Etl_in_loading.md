@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 导入过程中实现数据转换
 
 StarRocks 支持在导入数据的过程中实现数据转换。
 
-目前支持的导入方式有 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。暂不支持 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入方式。
+目前支持的导入方式有 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 和 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。暂不支持 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入方式。
 
 > **注意**
 >
@@ -147,7 +147,7 @@ curl --location-trusted -u <username>:<password> \
 >
 > `columns` 参数用于对数据文件中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
@@ -169,7 +169,7 @@ WITH BROKER;
 >
 > `column_list` 参数用于对数据文件中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
@@ -191,7 +191,7 @@ FROM KAFKA
 >
 > `COLUMNS` 参数用于对数据中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -243,7 +243,7 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
@@ -262,7 +262,7 @@ LOAD LABEL test_db.label2
 WITH BROKER;
 ```
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
@@ -281,7 +281,7 @@ FROM KAFKA
 );
 ```
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -336,7 +336,7 @@ curl --location-trusted -u <username>:<password> \
 >
 > - 不支持 `column_name = function(column_name)` 的形式，需要时可以重命名衍生列之前的列，比如为 `column_name = func(``tempcolumn_name``)`。
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
@@ -359,7 +359,7 @@ WITH BROKER;
 >
 > 必须先通过 `column_list` 参数声明源数据文件中包含的所有列，然后再通过 SET 子句声明衍生列。如上述示例中，先通过 `column_list` 参数声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再通过 SET 子句声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
@@ -381,7 +381,7 @@ FROM KAFKA
 >
 > 必须通过 `COLUMNS` 参数先声明源数据文件中包含的所有列，然后再声明衍生列。如上述示例中，`COLUMNS` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -439,7 +439,7 @@ WITH BROKER;
 >
 > 上述示例中，指定的文件路径中的分区字段 `date` 对应 `table1` 表中的 `event_date` 列，因此需要通过 SET 子句完成 `date` 到 `event_date` 的映射。如果指定的文件路径中的分区字段与其对应的 StarRocks 表中的列名称一样，则不需要通过 SET 子句来指定映射关系。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 ### 查询数据
 

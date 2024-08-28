@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 从 HDFS 或外部云存储系统导入数据
 
 StarRocks 提供基于 MySQL 协议的 Broker Load 导入方式，帮助您从 HDFS 或外部云存储系统导入大批量数据。
 
-Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
+Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
 
 Broker Load 支持单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load)。您可以通过单次导入操作，把一个或多个数据文件导入单张或多张目标表。而且 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
 
@@ -22,7 +22,7 @@ Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DE
 
 自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。导入语句中也不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
 
-需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，例如，在多 HDFS 集群或者多 Kerberos 用户的场景。在这些场景下，可以继续采用有 Broker 的导入，需要确保至少部署了一组独立的 Broker。有关各种场景下如何指定认证方式和 HA 配置，参见 [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md##hdfs)。
+需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，例如，在多 HDFS 集群或者多 Kerberos 用户的场景。在这些场景下，可以继续采用有 Broker 的导入，需要确保至少部署了一组独立的 Broker。有关各种场景下如何指定认证方式和 HA 配置，参见 [HDFS](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md##hdfs)。
 
 
 ## 支持的数据文件格式
@@ -74,7 +74,7 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 ### 创建多表导入 (Multi-Table Load) 作业
 
-这里以 CSV 格式的数据为例，介绍如何导入多个数据文件至多张目标表。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+这里以 CSV 格式的数据为例，介绍如何导入多个数据文件至多张目标表。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
@@ -159,7 +159,7 @@ PROPERTIES
 );
 ```
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs)。
 
 从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 HDFS 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
@@ -190,7 +190,7 @@ WITH BROKER
 >
 > 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#aws-s3)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#aws-s3)。
 
 从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
@@ -221,7 +221,7 @@ WITH BROKER
 >
 > 由于 Broker Load 只支持通过 gs 协议访问 Google GCS，因此当从 Google GCS 导入数据时，必须确保文件路径传入的目标文件的 GCS URI 使用 `gs://` 为前缀。
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#google-gcs)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#google-gcs)。
 
 #### 从 阿里云 OSS 导入
 
@@ -246,7 +246,7 @@ WITH BROKER
 );
 ```
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#阿里云-oss)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#阿里云-oss)。
 
 #### 从腾讯云 COS 导入
 
@@ -271,7 +271,7 @@ WITH BROKER
 );
 ```
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#腾讯云-cos)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#腾讯云-cos)。
 
 #### 从华为云 OBS 导入
 
@@ -300,7 +300,7 @@ WITH BROKER
 >
 > 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#华为云-obs)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#华为云-obs)。
 
 #### 从其他兼容 S3 协议的对象存储导入
 
@@ -325,7 +325,7 @@ WITH BROKER
 );
 ```
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#其他兼容-s3-协议的对象存储)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#其他兼容-s3-协议的对象存储)。
 
 #### 从 Microsoft Azure Storage 导入
 
@@ -362,7 +362,7 @@ WITH BROKER
   >   - 如果使用 HTTP 协议进行访问，请使用 `abfs://` 作为前缀，例如，`abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
   >   - 如果使用 HTTPS 协议进行访问，请使用 `abfss://` 作为前缀，例如，`abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
 
-以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#microsoft-azure-storage)。
+以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#microsoft-azure-storage)。
 
 #### 查询数据
 
@@ -431,7 +431,7 @@ WITH BROKER
 )；
 ```
 
-以上两个示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#aws-s3)。
+以上两个示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#aws-s3)。
 
 ### 查看导入作业
 
@@ -439,7 +439,7 @@ Broker Load 支持通过 SHOW LOAD 语句和 curl 命令两种方式来查看导
 
 #### 使用 SHOW LOAD 语句
 
-请参见 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。
+请参见 [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md)。
 
 #### 使用 curl 命令
 
@@ -482,7 +482,7 @@ curl --location-trusted -u <username>:<password> \
 
 ### 取消导入作业
 
-当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/loading_unloading/CANCEL_LOAD.md) 语句来取消该导入作业。
 
 例如，可以通过以下语句，撤销 `db1` 数据库中标签为 `label1` 的导入作业：
 
@@ -518,7 +518,7 @@ WHERE LABEL = "label";
 
 StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
 
-StarRocks v2.5 版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照作业创建时指定的优先级被放到队列中排队等待调度。参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#opt_properties) 文档中的可选参数 `priority`。您可以使用 [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_LOAD.md) 语句修改处于 **QUEUEING** 状态或者 **LOADING** 状态的 Broker Load 作业的优先级。
+StarRocks v2.5 版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照作业创建时指定的优先级被放到队列中排队等待调度。参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#opt_properties) 文档中的可选参数 `priority`。您可以使用 [ALTER LOAD](../sql-reference/sql-statements/loading_unloading/ALTER_LOAD.md) 语句修改处于 **QUEUEING** 状态或者 **LOADING** 状态的 Broker Load 作业的优先级。
 
 ## 常见问题
 
