@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 
 ---
 
@@ -52,7 +52,7 @@ N-gram bloom filter index-related parameters:
 | `case_sensitive`   |  No          | Whether this index is case-sensitive or not. Default value is `true`. |
 | `COMMENT`          | No           | Index comment. |
 
-For explanations of other parameters related to table creation, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+For explanations of other parameters related to table creation, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
 ### View N-gram bloom filter index 
 
@@ -65,7 +65,7 @@ SHOW INDEX FROM table1;
 
 ### Modify N-gram bloom filter index
 
-You can add and delete the N-gram bloom filter index by using the [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement.
+You can add and delete the N-gram bloom filter index by using the [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) statement.
 
 - Execute the following statement to add a new N-gram bloom filter index `new_index_name` for the column `k1` to the table `table1`.
 
@@ -83,7 +83,7 @@ You can add and delete the N-gram bloom filter index by using the [ALTER TABLE](
 
 :::note
 
-Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md). You can run only one task to alter the index in a table each time.
+Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md). You can run only one task to alter the index in a table each time.
 
 :::
 

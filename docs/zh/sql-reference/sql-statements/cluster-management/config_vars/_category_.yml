@@ -1,0 +1,6 @@
+position: 50 # float position is supported
+label: '系统配置和变量'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

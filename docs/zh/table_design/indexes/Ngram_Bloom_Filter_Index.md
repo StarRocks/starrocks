@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # [Preview] N-Gram bloom filter 索引
@@ -50,11 +50,11 @@ N-Gram bloom filter 索引相关参数：
 | `case_sensitive`   | 否       | 此索引是否区分大小写。默认值为 `true`。            |
 | `COMMENT`          | 否       | 索引的注释。                                                 |
 
-其他建表相关的参数解释，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+其他建表相关的参数解释，参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 ### 查看 N-Gram bloom filter 索引
 
-您可以使用 [SHOW CREATE TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) 或 [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation/SHOW_INDEX.md) 来查看表的所有索引。由于索引创建是异步的，因此只有在成功创建索引后才能看到相应的索引。
+您可以使用 [SHOW CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) 或 [SHOW INDEX](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_INDEX.md) 来查看表的所有索引。由于索引创建是异步的，因此只有在成功创建索引后才能看到相应的索引。
 
 ```SQL
 SHOW CREATE TABLE table1;
@@ -63,7 +63,7 @@ SHOW INDEX FROM table1;
 
 ### 修改 N-Gram bloom filter 索引
 
-您可以使用 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句添加和删除 N-Gram bloom filter 索引。
+您可以使用 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句添加和删除 N-Gram bloom filter 索引。
 
 - 执行如下语句，在表 `table1` 中为列 `k1` 添加一个新的 N-Gram bloom filter 索引，索引名称为 `new_index_name`。
 
@@ -81,7 +81,7 @@ SHOW INDEX FROM table1;
 
 :::note
 
-修改索引是一个异步操作。您可以执行 [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 来查看此操作的进度。一次只能对表运行一个修改索引任务。
+修改索引是一个异步操作。您可以执行 [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md) 来查看此操作的进度。一次只能对表运行一个修改索引任务。
 
 :::
 

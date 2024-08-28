@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_position: 3
 description: "湖仓分析"
 toc_max_heading_level: 2
