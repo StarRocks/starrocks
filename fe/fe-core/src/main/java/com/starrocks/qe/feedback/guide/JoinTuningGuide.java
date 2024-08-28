@@ -17,9 +17,11 @@ package com.starrocks.qe.feedback.guide;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 
@@ -78,6 +80,16 @@ public abstract class JoinTuningGuide implements TuningGuide {
         }
         return null;
     }
+
+    protected PhysicalPropertySet createBroadcastPropertySet() {
+        return new PhysicalPropertySet(DistributionProperty.createProperty(
+                DistributionSpec.createReplicatedDistributionSpec()));
+    }
+
+    protected PhysicalPropertySet createShufflePropertySet(DistributionSpec spec) {
+        return new PhysicalPropertySet(DistributionProperty.createProperty(spec));
+    }
+
 
     public enum EstimationErrorType {
         LEFT_INPUT_UNDERESTIMATED,

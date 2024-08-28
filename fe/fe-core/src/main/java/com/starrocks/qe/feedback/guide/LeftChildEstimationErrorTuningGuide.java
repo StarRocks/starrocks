@@ -21,11 +21,13 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
+import java.util.List;
 import java.util.Optional;
 
 public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
@@ -82,20 +84,31 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
                 leftChild.getRowOutputInfo().getOutputColumnRefSet());
 
         if (isBroadcastJoin(rightChild) && !optExpression.isExistRequiredDistribution()) {
-            if (leftNodeExecStats.getPushRows() < BROADCAST_THRESHOLD && leftSize < rightSize
-                    && !commuteJoinHelper.onlyShuffle()) {
+            if (!originalHelper.onlyBroadcast()) {
                 // original plan: small table inner join large table(broadcast)
-                // rewrite to: large table inner join small table(broadcast)
-                PhysicalDistributionOperator broadcastOp = new PhysicalDistributionOperator(
-                        DistributionSpec.createReplicatedDistributionSpec());
-                OptExpression newRightChild = OptExpression.builder().with(leftChild)
-                        .setOp(broadcastOp)
-                        .setInputs(Lists.newArrayList(leftChild))
+                // rewrite to: small table(shuffle) inner large small table(shuffle)
+                PhysicalDistributionOperator leftExchangeOp = new PhysicalDistributionOperator(
+                        DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(originalHelper.getLeftCols(),
+                                HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
+
+                PhysicalDistributionOperator rightExchangeOp = new PhysicalDistributionOperator(
+                        DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(originalHelper.getRightCols(),
+                                HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
+                OptExpression newLeftChild = OptExpression.builder().with(leftChild)
+                        .setOp(leftExchangeOp)
+                        .setInputs(List.of(leftChild))
+                        .build();
+
+                OptExpression newRightChild = OptExpression.builder().with(rightChild)
+                        .setOp(rightExchangeOp)
+                        .setInputs(rightChild.getInputs())
                         .build();
 
                 return Optional.of(OptExpression.builder().with(optExpression)
-                        .setOp(buildJoinOperator(joinOperator, true))
-                        .setInputs(Lists.newArrayList(rightChild.getInputs().get(0), newRightChild))
+                        .setOp(buildJoinOperator(joinOperator, false))
+                        .setRequiredProperties(List.of(createShufflePropertySet(leftExchangeOp.getDistributionSpec()),
+                                createShufflePropertySet(rightExchangeOp.getDistributionSpec())))
+                        .setInputs(Lists.newArrayList(newLeftChild, newRightChild))
                         .build());
             }
         }

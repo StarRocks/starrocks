@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
+import java.util.List;
 import java.util.Optional;
 
 public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
@@ -96,12 +97,14 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
                             DistributionSpec.createReplicatedDistributionSpec());
                     OptExpression newRightChild = OptExpression.builder().with(leftChild)
                             .setOp(broadcastOp)
-                            .setInputs(Lists.newArrayList(leftChild))
+                            .setInputs(List.of(leftChild))
                             .build();
 
                     return Optional.of(OptExpression.builder().with(optExpression)
+                            .setRequiredProperties(List.of(rightChild.inputAt(0).getOutputProperty(),
+                                    createBroadcastPropertySet()))
                             .setOp(buildJoinOperator(joinOperator, true))
-                            .setInputs(Lists.newArrayList(rightChild.getInputs().get(0), newRightChild))
+                            .setInputs(List.of(rightChild.inputAt(0), newRightChild))
                             .build());
                 } else if (leftSize < rightSize && !commuteJoinHelper.onlyBroadcast()) {
                     // original plan: medium table inner join large table(broadcast)
@@ -120,11 +123,13 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
 
                     OptExpression newRightChild = OptExpression.builder().with(leftChild)
                             .setOp(rightExchangeOp)
-                            .setInputs(Lists.newArrayList(leftChild))
+                            .setInputs(List.of(leftChild))
                             .build();
 
                     return Optional.of(OptExpression.builder().with(optExpression)
                             .setOp(buildJoinOperator(joinOperator, true))
+                            .setRequiredProperties(List.of(createShufflePropertySet(leftExchangeOp.getDistributionSpec()),
+                                    createShufflePropertySet(rightExchangeOp.getDistributionSpec())))
                             .setInputs(Lists.newArrayList(newLeftChild, newRightChild))
                             .build());
                 } else if (leftSize >= rightSize && !originalHelper.onlyBroadcast()) {
@@ -139,7 +144,7 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
                                     HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
                     OptExpression newLeftChild = OptExpression.builder().with(leftChild)
                             .setOp(leftExchangeOp)
-                            .setInputs(Lists.newArrayList(leftChild))
+                            .setInputs(List.of(leftChild))
                             .build();
 
                     OptExpression newRightChild = OptExpression.builder().with(rightChild)
@@ -149,6 +154,8 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
 
                     return Optional.of(OptExpression.builder().with(optExpression)
                             .setOp(buildJoinOperator(joinOperator, false))
+                            .setRequiredProperties(List.of(createShufflePropertySet(leftExchangeOp.getDistributionSpec()),
+                                    createShufflePropertySet(rightExchangeOp.getDistributionSpec())))
                             .setInputs(Lists.newArrayList(newLeftChild, newRightChild))
                             .build());
                 }
@@ -169,7 +176,9 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
                             .build();
                     return Optional.of(OptExpression.builder().with(optExpression)
                             .setOp(buildJoinOperator(joinOperator, true))
-                            .setInputs(Lists.newArrayList(rightChild.getInputs().get(0), newRightChild))
+                            .setRequiredProperties(List.of(rightChild.inputAt(0).getOutputProperty(),
+                                    createBroadcastPropertySet()))
+                            .setInputs(Lists.newArrayList(rightChild.inputAt(0), newRightChild))
                             .build());
                 } else if (leftSize < rightSize && !commuteJoinHelper.onlyBroadcast()) {
                     // original plan: medium table(shuffle) inner join large table(shuffle)
@@ -185,7 +194,8 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
                     // rewrite to: large table colocate join medium table
                     return Optional.of(OptExpression.builder().with(optExpression)
                             .setOp(buildJoinOperator(joinOperator, true))
-                            .setInputs(Lists.newArrayList(rightChild, leftChild))
+                            .setRequiredProperties(List.of(rightChild.getOutputProperty(), leftChild.getOutputProperty()))
+                            .setInputs(List.of(rightChild, leftChild))
                             .build());
                 }
             }
@@ -207,6 +217,8 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
 
                     return Optional.of(OptExpression.builder().with(optExpression)
                             .setOp(buildJoinOperator(joinOperator, false))
+                            .setRequiredProperties(List.of(leftChild.inputAt(0).getOutputProperty(),
+                                    createBroadcastPropertySet()))
                             .setInputs(Lists.newArrayList(leftChild.getInputs().get(0), newRightChild))
                             .build());
                 }
