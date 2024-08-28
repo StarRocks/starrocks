@@ -14,20 +14,34 @@
 
 package com.starrocks.common;
 
+import com.google.gson.JsonObject;
+import com.google.gson.internal.Streams;
+import com.google.gson.stream.JsonReader;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.io.Reader;
+import java.nio.charset.Charset;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Log4jConfigTest {
+    private static final Logger LOG = LogManager.getLogger(Log4jConfigTest.class);
+
     private String logFormat;
 
     @Before
     public void setUp() throws IOException {
+        FeConstants.runningUnitTest = true;
         logFormat = Config.sys_log_format;
         Log4jConfig.initLogging();
     }
@@ -35,6 +49,7 @@ public class Log4jConfigTest {
     @After
     public void tearDown() {
         Config.sys_log_format = logFormat;
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -68,5 +83,42 @@ public class Log4jConfigTest {
                 Assert.fail(String.format("Unexpected of unresolved variables:'%s' in the final xmlConfig", name));
             }
         }
+    }
+
+    @Test
+    public void testJsonLogOutputFormat() throws IOException {
+        // enable logging with json format to console
+        // with `sys_log_to_console = true`, the log will be written to System.err
+        Config.sys_log_format = "json";
+        Config.sys_log_to_console = true;
+        Config.sys_log_level = "INFO";
+        Log4jConfig.initLogging();
+
+        String logMessage = "Test log message from unit test";
+        // Hook System.err
+        PrintStream oldErr = System.err;
+        ByteArrayOutputStream byteOs = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(byteOs, true));
+        // log a message
+        LOG.warn(logMessage);
+        // reset System.out
+        System.setErr(oldErr);
+        // reset logging
+        Config.sys_log_format = "plaintext";
+        Config.sys_log_to_console = false;
+        Log4jConfig.initLogging();
+
+        // validate log message
+        String logMsg = byteOs.toString(Charset.defaultCharset()).trim();
+        System.out.println("logMsg: " + logMsg);
+
+        Reader reader = new InputStreamReader(new ByteArrayInputStream(byteOs.toByteArray()));
+        JsonObject jsonObject = Streams.parse(new JsonReader(reader)).getAsJsonObject();
+
+        Assert.assertEquals("testJsonLogOutputFormat", jsonObject.get("method").getAsString());
+        Assert.assertEquals("Log4jConfigTest.java", jsonObject.get("file").getAsString());
+        Assert.assertEquals("WARN", jsonObject.get("level").getAsString());
+        Assert.assertEquals("main", jsonObject.get("thread.name").getAsString());
+        Assert.assertEquals(logMessage, jsonObject.get("message").getAsString());
     }
 }
