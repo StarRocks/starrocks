@@ -81,6 +81,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -185,9 +186,11 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         Future<?> future;
+        AtomicBoolean isRunning = new AtomicBoolean(false);
         try {
             future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
+                        isRunning.set(true);
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                         // set session id for temporary table
@@ -208,6 +211,25 @@ public class StatisticUtils {
         }
 
         if (sync) {
+            // wait a short-time for the task getting executed, if too many jobs in the queue we just give up
+            // waiting, otherwise it may block the data loading for a long period
+            try {
+                future.get(1, TimeUnit.SECONDS);
+                Preconditions.checkState(isRunning.get());
+                return;
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.error("failed to execute statistic collect job", e);
+            } catch (TimeoutException e) {
+                if (!isRunning.get()) {
+                    LOG.warn(
+                            "await collect statistic task failed after 1 seconds, which mean too many jobs in the " +
+                                    "queue");
+                    return;
+                }
+            }
+
+            // it's already running wait for the task finish
+            Preconditions.checkState(isRunning.get());
             long await = Config.semi_sync_collect_statistic_await_seconds;
             try {
                 future.get(await, TimeUnit.SECONDS);
