@@ -81,8 +81,6 @@ public:
     const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
-    bool has_delete_pred = false;
-
     /// Mark whether this is the first split of a segment.
     /// A segment may be divided into multiple split to scan concurrently.
     bool is_first_split_of_segment = true;

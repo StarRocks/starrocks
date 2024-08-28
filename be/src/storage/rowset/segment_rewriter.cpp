@@ -276,40 +276,4 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     return Status::OK();
 }
 
-Status SegmentRewriter::rewrite(const std::string& src_path, const FileEncryptionInfo& einfo,
-                                const TabletSchemaCSPtr& tschema, std::vector<uint32_t>& column_ids,
-                                std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
-                                const FooterPointerPB& partial_rowset_footer) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(src_path));
-    ASSIGN_OR_RETURN(auto read_file,
-                     fs->new_random_access_file(RandomAccessFileOptions{.encryption_info = einfo}, src_path));
-
-    SegmentFooterPB footer;
-    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, &partial_rowset_footer));
-
-    int64_t trunc_len = partial_rowset_footer.position() + partial_rowset_footer.size();
-    RETURN_IF_ERROR(FileSystemUtil::resize_file(src_path, trunc_len));
-
-    WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::MUST_EXIST, .encryption_info = einfo};
-    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(fopts, src_path));
-
-    SegmentWriterOptions opts;
-    SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
-    RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
-
-    auto schema = ChunkHelper::convert_schema(tschema, column_ids);
-    auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
-    for (int i = 0; i < columns.size(); ++i) {
-        chunk->get_column_by_index(i).reset(columns[i].release());
-    }
-    uint64_t index_size = 0;
-    uint64_t segment_file_size;
-    RETURN_IF_ERROR(writer.append_chunk(*chunk));
-    RETURN_IF_ERROR(writer.finalize_columns(&index_size));
-    TEST_ERROR_POINT("SegmentRewriter::rewrite4");
-    RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
-
-    return Status::OK();
-}
-
 } // namespace starrocks
