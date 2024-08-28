@@ -219,8 +219,8 @@ public class StatisticExecutor {
         }
     }
 
-    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId) {
-        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId);
+    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId, List<Long> partitions) {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId, partitions);
         return executeStatisticDQL(context, sql);
     }
 
@@ -232,7 +232,7 @@ public class StatisticExecutor {
     private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
         List<TStatisticData> statistics = Lists.newArrayList();
 
-        if (sqlResult.size() < 1) {
+        if (sqlResult.isEmpty()) {
             return statistics;
         }
 
