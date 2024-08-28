@@ -167,8 +167,12 @@ public class HiveMetadata implements ConnectorMetadata {
                         " 'Force' must be set when dropping a hive table." +
                         " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
             }
-
-            HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
+            HiveTable hiveTable = null;
+            try {
+                hiveTable = (HiveTable) getTable(dbName, tableName);
+            } catch (Exception e) {
+                // ignore not found exception
+            }
             if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
