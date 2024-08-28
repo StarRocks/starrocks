@@ -1,11 +1,6 @@
 ---
 description: 使用 Helm 部署 StarRocks
-<<<<<<< HEAD
-displayed_sidebar: Chinese
-toc_max_heading_level: 2
-=======
 displayed_sidebar: docs
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 import Tabs from '@theme/Tabs';
