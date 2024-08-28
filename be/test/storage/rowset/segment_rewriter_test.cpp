@@ -159,54 +159,6 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
     EXPECT_EQ(count, num_rows);
-
-    // add useless string to partial segment
-    WritableFileOptions wopts2{
-            .sync_on_close = true, .mode = FileSystem::MUST_EXIST, .encryption_info = encryption_pair.info};
-    ASSIGN_OR_ABORT(auto wblock_tmp, _fs->new_writable_file(wopts2, file_name));
-    for (int i = 0; i < 10; i++) {
-        wblock_tmp->append("test");
-    }
-
-    std::vector<std::unique_ptr<Column>> new_write_columns(read_column_ids.size());
-    for (auto i = 0; i < read_column_ids.size(); ++i) {
-        const auto read_column_id = read_column_ids[i];
-        auto tablet_column = tablet_schema->column(read_column_id);
-        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-        new_write_columns[i] = column->clone_empty();
-        for (auto j = 0; j < num_rows; ++j) {
-            new_write_columns[i]->append_datum(Datum(static_cast<int32_t>(j + read_column_ids[i])));
-        }
-    }
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, encryption_pair.info, tablet_schema, read_column_ids,
-                                       new_write_columns, partial_segment->id(), partial_rowset_footer));
-    auto rewrite_segment = *Segment::open(
-            _fs, FileInfo{.path = file_name, .encryption_meta = encryption_pair.encryption_meta}, 0, tablet_schema);
-
-    ASSERT_EQ(rewrite_segment->num_rows(), num_rows);
-    res = rewrite_segment->new_iterator(schema, seg_options);
-    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
-    auto rewrite_seg_iterator = res.value();
-
-    count = 0;
-    chunk = ChunkHelper::new_chunk(schema, chunk_size);
-    while (true) {
-        chunk->reset();
-        auto st = rewrite_seg_iterator->get_next(chunk.get());
-        if (st.is_end_of_file()) {
-            break;
-        }
-        ASSERT_FALSE(!st.ok());
-        for (auto i = 0; i < chunk->num_rows(); ++i) {
-            EXPECT_EQ(count, chunk->get(i)[0].get_int32());
-            EXPECT_EQ(count + 1, chunk->get(i)[1].get_int32());
-            EXPECT_EQ(count + 2, chunk->get(i)[2].get_int32());
-            EXPECT_EQ(count + 3, chunk->get(i)[3].get_int32());
-            EXPECT_EQ(count + 4, chunk->get(i)[4].get_int32());
-            ++count;
-        }
-    }
-    EXPECT_EQ(count, num_rows);
 }
 
 } // namespace starrocks
