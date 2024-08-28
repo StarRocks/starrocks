@@ -19,6 +19,7 @@
 #include <numeric>
 
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/hash_joiner.h"
@@ -27,6 +28,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "util/cpu_info.h"
 #include "util/runtime_profile.h"
 
@@ -98,28 +100,40 @@ void HashJoinProber::attach(HashJoinBuilder* builder, const HashJoinProbeMetrics
     _impl = builder->create_prober();
 }
 
-struct PartitionChunkChannel {
-    std::deque<ChunkPtr> chunks;
-    bool _processing = false;
-
+class PartitionChunkChannel {
+public:
+    PartitionChunkChannel(MemTracker* tracker) : _tracker(tracker) {}
     bool processing() const { return _processing; }
     void set_processing(bool processing) { _processing = processing; }
 
     ChunkPtr pull() {
-        auto chunk = std::move(chunks.front());
-        chunks.pop_front();
+        auto chunk = std::move(_chunks.front());
+        _tracker->release(chunk->memory_usage());
+        _chunks.pop_front();
         return chunk;
     }
 
-    void push(ChunkPtr&& chunk) { chunks.emplace_back(std::move(chunk)); }
+    void push(ChunkPtr&& chunk) {
+        _tracker->consume(chunk->memory_usage());
+        _chunks.emplace_back(std::move(chunk));
+    }
 
-    const ChunkPtr& back() { return chunks.back(); }
+    const ChunkPtr& back() { return _chunks.back(); }
 
-    bool is_full() const { return chunks.size() >= 4; }
+    bool is_full() const {
+        return _chunks.size() >= 4 || _tracker->consumption() > config::local_exchange_buffer_mem_limit_per_driver;
+    }
 
-    bool is_empty() const { return chunks.empty() || chunks.front()->is_empty(); }
+    size_t size() const { return _chunks.size(); }
+
+    bool is_empty() const { return _chunks.empty() || _chunks.front()->is_empty(); }
 
     bool not_empty() const { return !is_empty(); }
+
+private:
+    MemTracker* _tracker;
+    std::deque<ChunkPtr> _chunks;
+    bool _processing = false;
 };
 
 class PartitionedHashJoinProberImpl final : public HashJoinProberImpl {
@@ -134,10 +148,11 @@ public:
     void reset(RuntimeState* runtime_state) override;
     void set_probers(std::vector<std::unique_ptr<SingleHashJoinProberImpl>>&& probers) {
         _probers = std::move(probers);
-        _partition_input_channels.resize(_probers.size());
+        _partition_input_channels.resize(_probers.size(), PartitionChunkChannel(&_mem_tracker));
     }
 
 private:
+    MemTracker _mem_tracker;
     bool _all_input_finished = false;
     int32_t _remain_partition_idx = 0;
     std::vector<std::unique_ptr<SingleHashJoinProberImpl>> _probers;
@@ -229,7 +244,7 @@ Status PartitionedHashJoinProberImpl::push_probe_chunk(RuntimeState* state, Chun
         selection[channel_row_idx_start_points[partitions[i]] - 1] = i;
         channel_row_idx_start_points[partitions[i]]--;
     }
-    _partition_input_channels.resize(num_partitions);
+    _partition_input_channels.resize(num_partitions, PartitionChunkChannel(&_mem_tracker));
 
     for (size_t i = 0; i < num_partitions; ++i) {
         auto from = channel_row_idx_start_points[i];
@@ -281,7 +296,7 @@ StatusOr<ChunkPtr> PartitionedHashJoinProberImpl::probe_chunk(RuntimeState* stat
             if (probers[i]->probe_chunk_empty()) {
                 RETURN_IF_ERROR(probers[i]->push_probe_chunk(state, _partition_input_channels[i].pull()));
             }
-            _partition_input_channels[i].set_processing(_partition_input_channels[i].chunks.size() > 1);
+            _partition_input_channels[i].set_processing(_partition_input_channels[i].size() > 1);
             auto chunk = std::make_shared<Chunk>();
             ASSIGN_OR_RETURN(chunk, probers[i]->probe_chunk(state))
             return chunk;
@@ -385,6 +400,8 @@ ChunkPtr SingleHashJoinBuilder::convert_to_spill_schema(const ChunkPtr& chunk) c
     return _ht.convert_to_spill_schema(chunk);
 }
 
+enum class CacheLevel { L2, L3, MEMORY };
+
 class AdaptivePartitionHashJoinBuilder final : public HashJoinBuilder {
 public:
     AdaptivePartitionHashJoinBuilder(HashJoiner& hash_joiner);
@@ -420,7 +437,8 @@ public:
 private:
     size_t _estimated_row_size(const HashTableParam& param) const;
     size_t _estimated_probe_cost(const HashTableParam& param) const;
-    size_t _estimated_build_cost(size_t build_row_size, int cache_level) const;
+    template <CacheLevel T>
+    size_t _estimated_build_cost(size_t build_row_size) const;
     void _adjust_partition_rows(size_t build_row_size);
 
     void _init_partition_nums(const HashTableParam& param);
@@ -490,14 +508,19 @@ size_t AdaptivePartitionHashJoinBuilder::_estimated_probe_cost(const HashTablePa
     return size * 6;
 }
 
-size_t AdaptivePartitionHashJoinBuilder::_estimated_build_cost(size_t build_row_size, int cache_level) const {
-    if (cache_level == 0) {
-        return build_row_size / 2;
-    } else if (cache_level == 1) {
-        return build_row_size;
-    } else {
-        return build_row_size * 2;
-    }
+template <>
+size_t AdaptivePartitionHashJoinBuilder::_estimated_build_cost<CacheLevel::L2>(size_t build_row_size) const {
+    return build_row_size / 2;
+}
+
+template <>
+size_t AdaptivePartitionHashJoinBuilder::_estimated_build_cost<CacheLevel::L3>(size_t build_row_size) const {
+    return build_row_size;
+}
+
+template <>
+size_t AdaptivePartitionHashJoinBuilder::_estimated_build_cost<CacheLevel::MEMORY>(size_t build_row_size) const {
+    return build_row_size * 2;
 }
 
 void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t build_row_size) {
@@ -509,11 +532,12 @@ void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t build_row_s
     // If the hash table after partition can't be loaded to L3. we don't think partition hash join is needed.
     _partition_join_max_rows = _fit_L3_cache_max_rows * _partition_num;
 
-    if (_probe_estimated_costs + _estimated_build_cost(build_row_size, 0) < _estimated_build_cost(build_row_size, 1)) {
+    if (_probe_estimated_costs + _estimated_build_cost<CacheLevel::L2>(build_row_size) <
+        _estimated_build_cost<CacheLevel::L3>(build_row_size)) {
         // overhead after hash table partitioning + probe extra cost < cost before partitioning
         // nothing to do
-    } else if (_probe_estimated_costs + _estimated_build_cost(build_row_size, 1) <
-               _estimated_build_cost(build_row_size, 2)) {
+    } else if (_probe_estimated_costs + _estimated_build_cost<CacheLevel::L3>(build_row_size) <
+               _estimated_build_cost<CacheLevel::MEMORY>(build_row_size)) {
         // It is only after this that performance gains can be realized beyond the L3 cache.
         _partition_join_min_rows = _fit_L3_cache_max_rows;
     } else {
@@ -523,12 +547,10 @@ void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t build_row_s
 
     VLOG_OPERATOR << "TRACE:"
                   << "partition_num=" << _partition_num << " partition_join_min_rows=" << _partition_join_min_rows
-                  << " partition_join_max_rows=" << _partition_join_max_rows;
-    VLOG_OPERATOR << "TRACE"
-                  << " probe cost=" << _probe_estimated_costs
-                  << " build cost=" << _estimated_build_cost(build_row_size, 0)
-                  << " build cost L2=" << _estimated_build_cost(build_row_size, 1)
-                  << " build cost L3=" << _estimated_build_cost(build_row_size, 2);
+                  << " partition_join_max_rows=" << _partition_join_max_rows << " probe cost=" << _probe_estimated_costs
+                  << " build cost L2=" << _estimated_build_cost<CacheLevel::L2>(build_row_size)
+                  << " build cost L3=" << _estimated_build_cost<CacheLevel::L3>(build_row_size)
+                  << " build cost Mem=" << _estimated_build_cost<CacheLevel::MEMORY>(build_row_size);
 }
 
 void AdaptivePartitionHashJoinBuilder::_init_partition_nums(const HashTableParam& param) {
