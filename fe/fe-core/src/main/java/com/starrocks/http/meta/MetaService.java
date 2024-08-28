@@ -93,12 +93,15 @@ public class MetaService {
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             String tokenStr = request.getSingleParameter(TOKEN);
-            if (Strings.isNullOrEmpty(tokenStr) && !isFromValidFe(request)) {
-                response.appendContent("Invalid client host.");
-                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-                return;
-            }
-            if (!tokenStr.equals(GlobalStateMgr.getCurrentState().getToken())) {
+            if (Strings.isNullOrEmpty(tokenStr)) {
+                // No cluster token, check client is from valid fe
+                if (!isFromValidFe(request)) {
+                    response.appendContent("Invalid client host.");
+                    writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                    return;
+                }
+            } else if (!tokenStr.equals(GlobalStateMgr.getCurrentState().getToken())) {
+                // Token not match
                 response.appendContent("Invalid token.");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 return;
