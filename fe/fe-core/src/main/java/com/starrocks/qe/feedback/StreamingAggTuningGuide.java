@@ -45,7 +45,7 @@ public class StreamingAggTuningGuide implements TuningGuide {
     }
 
     @Override
-    public Optional<OptExpression> apply(OptExpression optExpression) {
+    public Optional<OptExpression> applyImpl(OptExpression optExpression) {
         PhysicalHashAggregateOperator aggregateOperator = (PhysicalHashAggregateOperator) optExpression.getOp();
         if (ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode().equals("auto")) {
             aggregateOperator.setForcePreAggregation(true);

@@ -24,6 +24,14 @@ public interface TuningGuide {
 
     String getAdvice();
 
-    Optional<OptExpression> apply(OptExpression optExpression);
+    default Optional<OptExpression> apply(OptExpression optExpression) {
+        try {
+            return applyImpl(optExpression);
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    Optional<OptExpression> applyImpl(OptExpression optExpression);
 
 }

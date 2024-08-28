@@ -16,13 +16,13 @@ package com.starrocks.qe.feedback;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.qe.feedback.skeleton.DistributionNode;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -65,7 +65,7 @@ public class JoinTuningGuide implements TuningGuide {
     }
 
     @Override
-    public Optional<OptExpression> apply(OptExpression optExpression) {
+    public Optional<OptExpression> applyImpl(OptExpression optExpression) {
         if (optExpression.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
             return Optional.empty();
         }
@@ -96,7 +96,7 @@ public class JoinTuningGuide implements TuningGuide {
             if (optExpression.isExistRequiredDistribution()) {
                 return Optional.empty();
             }
-            if (isBroadcastJoin(rightChildNode)) {
+            if (isBroadcastJoin(rightChild)) {
                 if (leftNodeExecStats.getPushRows() < BROADCAST_THRESHOLD && leftSize < rightSize
                         && !commuteJoinHelper.onlyShuffle()) {
                     // original plan: small table inner join large table(broadcast)
@@ -161,7 +161,7 @@ public class JoinTuningGuide implements TuningGuide {
                             .setInputs(Lists.newArrayList(newLeftChild, newRightChild))
                             .build());
                 }
-            } else if (isShuffleJoin(leftChildNode, rightChildNode)) {
+            } else if (isShuffleJoin(leftChild, rightChild)) {
                 if (leftNodeExecStats.getPushRows() < BROADCAST_THRESHOLD &&
                         leftSize < rightSize && !commuteJoinHelper.onlyShuffle()) {
                     if (optExpression.isExistRequiredDistribution()) {
@@ -188,9 +188,18 @@ public class JoinTuningGuide implements TuningGuide {
                             .setInputs(Lists.newArrayList(rightChild, leftChild))
                             .build());
                 }
+            } else if(isColocateJoin(optExpression)) {
+                if (leftSize < rightSize && !commuteJoinHelper.onlyBroadcast()) {
+                    // original plan: medium table colocate join large table
+                    // rewrite to: large table colocate join medium table
+                    return Optional.of(OptExpression.builder().with(optExpression)
+                            .setOp(buildJoinOperator(joinOperator, true))
+                            .setInputs(Lists.newArrayList(rightChild, leftChild))
+                            .build());
+                }
             }
         } else if (type == EstimationErrorType.RIGHT_INPUT_OVERESTIMATED) {
-            if (isShuffleJoin(leftChildNode, rightChildNode)) {
+            if (isShuffleJoin(leftChild, rightChild)) {
                 if (rightNodeExecStats.getPushRows() < BROADCAST_THRESHOLD && !originalHelper.onlyShuffle()) {
                     if (optExpression.isExistRequiredDistribution()) {
                         return Optional.empty();
@@ -230,20 +239,33 @@ public class JoinTuningGuide implements TuningGuide {
                 joinOperator.getProjection());
     }
 
-    private boolean isShuffleJoin(SkeletonNode leftChildNode, SkeletonNode rightChildNode) {
-        DistributionSpec.DistributionType leftDistributionType = getDistributionType(leftChildNode);
-        DistributionSpec.DistributionType rightDistributionType = getDistributionType(rightChildNode);
+    private boolean isColocateJoin(OptExpression optExpression) {
+        // through the required properties type check if it is colocate join
+        return optExpression.getRequiredProperties().stream().allMatch(
+                physicalPropertySet -> {
+                    if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
+                        return false;
+                    }
+                    HashDistributionDesc.SourceType hashSourceType =
+                            ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
+                                    .getHashDistributionDesc().getSourceType();
+                    return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
+                });
+    }
+
+    private boolean isShuffleJoin(OptExpression leftChild, OptExpression rightChild) {
+        DistributionSpec.DistributionType leftDistributionType = getDistributionType(leftChild);
+        DistributionSpec.DistributionType rightDistributionType = getDistributionType(rightChild);
         return leftDistributionType == DistributionSpec.DistributionType.SHUFFLE
                 && rightDistributionType == DistributionSpec.DistributionType.SHUFFLE;
     }
-    private boolean isBroadcastJoin(SkeletonNode rightChildNode) {
-        DistributionSpec.DistributionType distributionType = getDistributionType(rightChildNode);
-        return distributionType == DistributionSpec.DistributionType.BROADCAST;
+    private boolean isBroadcastJoin(OptExpression rightChild) {
+        return getDistributionType(rightChild) == DistributionSpec.DistributionType.BROADCAST;
     }
 
-    private DistributionSpec.DistributionType getDistributionType(SkeletonNode childNode) {
-        if (childNode instanceof DistributionNode) {
-            return ((DistributionNode) childNode).getSpec().getType();
+    private DistributionSpec.DistributionType getDistributionType(OptExpression optExpression) {
+        if (optExpression.getOp() instanceof PhysicalDistributionOperator) {
+            return ((PhysicalDistributionOperator) optExpression.getOp()).getDistributionSpec().getType();
         }
         return null;
     }
