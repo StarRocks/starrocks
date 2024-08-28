@@ -20,6 +20,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "exprs/function_helper.h"
 
 namespace starrocks {
 
@@ -40,9 +41,8 @@ public:
         ASSIGN_OR_RETURN(ColumnPtr col, _children.at(0)->evaluate_checked(context, chunk));
 
         // handle nullable column
-        std::vector<uint8_t> null_flags;
-        size_t num_rows = col->size();
-        null_flags.resize(num_rows, false);
+        const size_t num_rows = col->size();
+        NullColumnPtr union_null_column = NullColumn::create(num_rows, false);
 
         for (size_t i = 0; i < _used_subfield_names.size(); i++) {
             const std::string& fieldname = _used_subfield_names[i];
@@ -50,10 +50,7 @@ public:
             // merge null flags for each level
             if (col->is_nullable()) {
                 auto* nullable = down_cast<NullableColumn*>(col.get());
-                const uint8_t* nulls = nullable->null_column()->raw_data();
-                for (size_t row = 0; row < num_rows; row++) {
-                    null_flags[row] |= nulls[row];
-                }
+                union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
             }
 
             Column* tmp_col = ColumnHelper::get_data_column(col.get());
@@ -67,22 +64,17 @@ public:
 
         if (col->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(col.get());
-            const uint8_t* nulls = nullable->null_column()->raw_data();
-            for (size_t i = 0; i < num_rows; i++) {
-                null_flags[i] |= nulls[i];
-            }
+            union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
             col = nullable->data_column();
         }
 
-        NullColumnPtr result_null = NullColumn::create();
-        result_null->get_data().swap(null_flags);
-        DCHECK_EQ(col->size(), result_null->size());
+        DCHECK_EQ(col->size(), union_null_column->size());
 
         // We need to clone a new subfield column
         if (_copy_flag) {
-            return NullableColumn::create(col->clone_shared(), result_null);
+            return NullableColumn::create(col->clone_shared(), union_null_column);
         } else {
-            return NullableColumn::create(col, result_null);
+            return NullableColumn::create(col, union_null_column);
         }
     }
 

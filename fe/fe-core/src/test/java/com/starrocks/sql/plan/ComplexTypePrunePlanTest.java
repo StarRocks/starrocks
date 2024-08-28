@@ -151,6 +151,15 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testCommonSubOperator() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // test for CommonSubOperator
+        String sql = "select abs(index_struct[1].`index`) + abs(index_struct[1].`index`) from index_struct_nest";
+        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [ARRAY<struct<index bigint(20)>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testSubQuery() throws Exception {
         String sql = "select c2.a from (select c1, c2 from test) t";
         assertVerbosePlanContains(sql, "[/c2/a]");
