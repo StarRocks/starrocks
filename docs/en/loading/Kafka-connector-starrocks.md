@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Load data using Kafka connector
@@ -310,13 +310,13 @@ The data is successfully loaded when the above result is returned.
 
 **Required**:<br/>
 **Default value**:<br/>
-**Description**: Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+**Description**: Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 ### sink.properties.format              
 
 **Required**: NO<br/>
 **Default value**: json<br/>
-**Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters).
+**Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#json-parameters).
 
 ### sink.properties.partial_update
 

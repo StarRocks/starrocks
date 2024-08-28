@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['suoyin']
 toc_max_heading_level: 4
 ---

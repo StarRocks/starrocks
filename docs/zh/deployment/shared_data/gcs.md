@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 基于 GCS 部署
@@ -132,7 +132,7 @@ StarRocks 集群的运行模式。有效值：
 
 <SharedDataUseIntro />
 
-以下示例使用 HMAC Access Key 以及 Secret Key 认证为 GCS 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活[分区前缀](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md#分区前缀)功能，并将其设置为默认存储卷：
+以下示例使用 HMAC Access Key 以及 Secret Key 认证为 GCS 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活[分区前缀](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md#分区前缀)功能，并将其设置为默认存储卷：
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
