@@ -28,7 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TLoadSourceType;
-import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TPulsarLoadInfo;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
@@ -175,8 +174,6 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
-        TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
-        tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
         return tExecPlanFragmentParams;
     }
 }
