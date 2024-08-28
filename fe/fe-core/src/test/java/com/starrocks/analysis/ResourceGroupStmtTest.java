@@ -1697,7 +1697,7 @@ public class ResourceGroupStmtTest {
                     "   'dedicated_cpu_cores' = '17'" +
                     ")";
             Assert.assertThrows(
-                    "The sum of dedicated_cpu_cores of all the resource groups cannot exceed 31",
+                    "the sum of dedicated_cpu_cores of all the resource groups cannot exceed 31",
                     DdlException.class,
                     () -> starRocksAssert.executeResourceGroupDdlSql(sql));
         }
@@ -1721,7 +1721,7 @@ public class ResourceGroupStmtTest {
                     "   'dedicated_cpu_cores' = '3'" +
                     ");";
             Assert.assertThrows(
-                    "The sum of dedicated_cpu_cores of all the resource groups cannot exceed 31",
+                    "the sum of dedicated_cpu_cores of all the resource groups cannot exceed 31",
                     DdlException.class,
                     () -> starRocksAssert.executeResourceGroupDdlSql(sql));
         }

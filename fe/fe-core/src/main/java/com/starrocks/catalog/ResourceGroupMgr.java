@@ -70,7 +70,7 @@ public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
 
     private static final String EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG =
-            "The sum of %s of all the resource groups cannot exceed %d";
+            "the sum of %s of all the resource groups cannot exceed %d";
     public static final String SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG =
             "'short_query' ResourceGroup cannot set 'dedicated_cpu_cores', " +
                     "since it use 'cpu_weight' as 'dedicated_cpu_cores'";
