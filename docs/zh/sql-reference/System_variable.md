@@ -412,7 +412,7 @@ SELECT /*+ SET_VAR
 
 ### plan_mode
 
-* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案]()。有效值：
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg_catalog.md#附录自适应元数据检索方案)。有效值：
   * `auto`：系统自动选择方案。
   * `local`：使用本地缓存方案。
   * `distributed`：使用分布式方案。
