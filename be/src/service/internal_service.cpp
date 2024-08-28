@@ -79,12 +79,12 @@
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+#include "util/arrow/row_batch.h"
 #include "util/failpoint/fail_point.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/time.h"
 #include "util/uid_util.h"
-#include "util/arrow/row_batch.h"
 
 namespace starrocks {
 
@@ -893,8 +893,9 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
-                        PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller,
+                                                     const PFetchArrowSchemaRequest* request,
+                                                     PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     std::shared_ptr<arrow::Schema> schema =
             ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(UniqueId(request->finst_id()).to_thrift());

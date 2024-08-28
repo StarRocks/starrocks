@@ -181,7 +181,8 @@ public:
                                   PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
 
     void fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
-             PFetchArrowSchemaResult* result, google::protobuf::Closure* done);
+                            PFetchArrowSchemaResult* result, google::protobuf::Closure* done);
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
