@@ -129,9 +129,8 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
             PFetchArrowSchemaResult fetchArrowSchemaResult = future.get(timeout, TimeUnit.SECONDS);
 
             RootAllocator rootAllocator = new RootAllocator(Integer.MAX_VALUE);
-            try (ArrowStreamReader arrowStreamReader =
-                    new ArrowStreamReader(new ByteArrayInputStream(
-                            ByteString.copyFrom(fetchArrowSchemaResult.getSchema()).toByteArray()), rootAllocator)) {
+            try (ArrowStreamReader arrowStreamReader = new ArrowStreamReader(new ByteArrayInputStream(
+                    ByteString.copyFrom(fetchArrowSchemaResult.getSchema()).toByteArray()), rootAllocator)) {
                 VectorSchemaRoot vectorSchemaRoot = arrowStreamReader.getVectorSchemaRoot();
                 return vectorSchemaRoot.getSchema();
             }
