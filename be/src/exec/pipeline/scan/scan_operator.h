@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
@@ -57,6 +58,8 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
+
+    virtual workgroup::ScanSchedEntityType sched_entity_type() const { return workgroup::ScanSchedEntityType::OLAP; }
 
     void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 

@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <stddef.h>
-
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -23,18 +21,15 @@
 #include <vector>
 
 #include "block_cache/block_cache.h"
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/function_context.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace tparquet {
 class ColumnMetaData;
@@ -70,7 +65,8 @@ using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+               const DataCacheOptions& datacache_options = DataCacheOptions(),
                io::SharedBufferedInputStream* sb_stream = nullptr,
                const std::set<int64_t>* _need_skip_rowids = nullptr);
     ~FileReader();
@@ -80,6 +76,8 @@ public:
     Status get_next(ChunkPtr* chunk);
 
     FileMetaData* get_file_metadata();
+
+    Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
 
 private:
     int _chunk_size;
@@ -128,8 +126,6 @@ private:
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
-    Status _prepare_cur_row_group();
-
     // get min/max value from row group stats
     Status _get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
                               const ParquetField* field, std::vector<std::string>& min_values,
@@ -141,7 +137,7 @@ private:
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
-    int64_t _file_mtime = 0;
+    const DataCacheOptions _datacache_options;
 
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;

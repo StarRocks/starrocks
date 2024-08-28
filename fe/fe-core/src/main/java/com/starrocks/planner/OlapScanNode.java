@@ -517,7 +517,7 @@ public class OlapScanNode extends ScanNode {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
-                ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
         }
         for (Tablet tablet : tablets) {
@@ -920,7 +920,8 @@ public class OlapScanNode extends ScanNode {
                     col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
                     columnsDesc.add(tColumn);
                 }
-                if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                // process schema has order by columns
+                if (indexMeta.getSortKeyIdxes() != null) {
                     for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                         Column col = indexMeta.getSchema().get(sortKeyIdx);
                         keyColumnNames.add(col.getName());
@@ -1112,6 +1113,9 @@ public class OlapScanNode extends ScanNode {
         return selectedIndexId;
     }
 
+    /**
+     * Get partition id -> tablets map, note that the partition id is unrolled partition id which may be subpartition id.
+     */
     public Map<Long, List<Long>> getPartitionToScanTabletMap() {
         return partitionToScanTabletMap;
     }

@@ -95,6 +95,8 @@ public:
     int64_t gtid = 0;
     // Is pk compaction output writer
     bool is_pk_compaction = false;
+    // is compaction job
+    bool is_compaction = false;
 };
 
 } // namespace starrocks

@@ -14,6 +14,7 @@
 
 #include "http/action/transaction_stream_load.h"
 
+#include <event2/buffer.h>
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <gtest/gtest.h>
@@ -750,6 +751,85 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
         request._headers.emplace(HTTP_COLUMN_SEPARATOR, ",");
         ASSERT_EQ(-1, action.on_header(&request));
     }
+}
+
+TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
+    TransactionStreamLoadAction action(&_env);
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    HttpRequest request(_evhttp_req);
+    std::string content = "abc";
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    auto evb = evbuffer_new();
+    ev_req.input_buffer = evb;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_DB_KEY, "db");
+    request._headers.emplace(HTTP_LABEL_KEY, "123");
+    request._headers.emplace(HTTP_COLUMN_SEPARATOR, "|");
+
+    (_env._stream_context_mgr)->put("123", ctx);
+
+    evbuffer_add(evb, content.data(), content.size());
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+
+    evbuffer_add(evb, content.data(), content.size());
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    ctx->buffer = nullptr;
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+
+    evbuffer_add(evb, content.data(), content.size());
+    auto old_format = ctx->format;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->format = TFileFormatType::FORMAT_JSON;
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    ctx->buffer = nullptr;
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->format = TFileFormatType::FORMAT_JSON;
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+    ctx->format = old_format;
+
+    if (ctx->unref()) {
+        delete ctx;
+    }
+    evbuffer_free(evb);
 }
 
 } // namespace starrocks

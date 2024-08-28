@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
@@ -58,7 +60,7 @@ bool HashJoinProbeOperator::need_input() const {
         return true;
     }
 
-    if (_join_prober != _join_builder && is_ready()) {
+    if (is_ready()) {
         // If hasn't referenced hash table, return true to reference hash table in push_chunk.
         return !_join_prober->has_referenced_hash_table();
     }
@@ -80,10 +82,12 @@ Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 }
 
 StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_reference_builder_hash_table_once());
     return _join_prober->pull_chunk(state);
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
+    RETURN_IF_ERROR(_join_prober->probe_input_finished());
     _join_prober->enter_post_probe_phase();
     return Status::OK();
 }
@@ -95,12 +99,6 @@ Status HashJoinProbeOperator::set_finished(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
-    // non-broadcast join directly return as _join_prober == _join_builder,
-    // but broadcast should refer to the shared join builder
-    if (_join_prober == _join_builder) {
-        return Status::OK();
-    }
-
     if (!is_ready()) {
         return Status::OK();
     }

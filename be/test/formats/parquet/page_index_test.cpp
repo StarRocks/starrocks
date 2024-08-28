@@ -21,15 +21,12 @@
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
-#include "exprs/expr_context.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks::parquet {
 
@@ -280,7 +277,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                 std::cout << "file path: " << file_path << ", " << _print_predicate(single_flag) << std::endl;
 
                 auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                                std::filesystem::file_size(file_path), 100000);
+                                                                std::filesystem::file_size(file_path));
 
                 Status status = file_reader->init(ctx);
                 ASSERT_TRUE(status.ok());
@@ -362,7 +359,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
 
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 100000);
+                                                    std::filesystem::file_size(small_page_file));
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
@@ -439,8 +436,11 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     std::vector<TExpr> t_conjuncts_slot1{t_conjuncts[1]};
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot1, &ctx->conjunct_ctxs_by_slot[1]);
 
+    auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
+                                                                         std::filesystem::file_size(small_page_file));
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 100000);
+                                                    std::filesystem::file_size(small_page_file), DataCacheOptions(),
+                                                    shared_buffer.get());
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
@@ -467,6 +467,8 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     // three columns, (5 + 1) * 3 = 18
     EXPECT_EQ(ranges.size(), 18);
 
+    EXPECT_EQ(shared_buffer->current_range_ref_sum(), 28);
+
     // The second row group is not prepare yet
 
     size_t total_row_nums = 0;
@@ -477,6 +479,90 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         total_row_nums += chunk->num_rows();
     }
     EXPECT_EQ(total_row_nums, 10000);
+}
+
+TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(
+            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
+            chunk->num_columns());
+
+    const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
+
+    Utils::SlotDesc min_max_slots[] = {
+            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
+            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 1},
+            {""},
+    };
+
+    auto ctx = _create_file_c0_c1_c2_context(small_page_file);
+    auto file = _create_file(small_page_file);
+    ctx->conjunct_ctxs_by_slot[0].clear();
+    ctx->conjunct_ctxs_by_slot[1].clear();
+    ctx->min_max_conjunct_ctxs.clear();
+    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+
+    std::vector<TExpr> t_conjuncts;
+    // c0: 1->20000, c0 > 500
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 500, &t_conjuncts);
+    // c1: 20000->1, c1 > 500
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 1, 500, &t_conjuncts);
+
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+
+    std::vector<TExpr> t_conjuncts_slot0{t_conjuncts[0]};
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot0, &ctx->conjunct_ctxs_by_slot[0]);
+
+    std::vector<TExpr> t_conjuncts_slot1{t_conjuncts[1]};
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot1, &ctx->conjunct_ctxs_by_slot[1]);
+
+    auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
+                                                                         std::filesystem::file_size(small_page_file));
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(small_page_file), DataCacheOptions(),
+                                                    shared_buffer.get());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // two row groups.
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 2);
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+
+    for (auto& r : file_reader->_row_group_readers) {
+        r->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGE_INDEX);
+    }
+
+    // collect io of column index and offset index for active column,
+    // and offset index for lazy column
+    // and two group collect together. (2 + 2 + 1) * 2 = 10
+    EXPECT_EQ(ranges.size(), 10);
+
+    ranges.clear();
+    end_offset = 0;
+
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+    // only collect io of 1 chunk / column.
+    // three columns, 1 * 3 = 3
+    EXPECT_EQ(ranges.size(), 3);
+
+    EXPECT_EQ(shared_buffer->current_range_ref_sum(), 13);
+
+    // The second row group is not prepare yet
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+    }
+    EXPECT_EQ(total_row_nums, 19000);
 }
 
 } // namespace starrocks::parquet

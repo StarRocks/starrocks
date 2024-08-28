@@ -86,4 +86,5 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
             }
         }
     }
+
 }

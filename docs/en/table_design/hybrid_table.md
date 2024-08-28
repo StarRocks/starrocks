@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # [Preview] Hybrid row-column storage
@@ -111,7 +111,7 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
    SHOW VARIABLES LIKE '%enable_short_circuit%';
    ```
 
-   If the short circuiting for queries is not enabled, run the `SET enable_short_circuit = true;` command to set the variable [`enable_short_circuit`](../reference/System_variable.md) to `true`.
+   If the short circuiting for queries is not enabled, run the `SET enable_short_circuit = true;` command to set the variable [`enable_short_circuit`](../sql-reference/System_variable.md) to `true`.
 
 2. Query data. If the query meets the criteria that conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the shortcut.
 
@@ -172,7 +172,7 @@ EXECUTE select_by_id_stmt USING @id2;
 ## Limits
 
 - Currently, StarRocks shared-data clusters do not support hybrid row-column storage.
-- Since v3.2.4, the table with hybrid row-column storage can be altered by using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+- Since v3.2.4, the table with hybrid row-column storage can be altered by using [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
 - The short circuiting for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short circuiting for queries happens at the apply stage of the data writing process, data writing may block short circuiting for queries, affecting the response time of point queries during data writing.
 - Hybrid row-column storage may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
 - Hybrid row-column storage can increase the time and resource consumption during data loading.

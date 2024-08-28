@@ -39,7 +39,7 @@
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
@@ -53,7 +53,6 @@
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/rowid_column_iterator.h"
-#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
@@ -458,7 +457,7 @@ Status SegmentIterator::_init() {
 
     // reverse scan_range
     if (!_opts.asc_hint) {
-        _scan_range.split_and_revese(config::desc_hint_split_range, config::vector_chunk_size);
+        _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
     }
 
     _range_iter = _scan_range.new_iterator();
@@ -548,6 +547,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
+    iter_opts.has_preaggregation = _opts.has_preaggregation;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
                                  .buffer_size = _opts.lake_io_opts.buffer_size};

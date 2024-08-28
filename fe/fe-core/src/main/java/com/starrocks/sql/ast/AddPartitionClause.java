@@ -61,7 +61,6 @@ public class AddPartitionClause extends AlterTableClause {
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.isTempPartition = isTempPartition;
-        this.needTableStable = false;
     }
 
     public List<PartitionDesc> getResolvedPartitionDescList() {
@@ -72,7 +71,6 @@ public class AddPartitionClause extends AlterTableClause {
         this.resolvedPartitionDescList = resolvedPartitionDescList;
     }
 
-    @Override
     public Map<String, String> getProperties() {
         return this.properties;
     }

@@ -837,19 +837,28 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                List<Long> selectedNonEmptyPartitionIds = node.getSelectedPartitionId().stream().filter(p -> {
-                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(p);
-                    return selectTabletIds != null && !selectTabletIds.isEmpty();
-                }).collect(Collectors.toList());
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
-
+                // Filter out empty partitions from all selected partitions, original selected partition ids may be
+                // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
+                // eg:
+                // partition        : 10001 -> (tablet_1)
+                //  subpartition1   : 10002 -> (tablet_2)
+                //  subpartition2   : 10004 -> (tablet_3)
+                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                // after:
+                // selected partition ids   : 10002
+                // selected tablet ids      : tablet_2
+                // total tablets num        : 1
+                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
-
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
                                 .get(physicalPartition.getId());
+                        if (CollectionUtils.isEmpty(selectTabletIds)) {
+                            continue;
+                        }
+                        selectedNonEmptyPartitionIds.add(physicalPartition.getId());
+                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
                         List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
@@ -863,6 +872,7 @@ public class PlanFragmentBuilder {
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
                     }
                 }
+                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (UserException e) {
                 throw new StarRocksPlannerException(
@@ -1090,6 +1100,7 @@ public class PlanFragmentBuilder {
             }
 
             hudiScanNode.setLimit(node.getLimit());
+            hudiScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hudiScanNode);
@@ -1132,6 +1143,7 @@ public class PlanFragmentBuilder {
             }
 
             hdfsScanNode.setLimit(node.getLimit());
+            hdfsScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hdfsScanNode);
@@ -1172,6 +1184,7 @@ public class PlanFragmentBuilder {
             }
 
             fileTableScanNode.setLimit(node.getLimit());
+            fileTableScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(fileTableScanNode);
@@ -1226,6 +1239,7 @@ public class PlanFragmentBuilder {
             }
 
             deltaLakeScanNode.setLimit(node.getLimit());
+            deltaLakeScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(deltaLakeScanNode);
@@ -1270,6 +1284,7 @@ public class PlanFragmentBuilder {
             }
 
             paimonScanNode.setLimit(node.getLimit());
+            paimonScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(paimonScanNode);
@@ -1414,6 +1429,7 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setLimit(node.getLimit());
+            icebergScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(icebergScanNode);
@@ -1601,6 +1617,12 @@ public class PlanFragmentBuilder {
                             case "JOB_ID":
                                 scanNode.setJobId(constantOperator.getBigint());
                                 break;
+                            case "ID":
+                                if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                                        || scanNode.getTableName().equalsIgnoreCase("loads")) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
+                                break;
                             case "TYPE":
                                 scanNode.setType(constantOperator.getVarchar());
                                 break;
@@ -1654,7 +1676,8 @@ public class PlanFragmentBuilder {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                    || scanNode.getTableName().equalsIgnoreCase("loads")) {
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
@@ -3717,7 +3740,7 @@ public class PlanFragmentBuilder {
             prepareContextSlots(node, context, tupleDesc);
 
             int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
-            scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, false, dop);
+            scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);
             scanNode.setUseVectorizedLoad(true);
             // table function enable flexible column mapping by default.
             scanNode.setFlexibleColumnMapping(true);

@@ -45,7 +45,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
-#include "storage/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -221,6 +221,9 @@ public:
     const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
 
     DISALLOW_COPY_AND_MOVE(Segment);
+
+    // for ut test
+    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
 
 private:
     friend struct SegmentZoneMapPruner;

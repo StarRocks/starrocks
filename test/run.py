@@ -28,11 +28,16 @@ import sys
 
 import nose
 
+from lib.sr_sql_lib import self_print
+from lib import ColorEnum
+
 if not os.environ.get("version"):
     version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     os.environ["version"] = version
 
 from lib import sr_sql_lib
+
+DEFAULT_TIMEOUT = 600
 
 
 def print_help():
@@ -65,7 +70,7 @@ if __name__ == "__main__":
     record = False
     dirname = None
     concurrency = 8
-    timeout = 1200
+    timeout = DEFAULT_TIMEOUT
     file_filter = ".*"
     case_filter = ".*"
     collect = False
@@ -187,7 +192,7 @@ if __name__ == "__main__":
     argv = [
         "nosetests",
         "test_sql_cases.py",
-        "-vv",
+        "-v",
         "-s",
         "--nologcapture",
     ]
@@ -208,11 +213,12 @@ if __name__ == "__main__":
     argv += ["--processes=%s" % concurrency]
 
     # timeout setting of each case
-    if timeout <= 0:
-        print("-t|--timeout must > 0!")
+    if not 0 < timeout <= 10 * 60:
+        print("-t|--timeout(s) must be in (0, 10min]!")
         print_help()
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
+    argv += ["--process-restartworker"]
 
     # test xml
     if not record:
@@ -221,7 +227,7 @@ if __name__ == "__main__":
     if collect:
         argv += ["--collect-only"]
 
-    print("Test cmd: %s" % " ".join(argv))
+    self_print("Test cmd: %s" % " ".join(argv), ColorEnum.GREEN)
 
     nose.run(argv=argv)
 

@@ -26,8 +26,8 @@
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"
-#include "storage/inverted/inverted_index_iterator.h"
-#include "storage/inverted/inverted_reader.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/type_traits.h"

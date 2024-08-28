@@ -18,8 +18,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -27,7 +25,6 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
@@ -63,19 +60,6 @@ import java.util.Map;
 public class ExternalOlapTable extends OlapTable {
     private static final Logger LOG = LogManager.getLogger(ExternalOlapTable.class);
 
-    private static final String JSON_KEY_HOST = "host";
-    private static final String JSON_KEY_PORT = "port";
-    private static final String JSON_KEY_USER = "user";
-    private static final String JSON_KEY_PASSWORD = "password";
-    private static final String JSON_KEY_TABLE_NAME = "table_name";
-    private static final String JSON_KEY_DB_ID = "db_id";
-    private static final String JSON_KEY_TABLE_ID = "table_id";
-    private static final String JSON_KEY_SOURCE_DB_NAME = "source_db_name";
-    private static final String JSON_KEY_SOURCE_DB_ID = "source_db_id";
-    private static final String JSON_KEY_SOURCE_TABLE_ID = "source_table_id";
-    private static final String JSON_KEY_SOURCE_TABLE_NAME = "source_table_name";
-    private static final String JSON_KEY_SOURCE_TABLE_TYPE = "source_table_type";
-
     private static final String PROPERTIES_HOST = "host";
     private static final String PROPERTIES_PORT = "port";
     private static final String PROPERTIES_USER = "user";
@@ -83,8 +67,8 @@ public class ExternalOlapTable extends OlapTable {
     private static final String PROPERTIES_DATABASE = "database";
     private static final String PROPERTIES_TABLE = "table";
 
-    public class ExternalTableInfo {
-        // remote doris cluster fe addr
+    public static class ExternalTableInfo {
+        // remote starrocks cluster fe addr
         @SerializedName("ht")
         private String host;
         @SerializedName("pt")
@@ -168,33 +152,6 @@ public class ExternalOlapTable extends OlapTable {
             this.tableType = tableType;
         }
 
-        public void toJsonObj(JsonObject obj) {
-            obj.addProperty(JSON_KEY_HOST, host);
-            obj.addProperty(JSON_KEY_PORT, port);
-            obj.addProperty(JSON_KEY_USER, user);
-            obj.addProperty(JSON_KEY_PASSWORD, password);
-            obj.addProperty(JSON_KEY_SOURCE_DB_NAME, dbName);
-            obj.addProperty(JSON_KEY_SOURCE_DB_ID, dbId);
-            obj.addProperty(JSON_KEY_SOURCE_TABLE_NAME, tableName);
-            obj.addProperty(JSON_KEY_SOURCE_TABLE_ID, tableId);
-            obj.addProperty(JSON_KEY_SOURCE_TABLE_TYPE, TableType.serialize(tableType));
-        }
-
-        public void fromJsonObj(JsonObject obj) {
-            host = obj.getAsJsonPrimitive(JSON_KEY_HOST).getAsString();
-            port = obj.getAsJsonPrimitive(JSON_KEY_PORT).getAsInt();
-            user = obj.getAsJsonPrimitive(JSON_KEY_USER).getAsString();
-            password = obj.getAsJsonPrimitive(JSON_KEY_PASSWORD).getAsString();
-            dbName = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_DB_NAME).getAsString();
-            dbId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_DB_ID).getAsLong();
-            tableName = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_NAME).getAsString();
-            tableId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_ID).getAsLong();
-            JsonPrimitive tableTypeJson = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_TYPE);
-            if (tableTypeJson != null) {
-                tableType = TableType.deserialize(tableTypeJson.getAsString());
-            }
-        }
-
         public void parseFromProperties(Map<String, String> properties) throws DdlException {
             if (properties == null) {
                 throw new DdlException("miss properties for external table, "
@@ -214,7 +171,7 @@ public class ExternalOlapTable extends OlapTable {
                         + "Please add properties('port'='3306') when create table");
             }
             try {
-                port = Integer.valueOf(portStr);
+                port = Integer.parseInt(portStr);
             } catch (Exception e) {
                 throw new DdlException("port of external table must be a number."
                         + "Please add properties('port'='3306') when create table");
@@ -252,6 +209,8 @@ public class ExternalOlapTable extends OlapTable {
 
     @SerializedName(value = "ef")
     private ExternalTableInfo externalTableInfo;
+
+    private SystemInfoService externalSystemInfoService;
 
     public ExternalOlapTable() {
         super();
@@ -325,6 +284,10 @@ public class ExternalOlapTable extends OlapTable {
 
     public boolean isSourceTableCloudNativeTableOrMaterializedView() {
         return isSourceTableCloudNativeTable() || isSourceTableCloudNativeMaterializedView();
+    }
+
+    public SystemInfoService getExternalSystemInfoService() {
+        return externalSystemInfoService;
     }
 
     @Override
@@ -460,7 +423,7 @@ public class ExternalOlapTable extends OlapTable {
         indexNameToId.clear();
 
         for (TIndexMeta indexMeta : meta.getIndexes()) {
-            List<Column> columns = new ArrayList();
+            List<Column> columns = new ArrayList<>();
             for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
                 Type type = Type.fromThrift(columnMeta.getColumnType());
                 Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
@@ -556,29 +519,19 @@ public class ExternalOlapTable extends OlapTable {
         }
         long endOfTabletMetaBuild = System.currentTimeMillis();
 
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        SystemInfoService systemInfoService = new SystemInfoService();
         for (TBackendMeta backendMeta : backendMetas) {
-            Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
-            if (backend == null) {
-                backend = new Backend();
-                backend.setId(backendMeta.getBackend_id());
-                backend.setHost(backendMeta.getHost());
-                backend.setBePort(backendMeta.getBe_port());
-                backend.setHttpPort(backendMeta.getHttp_port());
-                backend.setBrpcPort(backendMeta.getRpc_port());
-                backend.setAlive(backendMeta.isAlive());
-                backend.setBackendState(BackendState.values()[backendMeta.getState()]);
-                systemInfoService.addBackend(backend);
-            } else {
-                backend.setId(backendMeta.getBackend_id());
-                backend.setHost(backendMeta.getHost());
-                backend.setBePort(backendMeta.getBe_port());
-                backend.setHttpPort(backendMeta.getHttp_port());
-                backend.setBrpcPort(backendMeta.getRpc_port());
-                backend.setAlive(backendMeta.isAlive());
-                backend.setBackendState(BackendState.values()[backendMeta.getState()]);
-            }
+            Backend backend = new Backend();
+            backend.setId(backendMeta.getBackend_id());
+            backend.setHost(backendMeta.getHost());
+            backend.setBePort(backendMeta.getBe_port());
+            backend.setHttpPort(backendMeta.getHttp_port());
+            backend.setBrpcPort(backendMeta.getRpc_port());
+            backend.setAlive(backendMeta.isAlive());
+            backend.setBackendState(BackendState.values()[backendMeta.getState()]);
+            systemInfoService.addBackend(backend);
         }
+        externalSystemInfoService = systemInfoService;
 
         lastExternalMeta = meta;
         LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +

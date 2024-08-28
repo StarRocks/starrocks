@@ -14,17 +14,23 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 public abstract class DmlStmt extends StatementBase {
     public static final long INVALID_TXN_ID = -1L;
 
     private long txnId = INVALID_TXN_ID;
 
+    protected final Map<String, String> properties;
+
     protected DmlStmt(NodePosition pos) {
         super(pos);
+        this.properties = Maps.newHashMap();
     }
 
     @Override
@@ -40,5 +46,9 @@ public abstract class DmlStmt extends StatementBase {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 }

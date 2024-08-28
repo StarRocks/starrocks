@@ -25,8 +25,10 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedViewStatus;
 
 import java.util.ArrayList;
@@ -64,6 +66,7 @@ public class ShowMaterializedViewStatus {
     public class RefreshJobStatus {
         private long taskId;
         private String taskName;
+        private String taskOwner;
         private Constants.TaskRunState refreshState;
         private long mvRefreshStartTime;
         private long mvRefreshEndTime;
@@ -199,6 +202,14 @@ public class ShowMaterializedViewStatus {
 
         public void setExtraMessage(ExtraMessage extraMessage) {
             this.extraMessage = extraMessage;
+        }
+
+        public String getTaskOwner() {
+            return taskOwner;
+        }
+
+        public void setTaskOwner(String taskOwner) {
+            this.taskOwner = taskOwner;
         }
     }
 
@@ -381,6 +392,16 @@ public class ShowMaterializedViewStatus {
         status.setTaskId(firstTaskRunStatus.getTaskId());
         status.setTaskName(firstTaskRunStatus.getTaskName());
 
+        // Task creator
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(firstTaskRunStatus.getTaskName());
+        if (task != null) {
+            if (task.getUserIdentity() != null) {
+                status.setTaskOwner(task.getUserIdentity().toString());
+            } else {
+                status.setTaskOwner(task.getCreateUser());
+            }
+        }
+
         // extra message
         ExtraMessage extraMessage = new ExtraMessage();
         List<String> queryIds = applyTaskRunStatusWith(x -> x.getQueryId());
@@ -440,7 +461,7 @@ public class ShowMaterializedViewStatus {
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
             long totalProcessDuration = lastJobTaskRunStatus.stream()
-                    .map(x -> x.calculateRefreshProcessDuration())
+                    .map(TaskRunStatus::calculateRefreshProcessDuration)
                     .collect(Collectors.summingLong(Long::longValue));
             status.setTotalProcessDuration(totalProcessDuration);
             status.setErrorCode(String.valueOf(lastTaskRunStatus.getErrorCode()));
@@ -509,6 +530,8 @@ public class ShowMaterializedViewStatus {
 
         // query_rewrite_status
         status.setQuery_rewrite_status(queryRewriteStatus);
+        // creator
+        status.setCreator(refreshJobStatus.getTaskOwner());
 
         return status;
     }
@@ -576,6 +599,8 @@ public class ShowMaterializedViewStatus {
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
         // query_rewrite_status
         addField(resultRow, queryRewriteStatus);
+        // owner
+        addField(resultRow, refreshJobStatus.getTaskOwner());
 
         return resultRow;
     }

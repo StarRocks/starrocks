@@ -193,6 +193,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
 
+    // for deserialization
     private SchemaChangeJobV2() {
         super(JobType.SCHEMA_CHANGE);
     }
@@ -835,6 +836,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void onFinished(OlapTable tbl) {
+        tbl.setState(OlapTableState.UPDATING_META);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // 
         // partition visible version won't update in schema change, so we need make global

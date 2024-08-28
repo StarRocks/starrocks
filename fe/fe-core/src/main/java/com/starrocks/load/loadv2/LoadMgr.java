@@ -57,6 +57,7 @@ import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -231,12 +232,10 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows,
-                                int estimateFileNum, long estimateFileSize,
-                                TLoadJobType type, long timeout, Coordinator coordinator)
-            throws UserException {
-
+    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
+                                               EtlJobType jobType, long createTimestamp, long estimateScanRows,
+                                               int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
+                                               Coordinator coordinator) throws UserException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
@@ -245,16 +244,21 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout, coordinator);
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
+                    createTimestamp, type, timeout, coordinator);
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
+            loadJob.setTransactionId(txnId);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
         addLoadJob(loadJob);
+        if (!loadJob.isCompleted()) {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
-        return loadJob.getId();
+        return loadJob;
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
@@ -801,12 +805,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public void saveLoadJobsV2JsonFormat(DataOutputStream out) throws IOException, SRMetaBlockException {
+    public void saveLoadJobsV2JsonFormat(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
         // 1 json for number of jobs, size of idToLoadJob for jobs
         final int cnt = 1 + loadJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.LOAD_MGR, cnt);
-        writer.writeJson(loadJobs.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.LOAD_MGR, cnt);
+        writer.writeInt(loadJobs.size());
         for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);
         }

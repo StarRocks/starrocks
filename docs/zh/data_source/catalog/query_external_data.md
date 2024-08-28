@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 查询外部数据
@@ -16,25 +16,25 @@ displayed_sidebar: "Chinese"
    - 如从 MySQL 客户端连接到 StarRocks。连接后，默认进入到 `default_catalog`。
    - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
 
-2. （可选）执行以下语句查看当前 StarRocks 集群中的所有 Catalog 并找到指定的 External Catalog。有关返回值说明，请参见 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)。
+2. （可选）执行以下语句查看当前 StarRocks 集群中的所有 Catalog 并找到指定的 External Catalog。有关返回值说明，请参见 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md)。
 
     ```SQL
     SHOW CATALOGS;
     ```
 
-3. （可选）执行以下语句查看指定 external catalog 中的数据库。有关参数和返回值说明，请参见 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md)。
+3. （可选）执行以下语句查看指定 external catalog 中的数据库。有关参数和返回值说明，请参见 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md)。
 
     ```SQL
     SHOW DATABASES FROM catalog_name;
     ```
 
-4. （可选）执行以下语句将当前会话切换到指定 external catalog 的指定数据库。有关参数说明和示例，请参见 [USE](../../sql-reference/sql-statements/data-definition/USE.md)。
+4. （可选）执行以下语句将当前会话切换到指定 external catalog 的指定数据库。有关参数说明和示例，请参见 [USE](../../sql-reference/sql-statements/Database/USE.md)。
 
     ```SQL
     USE catalog_name.db_name;
     ```
 
-5. 查询外部数据。更多 SELECT 的使用方法，请参见 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md)。
+5. 查询外部数据。更多 SELECT 的使用方法，请参见 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
 
     ```SQL
     SELECT * FROM table_name;

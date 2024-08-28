@@ -16,7 +16,10 @@
 
 #include <cstddef>
 #include <random>
+#include <utility>
 
+#include "column/bytes.h"
+#include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -32,20 +35,29 @@
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/internal_service_recoverable_stub.h"
+#include "util/metrics.h"
 #include "util/thread.h"
 #include "util/time.h"
 
 namespace starrocks {
 
-static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query_id, bool is_pipeline) {
+// Using a query-level mem_tracker beyond QueryContext's lifetime may access already destructed parent mem_tracker.
+// mem_trackers has a hierarchy: process->query_pool->resource_group->query, so when resource_group is dropped or
+// altered, resource_group-level mem_tracker would be destructed, such a dangling query-level mem_tracker would cause
+// BE's crash when it accesses its parent mem_tracker(i.e. resource_group-level mem_tracker). so we need capture
+// query context to prevent it from being destructed, and when a dropping resource_group is used by outstanding query
+// contexts, it would be delayed to be dropped until all its outstanding query contexts are destructed.
+static inline std::pair<pipeline::QueryContextPtr, std::shared_ptr<MemTracker>> get_mem_tracker(
+        const PUniqueId& query_id, bool is_pipeline) {
     if (is_pipeline) {
         TUniqueId tquery_id;
         tquery_id.lo = query_id.lo();
         tquery_id.hi = query_id.hi();
         auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(tquery_id);
-        return query_ctx == nullptr ? nullptr : query_ctx->mem_tracker();
+        auto mem_tracker = query_ctx == nullptr ? nullptr : query_ctx->mem_tracker();
+        return std::make_pair(query_ctx, mem_tracker);
     } else {
-        return nullptr;
+        return std::make_pair(nullptr, nullptr);
     }
 }
 
@@ -239,7 +251,7 @@ Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
 }
 
 void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& params) {
-    auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
+    auto [query_ctx, mem_tracker] = get_mem_tracker(params.query_id(), params.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     DCHECK(params.is_partial());
@@ -542,6 +554,10 @@ void RuntimeFilterWorker::close() {
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
                                      const TRuntimeFilterParams& params, bool is_pipeline) {
     VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop open query_id = " << query_id;
+        return;
+    }
     RuntimeFilterWorkerEvent ev;
     ev.type = OPEN_QUERY;
     ev.query_id = query_id;
@@ -561,9 +577,33 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     _queue.put(std::move(ev));
 }
 
+bool RuntimeFilterWorker::_reach_queue_limit() {
+    if (config::runtime_filter_queue_limit > 0) {
+        if (_queue.get_size() > config::runtime_filter_queue_limit) {
+            LOG(WARNING) << "runtime filter worker queue size is too large(" << _queue.get_size()
+                         << "), queue limit = " << config::runtime_filter_queue_limit;
+            return true;
+        }
+    } else if (config::runtime_filter_queue_limit == 0) {
+        int64_t mem_usage = _metrics->total_rf_bytes();
+        auto tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+        if (tracker->limit_exceeded_precheck(mem_usage)) {
+            LOG(WARNING) << "runtime filter worker queue mem-useage is too large(" << mem_usage
+                         << "), query pool consum(" << tracker->consumption() << "), limit(" << tracker->limit() << ")";
+            return true;
+        }
+    }
+    return false;
+}
+
 void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms,
                                                    int64_t rpc_http_min_size) {
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop part runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_PART_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_PART_RF;
@@ -579,6 +619,11 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
                                                         int timeout_ms, int64_t rpc_http_min_size) {
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop broadcast runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_BROADCAST_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_BROADCAST_GRF;
@@ -597,6 +642,11 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
               << ", filter_id = " << params.filter_id() << ", # probe insts = " << params.probe_finst_ids_size()
               << ", is_pipeline = " << params.is_pipeline();
 
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "RECV_PART_RF"});
@@ -674,7 +724,7 @@ static inline void receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterP
 }
 
 void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request) {
-    auto mem_tracker = get_mem_tracker(request.query_id(), request.is_pipeline());
+    auto [query_ctx, mem_tracker] = get_mem_tracker(request.query_id(), request.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
     // deserialize once, and all fragment instance shared that runtime filter.
     JoinRuntimeFilter* rf = nullptr;
@@ -745,7 +795,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
         PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms,
         int64_t rpc_http_min_size) {
-    auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
+    auto [query_ctx, mem_tracker] = get_mem_tracker(params.query_id(), params.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     std::random_device rd;
@@ -887,9 +937,6 @@ void RuntimeFilterWorker::execute() {
         if (!_queue.blocking_get(&ev)) {
             break;
         }
-
-        LOG_IF_EVERY_N(INFO, _queue.get_size() > CpuInfo::num_cores() * 10, 10)
-                << "runtime filter worker queue may be too large, size: " << _queue.get_size();
 
         _metrics->update_event_nums(ev.type, -1);
         switch (ev.type) {

@@ -46,7 +46,7 @@ function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_s
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['2'])
+function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['5'])
 -- result:
 None
 -- !result
@@ -54,19 +54,23 @@ function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01' as datetime) from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01' as datetime) from prepare_stmt where k5 = ?", ['5'])
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123456' as datetime) from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123456' as datetime) from prepare_stmt where k5 = ?", ['5'])
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12' as datetime) from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12' as datetime) from prepare_stmt where k5 = ?", ['5'])
 -- result:
 None
 -- !result
-function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123' as datetime), cast('2021-01-01' as date), * from prepare_stmt where k5 = ?", ['2'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123' as datetime), cast('2021-01-01' as date), * from prepare_stmt where k5 = ?", ['5'])
+-- result:
+None
+-- !result
+function: assert_prepare_execute('test_driver_prepare', "select /*+set_var(enable_short_circuit = true)*/ * from prepare_stmt where k1 = 1 and k2 = 2 and k3 = 3 and k4 = 4 and k5 = ?", ['5'])
 -- result:
 None
 -- !result

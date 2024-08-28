@@ -14,23 +14,27 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
@@ -46,7 +50,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -172,10 +177,29 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "7 months");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
-        List<AlterClause> alterList = Collections.singletonList(modify);
-        alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
+        //SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        //List<AlterClause> alterList = Collections.singletonList(modify);
+        //alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         Assert.assertEquals("7 months", TimeUtils.toHumanReadableString(
@@ -188,10 +212,25 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "2 days");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
-        List<AlterClause> alterList = Collections.singletonList(modify);
-        alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         Assert.assertEquals("2 days", TimeUtils.toHumanReadableString(
@@ -204,10 +243,24 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "4 hours");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return db;
+            }
 
-        List<AlterClause> alterList = Collections.singletonList(modify);
-        alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         Assert.assertEquals("4 hours", TimeUtils.toHumanReadableString(

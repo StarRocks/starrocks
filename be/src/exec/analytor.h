@@ -23,6 +23,7 @@
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/memory/mem_hook_allocator.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
 
@@ -335,6 +336,7 @@ private:
     Segment _peer_group;
     SegmentStatistics _peer_group_statistics;
     std::queue<int64_t> _candidate_peer_group_ends;
+    std::unique_ptr<Allocator> _allocator = std::make_unique<MemHookAllocator>();
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.

@@ -970,8 +970,8 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     auto dst_file_name = Rowset::segment_temp_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
 
     std::vector<uint32_t> column_ids{3};
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, auto_increment_partial_update_state,
-                                       column_ids, &write_columns));
+    ASSERT_OK(SegmentRewriter::rewrite_auto_increment(file_name, dst_file_name, tablet_schema,
+                                                      auto_increment_partial_update_state, column_ids, &write_columns));
 
     auto segment = *Segment::open(fs, FileInfo{dst_file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);

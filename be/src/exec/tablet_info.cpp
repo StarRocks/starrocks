@@ -24,7 +24,6 @@
 
 namespace starrocks {
 
-static const std::string LOAD_OP_COLUMN = "__op";
 // NOTE: This value should keep the same with the value in FE's `STARROCKS_DEFAULT_PARTITION_VALUE` constant.
 static const std::string STARROCKS_DEFAULT_PARTITION_VALUE = "__STARROCKS_DEFAULT_PARTITION__";
 

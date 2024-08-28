@@ -412,6 +412,21 @@ build_simdjson() {
     cp -r $TP_SOURCE_DIR/$SIMDJSON_SOURCE/include/* $TP_INCLUDE_DIR/
 }
 
+# poco
+build_poco() {
+  check_if_source_exist $POCO_SOURCE
+  cd $TP_SOURCE_DIR/$POCO_SOURCE
+
+  mkdir -p $BUILD_DIR
+  cd $BUILD_DIR
+  rm -rf CMakeCache.txt CMakeFiles/
+  $CMAKE_CMD .. -DBUILD_SHARED_LIBS=NO -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+   -DENABLE_XML=OFF -DENABLE_JSON=OFF -DENABLE_NET=ON -DENABLE_NETSSL=ON -DENABLE_CRYPTO=OFF -DENABLE_JWT=OFF -DENABLE_DATA=OFF -DENABLE_DATA_SQLITE=OFF -DENABLE_DATA_MYSQL=OFF -DENABLE_DATA_POSTGRESQL=OFF -DENABLE_DATA_ODBC=OFF \
+   -DENABLE_MONGODB=OFF -DENABLE_REDIS=OFF -DENABLE_UTIL=OFF -DENABLE_ZIP=OFF -DENABLE_APACHECONNECTOR=OFF -DENABLE_ENCODINGS=OFF \
+   -DENABLE_PAGECOMPILER=OFF -DENABLE_PAGECOMPILER_FILE2PAGE=OFF -DENABLE_ACTIVERECORD=OFF -DENABLE_ACTIVERECORD_COMPILER=OFF -DENABLE_PROMETHEUS=OFF
+  $CMAKE_CMD --build . --config Release --target install
+}
+
 # snappy
 build_snappy() {
     check_if_source_exist $SNAPPY_SOURCE
@@ -997,7 +1012,7 @@ build_aws_cpp_sdk() {
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
-    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts;kms" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \
@@ -1419,6 +1434,7 @@ build_fiu
 build_llvm
 build_clucene
 build_simdutf
+build_poco
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

@@ -89,14 +89,6 @@ message TabletSchemaPB {
     optional int64 id = 50;
 }
 
-enum IndexType {
-    BITMAP = 0;
-    GIN = 1;
-    INDEX_UNKNOWN = 2;
-    NGRAMBF = 3;
-    VECTOR = 4;
-}
-
 message TabletIndexPB {
     optional int64 index_id = 1;
     optional string index_name = 2;

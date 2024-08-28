@@ -49,6 +49,7 @@ import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
@@ -68,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConsistencyChecker extends FrontendDaemon {
@@ -75,7 +77,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
     private static final int MAX_JOB_NUM = 100;
     private static final Comparator<MetaObject> COMPARATOR =
-            (first, second) -> Long.signum(first.getLastCheckTime() - second.getLastCheckTime());
+                (first, second) -> Long.signum(first.getLastCheckTime() - second.getLastCheckTime());
 
     // tabletId -> job
     private final Map<Long, CheckConsistencyJob> jobs;
@@ -94,6 +96,10 @@ public class ConsistencyChecker extends FrontendDaemon {
     private int startTime;
     private int endTime;
     private long lastTabletMetaCheckTime = 0;
+
+    // Record the id of the table being created and ignore the check of the tablet of the table being created
+    // to avoid deleting its tablets from TabletInvertedIndex by mistake.
+    private final Map<Long, Integer> creatingTableCounters = new ConcurrentHashMap<>();
 
     public ConsistencyChecker() {
         super("consistency checker");
@@ -118,7 +124,7 @@ public class ConsistencyChecker extends FrontendDaemon {
             LOG.info("parsed startDate: {}, endDate: {}", startDate, endDate);
         } catch (ParseException e) {
             LOG.error("failed to parse start/end time: {}, {}", Config.consistency_check_start_time,
-                    Config.consistency_check_end_time, e);
+                        Config.consistency_check_end_time, e);
             return false;
         }
 
@@ -137,7 +143,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     private void checkTabletMetaConsistency() {
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency(creatingTableCounters);
     }
 
     @Override
@@ -212,7 +218,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
         if (!isTime) {
             LOG.debug("current time is {}:00, waiting to {}:00 to {}:00",
-                    currentTime, startTime, endTime);
+                        currentTime, startTime, endTime);
         }
 
         return isTime;
@@ -313,7 +319,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                         // sort partitions
                         Queue<MetaObject> partitionQueue =
-                                new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
+                                    new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
                         for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                             // check partition's replication num. if 1 replication. skip
                             if (table.getPartitionInfo().getReplicationNum(partition.getParentId()) == (short) 1) {
@@ -324,7 +330,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                             // check if this partition has no data
                             if (partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
                                 LOG.debug("partition[{}]'s version is {}. ignore", partition.getId(),
-                                        Partition.PARTITION_INIT_VERSION);
+                                            Partition.PARTITION_INIT_VERSION);
                                 continue;
                             }
                             if (partition instanceof Partition) {
@@ -339,9 +345,9 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                             // sort materializedIndices
                             List<MaterializedIndex> visibleIndexes =
-                                    partition.getMaterializedIndices(IndexExtState.VISIBLE);
+                                        partition.getMaterializedIndices(IndexExtState.VISIBLE);
                             Queue<MetaObject> indexQueue =
-                                    new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
+                                        new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
                             indexQueue.addAll(visibleIndexes);
 
                             while ((chosenOne = indexQueue.poll()) != null) {
@@ -349,7 +355,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                                 // sort tablets
                                 Queue<MetaObject> tabletQueue =
-                                        new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
+                                            new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
                                 tabletQueue.addAll(index.getTablets());
 
                                 while ((chosenOne = tabletQueue.poll()) != null) {
@@ -364,11 +370,12 @@ public class ConsistencyChecker extends FrontendDaemon {
                                     if (partition.getVisibleVersion() == tablet.getCheckedVersion()) {
                                         if (tablet.isConsistent()) {
                                             LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
-                                                    chosenTabletId, tablet.getCheckedVersion(), partition.getVisibleVersion());
+                                                        chosenTabletId, tablet.getCheckedVersion(),
+                                                        partition.getVisibleVersion());
                                         }
                                     } else {
                                         LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
-                                                table.getId(), partition.getId(), index.getId(), chosenTabletId);
+                                                    table.getId(), partition.getId(), index.getId(), chosenTabletId);
 
                                         chosenTablets.add(chosenTabletId);
                                     }
@@ -384,7 +391,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                     // Since only at most `MAX_JOB_NUM` tablet are chosen, we don't need to release the db read lock
                     // from time to time, just log the time cost here.
                     LOG.info("choose tablets from db[{}-{}](with read lock held) took {}ms",
-                            db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
+                                db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
                     locker.unLockDatabase(db, LockType.READ);
                 }
             } // end while dbQueue
@@ -414,14 +421,14 @@ public class ConsistencyChecker extends FrontendDaemon {
             LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            OlapTable table = (OlapTable) db.getTable(info.getTableId());
-            if (table == null) {
-                LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
-                return;
-            }
+        OlapTable table = (OlapTable) db.getTable(info.getTableId());
+        if (table == null) {
+            LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
+            return;
+        }
+
+        try (AutoCloseableLock ignore
+                    = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.WRITE)) {
             Partition partition = table.getPartition(info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);
@@ -447,8 +454,6 @@ public class ConsistencyChecker extends FrontendDaemon {
             tablet.setCheckedVersion(info.getCheckedVersion());
 
             tablet.setIsConsistent(info.isConsistent());
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -458,5 +463,19 @@ public class ConsistencyChecker extends FrontendDaemon {
             CheckConsistencyJob job = new CheckConsistencyJob(tabletId);
             addJob(job);
         }
+    }
+
+    public void addCreatingTableId(long tableId) {
+        creatingTableCounters.compute(tableId, (k, v) -> (v == null) ? 1 : v + 1);
+    }
+
+    public void deleteCreatingTableId(long tableId) {
+        creatingTableCounters.compute(tableId, (k, v) -> {
+            if (v == null || v <= 1) {
+                return null;
+            } else {
+                return v - 1;
+            }
+        });
     }
 }

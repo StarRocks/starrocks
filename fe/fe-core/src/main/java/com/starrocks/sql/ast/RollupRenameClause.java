@@ -17,19 +17,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
-
-import java.util.Map;
 
 // rename table
 public class RollupRenameClause extends AlterTableClause {
-    private String rollupName;
-    private String newRollupName;
+    private final String rollupName;
+    private final String newRollupName;
 
     public RollupRenameClause(String rollupName, String newRollupName) {
         this(rollupName, newRollupName, NodePosition.ZERO);
@@ -39,7 +33,6 @@ public class RollupRenameClause extends AlterTableClause {
         super(AlterOpType.RENAME, pos);
         this.rollupName = rollupName;
         this.newRollupName = newRollupName;
-        this.needTableStable = false;
     }
 
     public String getRollupName() {
@@ -48,24 +41,6 @@ public class RollupRenameClause extends AlterTableClause {
 
     public String getNewRollupName() {
         return newRollupName;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(rollupName)) {
-            throw new AnalysisException("Rollup name is not set");
-        }
-
-        if (Strings.isNullOrEmpty(newRollupName)) {
-            throw new AnalysisException("New rollup name is not set");
-        }
-
-        FeNameFormat.checkTableName(newRollupName);
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return null;
     }
 
     @Override

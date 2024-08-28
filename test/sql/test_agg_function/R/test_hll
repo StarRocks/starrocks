@@ -1,0 +1,119 @@
+-- name: test_hll_function
+CREATE TABLE t1 (
+    c1 int,
+    c2 int
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series from table(generate_series(1, 1000));
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+select ndv(c1) from t1;
+-- result:
+1005
+-- !result
+select c2, ndv(c1) from t1 group by c2 order by c2 limit 10;
+-- result:
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+9	1
+10	1
+-- !result
+select approx_count_distinct(c1) from t1;
+-- result:
+1005
+-- !result
+select c2,approx_count_distinct(c1) from t1 group by c2 order by c2 limit 10;
+-- result:
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+9	1
+10	1
+-- !result
+select approx_count_distinct_hll_sketch(c1) from t1;
+-- result:
+1000
+-- !result
+select c2,approx_count_distinct_hll_sketch(c1) from t1 group by c2 order by c2 limit 10;
+-- result:
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+9	1
+10	1
+-- !result
+select hll_union(hll_hash(c1)) from t1;
+-- result:
+None
+-- !result
+select c2, hll_union(hll_hash(c1)) from t1 group by c2 order by c2 limit 10;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+9	None
+10	None
+-- !result
+select hll_raw_agg(hll_hash(c1)) from t1;
+-- result:
+None
+-- !result
+select c2, hll_raw_agg(hll_hash(c1)) from t1 group by c2 order by c2 limit 10;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+9	None
+10	None
+-- !result
+select hll_union_agg(hll_hash(c1)) from t1;
+-- result:
+1001
+-- !result
+select c2, hll_union_agg(hll_hash(c1)) from t1 group by c2 order by c2 limit 10;
+-- result:
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+9	1
+10	1
+-- !result

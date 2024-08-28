@@ -69,6 +69,9 @@ private:
     void update_realtime_counter(Chunk* chunk);
     void update_counter();
 
+    Status init_column_access_paths(Schema* schema);
+    Status prune_schema_by_access_paths(Schema* schema);
+
 private:
     const LakeDataSourceProvider* _provider;
     const TInternalScanRange _scan_range;
@@ -101,6 +104,8 @@ private:
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
+
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
@@ -174,6 +179,10 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+
+    RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
+    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
+    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };
 
 // ================================
@@ -195,7 +204,7 @@ public:
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-            size_t num_total_scan_ranges, size_t scan_dop = 0) override;
+            size_t num_total_scan_ranges, size_t scan_parallelism = 0) override;
 
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }

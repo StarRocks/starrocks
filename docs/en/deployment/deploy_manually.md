@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Deploy StarRocks manually
@@ -166,6 +166,11 @@ The following procedures are performed on the BE instances.
 > **NOTE**
 >
 > A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to a StarRocks cluster.
+> If you want to deploy just one BE node, you must set `default_replication_num` to `1` in the FE configuration file **fe/conf/fe.conf**.
+
+      ```YAML
+      default_replication_num = 1
+      ```
 
 ## Step 3: (Optional) Start the CN service
 
@@ -368,7 +373,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
 
    If the field `Alive` is `true`, this CN node is properly started and added to the cluster.
 
-   After CNs are properly started and you want to use CNs during queries, set the system variables `SET prefer_compute_node = true;` and `SET use_compute_nodes = -1;`. For more information, see [System variables](../reference/System_variable.md#descriptions-of-variables).
+   After CNs are properly started and you want to use CNs during queries, set the system variables `SET prefer_compute_node = true;` and `SET use_compute_nodes = -1;`. For more information, see [System variables](../sql-reference/System_variable.md#descriptions-of-variables).
 
 ## Step 5: (Optional) Deploy a high-availability FE cluster
 
@@ -395,7 +400,7 @@ A high-availability FE cluster requires at least THREE Follower FE nodes in the 
    > **NOTE**
    >
    > - You can use the preceding command to add a single Follower FE nodes each time.
-   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md).
+   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md).
 
 3. Launch a terminal on the new FE instance, create a dedicated directory for metadata storage, navigate to the directory that stores the StarRocks FE deployment files, and modify the FE configuration file **fe/conf/fe.conf**. For more instructions, see [Step 1: Start the Leader FE node](#step-1-start-the-leader-fe-node). Basically, you can repeat the procedures in Step 1 **except for the command used to start the FE node**.
   

@@ -42,6 +42,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
+import com.starrocks.alter.AlterJobException;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
@@ -90,6 +91,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
+import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -310,7 +312,12 @@ public class StmtExecutor {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
+                    AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt));
+        } else {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        }
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
@@ -526,6 +533,11 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
+
+                        if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
+                            processQueryScopeHint();
+                        }
+
                         try {
                             execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
                         } catch (SemanticException e) {
@@ -563,7 +575,8 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
-            if (isQuery && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
+            if ((isQuery || parsedStmt instanceof InsertStmt)
+                    && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (origStmt != null) {
                     String originSql = origStmt.originStmt.trim()
@@ -634,7 +647,7 @@ public class StmtExecutor {
                             isAsync = tryProcessProfileAsync(execPlan, i);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                if (coord.isShortCircuit()) {
+                                if (coord != null && coord.isShortCircuit()) {
                                     throw new UserException(
                                             "short circuit point query doesn't suppot explain analyze stmt, " +
                                                     "you can set it off by using  set enable_short_circuit=false");
@@ -741,19 +754,6 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
-            }
-
-            if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {
-                // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist) {
-                    OriginStatement origStmt = parsedStmt.getOrigStmt();
-                    if (origStmt != null) {
-                        String originSql = origStmt.originStmt.trim()
-                                .toLowerCase().replaceAll(" +", " ");
-                        // If this sql is in blacklist, show message.
-                        SqlBlackList.verifying(originSql);
-                    }
-                }
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
@@ -1047,13 +1047,17 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
-            killCtx.kill(killConnection, "killed by kill statement : " + originStmt);
+            killCtx.kill(killConnection, "killed manually: " + originStmt.getOrigStmt());
         }
         context.getState().setOk();
     }
 
     // Handle kill running query statement.
     private void handleKillQuery(String queryId) throws DdlException {
+        if (StringUtils.isEmpty(queryId)) {
+            context.getState().setOk();
+            return;
+        }
         // > 0 means it is forwarded from other fe
         if (context.getForwardTimes() == 0) {
             String errorMsg = null;
@@ -1083,7 +1087,10 @@ public class StmtExecutor {
             context.getState().setError(errorMsg == null ? ErrorCode.ERR_UNKNOWN_ERROR.formatErrorMsg() : errorMsg);
             return;
         }
-        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByCustomQueryId(queryId);
+        if (killCtx == null) {
+            killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        }
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
         }
@@ -1763,7 +1770,7 @@ public class StmtExecutor {
                 LOG.warn("DDL statement (" + sql + ") process failed.", e);
             }
             context.setState(e.getQueryState());
-        } catch (DdlException e) {
+        } catch (DdlException | AlterJobException e) {
             // let StmtExecutor.execute catch this exception
             // which will set error as ANALYSIS_ERR
             throw e;
@@ -1774,7 +1781,7 @@ public class StmtExecutor {
                 sql = originStmt.originStmt;
             }
             LOG.warn("DDL statement (" + sql + ") process failed.", e);
-            context.getState().setError("Unexpected exception: " + e.getMessage());
+            context.getState().setError(e.getMessage());
         }
     }
 
@@ -2116,12 +2123,17 @@ public class StmtExecutor {
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
+            InsertLoadJob loadJob = null;
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                     targetTable.isBlackHoleTable())) {
-                jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
+                // insert, update and delete job
+                loadJob = context.getGlobalStateMgr().getLoadMgr().registerInsertLoadJob(
                         label,
                         database.getFullName(),
                         targetTable.getId(),
+                        transactionId,
+                        DebugUtil.printId(context.getExecutionId()),
+                        context.getQualifiedUser(),
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
@@ -2130,6 +2142,11 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         coord);
+                loadJob.setJobProperties(stmt.getProperties());
+                jobId = loadJob.getId();
+                if (txnState != null) {
+                    txnState.setCallbackId(jobId);
+                }
             }
 
             coord.setLoadJobId(jobId);
@@ -2206,37 +2223,32 @@ public class StmtExecutor {
                 loadedBytes = Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES));
             }
 
-            // if in strict mode, insert will fail if there are filtered rows
-            if (context.getSessionVariable().getEnableInsertStrict()) {
-                if (filteredRows > 0) {
-                    if (targetTable instanceof ExternalOlapTable) {
-                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                        RemoteTransactionMgr.abortRemoteTransaction(
-                                externalTable.getSourceTableDbId(), transactionId,
-                                externalTable.getSourceTableHost(),
-                                externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                        trackingSql,
-                                coord == null ? Collections.emptyList() : coord.getCommitInfos(),
-                                coord == null ? Collections.emptyList() : coord.getFailInfos()
-                        );
-                    } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
-                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable() ||
-                            targetTable.isBlackHoleTable()) {
-                        // schema table does not need txn
-                    } else {
-                        transactionMgr.abortTransaction(
-                                database.getId(),
-                                transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                        trackingSql,
-                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
-                    }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
-                            " tracking sql = " + trackingSql);
-                    insertError = true;
-                    return;
+            if (loadJob != null) {
+                loadJob.updateLoadingStatus(coord.getLoadCounters());
+            }
+
+            // insert will fail if 'filtered rows / total rows' exceeds max_filter_ratio
+            if (loadJob != null && !loadJob.checkDataQuality()) {
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                    RemoteTransactionMgr.abortRemoteTransaction(externalTable.getSourceTableDbId(), transactionId,
+                            externalTable.getSourceTableHost(), externalTable.getSourceTablePort(),
+                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
+                            coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                            coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() || targetTable.isIcebergTable() ||
+                        targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+                    // schema table does not need txn
+                } else {
+                    transactionMgr.abortTransaction(database.getId(), transactionId,
+                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
+                            Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 }
+                context.getState().setError(
+                        TransactionCommitFailedException.FILTER_DATA_ERR + ", txn_id = " + transactionId +
+                                ", tracking sql = " + trackingSql);
+                insertError = true;
+                return;
             }
 
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt

@@ -117,6 +117,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -235,6 +237,23 @@ public class OlapTableSink extends DataSink {
         complete();
     }
 
+    public List<Long> getOpenPartitions() {
+        if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
+                || partitionIds.size() < Config.max_load_initial_open_partition_number) {
+            return partitionIds;
+        }
+        // bigger partition id means newer partition
+        // open last max_load_initial_open_partition_number partitions
+        Set<Long> openPartitionIds = partitionIds.stream().collect(
+                Collectors.toCollection(() -> new TreeSet<>(Collections.reverseOrder())))
+                .stream().limit(Config.max_load_initial_open_partition_number).collect(Collectors.toSet());;
+        if (!dstTable.getDoubleWritePartitions().isEmpty()) {
+            openPartitionIds.addAll(dstTable.getDoubleWritePartitions().keySet());
+        }
+
+        return openPartitionIds.stream().collect(Collectors.toList());
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
@@ -252,10 +271,11 @@ public class OlapTableSink extends DataSink {
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
         TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
-                enableAutomaticPartition, automaticBucketSize, partitionIds);
+                enableAutomaticPartition, automaticBucketSize, getOpenPartitions());
         tSink.setPartition(partitionParam);
         tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, warehouseId));
-        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId));
+        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId,
+                getSystemInfoService(dstTable)));
         tSink.setPartial_update_mode(this.partialUpdateMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         if (canUseColocateMVIndex(dstTable)) {
@@ -713,6 +733,14 @@ public class OlapTableSink extends DataSink {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
+    public static SystemInfoService getSystemInfoService(OlapTable table) {
+        if (table instanceof ExternalOlapTable) {
+            return ((ExternalOlapTable) table).getExternalSystemInfoService();
+        } else {
+            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        }
+    }
+
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
                                                          long warehouseId) throws UserException {
@@ -720,7 +748,7 @@ public class OlapTableSink extends DataSink {
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         Map<Long, Long> bePrimaryMap = new HashMap<>();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        SystemInfoService infoService = getSystemInfoService(table);
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
@@ -743,7 +771,7 @@ public class OlapTableSink extends DataSink {
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
                         Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap();
+                                localTablet.getNormalReplicaBackendPathMap(infoService);
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
                                     String.format("Tablet lost replicas. Check if any backend is down or not. " +

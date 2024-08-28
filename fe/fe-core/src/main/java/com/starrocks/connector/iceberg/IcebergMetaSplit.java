@@ -20,17 +20,18 @@ import com.starrocks.connector.share.iceberg.ManifestFileBean;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.util.SerializationUtil;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class IcebergMetaSplit implements RemoteMetaSplit {
     public static final String PLACEHOLDER_FILE = "placeholder_file";
     public static final long PLACEHOLDER_FILE_LENGTH = 1L;
     public static final String PLACEHOLDER_FILE_PATH = "placeholder_file_path";
-    public static final List<MetadataTableType> ONLY_NEED_SINGLE_SPLIT = new ArrayList<>(List.of(
+    public static final List<MetadataTableType> ONLY_NEED_SINGLE_SPLIT = List.of(
             MetadataTableType.REFS,
-            MetadataTableType.HISTORY));
-
+            MetadataTableType.HISTORY,
+            MetadataTableType.METADATA_LOG_ENTRIES,
+            MetadataTableType.SNAPSHOTS,
+            MetadataTableType.MANIFESTS);
 
     private final String manifestFile;
     private final long length;

@@ -358,14 +358,14 @@ public class FrontendServiceImplTest {
 
         partition = impl.updateImmutablePartition(request);
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
-        Assert.assertEquals(3, table.getPhysicalPartitions().size());
+        Assert.assertEquals(2, table.getPhysicalPartitions().size());
 
         partitionIds = table.getPhysicalPartitions().stream()
                 .map(PhysicalPartition::getId).collect(Collectors.toList());
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
-        Assert.assertEquals(5, table.getPhysicalPartitions().size());
+        Assert.assertEquals(3, table.getPhysicalPartitions().size());
     }
 
     @Test
@@ -653,7 +653,7 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testAutomaticPartitionLimitExceed() throws TException {
-        Config.max_automatic_partition_number = 1;
+        Config.max_partition_number_per_table = 1;
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_slice");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -671,8 +671,44 @@ public class FrontendServiceImplTest {
         TCreatePartitionResult partition = impl.createPartition(request);
 
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
-        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_automatic_partition_number"));
-        Config.max_automatic_partition_number = 4096;
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_partition_number_per_table"));
+        Config.max_partition_number_per_table = 100000;
+    }
+
+    @Test
+    public void testAutomaticPartitionPerLoadLimitExceed() throws TException {
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1999-04-29");
+        partitionValues.add(values);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1999-03-28");
+        partitionValues.add(values2);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+        Assert.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
+
+        Config.max_partitions_in_one_batch = 1;
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_partitions_in_one_batch"));
+
+        Config.max_partitions_in_one_batch = 4096;
     }
 
     private TGetTablesParams buildListTableStatusParam() {

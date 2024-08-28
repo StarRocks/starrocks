@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 4
 description: Data Lakehouse with Apache Hudi
 toc_max_heading_level: 3
@@ -50,7 +50,7 @@ Change directory into `demo/documentation-samples/hudi` and look at the files. T
 | **`metastore_db`**       | Postgres DB used to store the Hive metadata                         |
 | **`hive_metastore`**     | Provides the Apache Hive metastore                                  |
 | **`minio`** and **`mc`** | MinIO Object Storage and MinIO command line client                  |
-| **`spark-hudi`**         | MinIO Object Storage                                                |
+| **`spark-hudi`**         | Distributed computing and Transactional data lake platform          |
 
 ### Configuration files
 
