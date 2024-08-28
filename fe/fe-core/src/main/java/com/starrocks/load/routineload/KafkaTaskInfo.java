@@ -48,7 +48,6 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TKafkaLoadInfo;
 import com.starrocks.thrift.TLoadSourceType;
-import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
@@ -246,8 +245,6 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     getStreamLoadMgr().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }
-        TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
-        tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
         return tExecPlanFragmentParams;
     }
 }
