@@ -465,7 +465,22 @@ class StarrocksSQLApiLib(object):
                 return _tmp_conf
 
         # read conf file to dict
-        config_parser = configparser.Configure2Dict(f"{root_path}/{path}", separator="=").get_dict()
+        config_parser = configparser.Configure2Dict(path, separator="=").get_dict()
+        config_parser_str = json.dumps(config_parser)
+
+        # replace ${} in conf
+        var_strs = set(re.findall(r"\${([a-zA-Z._-]+)}", config_parser_str))
+        for var_str in var_strs:
+            var_str_path = "['" + var_str.replace(".", "']['") + "']"
+            print(f'config_parser{var_str_path}')
+            try:
+                var_value = eval(f'config_parser{var_str_path}')
+            except Exception as e:
+                self_print(f"[ERROR] config: {var_str} is incorrect!", color=ColorEnum.RED, bold=True)
+                sys.exit(1)
+            config_parser_str = config_parser_str.replace(var_str, var_value)
+
+        config_parser = json.loads(config_parser_str)
 
         # update dependency component status dict
         component_list = list(_get_value(config_parser, "env").keys())
