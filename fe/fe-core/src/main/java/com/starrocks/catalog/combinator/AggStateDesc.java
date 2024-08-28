@@ -36,7 +36,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * It's a wrapper for the result type with extra information for the aggregate function.
+ * AggStateDesc is used to get the aggregate function which's used for common aggregate function state. 
+ * Aggregate function's state needs to find the associated aggregate function, to get the aggregate function, 
+ * we need to know the function name, return type, argument types and result nullable.
  */
 public class AggStateDesc {
     // aggregate function's name

@@ -331,7 +331,7 @@ struct TTableFunction {
 struct TAggStateDesc {
     1: optional string agg_func_name
     2: optional list<TTypeDesc> arg_types
-    3: TTypeDesc ret_type
+    3: optional TypeDesc ret_type
     4: optional bool result_nullable
     5: optional i32 func_version
 }
