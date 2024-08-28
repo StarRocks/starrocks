@@ -284,4 +284,18 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
     }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("FullStatisticsCollectJob{");
+        sb.append("type=").append(type);
+        sb.append(", scheduleType=").append(scheduleType);
+        sb.append(", db=").append(db);
+        sb.append(", table=").append(table);
+        sb.append(", partitionIdList=").append(partitionIdList);
+        sb.append(", columnNames=").append(columnNames);
+        sb.append(", properties=").append(properties);
+        sb.append('}');
+        return sb.toString();
+    }
 }
