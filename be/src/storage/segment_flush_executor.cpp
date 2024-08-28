@@ -50,6 +50,7 @@ public:
         if (_run_or_released.load()) {
             return;
         }
+
         Status status = Status::Cancelled(
                 fmt::format("Segment flush task does not run, and it may be cancelled,"
                             " txn_id: {}, tablet id: {}, flush token status: {}",
@@ -100,15 +101,6 @@ public:
         } else {
             _send_success_response(eos, st);
         }
-    }
-
-    // Release the task which means it should not be run and respond to the brpc.
-    void release() {
-        bool expect = false;
-        _run_or_released.compare_exchange_strong(expect, true);
-        VLOG(1) << "Segment flush task is released"
-                << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
-                << ", flush token status: " << _flush_token->status();
     }
 
 private:
@@ -171,12 +163,10 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
 
     auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
     auto submit_st = _flush_token->submit(task);
-    if (submit_st.ok()) {
-        closure_guard.release();
-    } else {
-        task->release();
-        submit_st.to_protobuf(response->mutable_status());
+    if (!submit_st.ok()) {
+        set_status(submit_st);
     }
+    closure_guard.release();
 
     return submit_st;
 }
