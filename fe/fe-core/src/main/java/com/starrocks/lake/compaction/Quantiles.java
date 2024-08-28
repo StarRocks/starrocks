@@ -64,14 +64,15 @@ public class Quantiles implements Comparable<Quantiles> {
 
     @Override
     public int compareTo(@NotNull Quantiles o) {
-        if (avg != o.avg) {
-            return avg > o.avg ? 1 : -1;
+        // must use Double.compare to avoid float type precision issue
+        if (Double.compare(avg, o.avg) != 0) {
+            return Double.compare(avg, o.avg);
         }
-        if (p50 != o.p50) {
-            return p50 > o.p50 ? 1 : -1;
+        if (Double.compare(p50, o.p50) != 0) {
+            return Double.compare(p50, o.p50);
         }
-        if (max != o.max) {
-            return max > o.max ? 1 : -1;
+        if (Double.compare(max, o.max) != 0) {
+            return Double.compare(max, o.max);
         }
         return 0;
     }
