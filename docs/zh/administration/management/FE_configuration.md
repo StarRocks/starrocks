@@ -2365,13 +2365,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **说明**
 >
-<<<<<<< HEAD
 > - StarRocks 存算分离集群不支持该参数。
-> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
-=======
-> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
 > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ##### recover_with_empty_tablet
 

@@ -7,13 +7,8 @@ toc_max_heading_level: 5
 
 Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi 和 Delta Lake 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 
-<<<<<<< HEAD
 - 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据进行加工建模，并导入至 StarRocks。
-=======
-- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据进行加工建模，并导入至 StarRocks。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
 为保证正常访问融合数据源内的数据，StarRocks 集群必须能够访问融合数据源的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
@@ -849,11 +844,7 @@ DROP CATALOG unified_catalog_glue;
 
 ## 从 Hive、Iceberg、Hudi 或 Delta Lake 导入数据
 
-<<<<<<< HEAD
-您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
-=======
-您可以通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 Hive、Iceberg、Hudi、Delta Lake 或 Kudu 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+您可以通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
 
 例如，通过如下命令将 Hive 表 `hive_table` 的数据导入到 StarRocks 中 Unified Catalog `unified_catalog` 下数据库`test_database` 里的表 `test_table`：
 

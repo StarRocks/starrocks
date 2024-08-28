@@ -161,11 +161,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 **从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-**从 3.2 版本起，支持直接在 Hive catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Hive 表中。参见 [创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)。**
-=======
-**从 3.2 版本起，支持直接在 Hive Catalog 内创建 Parquet 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Parquet 格式的 Hive 表中。从 3.3 版本起，支持直接在 Hive Catalog 中创建 ORC 及 Textfile 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 ORC 及 Textfile 格式的 Hive 表中。参见[创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)和[向 Hive 表中插入数据](../../../data_source/catalog/hive_catalog.md#向-hive-表中插入数据)。**
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
+**从 3.2 版本起，支持直接在 Hive catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Hive 表中。参见 [创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)。**
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -303,13 +299,8 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
     使用指定的 key 列和指定的数值范围进行分区。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-    - 分区名称的命名要求，参见[系统限制](../../../reference/System_limit.md)。
-    - 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
-=======
     - 分区名称的命名要求，参见[系统限制](../../System_limit.md)。
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
+    - 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
     - 分区为左闭右开区间，首个分区的左边界为最小值。
     - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
@@ -765,11 +756,7 @@ PROPERTIES (
 
 #### 设置 fast schema evolution
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
-=======
-`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
+`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](./ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
 
 > **NOTE**
 >

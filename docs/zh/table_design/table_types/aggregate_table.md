@@ -88,13 +88,9 @@ PROPERTIES (
 
   - 排序键必须满足唯一性约束，必须包含全部维度列，并且列的值不会更新。
 
-<<<<<<< HEAD
 - 指标列：通过在列名后指定聚合函数，定义该列为指标列。一般为需要汇总统计的数据。
-=======
-- **聚合函数**：value 列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
-- 聚合函数：指标列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+- 聚合函数：指标列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 - 查询时，排序键在多版聚合之前就能进行过滤，而指标列的过滤在多版本聚合之后。因此建议将频繁使用的过滤字段作为排序键，在聚合前就能过滤数据，从而提升查询性能。
 

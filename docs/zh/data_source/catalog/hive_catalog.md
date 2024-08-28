@@ -8,13 +8,8 @@ toc_max_heading_level: 5
 Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hive Catalog，您可以：
 
 - 无需手动建表，通过 Hive Catalog 直接查询 Hive 内的数据。
-<<<<<<< HEAD
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
-=======
 - 通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式（3.2 版本及以上）、以及 ORC 或 Textfile 格式（3.3 版本及以上）的 Hive 表中。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
 
 为保证正常访问 Hive 内的数据，StarRocks 集群必须能够访问 Hive 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
@@ -36,18 +31,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
   - Textfile 文件从 v3.1.5 起支持 LZO 压缩格式。
 
-<<<<<<< HEAD
 - StarRocks 查询 Hive 数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
-=======
-- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
-
-- StarRocks 写入数据到 Hive 时，支持 Parquet（3.2 版本及以上）、以及 ORC 或 Textfile（3.3 版本及以上）文件格式，其中：
-
-  - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
-  - Textfile 文件支持 NO_COMPRESSION 压缩格式。
-
-  您可以通过系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ## 准备工作
 
@@ -968,13 +952,7 @@ DROP DATABASE <database_name>
 
 ## 创建 Hive 表
 
-<<<<<<< HEAD
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
-=======
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) 在该 Hive 数据库下创建 Managed Table。
-
-本功能自 3.2 版本起开始支持，彼时只支持创建 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持创建 ORC 及 Textfile 格式的 Hive 表。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABLE LIKE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
 
 :::note
 
@@ -1041,13 +1019,8 @@ PARTITION BY (par_col1[, par_col2...])
 | **属性**          | **描述**                                                     |
 | ----------------- | ------------------------------------------------------------ |
 | location          | Managed Table 所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
-<<<<<<< HEAD
 | file_format       | Managed Table 的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Managed Table 的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) 控制。 |
-=======
-| file_format       | Managed Table 的文件格式。当前支持 Parquet、ORC、Textfile 文件格式，其中 ORC 和 Textfile 文件格式自 3.3 版本起支持。取值范围：`parquet`、`orc`、`textfile`。默认值：`parquet`。 |
-| compression_codec | Managed Table 的压缩格式。该属性自 3.2.3 版本起弃用，此后写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+| compression_codec | Managed Table 的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
 
 ### 示例
 
@@ -1083,24 +1056,11 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Hive 表中插入数据
 
-<<<<<<< HEAD
-同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。需要注意的是，写数据到 External Table 的功能默认是关闭的，您可以通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../reference/System_variable.md) 打开。
+同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。需要注意的是，写数据到 External Table 的功能默认是关闭的，您可以通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../sql-reference/System_variable.md) 打开。
 
 :::note
 
 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
-=======
-同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中。
-
-本功能自 3.2 版本起开始支持，彼时只支持写入到 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持写入到 ORC 及 Textfile 格式的 Hive 表。
-
-需要注意的是，写数据到 External Table 的功能默认是关闭的，您需要通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../sql-reference/System_variable.md) 打开。
-
-:::note
-
-- 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
-- 您可以通过会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来指定写入 Hive 表时的压缩算法。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 :::
 
