@@ -35,6 +35,7 @@ public:
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
     std::set<int64_t> _need_skip_rowids;
+    void update_v2_builder_counter(RuntimeProfile* parent_profile, HdfsScanStats& app_stats);
 };
 
 } // namespace starrocks
