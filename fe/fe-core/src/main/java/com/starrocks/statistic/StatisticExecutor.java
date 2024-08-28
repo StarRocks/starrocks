@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -273,6 +274,7 @@ public class StatisticExecutor {
         Table table = statsJob.getTable();
 
         try {
+            Stopwatch watch = Stopwatch.createStarted();
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
@@ -281,8 +283,9 @@ public class StatisticExecutor {
 
             statsConnectCtx.setStatisticsConnection(true);
             statsJob.collect(statsConnectCtx, analyzeStatus);
+            LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
-            LOG.warn("Collect statistics error ", e);
+            LOG.warn("execute statistics job failed: {}", statsJob, e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());

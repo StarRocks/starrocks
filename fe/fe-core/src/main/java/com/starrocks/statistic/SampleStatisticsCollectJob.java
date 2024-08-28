@@ -246,4 +246,5 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
         return builder.substring(0, builder.length() - "UNION ALL ".length());
     }
+
 }
