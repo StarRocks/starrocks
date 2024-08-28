@@ -1,5 +1,11 @@
 ---
+<<<<<<< HEAD
 displayed_sidebar: "English"
+=======
+displayed_sidebar: docs
+sidebar_label: Microsoft Azure Storage
+description: "This topic describes how to authenticate with Azure"
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # Authenticate to Microsoft Azure Storage
@@ -17,7 +23,7 @@ StarRocks supports the following types of Azure Storage accounts:
 - Azure Data Lake Storage Gen1
 - Azure Data Lake Storage Gen2
 
-In this topic, Hive catalog, file external table, and Broker Load are used as examples to show how StarRocks integrates with Azure Storage by using these types of Azure Storage accounts. For information about the parameters in the examples, see [Hive catalog](../data_source/catalog/hive_catalog.md), [File external table](../data_source/file_external_table.md), and [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+In this topic, Hive catalog, file external table, and Broker Load are used as examples to show how StarRocks integrates with Azure Storage by using these types of Azure Storage accounts. For information about the parameters in the examples, see [Hive catalog](../data_source/catalog/hive_catalog.md), [File external table](../data_source/file_external_table.md), and [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 ## Blob Storage
 
@@ -37,7 +43,7 @@ StarRocks supports using one of the following authentication methods to access B
 
 #### External catalog
 
-Configure `azure.blob.storage_account` and `azure.blob.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.blob.storage_account` and `azure.blob.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -52,7 +58,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.blob.storage_account`, `azure.blob.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -72,7 +78,7 @@ PROPERTIES
 
 #### Broker Load
 
-Configure `azure.blob.storage_account`, `azure.blob.shared_key`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.shared_key`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -92,7 +98,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.blob.storage_account`, `azure.blob.container`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -108,7 +114,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -129,7 +135,7 @@ PROPERTIES
 
 #### Broker load
 
-Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -161,7 +167,7 @@ StarRocks supports using one of the following authentication methods to access D
 
 #### External catalog
 
-Configure `azure.adls1.use_managed_service_identity` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls1.use_managed_service_identity` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -175,7 +181,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls1.use_managed_service_identity` and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls1.use_managed_service_identity` and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -194,7 +200,7 @@ PROPERTIES
 
 #### Broker Load
 
-Configure `azure.adls1.use_managed_service_identity` and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.adls1.use_managed_service_identity` and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -213,7 +219,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, and `azure.adls1.oauth2_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, and `azure.adls1.oauth2_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -229,7 +235,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, `azure.adls1.oauth2_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, `azure.adls1.oauth2_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -250,7 +256,7 @@ PROPERTIES
 
 #### Broker Load
 
-Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, `azure.adls1.oauth2_endpoint`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, `azure.adls1.oauth2_endpoint`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -292,7 +298,7 @@ Before you start, you need to make the following preparations:
 
 #### External catalog
 
-Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, and `azure.adls2.oauth2_client_id` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, and `azure.adls2.oauth2_client_id` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -308,7 +314,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -329,7 +335,7 @@ PROPERTIES
 
 #### Broker Load
 
-Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -350,7 +356,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.adls2.storage_account` and `azure.adls2.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls2.storage_account` and `azure.adls2.shared_key` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -365,7 +371,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls2.storage_account`, `azure.adls2.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls2.storage_account`, `azure.adls2.shared_key`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -385,7 +391,7 @@ PROPERTIES
 
 #### Broker Load
 
-Configure `azure.adls2.storage_account`, `azure.adls2.shared_key`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.adls2.storage_account`, `azure.adls2.shared_key`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -407,7 +413,7 @@ Before you start, you need to create a service principal, create a role assignme
 
 #### External catalog
 
-Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, and `azure.adls2.oauth2_client_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, and `azure.adls2.oauth2_client_endpoint` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -423,7 +429,7 @@ PROPERTIES
 
 #### File external table
 
-Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, `azure.adls2.oauth2_client_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, `azure.adls2.oauth2_client_endpoint`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -444,7 +450,7 @@ PROPERTIES
 
 #### Broker Load
 
-Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, `azure.adls2.oauth2_client_endpoint`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, `azure.adls2.oauth2_client_endpoint`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000

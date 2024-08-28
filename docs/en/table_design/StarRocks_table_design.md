@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Understand table design
@@ -32,13 +32,21 @@ The data of a table in StarRocks is organized into the following three parts:
   
   StarRocks segregates the data of each column into multiple 64-KB data blocks. Each data block is independently encoded and compressed as the minimal I/O unit and is read from or written to disk as a whole.
 
+<<<<<<< HEAD
 - Per-column index
   
   StarRocks maintains a row number index for each column. In the row number index table, data blocks for the column are mapped one by one onto the sequence numbers of the rows held in the column. Additionally, each entry in the row number index table consists of the starting row number, address, and length of the data block that is mapped onto a specific row number. When you query a row, StarRocks searches the row number index table to retrieve the address of the data block mapped onto the sequence number of the row. Then, StarRocks reads the data block to locate the row.
+=======
+Execute [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) to view the table schema.
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 In summary, StarRocks performs the following five steps to locate a row of a table by using the prefix that is composed of the dimension columns for the row:
 
+<<<<<<< HEAD
 1. Search the prefix index table to locate the sequence number of the starting row in the data block taken by the row of interest.
+=======
+Execute [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) to view the CREATE TABLE statement.
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 2. Search the row number index table of each dimension column to locate the data blocks for the dimension column.
 
@@ -72,4 +80,60 @@ StarRocks supports per-column indexes such as Bloom filters, zone maps, and bitm
 
 - A zone map is used to locate the values within a specified range.
 
+<<<<<<< HEAD
 - A bitmap index is used to locate the rows that meet specified query conditions in a column of the ENUM data type.
+=======
+### [Data types](../sql-reference/data-types/README.md)
+
+In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
+
+### [Index](./indexes/indexes_overview.md)
+
+An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
+
+StarRocks provides built-in indexes: Prefix indexes, Ordinal indexes, and ZoneMap indexes. StarRocks also allows users to create indexes, that is, Bitmap indexes and Bloom Filter indexes, to further enhance query efficiency.
+
+### Constraints
+
+Constraints help ensure data integrity, consistency, and accuracy. The primary key columns in Primary Key tables must have unique and NOT NULL values. The aggregate key columns in Aggregate tables and the unique key columns in Unique Key tables must have unique values.
+
+### Temporary table
+
+When processing data, you might need to save intermediate results for future reuse. In early versions, StarRocks only supports using CTE (Common Table Expressions) to define temporary results within a single query. However, CTEs are merely logical constructs, do not physically store the results, and cannot be used across different queries, which presents certain limitations. If you choose to create tables to save intermediate results, you will need to manage the lifecycle of these tables, which can be costly.
+
+To address this issue, StarRocks introduces temporary tables in v3.3.1. Temporary tables allow you to temporarily store data (such as intermediate results from ETL processes) in a table, with their lifecycle bound to the session and managed by StarRocks. When the session ends, the temporary tables are automatically cleared. Temporary tables are only visible within the current session, and different sessions can create temporary tables with the same name.
+
+#### Usage
+
+You can use the `TEMPORARY` keyword in the following SQL statements to create and drop temporary tables:
+
+- [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)
+- [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)
+- [CREATE TABLE LIKE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md)
+- [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md)
+
+:::note
+
+Similar to other types of native tables, temporary tables must be create under a database under the Default Catalog. However, because temporary tables are session-based, they are not subject to unique naming constraints. You can create temporary tables with the same name in different sessions, or even create temporary tables with the same names as other non-temporary, native tables.
+
+If there are temporary and non-temporary tables with the same name in a database, the temporary table takes precedence. Within the session, all queries and operations on the tables with the same name will only affect the temporary table.
+
+:::
+
+#### Limitations
+
+While the usage of temporary tables is similar to that of native tables, there are some constraints and differences:
+
+- Temporary tables must be created in the Default Catalog.
+- Setting a colocate group is not supported. If the `colocate_with` property is explicitly specified during table creation, it will be ignored.
+- The `ENGINE` must be specified as `olap` during table creation.
+- ALTER TABLE statements are not supported.
+- Creating views and materialized views based on temporary tables is not supported.
+- EXPORT statements are not supported.
+- SELECT INTO OUTFILE statements are not supported.
+- Submitting asynchronous tasks with SUBMIT TASK for creating temporary tables is not supported.
+
+### More features
+
+Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate distinct counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic storage cooldown methods to reduce maintenance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))

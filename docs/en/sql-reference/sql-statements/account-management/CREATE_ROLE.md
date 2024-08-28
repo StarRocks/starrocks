@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # CREATE ROLE
@@ -20,7 +20,11 @@ CREATE ROLE <role_name>
 
 ## Parameters
 
+<<<<<<< HEAD
 `role_name`: the name of the role. Naming conventions:
+=======
+`role_name`: the name of the role. For the naming conventions, see [System limits](../../System_limit.md).
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 - It can only contain digits (0-9), letters, or underscores (_) and must start with a letter.
 - It cannot exceed 64 characters in length.

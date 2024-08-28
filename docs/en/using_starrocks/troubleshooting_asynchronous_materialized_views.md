@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Troubleshooting asynchronous materialized views
@@ -16,14 +16,14 @@ To get a whole picture of asynchronous materialized views that you are working w
 
 ### Check the working state of an asynchronous materialized view
 
-You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md). Among all the information returned, you can focus on the following fields:
+You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md). Among all the information returned, you can focus on the following fields:
 
 - `is_active`: Whether the state of the materialized view is active. Only an active materialized view can be used for query acceleration and rewrite.
 - `last_refresh_state`: The state of the last refresh, including PENDING, RUNNING, FAILED, and SUCCESS.
 - `last_refresh_error_message`: The reason why the last refresh failed (if the materialized view state is not active).
 - `rows`: The number of data rows in the materialized view. Please note that this value can be different from the actual row count of the materialized view because the updates can be deferred.
 
-For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md#returns).
+For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md#returns).
 
 Example:
 
@@ -113,7 +113,7 @@ You can monitor and analyze the resource consumed by an asynchronous materialize
 
 #### Monitor resource consumption during refresh
 
-During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../sql-reference/sql-statements/Administration/SHOW_PROC.md).
+During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md).
 
 Among all the information returned, you can focus on the following fields:
 
@@ -158,7 +158,7 @@ For detailed information on how to check the query profile and understand other 
 
 ### Verify whether queries are rewritten by an asynchronous materialized view
 
-You can check whether a query can be rewritten with an asynchronous materialized view from its query plan using [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md).
+You can check whether a query can be rewritten with an asynchronous materialized view from its query plan using [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md).
 
 If the metric `SCAN` in the query plan shows the name of the corresponding materialized view, the query has been rewritten by the materialized view.
 
@@ -292,10 +292,27 @@ REFRESH ASYNC
 PROPERTIES ( 'session.enable_spill'='true' )
 AS <query>;
 
+<<<<<<< HEAD
 -- Add the properties.
 ALTER MATERIALIZED VIEW mv2 
     SET ('session.enable_spill' = 'true');
 ```
+=======
+  The default timeout for materialized view refresh tasks is 5 minutes in versions earlier than v3.2 and 1 hour in v3.2 and later. If you encounter timeout exceptions, you can adjust the timeout period by using the following statement:
+
+  ```sql
+  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
+  ```
+
+- **Analyze performance bottlenecks of the materialized view refresh**
+
+  Refreshing materialized views with complex computation is time-consuming. You can analyze its performance bottlenecks by analyzing the query profile of the refresh task:
+
+  - Obtain the `query_id` corresponding to the refresh task by querying `information_schema.task_runs`.
+  - Analyze the query profile of the refresh task using the following statements:
+    - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): Retrive the original query profile based on `query_id`.
+    - [ANALYZE PROFILE](../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): Analyze the query profile on a per-fragment basis, and display it in a tree structure.
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ### Materialized view state is not active
 
@@ -331,7 +348,11 @@ To stop a refresh task that occupies too many resources, you can:
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
+<<<<<<< HEAD
 - Terminate the running refresh task by using SHOW PROCESSLIST and KILL:
+=======
+- Terminate the running refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md):
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
   ```SQL
   -- Get the ConnectionId of the running refresh task.

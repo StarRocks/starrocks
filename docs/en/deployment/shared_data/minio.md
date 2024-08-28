@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Use MinIO for shared-data
@@ -138,7 +138,11 @@ enable_load_volume_from_conf = false
 
 <SharedDataUseIntro />
 
+<<<<<<< HEAD
 The following example creates a storage volume `def_volume` for a MinIO bucket `defaultbucket` with Access Key and Secret Key credentials, enables the storage volume, and sets it as the default storage volume:
+=======
+The following example creates a storage volume `def_volume` for a MinIO bucket `defaultbucket` with Access Key and Secret Key credentials, enables the [Partitioned Prefix](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md#partitioned-prefix) feature, and sets it as the default storage volume:
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ```SQL
 CREATE STORAGE VOLUME def_volume

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 从 Apache Flink® 持续导入
@@ -110,6 +110,7 @@ Flink connector JAR 文件的命名格式如下：
 | sink.max-retries                  | No       | 3             | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。该参数只在 `sink.version` 为 `V1` 才会生效。 |
 | sink.connect.timeout-ms           | No       |  30000            | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。  Flink connector v1.2.9 之前，默认值为 `1000`。  |
 | sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 60000]。 |
+<<<<<<< HEAD
 | sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键模型表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键模型表中视为DELETE 操作。 |
 | sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
 | sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
@@ -117,6 +118,17 @@ Flink connector JAR 文件的命名格式如下：
 | sink.properties.column_separator  | No       | \t            | CSV 数据的列分隔符。                                         |
 | sink.properties.row_delimiter     | No       | \n            | CSV 数据的行分隔符。                                         |
 | sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
+=======
+| sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键表中视为 DELETE 操作。 |
+| sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于 Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
+| sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
+| sink.properties.format            | No       | csv           | Stream Load 导入时的数据格式。Flink connector 会将内存的数据转换为对应格式，然后通过 Stream Load 导入至 StarRocks。取值为 CSV 或者 JSON。 |
+| sink.properties.column_separator  | No       | \t            | CSV 数据的列分隔符。                                         |
+| sink.properties.row_delimiter     | No       | \n            | CSV 数据的行分隔符。                                         |
+| sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
+| sink.properties.partial_update      | 否      | `FALSE` | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。                                                                                                                                                                                             |
+| sink.properties.partial_update_mode | 否      | `row` | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ## 数据类型映射
 
@@ -431,6 +443,11 @@ DISTRIBUTED BY HASH(id);
 
 快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
 
+<<<<<<< HEAD
+=======
+建议您使用 StarRocks v3.2.1 及以后的版本，以开启 [fast_schema_evolution](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)，来提高加减列的速度并降低资源使用。
+
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ## 最佳实践
 
 ### 导入至主键模型表

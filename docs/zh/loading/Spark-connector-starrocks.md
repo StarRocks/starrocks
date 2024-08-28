@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Spark connector 导入数据（推荐）
@@ -108,7 +108,7 @@ connector jar包的命名格式如下
 | starrocks.write.max.retries                    | 否       | 3             | 自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 导入该批数据的重试次数上线。<br/> **注意：**由于 Stream Load 事务接口不支持重试。如果此参数为正数，则 Spark connector 始终使用 Stream Load 接口，并忽略 `starrocks.write.enable.transaction-stream-load` 的值。|
 | starrocks.write.retry.interval.ms              | 否       | 10000         | 自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 尝试再次导入该批数据的时间间隔。|
 | starrocks.columns                              | 否      | 无 | 支持向 StarRocks 表中写入部分列，通过该参数指定列名，多个列名之间使用逗号 (,) 分隔，例如"c0,c1,c2"。                                                                                                                                                       |
-| starrocks.write.properties.*                   | 否      | 无 | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
+| starrocks.write.properties.*                   | 否      | 无 | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
 | starrocks.write.properties.format              | 否      | CSV | 指定导入数据的格式，取值为 CSV 和 JSON。connector 会将每批数据转换成相应的格式发送给 StarRocks。                                                                                                                                             |
 | starrocks.write.properties.row_delimiter       | 否      | \n | 使用CSV格式导入时，用于指定行分隔符。                                                                                                                                                                                                  |
 | starrocks.write.properties.column_separator    | 否      | \t | 使用CSV格式导入时，用于指定列分隔符。                                                                                                                                                                                                  |

@@ -1,5 +1,11 @@
 ---
+<<<<<<< HEAD
 displayed_sidebar: "English"
+=======
+displayed_sidebar: docs
+description: Monitor with Datadog
+sidebar_label: Datadog
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # Integrate Datadog with StarRocks
