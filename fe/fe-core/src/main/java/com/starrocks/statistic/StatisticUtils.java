@@ -232,9 +232,8 @@ public class StatisticUtils {
                 LOG.error("failed to execute statistic collect job", e);
             } catch (TimeoutException e) {
                 if (!isRunning.get()) {
-                    LOG.warn(
-                            "await collect statistic task failed after 1 seconds, which mean too many jobs in the " +
-                                    "queue");
+                    LOG.warn("await collect statistic task failed after 1 seconds, which mean too many jobs in the " +
+                            "queue");
                     return;
                 }
             }
