@@ -72,7 +72,8 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
         Statistics leftStats = leftChildNode.getStatistics();
         Statistics rightStats = rightChildNode.getStatistics();
 
-        double leftSize = (leftNodeExecStats.getPullRows() + leftNodeExecStats.getRfFilterRows()) * leftStats.getAvgRowSize();
+        double leftSize =
+                (leftNodeExecStats.getPullRows() + leftNodeExecStats.getRfFilterRows()) * leftStats.getAvgRowSize();
         double rightSize = rightNodeExecStats.getPullRows() * rightStats.getAvgRowSize();
 
         OptExpression leftChild = optExpression.getInputs().get(0);
@@ -80,8 +81,9 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
 
         JoinHelper originalHelper = JoinHelper.of(joinOperator, leftChild.getRowOutputInfo().getOutputColumnRefSet(),
                 rightChild.getRowOutputInfo().getOutputColumnRefSet());
-        JoinHelper commuteJoinHelper = JoinHelper.of(joinOperator, rightChild.getRowOutputInfo().getOutputColumnRefSet(),
-                leftChild.getRowOutputInfo().getOutputColumnRefSet());
+        JoinHelper commuteJoinHelper =
+                JoinHelper.of(joinOperator, rightChild.getRowOutputInfo().getOutputColumnRefSet(),
+                        leftChild.getRowOutputInfo().getOutputColumnRefSet());
 
         if (type == EstimationErrorType.LEFT_INPUT_OVERESTIMATED) {
             if (optExpression.isExistRequiredDistribution()) {
@@ -92,12 +94,14 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
                     // original plan: small table inner join large table(broadcast)
                     // rewrite to: small table(shuffle) inner large small table(shuffle)
                     PhysicalDistributionOperator leftExchangeOp = new PhysicalDistributionOperator(
-                            DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(originalHelper.getLeftCols(),
-                                    HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
+                            DistributionSpec.createHashDistributionSpec(
+                                    new HashDistributionDesc(originalHelper.getLeftCols(),
+                                            HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
 
                     PhysicalDistributionOperator rightExchangeOp = new PhysicalDistributionOperator(
-                            DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(originalHelper.getRightCols(),
-                                    HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
+                            DistributionSpec.createHashDistributionSpec(
+                                    new HashDistributionDesc(originalHelper.getRightCols(),
+                                            HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
                     OptExpression newLeftChild = OptExpression.builder().with(leftChild)
                             .setOp(leftExchangeOp)
                             .setInputs(List.of(leftChild))
@@ -110,8 +114,9 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
 
                     return Optional.of(OptExpression.builder().with(optExpression)
                             .setOp(buildJoinOperator(joinOperator, false))
-                            .setRequiredProperties(List.of(createShufflePropertySet(leftExchangeOp.getDistributionSpec()),
-                                    createShufflePropertySet(rightExchangeOp.getDistributionSpec())))
+                            .setRequiredProperties(
+                                    List.of(createShufflePropertySet(leftExchangeOp.getDistributionSpec()),
+                                            createShufflePropertySet(rightExchangeOp.getDistributionSpec())))
                             .setInputs(Lists.newArrayList(newLeftChild, newRightChild))
                             .build());
                 }
