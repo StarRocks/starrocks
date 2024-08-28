@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.qe.feedback;
+package com.starrocks.qe.feedback.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.qe.feedback.OperatorTuningGuides;
+import com.starrocks.qe.feedback.guide.StreamingAggTuningGuide;
 import com.starrocks.qe.feedback.skeleton.BlockingAggNode;
 import com.starrocks.qe.feedback.skeleton.DistributionNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;

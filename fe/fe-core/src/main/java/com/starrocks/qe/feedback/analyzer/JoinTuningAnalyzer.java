@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.qe.feedback;
+package com.starrocks.qe.feedback.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.qe.feedback.NodeExecStats;
+import com.starrocks.qe.feedback.OperatorTuningGuides;
+import com.starrocks.qe.feedback.guide.LeftChildEstimationErrorTuningGuide;
+import com.starrocks.qe.feedback.guide.RightChildEstimationErrorTuningGuide;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -25,8 +29,9 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.Map;
 
-import static com.starrocks.qe.feedback.JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_OVERESTIMATED;
-import static com.starrocks.qe.feedback.JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED;
+import static com.starrocks.qe.feedback.guide.JoinTuningGuide.EstimationErrorType.LEFT_INPUT_OVERESTIMATED;
+import static com.starrocks.qe.feedback.guide.JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_OVERESTIMATED;
+import static com.starrocks.qe.feedback.guide.JoinTuningGuide.EstimationErrorType.RIGHT_INPUT_UNDERESTIMATED;
 
 public class JoinTuningAnalyzer implements PlanTuningAnalyzer.Analyzer {
 
@@ -70,15 +75,22 @@ public class JoinTuningAnalyzer implements PlanTuningAnalyzer.Analyzer {
             Preconditions.checkState(skeletonNode.getChildren().size() == 2);
 
             JoinNode joinNode = (JoinNode) skeletonNode;
+            NodeExecStats leftExecStats = joinNode.getChild(0).getNodeExecStats();
             NodeExecStats rightExecStats = joinNode.getChild(1).getNodeExecStats();
+
+            Statistics leftStats = optExpression.getInputs().get(0).getStatistics();
             Statistics rightStats = optExpression.getInputs().get(1).getStatistics();
 
             if (rightExecStats.getPullRows() > rightStats.getOutputRowCount() * 10000) {
                 tuningGuides.addTuningGuide(joinNode.getNodeId(),
-                        new JoinTuningGuide(joinNode, RIGHT_INPUT_UNDERESTIMATED));
+                        new RightChildEstimationErrorTuningGuide(joinNode, RIGHT_INPUT_UNDERESTIMATED));
             } else if (rightStats.getOutputRowCount() > rightExecStats.getPullRows() * 10000) {
                 tuningGuides.addTuningGuide(joinNode.getNodeId(),
-                        new JoinTuningGuide(joinNode, RIGHT_INPUT_OVERESTIMATED));
+                        new RightChildEstimationErrorTuningGuide(joinNode, RIGHT_INPUT_OVERESTIMATED));
+            } else if (rightExecStats.getPullRows() > 10000000 &&
+                    leftStats.getOutputRowCount() > leftExecStats.getPullRows() * 10000) {
+                tuningGuides.addTuningGuide(joinNode.getNodeId(),
+                        new LeftChildEstimationErrorTuningGuide(joinNode, LEFT_INPUT_OVERESTIMATED));
             }
             visit(optExpression, context);
             return null;

@@ -21,7 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
-import com.starrocks.qe.feedback.TuningGuide;
+import com.starrocks.qe.feedback.guide.TuningGuide;
 import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.ast.QueryStatement;

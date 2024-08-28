@@ -18,6 +18,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.qe.feedback.guide.TuningGuide;
 
 import java.util.List;
 import java.util.Map;

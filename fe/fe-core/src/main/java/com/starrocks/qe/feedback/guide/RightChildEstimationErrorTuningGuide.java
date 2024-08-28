@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.qe.feedback;
+package com.starrocks.qe.feedback.guide;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -30,17 +29,9 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.Optional;
 
-import static com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule.JOIN_COMMUTATIVITY_MAP;
+public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
 
-public class JoinTuningGuide implements TuningGuide {
-
-    private final JoinNode joinNode;
-
-    private final EstimationErrorType type;
-
-    private static final long BROADCAST_THRESHOLD = 1000000;
-
-    public JoinTuningGuide(JoinNode joinNode, EstimationErrorType type) {
+    public RightChildEstimationErrorTuningGuide(JoinNode joinNode, EstimationErrorType type) {
         this.joinNode = joinNode;
         this.type = type;
     }
@@ -223,55 +214,5 @@ public class JoinTuningGuide implements TuningGuide {
         }
 
         return Optional.empty();
-    }
-
-    private PhysicalHashJoinOperator buildJoinOperator(PhysicalHashJoinOperator joinOperator, boolean needCommute) {
-        JoinOperator joinType = joinOperator.getJoinType();
-        if (needCommute) {
-            joinType = JOIN_COMMUTATIVITY_MAP.get(joinOperator.getJoinType());
-        }
-        return new PhysicalHashJoinOperator(
-                joinType,
-                joinOperator.getOnPredicate(),
-                joinOperator.getJoinHint(),
-                joinOperator.getLimit(),
-                joinOperator.getPredicate(),
-                joinOperator.getProjection());
-    }
-
-    private boolean isColocateJoin(OptExpression optExpression) {
-        // through the required properties type check if it is colocate join
-        return optExpression.getRequiredProperties().stream().allMatch(
-                physicalPropertySet -> {
-                    if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
-                        return false;
-                    }
-                    HashDistributionDesc.SourceType hashSourceType =
-                            ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                    .getHashDistributionDesc().getSourceType();
-                    return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
-                });
-    }
-
-    private boolean isShuffleJoin(OptExpression leftChild, OptExpression rightChild) {
-        DistributionSpec.DistributionType leftDistributionType = getDistributionType(leftChild);
-        DistributionSpec.DistributionType rightDistributionType = getDistributionType(rightChild);
-        return leftDistributionType == DistributionSpec.DistributionType.SHUFFLE
-                && rightDistributionType == DistributionSpec.DistributionType.SHUFFLE;
-    }
-    private boolean isBroadcastJoin(OptExpression rightChild) {
-        return getDistributionType(rightChild) == DistributionSpec.DistributionType.BROADCAST;
-    }
-
-    private DistributionSpec.DistributionType getDistributionType(OptExpression optExpression) {
-        if (optExpression.getOp() instanceof PhysicalDistributionOperator) {
-            return ((PhysicalDistributionOperator) optExpression.getOp()).getDistributionSpec().getType();
-        }
-        return null;
-    }
-
-    public enum EstimationErrorType {
-        RIGHT_INPUT_UNDERESTIMATED,
-        RIGHT_INPUT_OVERESTIMATED
     }
 }

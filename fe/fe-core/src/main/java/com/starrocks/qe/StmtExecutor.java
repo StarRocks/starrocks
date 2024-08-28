@@ -121,7 +121,7 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanAdvisorExecutor;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
-import com.starrocks.qe.feedback.PlanTuningAnalyzer;
+import com.starrocks.qe.feedback.analyzer.PlanTuningAnalyzer;
 import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;

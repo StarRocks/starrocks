@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.qe.feedback;
+package com.starrocks.qe.feedback.analyzer;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.OptExpression;
 
