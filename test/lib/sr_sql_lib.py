@@ -472,13 +472,12 @@ class StarrocksSQLApiLib(object):
         var_strs = set(re.findall(r"\${([a-zA-Z._-]+)}", config_parser_str))
         for var_str in var_strs:
             var_str_path = "['" + var_str.replace(".", "']['") + "']"
-            print(f'config_parser{var_str_path}')
             try:
                 var_value = eval(f'config_parser{var_str_path}')
             except Exception as e:
                 self_print(f"[ERROR] config: {var_str} is incorrect!", color=ColorEnum.RED, bold=True)
                 sys.exit(1)
-            config_parser_str = config_parser_str.replace(var_str, var_value)
+            config_parser_str = config_parser_str.replace(f"${{{var_str}}}", var_value)
 
         config_parser = json.loads(config_parser_str)
 
