@@ -188,7 +188,7 @@ public class JoinTuningGuide implements TuningGuide {
                             .setInputs(Lists.newArrayList(rightChild, leftChild))
                             .build());
                 }
-            } else if(isColocateJoin(optExpression)) {
+            } else if (isColocateJoin(optExpression)) {
                 if (leftSize < rightSize && !commuteJoinHelper.onlyBroadcast()) {
                     // original plan: medium table colocate join large table
                     // rewrite to: large table colocate join medium table
