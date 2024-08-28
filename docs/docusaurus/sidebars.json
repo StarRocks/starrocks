@@ -478,8 +478,7 @@
                     "label": "DBT",
                     "description": "Modeling and transformation with DBT",
                     "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-                },
-                "integrations/hive_bitmap_udf"
+                }
             ]
         },
         {
