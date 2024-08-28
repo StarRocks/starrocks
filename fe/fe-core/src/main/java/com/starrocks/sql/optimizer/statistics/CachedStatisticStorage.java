@@ -52,7 +52,7 @@ public class CachedStatisticStorage implements StatisticStorage {
     private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
 
-    AsyncLoadingCache<TableStatsCacheKey, Optional<TableStatistic>> tableStatsCache = Caffeine.newBuilder()
+    AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache = Caffeine.newBuilder()
             .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
             .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
@@ -88,22 +88,21 @@ public class CachedStatisticStorage implements StatisticStorage {
             .buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
 
     @Override
-    public Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+    public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
         // get Statistics Table column info, just return default column statistics
         if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
-            return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));
+            return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
         }
 
         List<TableStatsCacheKey> keys = partitions.stream().map(p -> new TableStatsCacheKey(tableId, p.getId()))
                 .collect(Collectors.toList());
 
         try {
-            CompletableFuture<Map<TableStatsCacheKey, Optional<TableStatistic>>> result = tableStatsCache.getAll(keys);
+            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> result = tableStatsCache.getAll(keys);
             if (result.isDone()) {
-                Map<TableStatsCacheKey, Optional<TableStatistic>> data = result.get();
-                return keys.stream().collect(Collectors.toMap(
-                        TableStatsCacheKey::getPartitionId,
-                        k -> data.getOrDefault(k, Optional.empty()).orElse(TableStatistic.unknown())));
+                Map<TableStatsCacheKey, Optional<Long>> data = result.get();
+                return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
+                        k -> data.getOrDefault(k, Optional.empty())));
             }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute tableStatsCache.getAll", e);
@@ -111,7 +110,7 @@ public class CachedStatisticStorage implements StatisticStorage {
         } catch (Exception e) {
             LOG.warn("Faied to execute tableStatsCache.getAll", e);
         }
-        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
     @Override
@@ -122,7 +121,7 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
 
         try {
-            CompletableFuture<Map<TableStatsCacheKey, Optional<TableStatistic>>> completableFuture
+            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> completableFuture
                     = tableStatsCache.getAll(statsCacheKeyList);
             if (completableFuture.isDone()) {
                 completableFuture.get();
