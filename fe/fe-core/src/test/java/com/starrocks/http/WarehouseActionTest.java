@@ -33,6 +33,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.BrokerLoadJob;
+import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -538,7 +539,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
             throws UserException {
 
         for (int i = 0; i < numJobs; i++) {
-            long jobId = loadMgr.registerLoadJob(
+            InsertLoadJob job = loadMgr.registerInsertLoadJob(
                     "insert-load-" + NEXT_INDEX.getAndIncrement(),
                     DB_NAME,
                     TEST_TABLE_ID,
@@ -554,7 +555,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     isStatisticsJob,
                     null);
             if (isFinished) {
-                loadMgr.getLoadJob(jobId).updateState(JobState.FINISHED);
+                job.updateState(JobState.FINISHED);
             }
         }
     }

@@ -32,6 +32,7 @@ import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
@@ -57,7 +58,16 @@ public class UpdateAnalyzer {
         }
     }
 
+    private static void analyzeProperties(UpdateStmt updateStmt, ConnectContext session) {
+        Map<String, String> properties = updateStmt.getProperties();
+        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+    }
+
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
+        analyzeProperties(updateStmt, session);
+
         TableName tableName = updateStmt.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
         MetaUtils.getDatabase(session, tableName);
