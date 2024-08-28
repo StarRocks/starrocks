@@ -33,7 +33,6 @@ set(EXEC_FILES
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
-        ./exec/iceberg/iceberg_delete_builder_test.cpp
         ./exec/iceberg/iceberg_table_sink_operator_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp

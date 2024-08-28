@@ -27,23 +27,41 @@ static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     if (!scanner_params.deletes.empty()) {
-        SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-        std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(
-                new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
-                                         scanner_params.materialize_slots, &_need_skip_rowids));
-        for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
-                    runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
-                    scanner_params.mor_params.delete_column_tuple_desc, scanner_params.iceberg_equal_delete_schema,
-                    runtime_state, _mor_processor));
+        HdfsScanStats app_stats;
+        {
+            SCOPED_RAW_TIMER(&app_stats.iceberg_delete_file_build_ns);
+            std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(
+                    new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
+                                             scanner_params.materialize_slots, &_need_skip_rowids));
+            for (const auto& tdelete_file : scanner_params.deletes) {
+                RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
+                        runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
+                        scanner_params.mor_params.delete_column_tuple_desc, scanner_params.iceberg_equal_delete_schema,
+                        runtime_state, _mor_processor, scanner_params));
+            }
+            app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
         }
-        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
+
+        update_v2_builder_counter(scanner_params.profile->runtime_profile, app_stats);
     } else if (scanner_params.paimon_deletion_file != nullptr) {
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
                 new PaimonDeleteFileBuilder(scanner_params.fs, &_need_skip_rowids));
         RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
     }
     return Status::OK();
+}
+
+void HdfsParquetScanner::update_v2_builder_counter(RuntimeProfile* parent_profile, HdfsScanStats& app_stats) {
+    const std::string ICEBERG_TIMER = "ICEBERG_V2_MOR";
+    ADD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE);
+
+    RuntimeProfile::Counter* delete_build_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildTime", TUnit::TIME_NS, ICEBERG_TIMER);
+    RuntimeProfile::Counter* delete_file_per_scan_counter =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFilesPerScan", TUnit::UNIT, ICEBERG_TIMER);
+
+    COUNTER_UPDATE(delete_build_timer, app_stats.iceberg_delete_file_build_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, app_stats.iceberg_delete_files_per_scan);
 }
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
@@ -143,7 +161,6 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
     group_min_round_cost->set(_app_stats.group_min_round_cost);
-    do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
