@@ -46,6 +46,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
@@ -160,16 +162,22 @@ public class StatisticUtils {
         }
         // collectPartitionIds contains partition that is first loaded.
         Set<Long> collectPartitionIds = Sets.newHashSet();
-        for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            // partition commit info id is physical partition id.
-            // statistic collect granularity is logic partition.
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition != null) {
-                Partition partition = table.getPartition(physicalPartition.getParentId());
-                if (partition != null && partition.isFirstLoad()) {
-                    collectPartitionIds.add(partition.getId());
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db, List.of(table.getId()), LockType.READ);
+        try {
+            for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+                // partition commit info id is physical partition id.
+                // statistic collect granularity is logic partition.
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition != null) {
+                    Partition partition = table.getPartition(physicalPartition.getParentId());
+                    if (partition != null && partition.isFirstLoad()) {
+                        collectPartitionIds.add(partition.getId());
+                    }
                 }
             }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db, List.of(table.getId()), LockType.READ);
         }
         if (collectPartitionIds.isEmpty()) {
             return;
@@ -221,9 +229,8 @@ public class StatisticUtils {
                 LOG.error("failed to execute statistic collect job", e);
             } catch (TimeoutException e) {
                 if (!isRunning.get()) {
-                    LOG.warn(
-                            "await collect statistic task failed after 1 seconds, which mean too many jobs in the " +
-                                    "queue");
+                    LOG.warn("await collect statistic task failed after 1 seconds, which mean too many jobs in the " +
+                            "queue");
                     return;
                 }
             }
