@@ -22,7 +22,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.TableStatistic;
 import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
@@ -32,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -132,16 +132,13 @@ public class BasicStatsMeta implements Writable {
         long updatePartitionRowCount = 0L;
         long updatePartitionCount = 0L;
 
-        Map<Long, TableStatistic> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
+        Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), table.getPartitions());
 
         for (Partition partition : table.getPartitions()) {
-            TableStatistic statistic = tableStatistics.getOrDefault(partition.getId(), TableStatistic.unknown());
-
             tableRowCount += partition.getRowCount();
-            if (!statistic.equals(TableStatistic.unknown())) {
-                cachedTableRowCount += tableStatistics.get(partition.getId()).getRowCount();
-            }
+            Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
+            cachedTableRowCount += statistic.orElse(0L);
             LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
             if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
