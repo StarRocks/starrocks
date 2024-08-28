@@ -215,4 +215,17 @@ public abstract class StatisticsCollectJob {
         long typeSize = columnType.getTypeSize();
         return "COUNT(1) * " + typeSize;
     }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("StatisticsCollectJob{");
+        sb.append("type=").append(type);
+        sb.append(", scheduleType=").append(scheduleType);
+        sb.append(", db=").append(db);
+        sb.append(", table=").append(table);
+        sb.append(", columnNames=").append(columnNames);
+        sb.append(", properties=").append(properties);
+        sb.append('}');
+        return sb.toString();
+    }
 }
