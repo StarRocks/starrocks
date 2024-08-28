@@ -40,13 +40,13 @@ class Status;
 
 namespace starrocks {
 
-#define RETURN_STATUS_IF_ERROR(stmt)    \
-    do {                                      \
-        arrow::Status _status_ = (stmt);      \
-        if (UNLIKELY(!_status_.ok())) {       \
-            return to_status(_status_); \
-        }                                     \
-} while (false)
+#define RETURN_STATUS_IF_ERROR(stmt)     \
+    do {                                 \
+        arrow::Status _status_ = (stmt); \
+        if (UNLIKELY(!_status_.ok())) {  \
+            return to_status(_status_);  \
+        }                                \
+    } while (false)
 
 // Pretty print a arrow RecordBatch.
 Status arrow_pretty_print(const arrow::RecordBatch& rb, std::ostream* os);

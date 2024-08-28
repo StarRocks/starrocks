@@ -35,7 +35,7 @@
 namespace starrocks {
 
 ArrowResultWriter::ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
-                                     RuntimeProfile* parent_profile,const RowDescriptor& row_desc)
+                                     RuntimeProfile* parent_profile, const RowDescriptor& row_desc)
         : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile), _row_desc(row_desc) {}
 
 Status ArrowResultWriter::init(RuntimeState* state) {
@@ -72,7 +72,7 @@ StatusOr<TFetchDataResultPtrs> ArrowResultWriter::process_chunk(Chunk* chunk) {
     std::shared_ptr<arrow::RecordBatch> result;
     RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _output_expr_ctxs, _arrow_schema, arrow::default_memory_pool(),
                                                  &result));
-    Status  status = _sinker->add_arrow_batch(result);
+    Status status = _sinker->add_arrow_batch(result);
     return TFetchDataResultPtrs{};
 }
 

@@ -34,11 +34,12 @@
 
 #pragma once
 
+#include <arrow/record_batch.h>
+
 #include <map>
 #include <thread>
 #include <unordered_map>
 #include <vector>
-#include <arrow/record_batch.h>
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
@@ -80,7 +81,6 @@ public:
     void set_arrow_schema(const TUniqueId& query_id, const std::shared_ptr<arrow::Schema>& arrow_schema);
 
     std::shared_ptr<arrow::Schema> get_arrow_schema(const TUniqueId& query_id);
-
 
 private:
     typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;

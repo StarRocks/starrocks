@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "arrow_flight_batch_reader.h"
+
 #include "runtime/exec_env.h"
 #include "runtime/result_buffer_mgr.h"
 
-#include "arrow_flight_batch_reader.h"
-
 namespace starrocks {
 
-ArrowFlightBatchReader::ArrowFlightBatchReader(const TUniqueId& query_id)
-: _query_id(std::move(query_id)) {
+ArrowFlightBatchReader::ArrowFlightBatchReader(const TUniqueId& query_id) : _query_id(std::move(query_id)) {
     _schema = ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(query_id);
 }
 
@@ -34,4 +33,4 @@ std::shared_ptr<arrow::Schema> ArrowFlightBatchReader::schema() const {
     return _schema;
 }
 
-}
+} // namespace starrocks

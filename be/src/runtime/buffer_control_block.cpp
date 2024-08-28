@@ -35,6 +35,7 @@
 #include "runtime/buffer_control_block.h"
 
 #include <arrow/record_batch.h>
+
 #include <utility>
 
 #include "gen_cpp/InternalService_types.h"

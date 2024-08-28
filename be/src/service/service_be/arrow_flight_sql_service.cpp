@@ -13,23 +13,25 @@
 // limitations under the License.
 
 #include "arrow_flight_sql_service.h"
-#include "service/backend_options.h"
-#include "util/uid_util.h"
-#include "common/status.h"
-#include "exec/arrow_flight_batch_reader.h"
-#include "util/arrow/utils.h"
 
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/server.h>
 #include <arrow/flight/types.h>
 
+#include "common/status.h"
+#include "exec/arrow_flight_batch_reader.h"
+#include "service/backend_options.h"
+#include "util/arrow/utils.h"
+#include "util/uid_util.h"
+
 namespace starrocks {
 
 Status ArrowFlightSqlServer::start(int port) {
     arrow::flight::Location bind_location;
-    RETURN_STATUS_IF_ERROR(arrow::flight::Location::ForGrpcTcp(BackendOptions::get_service_bind_address(), port).Value(&bind_location));
+    RETURN_STATUS_IF_ERROR(arrow::flight::Location::ForGrpcTcp(BackendOptions::get_service_bind_address(), port)
+                                   .Value(&bind_location));
     arrow::flight::FlightServerOptions flight_options(bind_location);
-    RETURN_STATUS_IF_ERROR(Init(flight_options));
+    ETURN_STATUS_IF_ERROR R(Init(flight_options));
 
     return Status::OK();
 }

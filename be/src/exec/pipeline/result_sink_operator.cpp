@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/result_sink_operator.h"
 
+#include <arrow/type.h>
+
 #include "exprs/expr.h"
 #include "runtime/arrow_result_writer.h"
 #include "runtime/buffer_control_block.h"
@@ -26,8 +28,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/statistic_result_writer.h"
 #include "runtime/variable_result_writer.h"
-
-#include <arrow/type.h>
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {

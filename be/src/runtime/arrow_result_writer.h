@@ -14,7 +14,6 @@
 
 #pragma once
 
-
 #include "common/statusor.h"
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
@@ -36,7 +35,7 @@ using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 class ArrowResultWriter final : public ResultWriter {
 public:
     ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
-                     RuntimeProfile* parent_profile,const RowDescriptor& row_desc);
+                      RuntimeProfile* parent_profile, const RowDescriptor& row_desc);
 
     Status init(RuntimeState* state) override;
 

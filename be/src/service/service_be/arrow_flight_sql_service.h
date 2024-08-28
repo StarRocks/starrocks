@@ -14,12 +14,12 @@
 
 #pragma once
 
-#include "common/status.h"
-
-#include <arrow/flight/sql/server.h>
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/server.h>
+#include <arrow/flight/sql/server.h>
 #include <arrow/flight/types.h>
+
+#include "common/status.h"
 
 namespace starrocks {
 
