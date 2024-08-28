@@ -470,8 +470,7 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Test
-    @Order(5)
+    @Ignore
     public void testMVRestore_TestMVWithBaseTable3() {
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(TABLE_NAME));

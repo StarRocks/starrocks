@@ -169,9 +169,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TableVersionRange version,
-                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
-        return normal.getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit);
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        return normal.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        return normal.getRemoteFilesAsync(table, params);
     }
 
     @Override
@@ -180,12 +184,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
-        return normal.getRemoteFileInfos(table, partitionNames);
-    }
-
-    @Override
-    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         return normal.getRemotePartitions(table, partitionNames);
     }
 

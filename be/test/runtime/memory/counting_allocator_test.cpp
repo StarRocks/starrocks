@@ -23,11 +23,38 @@
 namespace starrocks {
 
 TEST(CountingAllocatorTest, normal) {
+    CountingAllocator<MemHookAllocator> allocator;
+    auto ptr = allocator.alloc(8);
+    ASSERT_NE(ptr, nullptr);
+    ptr = allocator.realloc(ptr, 2);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.calloc(10, 4);
+    ASSERT_NE(ptr, nullptr);
+    allocator.cfree(ptr);
+    ptr = allocator.memalign(8, 4);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.aligned_alloc(16, 64);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.valloc(4);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    ptr = allocator.pvalloc(16);
+    ASSERT_NE(ptr, nullptr);
+    allocator.free(ptr);
+    int res = allocator.posix_memalign(&ptr, 16, 64);
+    ASSERT_EQ(res, 0);
+    allocator.free(ptr);
+}
+
+TEST(STLCountingAllocatorTest, normal) {
     int64_t memory_usage = 0;
     {
         // stl container
         memory_usage = 0;
-        std::vector<int, CountingAllocator<int>> vec{CountingAllocator<int>(&memory_usage)};
+        std::vector<int, STLCountingAllocator<int>> vec{STLCountingAllocator<int>(&memory_usage)};
         for (int i = 0; i < 100; ++i) {
             vec.push_back(i);
         }
@@ -41,8 +68,8 @@ TEST(CountingAllocatorTest, normal) {
     {
         // phmap
         phmap::flat_hash_map<int, int, phmap::priv::hash_default_hash<int>, phmap::priv::hash_default_eq<int>,
-                             CountingAllocator<int>>
-                m{CountingAllocator<int>(&memory_usage)};
+                             STLCountingAllocator<int>>
+                m{STLCountingAllocator<int>(&memory_usage)};
         m.insert({1, 1});
         ASSERT_EQ(memory_usage, 28);
         m.insert({2, 2});

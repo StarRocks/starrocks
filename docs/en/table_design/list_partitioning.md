@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # List partitioning
@@ -54,7 +54,7 @@ value_item ::=
 
 | **Parameters**      | **Parameters** | **Description**                                              |
 | ------------------- | -------------- | ------------------------------------------------------------ |
-| `partition_columns` | YES            | the ames of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partitioning column allows `NULL` values. |
+| `partition_columns` | YES            | the ames of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partitioning column does not allow `NULL` values. |
 | `partition_name`    | YES            | Partition name. It is recommended to set appropriate partition names based on the business scenario to differentiate the data in different partitions. |
 | `value_list`        | YES            | A list of partitioning column values in a partition.            |
 

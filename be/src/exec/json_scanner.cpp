@@ -556,7 +556,15 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             }
 
             DCHECK(column_index >= 0);
-            _parsed_columns[column_index] = true;
+            if (_parsed_columns[column_index]) {
+                // {'a': 1, 'b': 1, 'b': 1}
+                // there may be duplicated keys in single json, this will cause inconsistent column rows,
+                // so skip the duplicated key
+                key_index++;
+                continue;
+            } else {
+                _parsed_columns[column_index] = true;
+            }
             auto& column = chunk->get_column_by_index(column_index);
             simdjson::ondemand::value val = field.value();
 
@@ -673,7 +681,8 @@ Status JsonReader::_read_file_stream() {
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
-        auto buf = ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
+        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() +
+                                                                     simdjson::SIMDJSON_PADDING));
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
         buf->flip();
         std::swap(buf, _file_stream_buffer);

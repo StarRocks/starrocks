@@ -167,6 +167,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+    reader_params.column_access_paths = &_column_access_paths;
 
     int64_t total_num_rows = 0;
     int64_t total_mem_footprint = 0;
@@ -253,6 +254,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         TabletReaderParams reader_params;
         reader_params.reader_type = compaction_type();
         reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+        reader_params.column_access_paths = &_column_access_paths;
 
         int64_t total_num_rows = 0;
         int64_t total_mem_footprint = 0;
@@ -357,7 +359,7 @@ Status Compaction::modify_rowsets() {
 
     std::vector<RowsetSharedPtr> to_replace;
     std::unique_lock wrlock(_tablet->get_header_lock());
-    _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+    _tablet->modify_rowsets_without_lock({_output_rowset}, _input_rowsets, &to_replace);
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
     for (auto& rs : to_replace) {

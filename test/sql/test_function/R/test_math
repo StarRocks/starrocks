@@ -1,11 +1,9 @@
 -- name: test_math_cosine_similarity
 create table t1 (id int, data array<float>) engine = olap distributed by hash(id) properties ("replication_num" = "1");
 -- result:
-[]
 -- !result
 insert into t1 values(1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]), (3, array<float>[0.3, 0.2, 0.1]);
 -- result:
-[]
 -- !result
 select cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 order by dist desc;
 -- result:
@@ -23,19 +21,15 @@ select cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2
 -- !result
 create table test_cosine (id int, data array<float>) ENGINE=olap DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) properties ("replication_num" = "1");
 -- result:
-[]
 -- !result
 insert into test_cosine values (1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]);
 -- result:
-[]
 -- !result
 insert into test_cosine values (3, array<float>[0.15, 0.25, 0.32]), (4, array<float>[0.12, 0.11, 0.32]);
 -- result:
-[]
 -- !result
 insert into test_cosine values (5, array<float>[0.25, 0.12, 0.13]), (6, array<float>[0.22, 0.01, 0.39]);
 -- result:
-[]
 -- !result
 select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim from test_cosine order by sim desc;
 -- result:

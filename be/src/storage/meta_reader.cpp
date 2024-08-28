@@ -184,7 +184,11 @@ Status SegmentMetaCollecter::open() {
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
-    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
+    RandomAccessFileOptions ropts;
+    if (_segment->encryption_info()) {
+        ropts.encryption_info = *_segment->encryption_info();
+    }
+    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(ropts, _segment->file_name()));
 
     auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);
@@ -234,10 +238,6 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
 }
 
 Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
-    if (cid >= _segment->num_columns()) {
-        return Status::NotFound("error column id");
-    }
-
     const ColumnReader* col_reader = _segment->column(cid);
     if (col_reader == nullptr) {
         return Status::NotFound("don't found column");

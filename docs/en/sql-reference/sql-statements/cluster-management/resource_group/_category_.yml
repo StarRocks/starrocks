@@ -1,0 +1,6 @@
+position: 20 # float position is supported
+label: 'Resource group'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

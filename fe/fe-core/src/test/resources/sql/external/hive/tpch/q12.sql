@@ -92,6 +92,7 @@ TABLE: orders
 NON-PARTITION PREDICATES: 1: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=23.0
+dataCacheOptions={populate: false}
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (1: o_orderkey)
@@ -120,6 +121,7 @@ NON-PARTITION PREDICATES: 24: l_shipmode IN ('REG AIR', 'MAIL'), 21: l_commitdat
 MIN/MAX PREDICATES: 24: l_shipmode >= 'MAIL', 24: l_shipmode <= 'REG AIR', 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01'
 partitions=1/1
 avgRowSize=30.0
+dataCacheOptions={populate: false}
 cardinality: 6125233
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6125233.086195324] ESTIMATE
@@ -128,4 +130,3 @@ column statistics:
 * l_receiptdate-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] ESTIMATE
 * l_shipmode-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]
-

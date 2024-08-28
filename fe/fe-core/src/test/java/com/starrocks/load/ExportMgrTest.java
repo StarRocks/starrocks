@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -31,11 +32,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -96,29 +92,6 @@ public class ExportMgrTest {
         Assert.assertNull(jobResultNull);
         ExportJob jobResultNotExist = mgr.getExportByQueryId(new UUID(4, 4));
         Assert.assertNull(jobResultNotExist);
-
-        // 5. save image
-        File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
-        System.err.println("write image " + tempFile.getAbsolutePath());
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        long checksum = 0;
-        long saveChecksum = mgr.saveExportJob(dos, checksum);
-        dos.close();
-
-        // 6. clean expire
-        mgr.removeOldExportJobs();
-        Assert.assertEquals(1, mgr.getIdToJob().size());
-
-        // 7. load image, will filter job1
-        ExportMgr newMgr = new ExportMgr();
-        Assert.assertEquals(0, newMgr.getIdToJob().size());
-        DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        checksum = 0;
-        long loadChecksum = newMgr.loadExportJob(dis, checksum);
-        Assert.assertEquals(1, newMgr.getIdToJob().size());
-        Assert.assertEquals(saveChecksum, loadChecksum);
-
-        tempFile.delete();
     }
 
     @Test
@@ -130,10 +103,10 @@ public class ExportMgrTest {
         leaderMgr.replayCreateExportJob(job);
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        leaderMgr.saveExportJobV2(image.getDataOutputStream());
+        leaderMgr.saveExportJobV2(image.getImageWriter());
 
         ExportMgr followerMgr = new ExportMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         followerMgr.loadExportJobV2(reader);
         reader.close();
 

@@ -142,9 +142,18 @@ public class NormalKeyTest {
     public void testEquals() {
         NormalKey key1 = NormalKey.createRandom();
         NormalKey key2 = NormalKey.createRandom();
+        assertNotEquals(key1, new String());
         assertNotEquals(key1, key2);
+        NormalKey keyNoAlgo = new NormalKey(EncryptionAlgorithmPB.NO_ENCRYPTION, new byte[16], null);
+        assertNotEquals(key1, keyNoAlgo);
         NormalKey key3 = (NormalKey) EncryptionKey.createFromSpec(key1.toSpec());
+        assertEquals(key1, key3);
+        assertEquals(key1.hashCode(), key3.hashCode());
         assertArrayEquals(key1.getPlainKey(), key3.getPlainKey());
+        NormalKey keyEn1 = new NormalKey(EncryptionAlgorithmPB.AES_128, null, new byte[16]);
+        NormalKey keyEn2 = new NormalKey(EncryptionAlgorithmPB.AES_128, null, new byte[16]);
+        assertEquals(keyEn1, keyEn2);
+        assertEquals(keyEn1.hashCode(), keyEn2.hashCode());
     }
 
     @Test

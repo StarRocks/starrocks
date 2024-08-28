@@ -23,7 +23,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
@@ -73,8 +72,8 @@ public class AnalyzeMgrTest {
             {
                 cachedStatisticStorage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"));
                 result = ImmutableList.of(
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5),
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50)
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5, ""),
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50, "")
                 );
                 minTimes = 1;
             }
@@ -88,8 +87,8 @@ public class AnalyzeMgrTest {
             {
                 cachedStatisticStorage.getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
                 result = ImmutableList.of(
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5),
-                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50)
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 10, 0, 20, 5), 5, ""),
+                        new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50, "")
                 );
                 minTimes = 1;
             }
@@ -120,9 +119,9 @@ public class AnalyzeMgrTest {
         analyzeMgr.addAnalyzeStatus(analyzeStatus);
         // test persist by image
         UtFrameUtils.PseudoImage testImage = new UtFrameUtils.PseudoImage();
-        analyzeMgr.save(testImage.getDataOutputStream());
+        analyzeMgr.save(testImage.getImageWriter());
 
-        analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+        analyzeMgr.load(testImage.getMetaBlockReader());
         Assert.assertEquals(1, analyzeMgr.getAnalyzeStatusMap().size());
         AnalyzeStatus analyzeStatus1 = analyzeMgr.getAnalyzeStatusMap().get(100L);
         Assert.assertEquals("hive0", analyzeStatus1.getCatalogName());
@@ -172,8 +171,8 @@ public class AnalyzeMgrTest {
         analyzeMgr.addAnalyzeJob(externalAnalyzeJob);
 
         testImage = new UtFrameUtils.PseudoImage();
-        analyzeMgr.save(testImage.getDataOutputStream());
-        analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+        analyzeMgr.save(testImage.getImageWriter());
+        analyzeMgr.load(testImage.getMetaBlockReader());
         Assert.assertEquals(2, analyzeMgr.getAllAnalyzeJobList().size());
         NativeAnalyzeJob analyzeJob = (NativeAnalyzeJob) analyzeMgr.getAllAnalyzeJobList().get(0);
         Assert.assertEquals(123, analyzeJob.getDbId());
@@ -233,8 +232,8 @@ public class AnalyzeMgrTest {
         analyzeMgr.addExternalBasicStatsMeta(externalBasicStatsMeta);
 
         testImage = new UtFrameUtils.PseudoImage();
-        analyzeMgr.save(testImage.getDataOutputStream());
-        analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+        analyzeMgr.save(testImage.getImageWriter());
+        analyzeMgr.load(testImage.getMetaBlockReader());
         Assert.assertEquals(1, analyzeMgr.getExternalBasicStatsMetaMap().size());
 
         ExternalBasicStatsMeta replayBasicStatsMeta = (ExternalBasicStatsMeta) UtFrameUtils.PseudoJournalReplayer.
@@ -279,8 +278,8 @@ public class AnalyzeMgrTest {
         analyzeMgr.addExternalHistogramStatsMeta(externalHistogramStatsMeta);
         // test persist by image
         UtFrameUtils.PseudoImage testImage = new UtFrameUtils.PseudoImage();
-        analyzeMgr.save(testImage.getDataOutputStream());
-        analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+        analyzeMgr.save(testImage.getImageWriter());
+        analyzeMgr.load(testImage.getMetaBlockReader());
         Assert.assertEquals(1, analyzeMgr.getExternalHistogramStatsMetaMap().size());
         // test replay json to histogram stats
         ExternalHistogramStatsMeta replayHistogramStatsMeta =

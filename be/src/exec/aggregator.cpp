@@ -24,13 +24,17 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
+#include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/memory/roaring_hook.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/runtime_profile.h"
@@ -199,7 +203,23 @@ void AggregatorParams::init() {
 #define ALIGN_TO(size, align) ((size + align - 1) / align * align)
 #define PAD(size, align) (align - (size % align)) % align;
 
-Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {}
+class ThreadLocalStateAllocatorSetter {
+public:
+    ThreadLocalStateAllocatorSetter(Allocator* allocator)
+            : _agg_state_allocator_setter(allocator), _roaring_allocator_setter(allocator) {}
+    ~ThreadLocalStateAllocatorSetter() = default;
+
+private:
+    ThreadLocalAggregateStateAllocatorSetter _agg_state_allocator_setter;
+    ThreadLocalRoaringAllocatorSetter _roaring_allocator_setter;
+};
+
+#define SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalStateAllocatorSetter(allocator)
+
+Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {
+    _allocator = std::make_unique<CountingAllocatorWithHook>();
+}
 
 Status Aggregator::open(RuntimeState* state) {
     if (_is_opened) {
@@ -315,8 +335,8 @@ Status Aggregator::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(check_has_error());
 
-    _buffer_mem_manager = std::make_unique<pipeline::ChunkBufferMemoryManager>(
-            1, config::local_exchange_buffer_mem_limit_per_driver,
+    _limited_buffer = std::make_unique<LimitedPipelineChunkBuffer<AggStatistics>>(
+            _agg_stat, 1, config::local_exchange_buffer_mem_limit_per_driver,
             state->chunk_size() * config::streaming_agg_chunk_buffer_size);
 
     return Status::OK();
@@ -527,6 +547,7 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
 }
 
 Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     _is_ht_eos = false;
     _num_input_rows = 0;
     _is_prepared = false;
@@ -539,7 +560,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _num_pass_through_rows = 0;
     _num_rows_returned = 0;
 
-    _buffer = {};
+    _limited_buffer->clear();
 
     _tmp_agg_states.assign(_tmp_agg_states.size(), nullptr);
     _streaming_selection.assign(_streaming_selection.size(), 0);
@@ -612,8 +633,8 @@ void Aggregator::close(RuntimeState* state) {
 
     _is_closed = true;
     // Clear the buffer
-    while (!_buffer.empty()) {
-        _buffer.pop();
+    if (_limited_buffer != nullptr) {
+        _limited_buffer->clear();
     }
 
     auto agg_close = [this, state]() {
@@ -621,6 +642,7 @@ void Aggregator::close(RuntimeState* state) {
         if (_mem_pool != nullptr) {
             // Note: we must free agg_states object before _mem_pool free_all;
             if (_single_agg_state != nullptr) {
+                SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                 for (int i = 0; i < _agg_functions.size(); i++) {
                     _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
                 }
@@ -659,45 +681,19 @@ void Aggregator::close(RuntimeState* state) {
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    return _buffer.empty();
+    return _limited_buffer->is_empty();
 }
 
 ChunkPtr Aggregator::poll_chunk_buffer() {
-    ChunkPtr chunk;
-    {
-        std::lock_guard<std::mutex> l(_buffer_mutex);
-        if (_buffer.empty()) {
-            return nullptr;
-        }
-        chunk = _buffer.front();
-        _buffer.pop();
-    }
-    size_t mem_usage = chunk->memory_usage();
-    size_t num_rows = chunk->num_rows();
-    _buffer_mem_manager->update_memory_usage(-mem_usage, -num_rows);
-
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, -mem_usage);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, -1);
-
-    return chunk;
+    return _limited_buffer->pull();
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
-    {
-        std::lock_guard<std::mutex> l(_buffer_mutex);
-        _buffer.push(chunk);
-    }
-
-    size_t mem_usage = chunk->memory_usage();
-    size_t num_rows = chunk->num_rows();
-    _buffer_mem_manager->update_memory_usage(mem_usage, num_rows);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, mem_usage);
-    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, 1);
+    _limited_buffer->push(chunk);
 }
 
 bool Aggregator::is_chunk_buffer_full() {
-    return _buffer_mem_manager->is_full();
+    return _limited_buffer->is_full();
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -771,6 +767,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge for singe stage
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
@@ -793,6 +790,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
@@ -814,7 +812,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
-
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                         _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
@@ -847,6 +845,7 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     // TODO(kks): we should approve memory allocate here
     auto use_intermediate = _use_intermediate_as_output();
     Columns agg_result_column = _create_agg_result_columns(1, use_intermediate);
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     if (!use_intermediate) {
         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
     } else {
@@ -930,8 +929,11 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
-                _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
-                                                               result_chunk->num_rows(), &agg_result_column[i]);
+                {
+                    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+                    _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
+                                                                   result_chunk->num_rows(), &agg_result_column[i]);
+                }
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
@@ -1098,6 +1100,7 @@ void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, const Colu
 }
 
 void Aggregator::_destroy_state(AggDataPtr __restrict state) {
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->destroy(_agg_fn_ctxs[i], state + _agg_states_offsets[i]);
     }
@@ -1426,6 +1429,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
 
             {
                 SCOPED_TIMER(_agg_stat->agg_append_timer);
+                SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                 if (!use_intermediate) {
                     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                         TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
@@ -1454,7 +1458,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
                     group_by_columns[0]->append_default();
-
+                    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
                     if (!use_intermediate) {
                         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     } else {
@@ -1563,6 +1567,7 @@ void Aggregator::_release_agg_memory() {
     // If all function states are of POD type,
     // then we don't have to traverse the hash table to call destroy method.
     //
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         bool skip_destroy = std::all_of(_agg_functions.begin(), _agg_functions.end(),
                                         [](auto* func) { return func->is_pod_state(); });

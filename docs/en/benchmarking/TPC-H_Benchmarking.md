@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # TPC-H Benchmark
@@ -20,7 +20,7 @@ The latency for StarRocks to query data from its native storage is 21s, that for
 
 ### 2.1 Hardware environment
 
-| Machine | 3 Cloud hosts |
+| Machine | 4 Cloud hosts |
 | -------- | ----------------------------------------------------- |
 | CPU | 16core Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz |
 | Memory | 64 GB |
@@ -28,6 +28,8 @@ The latency for StarRocks to query data from its native storage is 21s, that for
 | Disk | ESSD cloud disk |
 
 ### 2.2 Software environment
+
+StarRocks and Trino are deployed on machines with the same configuration. StarRocks has 1 FE and 3 BEs deployed. Trino has 1 Coordinator and 3 Workers deployed.
 
 - Kernel version: Linux 3.10.0-1127.13.1.el7.x86_64
 
@@ -54,6 +56,7 @@ The latency for StarRocks to query data from its native storage is 21s, that for
 
 :::note
 The unit of query results is ms. Lower is better.
+All queries are warmed up 1 time and then executed 3 times to take the average value as the result.
 :::
 
 | Query | StarRocks-native-3.0 | StarRocks-3.0-Hive external | Trino-419 |

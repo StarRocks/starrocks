@@ -66,7 +66,8 @@ std::string JsonColumn::debug_item(size_t idx) const {
         std::ostringstream ss;
         ss << "{";
         size_t i = 0;
-        for (; i < _flat_column_paths.size() - i; i++) {
+        // flat json debug is different with normal, lose quota
+        for (; i < _flat_column_paths.size() - 1; i++) {
             ss << _flat_column_paths[i] << ": ";
             ss << get_flat_field(i)->debug_item(idx) << ", ";
         }
@@ -88,6 +89,7 @@ MutableColumnPtr JsonColumn::clone() const {
         auto p = this->create_mutable();
         p->_flat_column_paths = this->_flat_column_paths;
         p->_flat_column_types = this->_flat_column_types;
+        p->_path_to_index = this->_path_to_index;
         for (auto& f : this->_flat_columns) {
             p->_flat_columns.emplace_back(f->clone());
         }
@@ -106,6 +108,7 @@ ColumnPtr JsonColumn::clone_shared() const {
         auto p = this->create_mutable();
         p->_flat_column_paths = this->_flat_column_paths;
         p->_flat_column_types = this->_flat_column_types;
+        p->_path_to_index = this->_path_to_index;
         for (auto& f : this->_flat_columns) {
             p->_flat_columns.emplace_back(f->clone_shared());
         }
@@ -163,50 +166,49 @@ const ColumnPtr& JsonColumn::get_flat_field(int index) const {
     return _flat_columns[index];
 }
 
+ColumnPtr& JsonColumn::get_remain() {
+    DCHECK(_flat_columns.size() == _flat_column_paths.size() + 1);
+    return _flat_columns[_flat_columns.size() - 1];
+}
+
+const ColumnPtr& JsonColumn::get_remain() const {
+    DCHECK(_flat_columns.size() == _flat_column_paths.size() + 1);
+    return _flat_columns[_flat_columns.size() - 1];
+}
+
 LogicalType JsonColumn::get_flat_field_type(const std::string& path) const {
     DCHECK(_path_to_index.count(path) > 0);
     return _flat_column_types[_path_to_index.at(path)];
 }
 
-void JsonColumn::init_flat_columns(const std::vector<std::string>& paths) {
-    if (_flat_column_paths.empty()) {
-        _flat_column_paths.insert(_flat_column_paths.cbegin(), paths.cbegin(), paths.cend());
-        _flat_column_types.assign(paths.size(), LogicalType::TYPE_JSON);
-        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
-            // nullable column
-            _flat_columns.emplace_back(NullableColumn::create(JsonColumn::create(), NullColumn::create()));
-            _path_to_index[_flat_column_paths[i]] = i;
-        }
-    } else {
-        DCHECK(_flat_column_paths.size() == paths.size());
-        DCHECK(_flat_columns.size() == paths.size());
-        DCHECK(_flat_column_types.size() == paths.size());
-        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
-            DCHECK(_flat_column_paths[i] == paths[i]);
-            DCHECK(_flat_columns[i]->is_nullable());
-            DCHECK(_flat_column_types[i] == LogicalType::TYPE_JSON);
-        }
-    }
-}
+void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
+                                  const Columns& flat_columns) {
+    DCHECK_EQ(paths.size(), types.size());
+    DCHECK(paths.size() == flat_columns.size() || paths.size() + 1 == flat_columns.size()); // may remain column
 
-void JsonColumn::init_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types) {
-    if (_flat_column_paths.empty()) {
-        DCHECK_EQ(paths.size(), types.size());
-        _flat_column_paths.insert(_flat_column_paths.cbegin(), paths.cbegin(), paths.cend());
-        _flat_column_types.insert(_flat_column_types.cbegin(), types.cbegin(), types.cend());
+    if (is_flat_json()) {
+        DCHECK_EQ(_flat_columns.size(), flat_columns.size());
+        DCHECK_EQ(_flat_column_paths.size(), paths.size());
+        DCHECK_EQ(_flat_column_types.size(), types.size());
+        DCHECK_EQ(_path_to_index.size(), paths.size());
         for (size_t i = 0; i < _flat_column_paths.size(); i++) {
-            // nullable column
-            _flat_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(types[i]), true));
-            _path_to_index[_flat_column_paths[i]] = i;
+            DCHECK_EQ(_flat_column_paths[i], paths[i]);
+            DCHECK_EQ(_flat_column_types[i], types[i]);
+            DCHECK_EQ(i, _path_to_index[paths[i]]);
+        }
+        if (flat_columns.size() != 0) {
+            for (size_t i = 0; i < _flat_columns.size(); i++) {
+                _flat_columns[i]->append(*flat_columns[i], 0, flat_columns[i]->size());
+            }
+        } else {
+            _flat_columns = flat_columns;
         }
     } else {
-        DCHECK(_flat_column_paths.size() == paths.size());
-        DCHECK(_flat_columns.size() == paths.size());
-        DCHECK(_flat_column_types.size() == paths.size());
+        _flat_column_paths = paths;
+        _flat_column_types = types;
+        _flat_columns = flat_columns;
         for (size_t i = 0; i < _flat_column_paths.size(); i++) {
-            DCHECK(_flat_column_paths[i] == paths[i]);
-            DCHECK(_flat_columns[i]->is_nullable());
-            DCHECK(_flat_column_types[i] == types[i]);
+            _path_to_index[_flat_column_paths[i]] = i;
         }
     }
 }
@@ -260,6 +262,41 @@ void JsonColumn::append_default() {
     }
 }
 
+void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    const auto* other_json = down_cast<const JsonColumn*>(&src);
+    if (other_json->is_flat_json() && !is_flat_json()) {
+        // only hit in AggregateIterator (Aggregate mode in storage)
+        DCHECK_EQ(0, this->size());
+        std::vector<ColumnPtr> copy;
+        for (const auto& col : other_json->_flat_columns) {
+            copy.emplace_back(col->clone_empty());
+        }
+        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), copy);
+    }
+
+    if (is_flat_json()) {
+        DCHECK(src.is_object());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_paths.size());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_types.size());
+        DCHECK_EQ(_flat_column_types.size(), other_json->_flat_column_paths.size());
+
+        DCHECK_EQ(_flat_columns.size(), other_json->_flat_columns.size());
+
+        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
+            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
+            DCHECK_EQ(_flat_column_types[i], other_json->_flat_column_types[i]);
+        }
+
+        for (size_t i = 0; i < _flat_columns.size(); i++) {
+            _flat_columns[i]->append_selective(*other_json->get_flat_field(i), indexes, from, size);
+        }
+    } else {
+        DCHECK(!this->is_flat_json());
+        DCHECK(!other_json->is_flat_json());
+        SuperClass::append_selective(src, indexes, from, size);
+    }
+}
+
 void JsonColumn::append_default(size_t count) {
     if (is_flat_json()) {
         for (auto& col : _flat_columns) {
@@ -272,10 +309,14 @@ void JsonColumn::append_default(size_t count) {
 
 void JsonColumn::resize(size_t n) {
     if (is_flat_json()) {
+        DCHECK_EQ(0, BaseClass::size());
         for (auto& col : _flat_columns) {
             col->resize(n);
         }
     } else {
+        for (auto& col : _flat_columns) {
+            DCHECK_EQ(0, col->size());
+        }
         BaseClass::resize(n);
     }
 }
@@ -307,17 +348,27 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        init_flat_columns(other_json->_flat_column_paths, other_json->_flat_column_types);
+        std::vector<ColumnPtr> copy;
+        for (const auto& col : other_json->_flat_columns) {
+            copy.emplace_back(col->clone_empty());
+        }
+        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), copy);
     }
 
     if (is_flat_json()) {
         DCHECK(src.is_object());
-        DCHECK(_flat_column_paths.size() == other_json->_flat_columns.size());
-        DCHECK(_flat_columns.size() == other_json->_flat_column_paths.size());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_paths.size());
+        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_types.size());
+        DCHECK_EQ(_flat_column_types.size(), other_json->_flat_column_paths.size());
+
+        DCHECK_EQ(_flat_columns.size(), other_json->_flat_columns.size());
+
+        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
+            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
+            DCHECK_EQ(_flat_column_types[i], other_json->_flat_column_types[i]);
+        }
 
         for (size_t i = 0; i < _flat_columns.size(); i++) {
-            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
-            DCHECK_EQ(_flat_column_types[i], other_json->flat_column_types()[i]);
             _flat_columns[i]->append(*other_json->get_flat_field(i), offset, count);
         }
     } else {
@@ -390,15 +441,23 @@ bool JsonColumn::capacity_limit_reached(std::string* msg) const {
 }
 
 void JsonColumn::check_or_die() const {
-    DCHECK(_flat_column_paths.size() == _flat_columns.size());
-    DCHECK(_flat_column_types.size() == _flat_columns.size());
+    if (has_remain()) {
+        DCHECK(_flat_column_paths.size() + 1 == _flat_columns.size());
+        DCHECK(_flat_column_types.size() + 1 == _flat_columns.size());
+    } else {
+        DCHECK(_flat_column_paths.size() == _flat_columns.size());
+        DCHECK(_flat_column_types.size() == _flat_columns.size());
+    }
     if (!_flat_columns.empty()) {
         size_t rows = _flat_columns[0]->size();
-        for (size_t i = 0; i < _flat_columns.size(); i++) {
+        for (size_t i = 0; i < _flat_columns.size() - 1; i++) {
             DCHECK(_flat_columns[i]->is_nullable());
             DCHECK(_flat_columns[i]->size() == rows);
             _flat_columns[i]->check_or_die();
         }
+        DCHECK(has_remain() ? _flat_columns.back()->is_json() : _flat_columns.back()->is_nullable());
+        DCHECK(_flat_columns.back()->size() == rows);
+        _flat_columns.back()->check_or_die();
     }
 }
 
@@ -417,10 +476,12 @@ std::string JsonColumn::debug_flat_paths() const {
     }
     std::ostringstream ss;
     ss << "[";
-    for (size_t i = 0; i < _flat_column_paths.size() - 1; i++) {
-        ss << _flat_column_paths[i] << ", ";
+    size_t i = 0;
+    for (; i < _flat_column_paths.size() - 1; i++) {
+        ss << _flat_column_paths[i] << "(" << type_to_string(_flat_column_types[i]) << "), ";
     }
-    ss << _flat_column_paths.back() << "]";
+    ss << _flat_column_paths[i] << "(" << type_to_string(_flat_column_types[i]) << ")";
+    ss << (has_remain() ? "]" : "}");
     return ss.str();
 }
 } // namespace starrocks

@@ -28,8 +28,6 @@ struct FileEncryptionPair {
     std::string encryption_meta;
 };
 
-bool is_decrypted(const EncryptionKeyPB& pb);
-
 class EncryptionKey {
 public:
     static constexpr int64_t INVALID_KEY_ID = 0;
@@ -54,7 +52,7 @@ public:
 
     EncryptionKeyTypePB type() const { return _pb.type(); }
 
-    EncryptionAlgorithmPB algorithm() const { return _pb.algorithm(); }
+    virtual EncryptionAlgorithmPB algorithm() const { return _pb.algorithm(); }
 
     const EncryptionKeyPB& pb() const { return _pb; }
 
@@ -92,6 +90,9 @@ public:
     StatusOr<FileEncryptionPair> create_encryption_meta_pair(const std::string& encryption_meta_prefix);
 
     StatusOr<FileEncryptionPair> create_encryption_meta_pair_using_current_kek();
+
+    // create a FileEncryptionPair, with single plain key in key hierarchy, only used for tests
+    StatusOr<FileEncryptionPair> create_plain_random_encryption_meta_pair();
 
     StatusOr<FileEncryptionInfo> unwrap_encryption_meta(const std::string& encryption_meta);
 

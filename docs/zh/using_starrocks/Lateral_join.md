@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['爆裂函数','一行转多行','炸开','explode']
 ---
 

@@ -1,0 +1,103 @@
+-- name: test_order_keys
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 1
+ORDER BY(`c2`, `c1`, `c0`)
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 40960 - generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+select * from t0 order by c0, c1, c2 limit 10;
+-- result:
+1	40959	1	1
+2	40958	2	2
+3	40957	3	3
+4	40956	4	4
+5	40955	5	5
+6	40954	6	6
+7	40953	7	7
+8	40952	8	8
+9	40951	9	9
+10	40950	10	10
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) COMMENT "",
+  `c1` varchar(20) COMMENT "",
+  `c2` varchar(200) COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 1
+ORDER BY(`c2`, `c1`, `c0`)
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t1 select * from t0;
+-- result:
+-- !result
+select * from t1 order by c0, c1, c2 limit 10;
+-- result:
+1	40959	1	1
+2	40958	2	2
+3	40957	3	3
+4	40956	4	4
+5	40955	5	5
+6	40954	6	6
+7	40953	7	7
+8	40952	8	8
+9	40951	9	9
+10	40950	10	10
+-- !result
+CREATE TABLE `t2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+UNIQUE KEY(`c0`, `c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 1
+ORDER BY(`c2`, `c1`, `c0`)
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t2 select * from t0;
+-- result:
+-- !result
+insert into t2 select * from t0;
+-- result:
+-- !result
+select * from t2 order by c0, c1, c2 limit 10;
+-- result:
+1	40959	1	1
+2	40958	2	2
+2	40958	2	2
+3	40957	3	3
+3	40957	3	3
+4	40956	4	4
+4	40956	4	4
+5	40955	5	5
+5	40955	5	5
+6	40954	6	6
+-- !result

@@ -70,6 +70,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -89,6 +90,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -113,9 +115,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -276,7 +276,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
             partitions.add(partition);
             short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
-            partitionReplicaNum.put(partition.getId(), replicationNum);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                partitionReplicaNum.put(physicalPartition.getId(), replicationNum);
+            }
         }
 
         // check conditions
@@ -832,29 +834,6 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static DeleteMgr read(DataInput in) throws IOException {
-        String json;
-        try {
-            json = Text.readString(in);
-
-            // In older versions of fe, the information in the deleteHandler is not cleaned up,
-            // and if there are many delete statements, it will cause an int overflow
-            // and report an IllegalArgumentException.
-            //
-            // dbToDeleteInfos is only used to record history delete info,
-            // discarding it doesn't make much of a difference
-        } catch (IllegalArgumentException e) {
-            LOG.warn("read delete handler json string failed, ignore", e);
-            return new DeleteMgr();
-        }
-        return GsonUtils.GSON.fromJson(json, DeleteMgr.class);
-    }
-
-    public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
     private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {
         return (currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second;
     }
@@ -899,13 +878,13 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + dbToDeleteInfos.size() * 2;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.DELETE_MGR, numJson);
 
-        writer.writeJson(dbToDeleteInfos.size());
+        writer.writeInt(dbToDeleteInfos.size());
         for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
-            writer.writeJson(deleteInfoEntry.getKey());
+            writer.writeLong(deleteInfoEntry.getKey());
             writer.writeJson(deleteInfoEntry.getValue());
         }
         writer.close();
@@ -914,7 +893,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
-            long dbId = reader.readJson(long.class);
+            long dbId = reader.readLong();
             List<MultiDeleteInfo> multiDeleteInfos =
                     (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {
                     }.getType());

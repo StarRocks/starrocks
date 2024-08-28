@@ -61,6 +61,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -85,9 +86,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -686,23 +685,11 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         LOG.info("finished replay {} backup/store jobs from image", dbIdToBackupOrRestoreJob.size());
     }
 
-    public long saveBackupHandler(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
-    public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
-        readFields(dis);
-        setGlobalStateMgr(globalStateMgr);
-        LOG.info("finished replay backupHandler from image");
-        return checksum;
-    }
-
-    public void saveBackupHandlerV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos,
+    public void saveBackupHandlerV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(
                 SRMetaBlockID.BACKUP_MGR, 2 + dbIdToBackupOrRestoreJob.size());
         writer.writeJson(this);
-        writer.writeJson(dbIdToBackupOrRestoreJob.size());
+        writer.writeInt(dbIdToBackupOrRestoreJob.size());
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
             writer.writeJson(job);
         }

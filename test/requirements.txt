@@ -15,3 +15,5 @@ pure-sasl
 thrift
 thrift-sasl
 PyHive
+timeout_decorator
+munch

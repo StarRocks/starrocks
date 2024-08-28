@@ -166,7 +166,7 @@ Status ConvertedSchemaChange::init() {
 Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
     // create reader
     auto reader = std::make_unique<TabletReader>(_base_tablet.tablet_manager(), _base_tablet.metadata(), _base_schema,
-                                                 std::vector<RowsetPtr>{rowset});
+                                                 std::vector<RowsetPtr>{rowset}, _base_tablet.get_schema());
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
@@ -238,7 +238,7 @@ Status SortedSchemaChange::init() {
 Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
     // create reader
     auto reader = std::make_unique<TabletReader>(_base_tablet.tablet_manager(), _base_tablet.metadata(), _base_schema,
-                                                 std::vector<RowsetPtr>{rowset});
+                                                 std::vector<RowsetPtr>{rowset}, _base_tablet.get_schema());
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 

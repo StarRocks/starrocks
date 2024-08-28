@@ -44,20 +44,36 @@ public class LoadJobMVListener implements LoadJobListener {
 
     public static final LoadJobMVListener INSTANCE = new LoadJobMVListener();
 
+    private static boolean isTriggerOnTransactionFinish(TransactionState transactionState) {
+        if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public void onStreamLoadTransactionFinish(TransactionState transactionState) {
+        if (!isTriggerOnTransactionFinish(transactionState)) {
+            return;
+        }
         // how to handle stream load transaction?
         triggerToRefreshRelatedMVs(transactionState, false);
     }
 
     @Override
     public void onLoadJobTransactionFinish(TransactionState transactionState) {
+        if (!isTriggerOnTransactionFinish(transactionState)) {
+            return;
+        }
         triggerToRefreshRelatedMVs(transactionState, false);
     }
 
     @Override
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
         if (table != null && table.isMaterializedView()) {
+            return;
+        }
+        if (!isTriggerOnTransactionFinish(transactionState)) {
             return;
         }
         triggerToRefreshRelatedMVs(db, table);
@@ -89,14 +105,11 @@ public class LoadJobMVListener implements LoadJobListener {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
             }
-            if (!isTriggerIfBaseTableIsMV) {
+            if (!isTriggerIfBaseTableIsMV && table.isMaterializedView()) {
                 LOG.info("Skip to trigger refresh related materialized views in publish version phase because " +
                         "base table {} is a materialized view.", table.getName());
                 continue;
             }
-            List<PartitionCommitInfo> txnPartitionCommitInfos = getPartitionCommitInfos(transactionState, tableId);
-            LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                    "transaction state:{}", table.getName(), txnPartitionCommitInfos);
             triggerToRefreshRelatedMVs(db, table);
         }
     }

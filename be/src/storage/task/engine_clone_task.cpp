@@ -110,6 +110,10 @@ Status EngineCloneTask::execute() {
         if (Tablet::check_migrate(tablet)) {
             return Status::Corruption("Fail to check migrate tablet");
         }
+        // if tablet is under dropping but not finished yet, reject the clone request.
+        if (tablet->is_dropping()) {
+            return Status::Corruption("Tablet is under dropping");
+        }
         Status st;
         if (tablet->updates() != nullptr) {
             st = _do_clone_primary_tablet(tablet.get());

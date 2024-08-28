@@ -17,6 +17,10 @@
 ###########################################################################
 
 from pyhive import hive
+from cup import log
+
+from lib import close_conn
+
 
 class SparkLib(object):
     """SparkLib class"""
@@ -29,10 +33,10 @@ class SparkLib(object):
             self.connector = hive.Connection(
                 host=query_dict["host"],
                 port=query_dict["port"],
-                username=query_dict["user"],
+                username=query_dict["user"]
             )
 
     def close(self):
         if self.connector is not None:
-            self.connector.close()
+            close_conn(self.connector, "spark")
             self.connector = None

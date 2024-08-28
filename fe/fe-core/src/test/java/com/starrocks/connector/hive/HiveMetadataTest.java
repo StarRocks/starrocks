@@ -31,8 +31,10 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -43,6 +45,7 @@ import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
@@ -180,6 +183,20 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testGetTableThrowConnectorException() {
+        new Expectations(hmsOps) {
+            {
+                hmsOps.getTable("acid_db", "acid_table");
+                result = new StarRocksConnectorException("hive acid table is not supported");
+                minTimes = 1;
+            }
+        };
+
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> hiveMetadata.getTable("acid_db", "acid_table"));
+    }
+
+    @Test
     public void testTableExists() {
         boolean exists = hiveMetadata.tableExists("db1", "tbl1");
         Assert.assertTrue(exists);
@@ -200,8 +217,10 @@ public class HiveMetadataTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
-                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), TableVersionRange.empty(), null, null, -1);
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPartitionKeys(Lists.newArrayList(hivePartitionKey1, hivePartitionKey2))
+                        .build();
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(hiveTable, params);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
@@ -256,6 +275,18 @@ public class HiveMetadataTest {
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
         Assert.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+    }
+
+    @Test
+    public void testShowCreateHiveTbl() {
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        Assert.assertEquals("CREATE TABLE `table1` (\n" +
+                "  `col2` int(11) DEFAULT NULL,\n" +
+                "  `col1` int(11) DEFAULT NULL\n" +
+                ")\n" +
+                "PARTITION BY (col1)\n" +
+                "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
+                AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 
     @Test
@@ -750,12 +781,12 @@ public class HiveMetadataTest {
             }
         };
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemotePartitions(table, partitionNames);
-        Assert.assertEquals(3, remoteFileInfos.size());
+        List<PartitionInfo> partitionInfoList = hiveMetadata.getRemotePartitions(table, partitionNames);
+        Assert.assertEquals(3, partitionInfoList.size());
     }
 
     @Test
-    public void testGetRemoteFileInfos(
+    public void testGetRemoteFiles(
             @Mocked HiveTable table,
             @Mocked HiveMetastoreOperations hmsOps) {
         List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");
@@ -776,7 +807,8 @@ public class HiveMetadataTest {
             }
         };
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(table, partitionNames);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(table, params);
         Assert.assertEquals(3, remoteFileInfos.size());
     }
 }
