@@ -141,6 +141,17 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+### 设置变量为用户属性
+
+您可以通过 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
+
+示例：
+
+```SQL
+-- 设置用户 jack 的 Session 变量 `query_timeout` 为 `600`。
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
 ## 支持的变量
 
 本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
@@ -436,7 +447,7 @@ SELECT /*+ SET_VAR
 
 ### enable_spill_to_remote_storage
 
-* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
 * 默认值：false
 * 引入版本：v3.3.0
 
@@ -914,7 +925,7 @@ SELECT /*+ SET_VAR
 
 ### spill_storage_volume
 
-* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
 * 默认值：空字符串
 * 引入版本：v3.3.0
 

@@ -82,7 +82,7 @@ displayed_sidebar: docs
 
 ```SQL
 -- 将 <username> 替换为需要增加最大连接数的用户名。
-SET PROPERTY FOR '<username>' 'max_user_connections' = '1000';
+ALTER USER '<username>' SET PROPERTIES ("max_user_connections" = "1000");
 ```
 
 ## 下一步
