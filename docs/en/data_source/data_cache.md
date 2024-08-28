@@ -39,7 +39,7 @@ After Data Cache is enabled, StarRocks caches data blocks read from external sto
 SET enable_populate_datacache = false;
 ```
 
-For more information about `enable_populate_datacache`, see [System variables](../reference/System_variable.md).
+For more information about `enable_populate_datacache`, see [System variables](../sql-reference/System_variable.md).
 
 ## Storage media of blocks
 
@@ -175,7 +175,7 @@ In synchronous population mode, all the remote data read by the current query is
 
 In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
 
-By default, the system uses synchronous cache population. You can enable asynchronous cache population by setting the session variable [enable_datacache_async_populate_mode](../reference/System_variable.md):
+By default, the system uses synchronous cache population. You can enable asynchronous cache population by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md):
 
 - Enable asynchronous cache population for a single session.
 

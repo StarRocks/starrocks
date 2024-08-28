@@ -185,13 +185,13 @@ Release date: October 20, 2022
 
 - [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](../deployment/sr_operator.md).
 
-- Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
+- Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
 
 - Supports creating Iceberg catalogs and Hudi catalogs, which allow direct queries on data from Apache Iceberg and Apache Hudi. For more information, see [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
 - Supports querying ARRAY-type columns from Apache Hive™ tables in CSV format. For more information, see [External table](../data_source/External_table.md).
 
-- Supports viewing the schema of external data via DESC. For more information, see [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md).
+- Supports viewing the schema of external data via DESC. For more information, see [DESC](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md).
 
 - Supports granting a specific role or IMPERSONATE permission to a user via GRANT and revoking them via REVOKE, and supports executing an SQL statement with IMPERSONATE permission via  EXECUTE AS. For more information, see [GRANT](../sql-reference/sql-statements/account-management/GRANT.md), [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md), and [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE_AS.md).
 
