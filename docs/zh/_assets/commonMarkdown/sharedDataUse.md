@@ -1,5 +1,5 @@
 
-有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md) 和 [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/Administration/SET_DEFAULT_STORAGE_VOLUME.md)。
+有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) 和 [SET DEFAU../../sql-reference/sql-statements/cluster_management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.mdT_STORAGE_VOLUME.md)。
 
 ### 创建数据库和云原生表
 
@@ -68,7 +68,7 @@ PROPERTIES (
 
 ### 查看表信息
 
-您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW_PROC.md)。
+您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md)。
 
 示例：
 
@@ -89,7 +89,7 @@ StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详�
 
 ### 在 StarRocks 存算分离集群查询
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
 
 > **说明**
 >

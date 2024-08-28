@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 【公测中】行列混存表
@@ -112,7 +112,7 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
    SHOW VARIABLES LIKE '%enable_short_circuit%';
    ```
 
-   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`，设置变量 [`enable_short_circuit`](../reference/System_variable.md#enable_short_circuit) 为 `true`。
+   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`，设置变量 [`enable_short_circuit`](../sql-reference/System_variable.md#enable_short_circuit) 为 `true`。
 
 2. 查询数据。如果查询满足本条件：WHERE 子句的条件列必须包含所有主键列，并且运算符为  `=` 或者 `IN`，该查询才会走短路径。
 
@@ -175,7 +175,7 @@ EXECUTE select_by_id_stmt USING @id2;
 ## 注意事项
 
 - StarRocks 存算分离集群暂不支持行列混存表。
-- 自 3.2.4 版本起，行列混存表支持 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)。
+- 自 3.2.4 版本起，行列混存表支持 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)。
 - 短路径查询目前仅适合定期批量导入后纯查询的场景。因为目前短路径查询和写流程中的 apply 步骤互斥访问索引，所以写操作可能会堵塞短路径查询，导致写入时会影响点查的响应时间。
 - 行列混存表可能会大幅增加存储空间的占用。因为数据会按行和列格式存储两份，并且按行存储压缩比可能不如按列存储高。
 - 行列混存表会增加数据导入耗时和资源占用。

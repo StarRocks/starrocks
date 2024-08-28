@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 管理查询
@@ -90,7 +90,7 @@ ALTER DATABASE db_name SET DATA QUOTA quota;
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
-详细内容，参考 [ALTER DATABASE](../../../sql-reference/sql-statements/data-definition/ALTER_DATABASE.md)
+详细内容，参考 [ALTER DATABASE](../../../sql-reference/sql-statements/Database/ALTER_DATABASE.md)
 
 ## 停止查询
 

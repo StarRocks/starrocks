@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 基于 Azure Blob 部署

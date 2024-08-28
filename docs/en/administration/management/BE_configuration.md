@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Aggregate table
@@ -83,7 +83,11 @@ PROPERTIES (
 
   - The sort key must be created on columns on which unique constraints are enforced. It must be composed of all the dimension columns whose names cannot be changed.
 
+<<<<<<< HEAD
 - You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
+=======
+- **Aggregate function**: The aggregate function used for the value column. For supported aggregate functions for the Aggregate tables, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 - For information about the aggregate functions that are supported by the Aggregate table, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 

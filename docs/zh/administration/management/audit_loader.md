@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 通过 AuditLoader 管理 StarRocks 中的审计日志
@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 ## 创建审计日志库表
 
-在 StarRocks 集群中为审计日志创建数据库和表。详细操作说明参阅 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 和 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+在 StarRocks 集群中为审计日志创建数据库和表。详细操作说明参阅 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 和 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 > **注意**
 >
@@ -109,11 +109,11 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
 ```
 
-详细操作说明参阅 [INSTALL PLUGIN](../../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md)。
+详细操作说明参阅 [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugin/INSTALL_PLUGIN.md)。
 
 ## 验证安装并查询审计日志
 
-1. 您可以通过 [SHOW PLUGINS](../../sql-reference/sql-statements/Administration/SHOW_PLUGINS.md) 语句检查插件是否安装成功。
+1. 您可以通过 [SHOW PLUGINS](../../sql-reference/sql-statements/cluster-management/plugin/SHOW_PLUGINS.md) 语句检查插件是否安装成功。
 
     以下示例中，插件 `AuditLoader` 的 `Status` 为 `INSTALLED`，即代表安装成功。
 

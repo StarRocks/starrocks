@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 3
 ---
 
@@ -63,7 +63,7 @@ In the following sections, "batch" or "batch loading" refers to the loading of a
 
 **Data volume:** 10 GB or less
 
-### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+### [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
 
 **Business scenario:**
 
@@ -74,7 +74,7 @@ In the following sections, "batch" or "batch loading" refers to the loading of a
 
 **Data volume:** Dozens of GB to hundreds of GB
 
-### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+### [Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
 
 **Business scenario:** Batch load or stream data from HDFS or AWS S3.
 
@@ -88,7 +88,7 @@ This loading method is supported from v3.2 onwards.
 
 **Data volume:** 100 GB to 1 TB or more
 
-### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
+### [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)
 
 **Business scenario:** Stream data from Kafka.
 
@@ -96,7 +96,7 @@ This loading method is supported from v3.2 onwards.
 
 **Data volume:** MBs to GBs of data as mini-batches
 
-### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
+### [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)
 
 **Business scenario:** Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
 

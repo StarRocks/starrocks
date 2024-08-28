@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data Cache
@@ -86,7 +86,99 @@ Add the following parameters to the **conf/be.conf** file of each BE. Then resta
 | datacache_mem_size   | The maximum amount of data that can be cached in the memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). We recommend that you set the value of this parameter to at least 10 GB. | `10%` |
 | datacache_disk_size  | The maximum amount of data that can be cached in a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter to `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks.  | `0`, which indicates that only the memory is used to cache data.  |
 
+<<<<<<< HEAD
 Examples of setting these parameters.
+=======
+Example:
+
+```sql
+mysql> explain verbose select col1 from hudi_table;
+|   0:HudiScanNode                        |
+|      TABLE: hudi_table                  |
+|      partitions=3/3                     |
+|      cardinality=9084                   |
+|      avgRowSize=2.0                     |
+|      dataCacheOptions={populate: false} |
+|      cardinality: 9084                  |
++-----------------------------------------+
+```
+
+`dataCacheOptions={populate: false}` indicates that the cache will not be populated because the query will scan all partitions.
+
+You can also fine tune the population behavior of Data Cache via the Session Variable [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode).
+
+### Population mode
+
+StarRocks supports populating Data Cache in synchronous or asynchronous mode.
+
+- Synchronous cache population
+
+  In synchronous population mode, all the remote data read by the current query is cached locally. Synchronous population is efficient but may affect the performance of initial queries because it happens during data reading.
+
+- Asynchronous cache population
+
+  In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
+
+From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md).
+
+## Footer Cache
+
+In addition to caching data from files in remote storage during queries against data lakes, StarRocks also supports caching the metadata (Footer) parsed from files. Footer Cache directly caches the parsed Footer object in memory. When the same file's Footer is accessed in subsequent queries, the object descriptor can be obtained directly from the cache, avoiding repetitive parsing.
+
+Currently, StarRocks supports caching Parquet Footer objects.
+
+You can enable Footer Cache by setting the following system variable:
+
+```SQL
+SET GLOBAL enable_file_metacache=true;
+```
+
+> **NOTE**
+>
+> Footer Cache uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
+
+## I/O Adaptor
+
+To prevent significant tail latency in disk access due to high cache disk I/O load, which can lead to negative optimization of the cache system, Data Cache provides the I/O adaptor feature. This feature routes some cache requests to remote storage when disk load is high, utilizing both local cache and remote storage to improve I/O throughput. This feature is enabled by default.
+
+You can enable I/O Adaptor by setting the following system variable:
+
+```SQL
+SET GLOBAL enable_datacache_io_adaptor=true;
+```
+
+## Dynamic Scaling
+
+Data Cache supports manual adjustment of cache capacity without restarting the BE process, and also supports automatic adjustment of cache capacity.
+
+### Manual Scaling
+
+You can modify Data Cache's memory limit or disk capacity by dynamically adjusting BE configuration items.
+
+Examples:
+
+```SQL
+-- Adjust the Data Cache memory limit for a specific BE instance.
+UPDATE be_configs SET VALUE="10G" WHERE NAME="datacache_mem_size" and BE_ID=10005;
+
+-- Adjust the Data Cache memory ratio limit for all BE instances.
+UPDATE be_configs SET VALUE="10%" WHERE NAME="datacache_mem_size";
+
+-- Adjust the Data Cache disk limit for all BE instances.
+UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
+```
+
+> **NOTE**
+>
+> - Be cautious when adjusting capacities in this way. Make sure not to omit the WHERE clause to avoid modifying irrelevant configuration items.
+> - Cache capacity adjustments made this way will not be persisted and will be lost after the BE process restarts. Therefore, you can first adjust the parameters dynamically as described above, and then manually modify the BE configuration file to ensure that the changes take effect after the next restart.
+
+### Automatic Scaling
+
+StarRocks currently supports automatic scaling of disk capacity. If you do not specify the cache disk path and capacity limit in the BE configuration, automatic scaling is enabled by default.
+
+You can also enable automatic scaling by adding the following configuration item to the BE configuration file and restarting the BE process:
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ```Plain
 
@@ -169,7 +261,14 @@ StarRocks supports populating the data cache in synchronous or asynchronous mode
 
 ### Synchronous cache population (default)
 
+<<<<<<< HEAD
 In synchronous population mode, all the remote data read by the current query is cached locally. Synchronous population is efficient but may affect the performance of initial queries because it happens during data reading.
+=======
+- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ### Asynchronous cache population (since v3.2.7)
 

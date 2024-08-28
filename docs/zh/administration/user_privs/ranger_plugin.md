@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Apache Ranger 管理权限
