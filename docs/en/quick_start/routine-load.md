@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 2
 toc_max_heading_level: 2
 description: Kafka routine load with shared-data storage

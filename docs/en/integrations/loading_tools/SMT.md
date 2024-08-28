@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: English
+displayed_sidebar: docs
 ---
 
 # StarRocks Migration Tool (SMT) 

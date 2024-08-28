@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_label: AWS
 description: "This topic describes how to authenticate with AWS"
 ---
@@ -40,19 +40,19 @@ Next step, create an IAM policy based on the type of AWS resource you want to ac
 
 For the IAM policy you will need to access a specific AWS resource, see the following sections:
 
-- [Batch load data from AWS S3](../reference/aws_iam_policies.md#batch-load-data-from-aws-s3)
-- [Read/write AWS S3](../reference/aws_iam_policies.md#readwrite-aws-s3)
-- [Integrate with AWS Glue](../reference/aws_iam_policies.md#integrate-with-aws-glue)
+- [Batch load data from AWS S3](../sql-reference/aws_iam_policies.md#batch-load-data-from-aws-s3)
+- [Read/write AWS S3](../sql-reference/aws_iam_policies.md#readwrite-aws-s3)
+- [Integrate with AWS Glue](../sql-reference/aws_iam_policies.md#integrate-with-aws-glue)
 
 ### Preparation for instance profile-based authentication
 
-Attach the [IAM policies](../reference/aws_iam_policies.md) for accessing the required AWS resources to the EC2 instance role.
+Attach the [IAM policies](../sql-reference/aws_iam_policies.md) for accessing the required AWS resources to the EC2 instance role.
 
 ### Preparation for assumed role-based authentication
 
 #### Create IAM roles and attach policies to them
 
-Create one or more IAM roles, depending on the AWS resources you want to access. See [Creating IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create.html). Then, attach the [IAM policies](../reference/aws_iam_policies.md) for accessing the required AWS resources to the IAM roles you create.
+Create one or more IAM roles, depending on the AWS resources you want to access. See [Creating IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create.html). Then, attach the [IAM policies](../sql-reference/aws_iam_policies.md) for accessing the required AWS resources to the IAM roles you create.
 
 For example, you want your StarRocks cluster to access AWS S3 and AWS Glue. In this situation, you can choose to create one IAM role (for example, `s3_assumed_role`), and attach the policy for accessing AWS S3 and the policy for accessing AWS Glue both to that role. Alternatively, you can choose to create two different IAM roles (for example, `s3_assumed_role` and `glue_assumed_role`), and attach these policies to the two different roles respectively (that is, attach the policy for accessing AWS S3 to `s3_assumed_role` and the policy for accessing AWS Glue to `glue_assumed_role`).
 
@@ -118,7 +118,7 @@ Configure your EC2 instance role as follows:
 
 Create an IAM user. See [Creating an IAM user in your AWS account](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html).
 
-Then, attach the [IAM policies](../reference/aws_iam_policies.md) for accessing the required AWS resources to the IAM user you create.
+Then, attach the [IAM policies](../sql-reference/aws_iam_policies.md) for accessing the required AWS resources to the IAM user you create.
 
 ## Comparison between authentication methods
 
@@ -352,7 +352,7 @@ PROPERTIES
 
 You can use LOAD LABEL to load data from AWS S3.
 
-The following examples load the data from all Parquet data files stored in the `s3a://test-bucket/test_brokerload_ingestion` path into the `test_ingestion_2` table in an existing database named `test_s3_db`. For detailed syntax and parameters, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+The following examples load the data from all Parquet data files stored in the `s3a://test-bucket/test_brokerload_ingestion` path into the `test_ingestion_2` table in an existing database named `test_s3_db`. For detailed syntax and parameters, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 #### Instance profile-based authentication
 

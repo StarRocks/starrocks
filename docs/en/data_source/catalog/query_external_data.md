@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Query external data
@@ -16,13 +16,13 @@ This topic guides you through querying data from external data sources by using 
    - If you use the MySQL client to connect the StarRocks cluster, you go to `default_catalog` by default after connecting.
    - If you use JDBC to connect the StarRocks cluster, you can go directly to the destination database in the default catalog by specifying `default_catalog.db_name` when connecting.
 
-2. (Optional) Execute the following statement to view all the catalogs and find the external catalog you have created. See [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to check the output of this statement.
+2. (Optional) Execute the following statement to view all the catalogs and find the external catalog you have created. See [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to check the output of this statement.
 
       ```SQL
       SHOW CATALOGS;
       ```
 
-3. (Optional) Execute the following statement to view all the databases in the external catalog. See [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to check the output of this statement.
+3. (Optional) Execute the following statement to view all the databases in the external catalog. See [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to check the output of this statement.
 
       ```SQL
       SHOW DATABASES FROM catalog_name;
@@ -34,7 +34,7 @@ This topic guides you through querying data from external data sources by using 
       USE catalog_name.db_name;
       ```
 
-5. Query external data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md).
+5. Query external data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
 
       ```SQL
       SELECT * FROM table_name;
