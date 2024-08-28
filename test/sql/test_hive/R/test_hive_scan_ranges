@@ -1,11 +1,9 @@
 -- name: testHiveScanRanges
 set enable_connector_incremental_scan_ranges = true;
 -- result:
-[]
 -- !result
 set connector_incremental_scan_ranges_size = 1;
 -- result:
-[]
 -- !result
 create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive",
     "hive.metastore.uris"="${hive_metastore_uris}",
@@ -14,7 +12,6 @@ create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive",
     "aws.s3.endpoint"="${oss_endpoint}"
 );
 -- result:
-[]
 -- !result
 select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy order by col_int, col_date;
 -- result:
@@ -37,5 +34,4 @@ select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet or
 -- !result
 drop catalog hive_sql_test_${uuid0}
 -- result:
-[]
 -- !result
