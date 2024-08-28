@@ -18,16 +18,9 @@
   "dependencies": {
     "@algolia/client-search": "^4.20.0",
     "@docsearch/react": "3",
-<<<<<<< HEAD
-    "@docusaurus/core": "^3.1.1",
-    "@docusaurus/plugin-client-redirects": "^3.1.1",
-    "@docusaurus/preset-classic": "^3.1.1",
-    "@docusaurus/theme-search-algolia": "^3.1.1",
-=======
     "@docusaurus/core": "^3.5.2",
     "@docusaurus/preset-classic": "^3.5.2",
     "@docusaurus/theme-search-algolia": "^3.5.2",
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
     "docusaurus-plugin-hubspot": "^1.0.1",

@@ -297,11 +297,7 @@ You can view the asynchronous materialized views in your database by using [SHOW
   SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
-<<<<<<< HEAD
 - Check all asynchronous materialized views by querying the metadata table `materialized_views` in Information Schema. For more information, please refer to [information_schema.materialized_views](../sql-reference/information_schema.md#materialized_views).
-=======
-- Check all asynchronous materialized views by querying the metadata view `materialized_views` in Information Schema. For more information, please refer to [information_schema.materialized_views](../sql-reference/information_schema/materialized_views.md).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
   ```SQL
   SELECT * FROM information_schema.materialized_views;
@@ -317,11 +313,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### Check the execution status of asynchronous materialized view
 
-<<<<<<< HEAD
 You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' [Information Schema](../sql-reference/information_schema.md).
-=======
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../sql-reference/information_schema/tasks.md) and [`task_runs`](../sql-reference/information_schema/task_runs.md) in [Information Schema](../sql-reference/information_schema/information_schema.md).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 The following example checks the execution status of the materialized view that was created most recently:
 

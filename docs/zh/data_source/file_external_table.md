@@ -10,15 +10,9 @@ displayed_sidebar: docs
 
 ## 使用限制
 
-<<<<<<< HEAD
-- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 来查询集群下的 catalog。
+- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 来查询集群下的 catalog。
 - 仅支持查询 Parquet 和 ORC 格式的数据文件。
 - 目前**仅支持读取**目标数据文件中的数据，不支持例如 INSERT，DELETE，DROP 等**写入**操作。
-=======
-- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 来查询集群下的 catalog。
-- 仅支持查询 Parquet、ORC、Avro、RCFile、或 SequenceFile 格式的数据文件。
-- 目前**仅支持读取**目标数据文件中的数据，不支持例如 INSERT、DELETE、DROP 等**写入**操作。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ## 前提条件
 

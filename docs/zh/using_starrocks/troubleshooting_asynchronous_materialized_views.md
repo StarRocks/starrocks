@@ -292,27 +292,10 @@ REFRESH ASYNC
 PROPERTIES ( 'session.enable_spill'='true' )
 AS <query>;
 
-<<<<<<< HEAD
 -- 添加属性。
 ALTER MATERIALIZED VIEW mv2 
     SET ('session.enable_spill' = 'true');
 ```
-=======
-  v3.2 之前版本中，物化视图刷新任务的默认超时时间为 5 分钟，v3.2 版本之后默认为 1 小时。当遇到超时异常时，可以尝试修改超时时间：
-
-  ```SQL
-  ALTER MATERIALIZED VIEW mv2 SET ( 'session.query_timeout' = '4000' );
-  ```
-
-- **分析物化视图性能瓶颈**
-
-  如果物化视图计算复杂，其本身计算耗时就会很久。您可以通过 Query Profile 分析性能瓶颈，并进行优化：
-
-  1. 通过查询 `information_schema.task_runs` 获取刷新任务的 `query_id`。
-  2. 通过上述的 `query_id`，获取并分析其 Query Profile。
-     - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): 根据 `query_id` 获取原始 Query Profile。
-     - [ANALYZE PROFILE](../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): 以 Fragment 为单位分析 Query Profile，并以树形结构展示。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ### 物化视图不可用
 
@@ -348,11 +331,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-<<<<<<< HEAD
 - 使用 SHOW PROCESSLIST 和 KILL 语句终止正在运行的刷新任务：
-=======
-- 通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 终止正在运行的刷新任务。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
   ```SQL
   -- 获取正在运行的刷新任务的 ConnectionId。

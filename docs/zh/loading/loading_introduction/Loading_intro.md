@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD
-displayed_sidebar: "Chinese"
-=======
 displayed_sidebar: docs
 toc_max_heading_level: 3
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # 导入总览
@@ -138,11 +134,7 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulat
 
 - 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。
 
-<<<<<<< HEAD
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
-=======
-### [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ![数据源与导入方式关系图](../../_assets/4.1-3.png)
 
@@ -150,11 +142,7 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulat
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-<<<<<<< HEAD
 不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../loading/StreamLoad.md)、[Broker Load](../../loading/hdfs_load.md)、[Routine Load](../../loading/RoutineLoad.md)、[Spark Load](../../loading/SparkLoad.md) 和 [INSERT](../../loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
-=======
-### [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](#系统配置)”章节。
 
@@ -164,13 +152,9 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulat
 
 导入数据时，您可以指定不导入数据文件中某个字段的数据，这种情况下：
 
-<<<<<<< HEAD
 - 如果您在创建 StarRocks 表时使用 `DEFAULT` 关键字给该字段对应的目标列指定了默认值，则 StarRocks 在导入时该行数据时会自动往该列填充 `DEFAULT` 中指定的默认值。
-=======
-### [Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
-  [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
+  [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
 
   > **说明**
   >
@@ -186,11 +170,7 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulat
 
 有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
-<<<<<<< HEAD
 ### 设置数据导入安全等级
-=======
-### [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
 
@@ -198,11 +178,7 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulat
 
 本节解释对所有导入方式均适用的参数配置。
 
-<<<<<<< HEAD
 ### FE 配置
-=======
-### [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 您可以通过修改每个 FE 的配置文件 **fe.conf** 来设置如下参数：
 

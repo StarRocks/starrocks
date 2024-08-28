@@ -16,29 +16,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name LIKE [database.]ta
 
 说明:
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md
 1. 复制的表结构包括 Column Defination、Partitions、Table Properties 等。
 2. 用户需要对复制的原表有 `SELECT` 权限，权限控制请参考 [GRANT](../account-management/GRANT.md) 章节。
 3. 支持复制 MySQL 等外表。
-=======
-```sql
-CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]<table_name>
-[partition_desc]
-[distribution_desc]
-[PROPERTIES ("key" = "value",...)]
-LIKE [database.]<source_table_name>
-```
-
-## 参数说明
-
-- `TEMPORARY`：创建临时表。从 v3.3.1 版本开始，StarRocks 支持在 Default Catalog 中创建临时表。更多信息，请参见 [临时表](../../../table_design/StarRocks_table_design.md#临时表)。
-- `database`：数据库。
-- `table_name`：要创建的表的名称。有关表名的命令要求，参见[系统限制](../../System_limit.md)。
-- `source_table_name`：要拷贝的表的名称。
-- `partition_desc`：分区方式。更多信息，参见 [CREATE TABLE](CREATE_TABLE.md#partition_desc)。
-- `distribution_desc`：分桶方式。更多信息，参见 [CREATE TABLE](CREATE_TABLE.md#distribution_desc)。
-- `PROPERTIES`：表的属性。支持所有表属性。更多信息，参见 [ALTER TABLE](ALTER_TABLE.md#修改表的属性)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md
 
 ## 示例
 

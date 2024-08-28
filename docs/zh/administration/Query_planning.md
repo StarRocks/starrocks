@@ -375,36 +375,9 @@ CREATE MATERIALIZED VIEW mv
 
 ### Join Hint
 
-<<<<<<< HEAD
 针对多表关联查询，优化器一般会主动选择最优的 Join 执行方式。在特殊情况下，您也可以使用 Join Hint 显式地向优化器建议 Join 执行方式、以及禁用 Join Reorder。目前 Join Hint 支持的 Join 执行方式有 Shuffle Join、Broadcast Join、Bucket Shuffle Join 和 Colocate Join。
 
 当您使用 Join Hint 建议 Join 的执行方式后，优化器不会进行 Join Reorder，因此您需要确保右表为较小的表。并且当您所建议的 Join 执行方式为 [Colocate Join](../using_starrocks/Colocate_join.md) 或者 Bucket Shuffle Join 时，您需要确保表的数据分布情况满足这两种 Join 执行方式的要求，否则所建议的 Join 执行方式不生效。
-=======
-在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../sql-reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
-
-相比于[用户自定义变量的一般用法](../sql-reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
-
-#### 语法
-
-```SQL
-[...] SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
-INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
-```
-
-#### 示例
-
-如下 SELECT 语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以使用 `SET_USER_VARIABLE` hint，将这两个标量子查询设置为用户自定义变量，然后执行查询。
-
-```SQL
-SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ * FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
-```
-
-### Join hint
-
-针对多表关联查询，优化器一般会主动选择最优的 Join 执行方式。在特殊情况下，您也可以使用 Join hint 显式地向优化器建议 Join 执行方式、以及禁用 Join Reorder。目前 Join hint 支持的 Join 执行方式有 Shuffle Join、Broadcast Join、Bucket Shuffle Join 和 Colocate Join。
-
-当您使用 Join hint 建议 Join 的执行方式后，优化器不会进行 Join Reorder，因此您需要确保右表为较小的表。并且当您所建议的 Join 执行方式为 [Colocate Join](../using_starrocks/Colocate_join.md) 或者 Bucket Shuffle Join 时，您需要确保表的数据分布情况满足这两种 Join 执行方式的要求，否则所建议的 Join 执行方式不生效。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 #### 语法
 

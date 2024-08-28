@@ -8,22 +8,7 @@ displayed_sidebar: docs
 
 为 ETL 语句创建异步任务。此功能自 StarRocks 2.5 起支持。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md
-StarRocks v3.0 支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。
-=======
-您可将该语句用于以下场景：
-
-- 创建长时间运行的后台任务（从 v2.5 开始支持）
-- 创建定期执行的任务（从 v3.3 开始支持）
-
-支持的语句包括：
-
-- [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（从 v3.0 开始支持）
-- [INSERT](../INSERT.md)（从 v3.0 开始支持）
-- [CACHE SELECT](../../../../data_source/data_cache_warmup.md)（从 v3.3 开始支持）
-
-您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md
+StarRocks v3.0 支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../INSERT.md) 创建异步任务。
 
 您可以使用 [DROP TASK](DROP_TASK.md) 删除异步任务。
 
@@ -35,19 +20,10 @@ SUBMIT TASK [task_name] AS <etl_statement>
 
 ## 参数说明
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md
 | **参数**      | **说明**                                                     |
 | ------------- | ------------------------------------------------------------ |
 | task_name     | 任务名称。                                                   |
-| etl_statement | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。 |
-=======
-| **参数**      | **是否必须** | **描述**                                                                                     |
-| ------------- | ------------ | ----------------------------------------------------------------------------------------- |
-| task_name          | 是      | 任务名称。                                                                                   |
-| schedule_start     | 否      | 定时任务的开始时间。                                                                           |
-| schedule_interval  | 否      | 定时任务的执行间隔，最小间隔为 10 秒。                                                           |
-| etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../INSERT.md) |
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md
+| etl_statement | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../INSERT.md) 创建异步任务。 |
 
 ## 使用说明
 

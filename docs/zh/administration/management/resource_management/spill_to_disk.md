@@ -56,30 +56,6 @@ displayed_sidebar: docs
    | enable_spill | false      | 是否启用中间结果落盘。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。 |
    | spill_mode   | auto       | 中间结果落盘的执行方式。有效值：`auto`：达到内存使用阈值时，会自动触发落盘。`force`：无论内存使用情况如何，StarRocks 都会强制落盘所有相关算子的中间结果。此变量仅在变量 `enable_spill` 设置为 `true` 时生效。 |
 
-<<<<<<< HEAD
-=======
-## [Preview] 将中间结果落盘至对象存储
-
-自 v3.3.0 起，StarRocks 支持将中间结果落盘至对象存储。
-
-:::tip
-在启用将对象存储落盘功能之前，您必须创建一个存储卷来指定您想要使用的对象存储。有关创建存储卷的详细说明，请参阅 [CREATE STORAGE VOLUME](../../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
-:::
-
-在上一步中开启落盘之后，您可以进一步设置以下系统变量，以允许将中间结果落盘至对象存储：
-
-```SQL
-SET enable_spill_to_remote_storage = true;
-
--- 将 <storage_volume_name> 替换为您想要使用的存储卷的名称。
-SET spill_storage_volume = '<storage_volume_name>';
-```
-
-启用将中间结果落盘至对象存储后，触发落盘的查询的中间结果将首先存储在 BE 或 CN 节点的本地磁盘上，如果本地磁盘的容量限制已达到上限，中间结果将会存储至对象存储。
-
-请注意，如果您在 `spill_storage_volume` 中指定的存储卷不存在，则不会启用将对象存储落盘。
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ## 使用限制
 
 - 中间结果落盘无法解决所有内存不足问题。例如，StarRocks 无法释放用于表达式计算的内存。

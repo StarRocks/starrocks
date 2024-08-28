@@ -116,7 +116,7 @@ PROPERTIES (
 
    > - 自 2.3.0 版本起，StarRocks 支持配置该参数。
    > - 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
-   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#修改表的属性) 。
+   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#修改表的属性) 。
    > - 自 3.1 版本起，存算分离模式支持创建主键模型表，并且自 3.1.4 版本起，支持基于本地磁盘上的持久化索引。
 
 - 如果未开启持久化索引，导入时主键索引存在内存中，可能会导致占用内存较多。因此建议您遵循如下建议：
@@ -146,38 +146,5 @@ PROPERTIES (
 
 ## 下一步
 
-<<<<<<< HEAD
 建表完成后，您可以创建导入作业，导入数据至表中。具体导入方式，请参见[导入总览](../../loading/loading_introduction/Loading_intro.md)。
-如果需要更新主键模型表的数据，您可以通过[导入](../../loading/Load_to_Primary_Key_tables.md)或执行 DML 语句（[UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md) 或 [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)）实现，并且更新操作是原子性的。
-=======
-- **数据有冷热特征**，即最近几天的热数据才经常被修改，老的冷数据很少被修改。例如，MySQL 订单表实时同步到 StarRocks 中提供分析查询。其中，数据按天分区，对订单的修改集中在最近几天新创建的订单，老的订单完成后就不再更新，因此导入时老订单的主键索引就不会加载，也就不会占用内存，内存中仅会加载最近几天的主键索引。如图所示，数据按天分区，最新两个分区的数据更新比较频繁。
-
-   ![pk5](../../_assets/table_design/pk5.png)
-
-- **大宽表**（数百到数千列）。主键只占整个数据的很小一部分，其内存开销比较低。比如用户状态和画像表，虽然列非常多，但总的用户数不大（千万至亿级别），主键索引内存占用相对可控。 如图所示，大宽表中主键只占一小部分，且数据行数不多。
-   ![pk6](../../_assets/table_design/pk6.png)
-
-</TabItem>
-  </Tabs>
-
-### 排序键
-
-自 3.0 起，主键表解耦了排序键和主键，排序键由 `ORDER BY` 定义的排序列组成，可以为任意列的排列组合，只要列的数据类型满足排序键的要求。
-
-导入数据时数据按照排序键排序后存储，并且排序键还用于构建前缀索引，能够加速查询。建议您[设计合理排序键，以便查询利用前缀索引加速](../indexes/Prefix_index_sort_key.md#如何设计合理排序键以便查询利用前缀索引加速)。
-
-:::info
-
-- 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
-- 建表后支持通过 `ALTER TABLE ... ORDER BY ...` 修改排序键。不支持删除排序键，不支持修改排序列的数据类型。
-
-:::
-
-## 更多信息
-
-- 建表后导入数据，您可以参考[导入概览](../../loading/loading_introduction/Loading_intro.md)选择合适的导入方式。
-- 如果需要对主键表中数据进行变更，则可以参考 [通过导入实现数据变更](../../loading/Load_to_Primary_Key_tables.md) 或者 DML 语句（[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md)、[DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)）。
-- 如果您需要进一步加速查询，则可以参考[查询加速](../../cover_pages/query_acceleration.mdx)。
-- 如果需要修改表结构，则可以参考 [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)。
-- [自增列](../../sql-reference/sql-statements/generated_columns.md)可作为生成主键。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+如果需要更新主键模型表的数据，您可以通过[导入](../../loading/Load_to_Primary_Key_tables.md)或执行 DML 语句（[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md) 或 [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md）实现，并且更新操作是原子性的。

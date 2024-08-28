@@ -89,8 +89,4 @@ You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](
     ALTER TABLE table1 SET ("bloom_filter_columns" = "");
     ```
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bloomfilter_index.md
-> Note: Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md). You can run only one alter index task on a table each time.
-=======
-> Note: Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md). You can run only one alter index task on a table each time.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/table_design/indexes/Bloomfilter_index.md
+> Note: Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md). You can run only one alter index task on a table each time.

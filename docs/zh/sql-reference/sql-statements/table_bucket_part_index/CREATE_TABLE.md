@@ -33,17 +33,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
 ### **column_definition**
-=======
-- 关于建表时对于表名、列名、分区名、索引名的命名要求，参见[系统限制](../../System_limit.md)。
-
-- 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
-
-:::
-
-### column_definition
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 
 语法：
 
@@ -166,11 +156,6 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 **从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-=======
-**从 3.2 版本起，支持直接在 Hive Catalog 内创建 Parquet 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Parquet 格式的 Hive 表中。从 3.3 版本起，支持直接在 Hive Catalog 中创建 ORC 及 Textfile 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 ORC 及 Textfile 格式的 Hive 表中。参见[创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)和[向 Hive 表中插入数据](../../../data_source/catalog/hive_catalog.md#向-hive-表中插入数据)。**
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
     ```sql
@@ -307,21 +292,12 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
     使用指定的 key 列和指定的数值范围进行分区。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
     * 分区名称仅支持字母开头，由字母、数字和下划线组成。
     * 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
     * 分区为左闭右开区间，首个分区的左边界为最小值。
     * NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     * 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
     * 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
-=======
-    - 分区名称的命名要求，参见[系统限制](../../System_limit.md)。
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
-    - 分区为左闭右开区间，首个分区的左边界为最小值。
-    - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
-    - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
-    - 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 
     注意：
 
@@ -560,11 +536,7 @@ PROPERTIES (
   
       例如建表时指定 `"storage_cooldown_ttl"="1 DAY"`，建表后存在分区 `p20230801` ，其范围为 `[2023-08-01 00:00:00,2023-08-02 00:00:00)`，则该分区的自动降冷时间点是 `2023-08-03 00:00:00`，即 `2023-08-02 00:00:00 + 1 DAY`。如果建表时指定 `"storage_cooldown_ttl"="0 DAY"`，则该分区自动降冷时间点是 `2023-08-02 00:00:00`。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-  * `storage_cooldown_time`：该表自动降冷**时间点**（绝对时间）。数据在该时间点之后数据从 SSD 自动降冷到 HDD，设置的时间必须大于当前时间。取值格式为："yyyy-MM-dd HH:mm:ss"。如果需要不同分区具有不同自动降冷时间点，则需要执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md) 手动指定。
-=======
-  - `storage_cooldown_time`：该表自动降冷**时间点**（绝对时间）。数据在该时间点之后数据从 SSD 自动降冷到 HDD，设置的时间必须大于当前时间。取值格式为："yyyy-MM-dd HH:mm:ss"。如果需要不同分区具有不同自动降冷时间点，则需要执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md) 手动指定。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
+  * `storage_cooldown_time`：该表自动降冷**时间点**（绝对时间）。数据在该时间点之后数据从 SSD 自动降冷到 HDD，设置的时间必须大于当前时间。取值格式为："yyyy-MM-dd HH:mm:ss"。如果需要不同分区具有不同自动降冷时间点，则需要执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](./ALTER_TABLE.md) 手动指定。
 
   **使用说明**
 
@@ -761,22 +733,8 @@ PROPERTIES (
 
 * `enable_async_write_back`：是否允许数据异步写入对象存储。默认值：`false`。
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
   * 当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
   * 当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
-=======
-  - 当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
-  - 当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
-
-#### 设置 fast schema evolution
-
-`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。
-
-> **NOTE**
->
-> - StarRocks 存算一体集群自 v3.2.0 版本起支持该参数，存算分离集群自 v3.3.0 起支持该参数。
-> - 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 
 ## 示例
 
@@ -1098,16 +1056,8 @@ PROPERTIES(
 
 ## References
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-* [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
-* [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
+* [SHOW CREATE TABLE](./SHOW_CREATE_TABLE.md)
+* [SHOW TABLES](./SHOW_TABLES.md)
 * [USE](USE.md)
-* [ALTER TABLE](ALTER_TABLE.md)
-* [DROP TABLE](DROP_TABLE.md)
-=======
-- [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
-- [SHOW TABLES](SHOW_TABLES.md)
-- [USE](../Database/USE.md)
-- [ALTER TABLE](ALTER_TABLE.md)
-- [DROP TABLE](DROP_TABLE.md)
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
+* [ALTER TABLE](./ALTER_TABLE.md)
+* [DROP TABLE](./DROP_TABLE.md)

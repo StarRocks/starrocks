@@ -109,11 +109,7 @@ displayed_sidebar: docs
 
 ### Broker
 
-<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md
-- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/cloud_storage_load.md)。
-=======
-- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 导入](../../../../loading/hdfs_load.md)或[从云存储导入](../../../../loading/cloud_storage_load.md)。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md
+- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 导入](../../../../loading/hdfs_load.md)和[从云存储导入](../../../../loading/cloud_storage_load.md)。
 
     ```SQL
     ALTER SYSTEM ADD BROKER broker_name "host:port"[, ...]
