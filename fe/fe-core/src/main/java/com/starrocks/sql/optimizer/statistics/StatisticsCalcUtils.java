@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsCalcUtils {
@@ -121,20 +122,20 @@ public class StatisticsCalcUtils {
                 // For example, a large amount of data LOAD may cause the number of rows to change greatly.
                 // This leads to very inaccurate row counts.
                 long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
-                Map<Long, TableStatistic> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                         .getTableStatistics(table.getId(), selectedPartitions);
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
-                    TableStatistic tableStatistic =
-                            tableStatisticMap.getOrDefault(partition.getId(), TableStatistic.unknown());
+                    Optional<Long> tableStatistic =
+                            tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
                     LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                    if (tableStatistic.equals(TableStatistic.unknown())) {
+                    if (tableStatistic.isEmpty()) {
                         partitionRowCount = partition.getRowCount();
                         if (updateDatetime.isAfter(lastWorkTimestamp)) {
                             partitionRowCount += deltaRows;
                         }
                     } else {
-                        partitionRowCount = tableStatistic.getRowCount();
+                        partitionRowCount = tableStatistic.get();
                         if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
                             partitionRowCount += deltaRows;
                         }
@@ -184,17 +185,13 @@ public class StatisticsCalcUtils {
 
     private static long deltaRows(Table table, long totalRowCount) {
         long tblRowCount = 0L;
-        Map<Long, TableStatistic> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+        Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), table.getPartitions());
 
         for (Partition partition : table.getPartitions()) {
             long partitionRowCount;
-            TableStatistic statistic = tableStatisticMap.getOrDefault(partition.getId(), TableStatistic.unknown());
-            if (statistic.equals(TableStatistic.unknown())) {
-                partitionRowCount = partition.getRowCount();
-            } else {
-                partitionRowCount = statistic.getRowCount();
-            }
+            Optional<Long> statistic = tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
+            partitionRowCount = statistic.orElseGet(partition::getRowCount);
             tblRowCount += partitionRowCount;
         }
         if (tblRowCount < totalRowCount) {
