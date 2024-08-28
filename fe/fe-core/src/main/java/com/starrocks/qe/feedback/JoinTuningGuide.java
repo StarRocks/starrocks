@@ -15,6 +15,7 @@
 package com.starrocks.qe.feedback;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.feedback.skeleton.DistributionNode;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
@@ -28,6 +29,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.Optional;
+
+import static com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule.JOIN_COMMUTATIVITY_MAP;
 
 public class JoinTuningGuide implements TuningGuide {
 
@@ -82,13 +85,6 @@ public class JoinTuningGuide implements TuningGuide {
 
         OptExpression leftChild = optExpression.getInputs().get(0);
         OptExpression rightChild = optExpression.getInputs().get(1);
-        PhysicalHashJoinOperator joinOp = new PhysicalHashJoinOperator(
-                joinOperator.getJoinType(),
-                joinOperator.getOnPredicate(),
-                joinOperator.getJoinHint(),
-                joinOperator.getLimit(),
-                joinOperator.getPredicate(),
-                joinOperator.getProjection());
 
         JoinHelper originalHelper = JoinHelper.of(joinOperator, leftChild.getRowOutputInfo().getOutputColumnRefSet(),
                 rightChild.getRowOutputInfo().getOutputColumnRefSet());
@@ -113,7 +109,7 @@ public class JoinTuningGuide implements TuningGuide {
                             .build();
 
                     return Optional.of(OptExpression.builder().with(optExpression)
-                            .setOp(joinOp)
+                            .setOp(buildJoinOperator(joinOperator, true))
                             .setInputs(Lists.newArrayList(rightChild.getInputs().get(0), newRightChild))
                             .build());
                 } else if (leftSize < rightSize && !commuteJoinHelper.onlyBroadcast()) {
@@ -137,7 +133,7 @@ public class JoinTuningGuide implements TuningGuide {
                             .build();
 
                     return Optional.of(OptExpression.builder().with(optExpression)
-                            .setOp(joinOp)
+                            .setOp(buildJoinOperator(joinOperator, true))
                             .setInputs(Lists.newArrayList(newLeftChild, newRightChild))
                             .build());
                 } else if (leftSize >= rightSize && !originalHelper.onlyBroadcast()) {
@@ -161,7 +157,7 @@ public class JoinTuningGuide implements TuningGuide {
                             .build();
 
                     return Optional.of(OptExpression.builder().with(optExpression)
-                            .setOp(joinOp)
+                            .setOp(buildJoinOperator(joinOperator, false))
                             .setInputs(Lists.newArrayList(newLeftChild, newRightChild))
                             .build());
                 }
@@ -181,14 +177,14 @@ public class JoinTuningGuide implements TuningGuide {
                             .setInputs(leftChild.getInputs())
                             .build();
                     return Optional.of(OptExpression.builder().with(optExpression)
-                            .setOp(joinOp)
+                            .setOp(buildJoinOperator(joinOperator, true))
                             .setInputs(Lists.newArrayList(rightChild.getInputs().get(0), newRightChild))
                             .build());
-                } else if (leftSize < rightSize) {
+                } else if (leftSize < rightSize && !commuteJoinHelper.onlyBroadcast()) {
                     // original plan: medium table(shuffle) inner join large table(shuffle)
                     // rewrite to: large table(shuffle) inner join medium table(shuffle)
                     return Optional.of(OptExpression.builder().with(optExpression)
-                            .setOp(joinOp)
+                            .setOp(buildJoinOperator(joinOperator, true))
                             .setInputs(Lists.newArrayList(rightChild, leftChild))
                             .build());
                 }
@@ -210,7 +206,7 @@ public class JoinTuningGuide implements TuningGuide {
                             .build();
 
                     return Optional.of(OptExpression.builder().with(optExpression)
-                            .setOp(joinOp)
+                            .setOp(buildJoinOperator(joinOperator, false))
                             .setInputs(Lists.newArrayList(leftChild.getInputs().get(0), newRightChild))
                             .build());
                 }
@@ -218,6 +214,20 @@ public class JoinTuningGuide implements TuningGuide {
         }
 
         return Optional.empty();
+    }
+
+    private PhysicalHashJoinOperator buildJoinOperator(PhysicalHashJoinOperator joinOperator, boolean needCommute) {
+        JoinOperator joinType = joinOperator.getJoinType();
+        if (needCommute) {
+            joinType = JOIN_COMMUTATIVITY_MAP.get(joinOperator.getJoinType());
+        }
+        return new PhysicalHashJoinOperator(
+                joinType,
+                joinOperator.getOnPredicate(),
+                joinOperator.getJoinHint(),
+                joinOperator.getLimit(),
+                joinOperator.getPredicate(),
+                joinOperator.getProjection());
     }
 
     private boolean isShuffleJoin(SkeletonNode leftChildNode, SkeletonNode rightChildNode) {
