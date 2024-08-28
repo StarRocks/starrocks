@@ -7,13 +7,8 @@ toc_max_heading_level: 5
 
 A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake data sources as a unified data source without ingestion. With unified catalogs, you can:
 
-<<<<<<< HEAD
 - Directly query data stored in Hive, Iceberg, Hudi, and Delta Lake without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
-=======
-- Directly query data stored in Hive, Iceberg, Hudi, Delta Lake, and Kudu without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, Delta Lake, and Kudu and load the data into StarRocks.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
 - Perform operations on StarRocks to create or drop Hive and Iceberg databases and tables.
 
 To ensure successful SQL workloads on your unified data source, your StarRocks cluster must be able to access the storage system and metastore of your unified data source. StarRocks supports the following storage systems and metastores:
@@ -829,11 +824,7 @@ To query data from a unified catalog, follow these steps:
 
 ## Load data from Hive, Iceberg, Hudi, or Delta Lake
 
-<<<<<<< HEAD
-You can use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
-=======
-You can use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to load the data of a Hive, Iceberg, Hudi, Delta Lake, or Kudu table into a StarRocks table created within a unified catalog.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+You can use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
 
 The following example loads the data of the Hive table `hive_table` into the StarRocks table `test_tbl` created in the database `test_database` that belongs to the unified catalog `unified_catalog`:
 
