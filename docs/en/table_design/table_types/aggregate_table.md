@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Aggregate table
@@ -84,7 +84,7 @@ DISTRIBUTED BY HASH(site_id);
 
 - **Value column**: Define a column as the value column by specifying an aggregate function after the column name. This column generally holds data that needs to be aggregated.
 
-- **Aggregate function**: The aggregate function used for the value column. For supported aggregate functions for the Aggregate tables, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+- **Aggregate function**: The aggregate function used for the value column. For supported aggregate functions for the Aggregate tables, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
 - **Sort key**
 

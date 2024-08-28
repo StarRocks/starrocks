@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 查询队列
@@ -119,7 +119,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 ### SHOW PROC
 
-通过 [SHOW PROC](../../../sql-reference/sql-statements/Administration/SHOW_PROC.md) 查看 BE 节点运行查询的数量、内存和 CPU 使用情况：
+通过 [SHOW PROC](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) 查看 BE 节点运行查询的数量、内存和 CPU 使用情况：
 
 ```Plain
 mysql> SHOW PROC '/backends'\G
@@ -132,7 +132,7 @@ mysql> SHOW PROC '/backends'\G
 
 ### SHOW PROCESSLIST
 
-通过 [SHOW PROCESSLIST](../../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）：
+通过 [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）：
 
 ```Plain
 MySQL [(none)]> SHOW PROCESSLIST;

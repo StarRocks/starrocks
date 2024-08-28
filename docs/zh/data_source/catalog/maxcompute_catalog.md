@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
@@ -9,7 +9,7 @@ StarRocks 从 3.3 版本开始支持 Alibaba Cloud MaxCompute (即以前的 ODPS
 
 MaxCompute Catalog 是一种 External Catalog。通过 MaxCompute Catalog，您不需要执行数据导入就可以直接查询 MaxCompute 里的数据。
 
-此外，您还可以基于 MaxCompute Catalog，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
+此外，您还可以基于 MaxCompute Catalog，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力来实现数据转换和导入。
 
 ## 使用说明
 
@@ -113,13 +113,13 @@ PROPERTIES
 
 ## 查看 MaxCompute Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 MaxCompute Catalog `odps_catalog` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 MaxCompute Catalog `odps_catalog` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG odps_catalog;
@@ -127,7 +127,7 @@ SHOW CREATE CATALOG odps_catalog;
 
 ## 删除 MaxCompute Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 MaxCompute Catalog `odps_catalog`：
 
@@ -153,31 +153,31 @@ DROP CATALOG odps_catalog;
 
 ## 查询 MaxCompute 表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 MaxCompute Catalog 中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 MaxCompute Catalog 中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：
+2. 通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 切换当前会话生效的 Catalog：
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+   再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话生效的数据库：
 
    ```SQL
    USE <db_name>;
    ```
 
-   或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+   或者，也可以通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
@@ -227,7 +227,7 @@ TIMESTAMP 类型在 StarRocks 中由于类型转换，会损失精度。
 
 由于 MaxCompute Catalog 在当前版本还无法自动采集 MaxCompute 表的 CBO 统计信息，导致某些情况下优化器无法做出最优的查询计划。在这种情况下，手动扫描 MaxCompute 表的 CBO 统计信息，并导入到 StarRocks 中，可以有效优化查询时间。
 
-假设有一个 MaxCompute 表，表名为 `mc_table`, 您可以通过 [ANALYZE TABLE](../../sql-reference/sql-statements/data-definition/ANALYZE_TABLE.md) 创建手动采集任务，进行 CBO 统计信息采集：
+假设有一个 MaxCompute 表，表名为 `mc_table`, 您可以通过 [ANALYZE TABLE](../../sql-reference/sql-statements/cbo_stats/ANALYZE_TABLE.md) 创建手动采集任务，进行 CBO 统计信息采集：
 
 ```SQL
 ANALYZE TABLE mc_table;
@@ -235,7 +235,7 @@ ANALYZE TABLE mc_table;
 
 ## 手动更新元数据缓存
 
-默认情况下，StarRocks 会缓存 MaxCompute 的元数据，从而提高查询性能。因此，当对 MaxCompute 表做了表结构变更或其他表更新后，您可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间获取到新的元数据信息：
+默认情况下，StarRocks 会缓存 MaxCompute 的元数据，从而提高查询性能。因此，当对 MaxCompute 表做了表结构变更或其他表更新后，您可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间获取到新的元数据信息：
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]

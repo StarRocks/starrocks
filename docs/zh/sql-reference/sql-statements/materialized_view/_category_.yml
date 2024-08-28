@@ -1,0 +1,6 @@
+position: 100 # float position is supported
+label: '物化视图'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

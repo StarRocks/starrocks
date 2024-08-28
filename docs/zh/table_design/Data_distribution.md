@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['fenqu','fentong', 'lengre']
 toc_max_heading_level: 4
 description: 分区与分桶
@@ -546,7 +546,7 @@ DISTRIBUTED BY HASH(site_id);
 
 执行如下语句，删除 `site_access` 表中分区 p1 及数据：
 
-> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md)恢复分区及数据。
+> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../sql-reference/sql-statements/backup_restore/RECOVER.md)恢复分区及数据。
 
 ```SQL
 ALTER TABLE site_access
@@ -723,7 +723,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   :::warning
 
   - 如果需要启用按需动态增加分桶数量，您需要设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
-  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 成功后才能回滚。
 
   :::
 
@@ -834,7 +834,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   :::warning
 
   - 如果需要启用按需动态增加分桶数量，您需要设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
-  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 成功后才能回滚。
 
   :::
 
@@ -906,13 +906,13 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 #### 查看分桶数量
 
-如果查看分区中分桶数量，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md)。
+如果查看分区中分桶数量，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md)。
 
 :::info
 
 - 如果是随机分桶表并且开启按需动态增加分桶数量，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示的是分区**当前**的分桶数量。
 
-- 如果是随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此  [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+- 如果是随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此  [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
 
 :::
 
@@ -944,7 +944,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ALTER TABLE t ORDER BY k2, k1;
     ```
 
-更多信息，参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 。
+更多信息，参见 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 。
 
 ## 最佳实践
 

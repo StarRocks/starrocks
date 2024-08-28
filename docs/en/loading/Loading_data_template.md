@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 unlisted: true
 ---
 
@@ -397,4 +397,4 @@ INSERT INTO user_behavior_declared
 - This document only covered IAM user-based authentication. For other options please see [authenticate to AWS resources](../integrations/authenticate_to_aws_resources.md).
 - The [AWS CLI Command Reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html) covers the S3 URI in detail.
 - Learn more about [table design](../table_design/StarRocks_table_design.md).
-- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用物化视图加速数据湖查询
@@ -101,7 +101,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
   > **说明**
   >
-  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
+  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
 
 请注意，如需按照分区刷新，物化视图的分区键必须包含在基表的分区键中。
 
@@ -135,7 +135,7 @@ FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
 
 对于 Hive Catalog，您可以启用 Hive 元数据缓存刷新功能，允许 StarRocks 在分区级别检测数据更改。启用此功能后，StarRocks 定期访问 Hive 元数据存储服务（HMS）或 AWS Glue，以检查最近查询的热数据的元数据信息。
 
-要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
+要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
 
 ### 配置名称                                           
 

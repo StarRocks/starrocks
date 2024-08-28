@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 【公测中】从 Apache® Pulsar™ 持续导入
@@ -46,7 +46,7 @@ Topic 负责存储和发布消息。Producer 往 Topic 中写消息，Consumer �
 
 ## 创建导入作业
 
-通过 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 语句，向StarRocks 提交一个 Routine Load 导入作业 `routine_wiki_edit_1`，持续消费 Pulsar 集群中 Topic `ordertest1`  的消息， 并且使用 Subscription  `load-test`，指定消费分区为 `load-partition-0`，`load-partition-1`，分区对应的消费起始 Position 分别为 Partition 有数据的位置开始消费、Partition 末尾开始消费。并导入至数据库 `load_test` 的表 `routine_wiki_edit` 中。
+通过 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 语句，向StarRocks 提交一个 Routine Load 导入作业 `routine_wiki_edit_1`，持续消费 Pulsar 集群中 Topic `ordertest1`  的消息， 并且使用 Subscription  `load-test`，指定消费分区为 `load-partition-0`，`load-partition-1`，分区对应的消费起始 Position 分别为 Partition 有数据的位置开始消费、Partition 末尾开始消费。并导入至数据库 `load_test` 的表 `routine_wiki_edit` 中。
 
 ```SQL
 CREATE ROUTINE LOAD load_test.routine_wiki_edit_1 ON routine_wiki_edit
@@ -93,7 +93,7 @@ Routine Load 还支持自定义 Pulsar 参数，如下表所述。
 
 ### 查看导入作业
 
-提交 Routine Load 导入作业以后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句来查看导入作业的信息。例如，您可以通过如下命令查看一个名为 `routine_wiki_edit_1` 的导入作业的信息：
+提交 Routine Load 导入作业以后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) 语句来查看导入作业的信息。例如，您可以通过如下命令查看一个名为 `routine_wiki_edit_1` 的导入作业的信息：
 
 ```Plaintext
 MySQL [load_test] > SHOW ROUTINE LOAD for routine_wiki_edit_1 \G
@@ -123,7 +123,7 @@ ReasonOfStateChanged:
 
 ### 查看导入任务
 
-提交 Routine Load 导入作业以后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看导入作业中一个或多个导入任务的信息。例如，您可以通过如下命令查看一个名为 `routine_wiki_edit_1`的导入作业中一个或多个导入任务的信息。比如当前有多少任务正在运行，消费分区及进度`DataSourceProperties`，以及对应的 Coordinator BE 节点 `BeId`。
+提交 Routine Load 导入作业以后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)，查看导入作业中一个或多个导入任务的信息。例如，您可以通过如下命令查看一个名为 `routine_wiki_edit_1`的导入作业中一个或多个导入任务的信息。比如当前有多少任务正在运行，消费分区及进度`DataSourceProperties`，以及对应的 Coordinator BE 节点 `BeId`。
 
 ```SQL
 MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "routine_wiki_edit_1" \G
@@ -133,11 +133,11 @@ MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "routine_wiki_edit_1"
 
 ## 修改导入作业
 
-修改前，您需要先执行 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD.md) 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
+修改前，您需要先执行 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/PAUSE_ROUTINE_LOAD.md) 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME R../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.mdUTINE_LOAD.md)，恢复导入作业。然后执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
 
 消费 Pulsar 集群中的数据，除了 `data_source_properties` 外的参数修改方式与[消费 Kafka](./RoutineLoad.md#修改导入作业)  时相同。
 
-修改前，您需要先执行 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD.md) 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
+修改前，您需要先执行 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/PAUSE_ROUTINE_LOAD.md) 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME R../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.mdUTINE_LOAD.md)，恢复导入作业。然后执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
 
 消费 Pulsar 集群中的数据，除了 `data_source_properties` 外的参数修改方式与[消费 Kafka](./RoutineLoad.md#修改导入作业)  时相同。
 

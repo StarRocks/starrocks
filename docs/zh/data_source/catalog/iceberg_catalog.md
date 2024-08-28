@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
@@ -8,8 +8,8 @@ toc_max_heading_level: 5
 Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。您可以：
 
 - 无需手动建表，通过 Iceberg Catalog 直接查询 Iceberg 内的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
 
 为保证正常访问 Iceberg 内的数据，StarRocks 集群必须能够访问 Iceberg 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
@@ -805,13 +805,13 @@ PROPERTIES
 
 ## 查看 Iceberg Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG iceberg_catalog_glue;
@@ -821,7 +821,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 您可以通过如下方法切换至目标 Iceberg Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -830,7 +830,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
   USE <db_name>
   ```
 
-- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
+- 通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -838,7 +838,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 ## 删除 Iceberg Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Iceberg Catalog `iceberg_catalog_glue`：
 
@@ -864,7 +864,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 查询 Iceberg 表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -872,7 +872,7 @@ DROP Catalog iceberg_catalog_glue;
 
 2. [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -880,7 +880,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 创建 Iceberg 数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -911,7 +911,7 @@ CREATE DATABASE <database_name>
 
 ## 删除 Iceberg 数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
 
 > **说明**
 >
@@ -927,7 +927,7 @@ DROP DATABASE <database_name>;
 
 ## 创建 Iceberg 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -991,7 +991,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Iceberg 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Iceberg 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Iceberg 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) 控制。 |
+| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Iceberg 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
 
 ### 示例
 
@@ -1027,7 +1027,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Iceberg 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -1116,7 +1116,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## 删除 Iceberg 表
 
-同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >

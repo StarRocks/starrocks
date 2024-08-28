@@ -25,7 +25,7 @@ const ChineseFeatureList = [
   },
   {
     title: '导入数据',
-    url: '../../loading/Loading_intro/',
+    url: '../../loading/loading_introduction/Loading_intro/',
     description: (
       <>
         数据清洗、转换、导入
@@ -52,7 +52,7 @@ const ChineseFeatureList = [
   },
   {
     title: '半结构化类型',
-    url: '../../sql-reference/overview-pages/semi_structured/',
+    url: '../../category/semi-structured/',
     description: (
       <>
         JSON, map, struct, array
@@ -79,7 +79,7 @@ const ChineseFeatureList = [
   },
   {
     title: '参考手册',
-    url: '../../reference/',
+    url: '../../category/reference/',
     description: (
       <>
         SQL 语法、命令、函数、变量
@@ -127,7 +127,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Data Loading',
-    url: '../../loading/Loading_intro/',
+    url: '../../loading/loading_introduction/Loading_intro/',
     description: (
       <>
         Clean, transform, and load
@@ -154,7 +154,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Work with semi-structured data',
-    url: '../../sql-reference/overview-pages/semi_structured/',
+    url: '../../category/semi-structured/',
     description: (
       <>
         JSON, map, struct, array
@@ -181,7 +181,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Reference',
-    url: '../../reference/',
+    url: '../../category/reference/',
     description: (
       <>
         SQL, functions, error codes, …

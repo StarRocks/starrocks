@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Overview
@@ -39,7 +39,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
 ## Access catalog
 
-You can use the [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
+You can use the [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
 
 ## Query data
 

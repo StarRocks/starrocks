@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['Stream Load']
 ---
 
@@ -9,8 +9,8 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
-- 使用 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 进行同步导入。
-- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
+- 使用 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 进行同步导入。
+- 使用 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 进行异步导入。
 
 两种导入方式各有优势：
 
@@ -64,7 +64,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 ### 操作示例
 
-本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
@@ -126,7 +126,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 :::note
 
 - 如果账号没有设置密码，这里只需要传入 `<username>:`。
-- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 :::
 
@@ -151,7 +151,7 @@ SELECT * FROM table1;
 
 #### 导入 JSON 格式的数据
 
-从 3.2.7 版本起，STREAM LOAD 支持在传输过程中对 JSON 数据进行压缩，减少网络带宽开销。用户可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。语法参见[STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+从 3.2.7 版本起，STREAM LOAD 支持在传输过程中对 JSON 数据进行压缩，减少网络带宽开销。用户可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。语法参见[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 ##### 数据样例
 
@@ -205,7 +205,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 :::note
 
 - 如果账号没有设置密码，这里只需要传入 `<username>:`。
-- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 :::
 
@@ -225,7 +225,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 :::
 
-有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#列映射)”章节。
+有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#列映射)”章节。
 
 导入完成后，您可以查询 `table2` 表，验证数据导入是否成功，如下所示：
 
@@ -241,7 +241,7 @@ SELECT * FROM table2;
 
 #### 查看 Stream Load 导入进度
 
-导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#返回值)”章节。
+导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#返回值)”章节。
 
 Stream Load 不支持通过 SHOW LOAD 语句查看导入作业执行情况。
 
@@ -282,7 +282,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::
 
-  Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+  Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 ### 使用说明
 
@@ -381,13 +381,13 @@ PROPERTIES
 - `BROKER`：Broker 的名称。
 - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 查看 Broker Load 导入进度
 
-在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的进度。
+在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的进度。
 
-在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../reference/information_schema/loads.md) 视图来查看 Broker Load 作业的进度：
+在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../sql-reference/information_schema/loads.md) 视图来查看 Broker Load 作业的进度：
 
 ```SQL
 SELECT * FROM information_schema.loads;
@@ -420,7 +420,7 @@ SELECT * FROM mytable;
 
 #### 取消 Broker Load 作业
 
-当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/loading_unloading/CANCEL_LOAD.md) 语句来取消该导入作业。
 
 例如，可以通过以下语句，撤销 `mydatabase` 数据库中标签为 `label_local` 的导入作业：
 
@@ -464,6 +464,6 @@ WHERE LABEL = "label_local";
    - `BROKER`：无需指定。
    - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-   有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+   有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 提交导入作业后，您可以查看导入进度、或者取消导入作业。具体操作参见本文“[查看 Broker Load 导入进度](#查看-broker-load-导入进度)”和“[取消 Broker Load 作业](#取消-broker-load-作业)中的介绍。

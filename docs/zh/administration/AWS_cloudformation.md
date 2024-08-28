@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群

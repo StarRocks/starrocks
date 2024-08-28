@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Query queues
@@ -117,7 +117,7 @@ You can view information related to query queues using the following methods.
 
 ### SHOW PROC
 
-You can check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC](../../../sql-reference/sql-statements/Administration/SHOW_PROC.md):
+You can check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md):
 
 ```Plain
 mysql> SHOW PROC '/backends'\G
@@ -130,7 +130,7 @@ mysql> SHOW PROC '/backends'\G
 
 ### SHOW PROCESSLIST
 
-You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md):
+You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md):
 
 ```Plain
 mysql> SHOW PROCESSLIST;

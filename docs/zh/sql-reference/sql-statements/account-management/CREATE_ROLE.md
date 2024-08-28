@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # CREATE ROLE
@@ -20,7 +20,7 @@ CREATE ROLE <role_name>
 
 ## 参数说明
 
-`role_name`：角色名称，命名要求参见[系统限制](../../../reference/System_limit.md)。
+`role_name`：角色名称，命名要求参见[系统限制](../../System_limit.md)。
 
 > 注意：角色名称不能与 StarRocks 的系统预置角色 `root`，`cluster_admin`，`db_admin`，`user_admin`，`public` 重复。
 

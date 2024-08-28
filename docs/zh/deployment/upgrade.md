@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['shengji']
 ---
 
@@ -38,7 +38,7 @@ StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，
 >
 > 如果您需要进行连续的大版本升级，比如从 2.4->2.5->3.0->3.1->3.2，或者在升级之后进行了降级，之后再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免部分 FE 节点元数据升级失败，需要在相邻的两次升级之间或降级后升级前执行如下操作：
 >
-> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 创建新的元数据快照文件。
 > 2. 等待元数据快照文件同步至其他 FE 节点。
 >
 > 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes"。

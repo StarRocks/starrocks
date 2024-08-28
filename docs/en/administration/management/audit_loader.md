@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Manage audit logs within StarRocks via AuditLoader
@@ -10,7 +10,7 @@ StarRocks stores its audit logs in the local file **fe/log/fe.audit.log** rather
 
 ## Create a table to store audit logs
 
-Create a database and a table in your StarRocks cluster to store its audit logs. See [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) and [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) for detailed instructions.
+Create a database and a table in your StarRocks cluster to store its audit logs. See [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) and [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) for detailed instructions.
 
 Because the fields of audit logs vary among different StarRocks versions, you must choose among the following examples to create a table that is compatible with your StarRocks.
 
@@ -111,11 +111,11 @@ Execute the following statement along with the path you copied to install AuditL
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
 ```
 
-See [INSTALL PLUGIN](../../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md) for detailed instructions.
+See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugin/INSTALL_PLUGIN.md) for detailed instructions.
 
 ## Verify the installation and query audit logs
 
-1. You can check if the installation is successful via [SHOW PLUGINS](../../sql-reference/sql-statements/Administration/SHOW_PLUGINS.md).
+1. You can check if the installation is successful via [SHOW PLUGINS](../../sql-reference/sql-statements/cluster-management/plugin/SHOW_PLUGINS.md).
 
     In the following example, the `Status` of the plugin `AuditLoader` is `INSTALLED`,  meaning installation is successful.
 

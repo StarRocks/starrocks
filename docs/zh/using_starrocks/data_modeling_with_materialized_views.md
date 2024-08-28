@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用物化视图进行数据建模
@@ -174,7 +174,7 @@ Schema Change 遵循以下原则：
 - `excluded_trigger_tables`：为避免触发自动刷新而需要忽略的表。
 - `auto_refresh_partitions_limit`：每次自动刷新操作中要刷新的分区数。
 
-详细说明，参见 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
+详细说明，参见 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
 
 当前版本中，分区物化视图存在如下限制：
 

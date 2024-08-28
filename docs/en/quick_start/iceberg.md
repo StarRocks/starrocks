@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 3
 description: Data Lakehouse with Apache Iceberg
 toc_max_heading_level: 2

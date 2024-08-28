@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 description: Partition and bucket data
 ---
@@ -549,7 +549,7 @@ The following statement deletes partition `p1` from table `site_access`.
 
 > **NOTE**
 >
-> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) command to restore the partition and its data.
+> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/backup_restore/RECOVER.md) command to restore the partition and its data.
 
 ```SQL
 ALTER TABLE site_access
@@ -733,7 +733,7 @@ Buckets reflect how data files are actually organized in StarRocks.
   :::warning
 
   - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
-  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) before rolling back.
 
   :::
 
@@ -846,7 +846,7 @@ Buckets reflect how data files are actually organized in StarRocks.
   :::warning
 
   - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
-  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) before rolling back.
 
   :::
 
@@ -918,7 +918,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 #### View the number of buckets
 
-After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
+After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
 
 :::info
 
@@ -957,4 +957,4 @@ As query patterns and data volume evolve in business scenarios, the configuratio
   ALTER TABLE t ORDER BY k2, k1;
   ```
 
-For more information, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+For more information, see [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).

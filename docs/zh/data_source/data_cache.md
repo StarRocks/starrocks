@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Data Cache
@@ -94,7 +94,7 @@ mysql> explain verbose select col1 from hudi_table;
 
 其中 `dataCacheOptions={populate: false}` 即表明不填充 Data Cache，因为该查询会扫描全部分区。
 
-您还可以通过 Session Variable [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
+您还可以通过 Session Variable [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
 
 ### 填充方式
 
@@ -108,7 +108,7 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
 
   使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存。异步方式能够减少缓存填充对首次读取性能的影响，但填充效率较低。通常单次查询不能保证将访问到的所以数据都缓存到本地，往往需要多次。
 
-自 v3.3.0 起，系统默认以异步方式进行缓存，您可以通过修改 Session 变量 [enable_datacache_async_populate_mode](../reference/System_variable.md) 来修改填充方式。
+自 v3.3.0 起，系统默认以异步方式进行缓存，您可以通过修改 Session 变量 [enable_datacache_async_populate_mode](../sql-reference/System_variable.md) 来修改填充方式。
 
 ## Footer Cache
 
@@ -244,10 +244,10 @@ datacache_auto_adjust_enable=true
 
 ### 系统变量
 
-- [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode)
-- [enable_datacache_io_adaptor](../reference/System_variable.md#enable_datacache_io_adaptor)
-- [enable_file_metacache](../reference/System_variable.md#enable_file_metacache)
-- [enable_datacache_async_populate_mode](../reference/System_variable.md)
+- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
 
 ### BE 参数
 

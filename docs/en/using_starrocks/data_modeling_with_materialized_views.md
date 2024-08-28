@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data modeling with materialized views
@@ -179,7 +179,7 @@ Several parameters can be used to control refresh behavior:
 - `excluded_trigger_tables`: the table whose data changes can be ignored to avoid triggering the automatic refresh.
 - `auto_refresh_partitions_limit`: the number of partitions to refresh in each automatic refresh operation.
 
-For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
+For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
 Currently, partitioned materialized views have the following limitations:
 

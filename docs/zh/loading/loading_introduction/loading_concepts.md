@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
@@ -27,7 +27,7 @@ StarRocks 支持通过以下两种访问协议来提交导入作业：MySQL 和 
 
 ## 支持的数据类型
 
-StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../../sql-reference/data-types/data-type-list.md)。
+StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../../sql-reference/data-types/README.md)。
 
 ## 严格模式
 
@@ -66,11 +66,11 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 :::tip
 
-如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为表设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
+如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为表设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
 
 :::
 
-支持异步模式的导入方式有 [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)。
+支持异步模式的导入方式有 [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)。
 
 用户操作过程如下：
 

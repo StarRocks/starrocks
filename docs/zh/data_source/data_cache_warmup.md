@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Data Cache 预热
@@ -114,7 +114,7 @@ mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="t
 
 ## CACHE SELECT 定时调度
 
-CACHE SELECT 可以和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 结合，实现周期性的预热。
+CACHE SELECT 可以和 [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 结合，实现周期性的预热。
 
 每隔 5 分钟对 `lineitem` 表进行一次预热：
 

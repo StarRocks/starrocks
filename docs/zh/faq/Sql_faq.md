@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 查询常见问题
@@ -178,7 +178,7 @@ StarRocks 使用 keyword 数据类型对该查询语句进行转换。因为该�
 
 ## 如何快速统计 StarRocks 库、表的大小，所占的磁盘资源？
 
-查看库、表的存储大小可以用 [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW_DATA.md) 命令查看。
+查看库、表的存储大小可以用 [SHOW DATA](../sql-reference/sql-statements/Database/SHOW_DATA.md) 命令查看。
 
 `SHOW DATA;` 可以展示当前数据库下所有表的数据量和副本数。
 

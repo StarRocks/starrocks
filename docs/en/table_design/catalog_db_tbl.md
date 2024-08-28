@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Catalogs, databases, and tables
@@ -44,7 +44,7 @@ External tables are maintained in external catalogs. The data of external tables
 
 Materialized views are special physical tables that hold precomputed query results from one or more base tables. Materialized views are categorized as synchronous and asynchronous materialized views. Asynchronous materialized views are more powerful because they can store precomputed results from multiple base tables (internal and external tables) and support various aggregation operators. When complex queries are executed on base tables, StarRocks can automatically reuse precomputed results stored in materialized views, to achieve transparent query acceleration, accelerate queries in data lakes and establish data modeling.
 
-## [Views](../sql-reference/sql-statements/data-definition/CREATE_VIEW.md)
+## [Views](../sql-reference/sql-statements/View/CREATE_VIEW.md)
 
 Views, or logical views, are virtual tables that do not hold any data. Views only display data that is the results of queries against other existing physical tables. The query that defines a view is run every time the view is referenced in a query.
 

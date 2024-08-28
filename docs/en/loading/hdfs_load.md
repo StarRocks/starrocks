@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---
@@ -40,9 +40,9 @@ This method is available from v3.1 onwards and currently supports only the Parqu
 
 With `FILES()`, you can:
 
-- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
-- Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) (CTAS).
-- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
+- Query the data directly from HDFS using [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
+- Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (CTAS).
+- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
 
 ### Typical examples
 
@@ -117,7 +117,7 @@ SELECT * FROM FILES
 );
 ```
 
-After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md):
+After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md):
 
 ```SQL
 DESCRIBE user_behavior_inferred;
@@ -261,13 +261,13 @@ The following query result is returned, indicating that the data has been succes
 
 #### Check load progress
 
-You can query the progress of INSERT jobs from the [`loads`](../reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards. Example:
+You can query the progress of INSERT jobs from the [`loads`](../sql-reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards. Example:
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
-For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+For information about the fields provided in the `loads` view, see [`loads`](../sql-reference/information_schema/loads.md).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
@@ -387,7 +387,7 @@ This job has four main sections:
 - `BROKER`: The connection details for the source.
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 #### Check load progress
 
@@ -397,7 +397,7 @@ You can query the progress of Broker Load jobs from the `information_schema.load
 SELECT * FROM information_schema.loads;
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md)).
+For information about the fields provided in the `loads` view, see [Information Schema](../sql-reference/information_schema/loads.md)).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
@@ -524,11 +524,11 @@ This job has four main sections:
 - `INSERT_SQL`: The INSERT INTO SELECT FROM FILES statement that is used to load data from the specified source data file to the destination table.
 - `PROPERTIES`: A set of optional parameters that specify how to execute the pipe. These include `AUTO_INGEST`, `POLL_INTERVAL`, `BATCH_SIZE`, and `BATCH_FILES`. Specify these properties in the `"key" = "value"` format.
 
-For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md).
+For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md).
 
 #### Check load progress
 
-- Query the progress of Pipe jobs by using [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md).
+- Query the progress of Pipe jobs by using [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md).
 
   ```SQL
   SHOW PIPES;
@@ -550,7 +550,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
   1 row in set (0.00 sec)
   ```
 
-- Query the progress of Pipe jobs from the [`pipes`](../reference/information_schema/pipes.md) view in the StarRocks Information Schema.
+- Query the progress of Pipe jobs from the [`pipes`](../sql-reference/information_schema/pipes.md) view in the StarRocks Information Schema.
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -574,7 +574,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
 
 #### Check file status
 
-You can query the load status of the files loaded from the [`pipe_files`](../reference/information_schema/pipe_files.md) view in the StarRocks Information Schema.
+You can query the load status of the files loaded from the [`pipe_files`](../sql-reference/information_schema/pipe_files.md) view in the StarRocks Information Schema.
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;
@@ -602,4 +602,4 @@ FINISH_LOAD_TIME: 2023-11-17 16:13:22
 
 #### Manage Pipes
 
-You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md).
+You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/loading_unloading/pipe/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/loading_unloading/pipe/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/loading_unloading/pipe/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/loading_unloading/pipe/RETRY_FILE.md).

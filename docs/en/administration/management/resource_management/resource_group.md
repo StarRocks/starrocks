@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Resource group
@@ -382,7 +382,7 @@ The following FE metrics only provide statistics within the current FE node:
 
 ### View resource group usage information
 
-From v3.1.4 onwards, StarRocks supports the SQL statement [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/Administration/SHOW_USAGE_RESOURCE_GROUPS.md), which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
+From v3.1.4 onwards, StarRocks supports the SQL statement [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/cluster-management/resource_group/SHOW_USAGE_RESOURCE_GROUPS.md), which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
 
 - `Name`: The name of the resource group.
 - `Id`: The ID of the resource group.

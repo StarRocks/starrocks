@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # base64_to_bitmap
@@ -48,7 +48,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
     );
     ```
 
-2. 使用 [Stream Load](../../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 将 JSON 格式数据导入到 `bitmap_table` 中。
+2. 使用 [Stream Load](../../sql-statements/loading_unloading/STREAM_LOAD.md) 将 JSON 格式数据导入到 `bitmap_table` 中。
 
     假设有 JSON 格式文件**simpledata**, 内容如下，`userid`为 Base64 编码后的字符串:
 

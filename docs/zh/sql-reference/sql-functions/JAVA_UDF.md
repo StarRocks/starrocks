@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Java UDF
@@ -527,7 +528,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md)。
+更多信息，请参见[SHOW FUNCTIONS](../sql-statements/Function/SHOW_FUNCTIONS.md)。
 
 ## 删除 UDF
 
@@ -537,7 +538,7 @@ SHOW [GLOBAL] FUNCTIONS;
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md)。
+更多信息，请参见[DROP FUNCTION](../sql-statements/Function/DROP_FUNCTION.md)。
 
 ## 类型映射关系
 

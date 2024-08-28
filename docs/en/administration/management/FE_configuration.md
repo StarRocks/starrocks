@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
@@ -20,7 +20,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
+For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md).
 
 :::note
 You must have administrator privileges to run cluster administration-related commands.
@@ -30,7 +30,7 @@ You must have administrator privileges to run cluster administration-related com
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -2133,7 +2133,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 ##### routine_load_task_timeout_second
@@ -2142,7 +2142,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 <!--
@@ -2380,7 +2380,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) command.
+- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
 ##### enable_auto_tablet_distribution
@@ -2473,7 +2473,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 > **NOTE**
 >
 > - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 预准备语句
@@ -73,7 +73,7 @@ SET @var_name = expr [, ...];
 SET @id1 = 1, @id2 = 2;
 ```
 
-详细信息，请参见[用户自定义变量](../../reference/user_defined_variables.md)。
+详细信息，请参见[用户自定义变量](../user_defined_variables.md)。
 
 ### EXECUTE
 

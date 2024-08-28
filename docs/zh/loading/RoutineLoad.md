@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Routine Load 导入数据
@@ -62,13 +62,13 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON、Avro (自 v3.0.1
 
 3. **多个导入任务并行进行，消费 Kafka 多个分区的消息，导入至 StarRocks**
 
-    1. **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties)。
+    1. **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties)。
 
     2. **执行导入任务**：Coordinator BE 执行导入任务，消费分区的消息，解析并过滤数据。导入任务需要消费足够多的消息，或者消费足够长时间。消费时间和消费的数据量由 FE 配置项 `max_routine_load_batch_size`、`routine_load_task_consume_second`决定，有关该配置项的更多说明，请参见 [配置参数](../administration/management/FE_configuration.md#导入导出)。然后，Coordinator BE 将消息分发至相关 Executor BE 节点， Executor BE 节点将消息写入磁盘。
 
       > **说明**
       >
-      > StarRocks 支持通过安全协议，包括 SASL_SSL、SAS_PLAINTEXT、SSL，或者 PLAINTEXT 来连接 Kafka。本文以 PLAINTEXT 方式连接 Kafka 为例进行演示，如果您需要通过其他安全协议连接 Kafka，请参见[CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+      > StarRocks 支持通过安全协议，包括 SASL_SSL、SAS_PLAINTEXT、SSL，或者 PLAINTEXT 来连接 Kafka。本文以 PLAINTEXT 方式连接 Kafka 为例进行演示，如果您需要通过其他安全协议连接 Kafka，请参见[CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 4. **持续生成新的导入任务，不间断地导入数据**
 
@@ -82,7 +82,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON、Avro (自 v3.0.1
 
 ## 创建导入作业
 
-这里通过三个简单的示例，介绍如何通过 Routine Load 持续消费 Kafka 中 CSV、JSON 和 Avro 格式的数据，并导入至 StarRocks 中。有关创建 Routine Load 的详细语法和参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+这里通过三个简单的示例，介绍如何通过 Routine Load 持续消费 Kafka 中 CSV、JSON 和 Avro 格式的数据，并导入至 StarRocks 中。有关创建 Routine Load 的详细语法和参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### 导入 CSV 数据
 
@@ -143,7 +143,7 @@ FROM KAFKA
 );
 ```
 
-提交导入作业后，您可以执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看导入作业执行情况。
+提交导入作业后，您可以执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)，查看导入作业执行情况。
 
 - **导入作业的名称**
 
@@ -169,7 +169,7 @@ FROM KAFKA
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
   ```
 
-  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#data_sourcedata_source_properties)。
+  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#data_sourcedata_source_properties)。
 
 - **数据转换**
 
@@ -257,7 +257,7 @@ FROM KAFKA
 );
 ```
 
-提交导入作业后，您可以执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看导入作业执行情况。
+提交导入作业后，您可以执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)，查看导入作业执行情况。
 
 - **数据格式**
 
@@ -368,7 +368,7 @@ FROM KAFKA
   >
   > 如果一条 Avro record 中字段的名称和数量（顺序不需要对应）都能对应目标表中列，则无需配置 `COLUMNS` 。
 
-提交导入作业后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看导入作业执行情况。
+提交导入作业后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)，查看导入作业执行情况。
 
 #### 数据类型映射
 
@@ -408,9 +408,9 @@ StarRocks 支持导入所有类型的 Avro 数据。导入 Avro 数据至 StarRo
 
 ### 查看导入作业
 
-执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看名称为  `example_tbl2_ordertest2` 的导入作业的信息，比如导入作业状态`State`，导入作业的统计信息`Statistic`（消费的总数据行数、已导入的行数等），消费的分区及进度`Progress`等。
+执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)，查看名称为  `example_tbl2_ordertest2` 的导入作业的信息，比如导入作业状态`State`，导入作业的统计信息`Statistic`（消费的总数据行数、已导入的行数等），消费的分区及进度`Progress`等。
 
-如果导入作业状态自动变为 **PAUSED**，则可能为导入任务错误行数超过阈值。错误行数阈值的设置方式，请参考 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties)。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。修复后您可以使用 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
+如果导入作业状态自动变为 **PAUSED**，则可能为导入任务错误行数超过阈值。错误行数阈值的设置方式，请参考 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties)。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。修复后您可以使用 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
 
 如果导入作业状态为 **CANCELLED**，则可能为导入任务执行遇到异常（如表被删除）。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。但是修复后，您无法恢复 **CANCELLED** 状态的导入作业。
 
@@ -443,7 +443,7 @@ ReasonOfStateChanged:
 
 ### 查看导入任务
 
-执行 [SHOW ROUTINE LOAD TASK](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD_TASK.md)，查看导入作业`example_tbl2_ordertest2` 中一个或多个导入任务的信息。比如当前有多少任务正在运行，消费分区及进度`DataSourceProperties`，以及对应的 Coordinator BE 节点 `BeId`。
+执行 [SHOW ROUTINE LOAD TASK](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD_TASK.md)，查看导入作业`example_tbl2_ordertest2` 中一个或多个导入任务的信息。比如当前有多少任务正在运行，消费分区及进度`DataSourceProperties`，以及对应的 Coordinator BE 节点 `BeId`。
 
 ```SQL
 MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "example_tbl2_ordertest2" \G
@@ -487,7 +487,7 @@ DataSourceProperties: {"0":2,"3":0}
 
 ## 暂停导入作业
 
-执行 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD.md) 语句后，会暂停导入作业。导入作业会进入 **PAUSED** 状态，但是导入作业未结束，您可以执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md) 语句重启该导入作业。您也可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看已暂停的导入作业的状态。
+执行 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/PAUSE_ROUTINE_LOAD.md) 语句后，会暂停导入作业。导入作业会进入 **PAUSED** 状态，但是导入作业未结束，您可以执行 [RESUME R../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.mdUTINE_LOAD.md) 语句重启该导入作业。您也可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) 语句查看已暂停的导入作业的状态。
 
 例如，可以通过以下语句，暂停导入作业`example_tbl2_ordertest2`：
 
@@ -497,7 +497,7 @@ PAUSE ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 ## 恢复导入作业
 
-执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。导入作业会先短暂地进入 **NEED_SCHEDULE** 状态，表示正在重新调度导入作业，一段时间后会恢复至 **RUNNING** 状态，继续消费 Kafka 消息并且导入数据。您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看已恢复的导入作业。
+执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.md)，恢复导入作业。导入作业会先短暂地进入 **NEED_SCHEDULE** 状态，表示正在重新调度导入作业，一段时间后会恢复至 **RUNNING** 状态，继续消费 Kafka 消息并且导入数据。您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) 语句查看已恢复的导入作业。
 
 例如，可以通过以下语句，恢复导入作业`example_tbl2_ordertest2`：
 
@@ -507,7 +507,7 @@ RESUME ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 ## 修改导入作业
 
-修改前，您需要先执行 PAUSE ROUTINE LOAD 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
+修改前，您需要先执行 PAUSE ROUTINE LOAD 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
 
 例如，当存活 BE 节点数增至 6 个，待消费分区为`"0,1,2,3,4,5,6,7"`时，如果您希望提高实际的导入并行度，则可以通过以下语句，将期望任务并行度`desired_concurrent_number` 增加至 `6`（大于等于存活 BE 节点数），并且调整待消费分区和起始消费位点。
 
@@ -530,7 +530,7 @@ FROM kafka
 
 ## 停止导入作业
 
-执行  [STOP ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/STOP_ROUTINE_LOAD.md)，可以停止导入作业。导入作业会进入 **STOPPED** 状态，代表此导入作业已经结束，且无法恢复。再次执行 SHOW ROUTINE LOAD 语句，将无法看到已经停止的导入作业。
+执行  [STOP ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/STOP_ROUTINE_LOAD.md)，可以停止导入作业。导入作业会进入 **STOPPED** 状态，代表此导入作业已经结束，且无法恢复。再次执行 SHOW ROUTINE LOAD 语句，将无法看到已经停止的导入作业。
 
 例如，可以通过以下语句，停止导入作业`example_tbl2_ordertest2`：
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 表概览
@@ -42,7 +42,7 @@ ORDER BY (uid, name);
 
 <Replicanum />
 
-执行 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看表结构。
+执行 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看表结构。
 
 ```SQL
 MySQL [example_db]> DESCRIBE user_access;
@@ -59,7 +59,7 @@ MySQL [example_db]> DESCRIBE user_access;
 6 rows in set (0.00 sec)
 ```
 
-执行 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) 来查看建表语句。
+执行 [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) 来查看建表语句。
 
 ```SQL
 MySQL [example_db]> SHOW CREATE TABLE user_access\G
@@ -120,7 +120,7 @@ StarRocks 提供两种分桶方式：
 - 哈希分桶：根据数据的分桶键值，将数据划分至分桶。选择查询时经常使用的条件列组成分桶键，能有效提高查询效率。
 - 随机分桶：随机划分数据至分桶。这种分桶方式更加简单易用。
 
-### [数据类型](../sql-reference/data-types/data-type-list.md)
+### [数据类型](../sql-reference/data-types/README.md)
 
 除了基本的数据类型，如数值、日期和字符串类型，StarRocks 还支持复杂的半结构化数据类型，包括 ARRAY、JSON、MAP、STRUCT。
 
@@ -144,10 +144,10 @@ StarRocks 提供内置索引，包括前缀索引、Ordinal 索引和 ZoneMap �
 
 您可以在以下 SQL 语句中添加 `TEMPORARY` 关键字创建或删除临时表：
 
-- [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)
-- [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)
-- [CREATE TABLE LIKE](../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md)
-- [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP_TABLE.md)
+- [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)
+- [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)
+- [CREATE TABLE LIKE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md)
+- [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md)
 
 :::note
 

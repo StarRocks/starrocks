@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Lambda 表达式

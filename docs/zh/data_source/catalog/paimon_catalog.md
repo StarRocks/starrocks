@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
@@ -9,7 +9,7 @@ StarRocks 从 3.1 版本开始支持 Paimon Catalog。
 
 Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要执行数据导入就可以直接查询 Apache Paimon 里的数据。
 
-此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
+此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力来实现数据转换和导入。
 
 为保证正常访问 Paimon 内的数据，StarRocks 集群必须能够访问 Paimon 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
@@ -634,13 +634,13 @@ PROPERTIES
 
 ## 查看 Paimon Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Paimon Catalog `paimon_catalog_fs` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Paimon Catalog `paimon_catalog_fs` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG paimon_catalog_fs;
@@ -648,7 +648,7 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 
 ## 删除 Paimon Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Paimon Catalog `paimon_catalog_fs`：
 
@@ -674,31 +674,31 @@ DROP Catalog paimon_catalog_fs;
 
 ## 查询 Paimon 表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：
+2. 通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 切换当前会话生效的 Catalog：
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+   再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话生效的数据库：
 
    ```SQL
    USE <db_name>;
    ```
 
-   或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+   或者，也可以通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

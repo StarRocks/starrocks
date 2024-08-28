@@ -131,7 +131,7 @@ const config = {
         items: [
           {
             type: 'docSidebar',
-            sidebarId: 'English',
+            sidebarId: 'docs',
             position: 'left',
             label: 'Documentation',
           },

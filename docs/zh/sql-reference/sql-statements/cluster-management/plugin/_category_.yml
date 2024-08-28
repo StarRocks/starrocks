@@ -1,0 +1,6 @@
+position: 80 # float position is supported
+label: '插件'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

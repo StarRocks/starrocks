@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---
@@ -10,8 +10,8 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 Azure 导入数据：
 
-- 使用 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
-- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
+- 使用 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
+- 使用 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 进行异步导入。
 
 两种导入方式各有优势，具体将在下面分章节详细阐述。
 
@@ -52,9 +52,9 @@ StarRocks 支持通过以下方式从 Azure 导入数据：
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 Azure 查询数据。
-- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
-- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 导入数据。
+- 使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句直接从 Azure 查询数据。
+- 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
+- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 导入数据。
 
 ### 操作示例
 
@@ -127,7 +127,7 @@ SELECT * FROM FILES
 );
 ```
 
-建表完成后，您可以通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+建表完成后，您可以通过 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
 
 ```SQL
 DESCRIBE user_behavior_inferred;
@@ -206,7 +206,7 @@ DUPLICATE KEY(UserID)
 DISTRIBUTED BY HASH(UserID);
 ```
 
-通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+通过 [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
 
 ```sql
 DESCRIBE user_behavior_declared;
@@ -270,13 +270,13 @@ SELECT * from user_behavior_declared LIMIT 3;
 
 #### 查看导入进度
 
-通过 StarRocks Information Schema 库中的 [`loads`](../reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。例如：
+通过 StarRocks Information Schema 库中的 [`loads`](../sql-reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。例如：
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../sql-reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
@@ -395,17 +395,17 @@ PROPERTIES
 - `BROKER`：连接数据源的认证信息配置。
 - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 查看导入进度
 
-通过 StarRocks Information Schema 库中的 [`loads`](../reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
+通过 StarRocks Information Schema 库中的 [`loads`](../sql-reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
 
 ```SQL
 SELECT * FROM information_schema.loads \G
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../sql-reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 

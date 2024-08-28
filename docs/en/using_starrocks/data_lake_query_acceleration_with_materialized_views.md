@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data lake query acceleration with materialized views
@@ -100,7 +100,7 @@ For Hive Catalog, Iceberg Catalog (starting from v3.1.4), JDBC catalog (starting
 
 :::tip
 
-You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
+You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
 :::
 
@@ -136,7 +136,7 @@ FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
 
 For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data.
 
-To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):
+To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md):
 
 ### Configuration items
 

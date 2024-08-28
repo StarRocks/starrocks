@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # database
@@ -39,4 +39,4 @@ select database();
 
 ## 相关 SQL
 
-[USE](../../sql-statements/data-definition/USE.md)：切换到指定数据库。
+[USE](../../sql-statements/Database/USE.md)：切换到指定数据库。
