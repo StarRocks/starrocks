@@ -23,6 +23,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.MapUtils;
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -31,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -111,6 +116,7 @@ public class BasicStatsMeta implements Writable {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) database.getTable(tableId);
         long totalPartitionCount = table.getPartitions().size();
+<<<<<<< HEAD
         long updatePartitionRowCount = 0;
         long updatePartitionCount = 0;
         for (Partition partition : table.getPartitions()) {
@@ -118,6 +124,22 @@ public class BasicStatsMeta implements Writable {
                 // skip init empty partition
                 continue;
             }
+=======
+
+        long tableRowCount = 1L;
+        long cachedTableRowCount = 1L;
+        long updatePartitionRowCount = 0L;
+        long updatePartitionCount = 0L;
+
+        Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getTableStatistics(table.getId(), table.getPartitions());
+
+        for (Partition partition : table.getPartitions()) {
+            tableRowCount += partition.getRowCount();
+            Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
+            cachedTableRowCount += statistic.orElse(0L);
+            LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
 
             LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
             if (updateTime.isAfter(loadTimes)) {

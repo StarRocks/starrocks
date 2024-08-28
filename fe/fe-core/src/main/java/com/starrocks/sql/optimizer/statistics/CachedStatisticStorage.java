@@ -46,7 +46,7 @@ public class CachedStatisticStorage implements StatisticStorage {
     private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
 
-    AsyncLoadingCache<TableStatsCacheKey, Optional<TableStatistic>> tableStatsCache = Caffeine.newBuilder()
+    AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache = Caffeine.newBuilder()
             .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
             .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
@@ -68,13 +68,21 @@ public class CachedStatisticStorage implements StatisticStorage {
             .buildAsync(new ColumnHistogramStatsCacheLoader());
 
     @Override
+<<<<<<< HEAD
     public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
         // get Statistics Table column info, just return default column statistics
         if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
             return TableStatistic.unknown();
+=======
+    public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
+            return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
         }
 
         try {
+<<<<<<< HEAD
             CompletableFuture<Optional<TableStatistic>> result =
                     tableStatsCache.get(new TableStatsCacheKey(tableId, partitionId));
             if (result.isDone()) {
@@ -83,6 +91,13 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return realResult.orElseGet(TableStatistic::unknown);
             } else {
                 return TableStatistic.unknown();
+=======
+            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> result = tableStatsCache.getAll(keys);
+            if (result.isDone()) {
+                Map<TableStatsCacheKey, Optional<Long>> data = result.get();
+                return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
+                        k -> data.getOrDefault(k, Optional.empty())));
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
             }
         } catch (InterruptedException e) {
             LOG.warn(e);
@@ -92,6 +107,10 @@ public class CachedStatisticStorage implements StatisticStorage {
             LOG.warn(e);
             return TableStatistic.unknown();
         }
+<<<<<<< HEAD
+=======
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
     }
 
     @Override
@@ -102,7 +121,7 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
 
         try {
-            CompletableFuture<Map<TableStatsCacheKey, Optional<TableStatistic>>> completableFuture
+            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> completableFuture
                     = tableStatsCache.getAll(statsCacheKeyList);
             if (completableFuture.isDone()) {
                 completableFuture.get();

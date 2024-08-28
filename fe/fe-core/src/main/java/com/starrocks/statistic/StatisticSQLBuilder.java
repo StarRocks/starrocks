@@ -70,9 +70,13 @@ public class StatisticSQLBuilder {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    public static String buildQueryTableStatisticsSQL(Long tableId) {
+    public static String buildQueryTableStatisticsSQL(Long tableId, List<Long> partitionIds) {
         VelocityContext context = new VelocityContext();
         context.put("predicate", "table_id = " + tableId);
+        if (!partitionIds.isEmpty()) {
+            context.put("predicate", "table_id = " + tableId + " and partition_id in (" +
+                    partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")");
+        }
         return build(context, QUERY_TABLE_STATISTIC_TEMPLATE);
     }
 

@@ -20,10 +20,20 @@ import com.starrocks.catalog.Table;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 
 public interface StatisticStorage {
     default TableStatistic getTableStatistic(Long tableId, Long partitionId) {
         return TableStatistic.unknown();
+=======
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+public interface StatisticStorage {
+    // partitionId: RowCount
+    default Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
     }
 
     default void refreshTableStatistic(Table table) {

@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsCalcUtils {
@@ -109,6 +110,7 @@ public class StatisticsCalcUtils {
                 // The purpose of this is to make the statistics of the number of rows more accurate.
                 // For example, a large amount of data LOAD may cause the number of rows to change greatly.
                 // This leads to very inaccurate row counts.
+<<<<<<< HEAD
                 int partitionCountModifiedAfterLastAnalyze = 0;
                 for (Partition partition : table.getPartitions()) {
                     LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
@@ -122,12 +124,27 @@ public class StatisticsCalcUtils {
                     TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
                             .getTableStatistic(table.getId(), partition.getId());
                     if (tableStatistic.equals(TableStatistic.unknown())) {
+=======
+                long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
+                Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getTableStatistics(table.getId(), selectedPartitions);
+                for (Partition partition : selectedPartitions) {
+                    long partitionRowCount;
+                    Optional<Long> tableStatistic =
+                            tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
+                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                    if (tableStatistic.isEmpty()) {
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
                         partitionRowCount = partition.getRowCount();
                     } else {
+<<<<<<< HEAD
                         partitionRowCount = tableStatistic.getRowCount();
                     }
                     if (partitionCountModifiedAfterLastAnalyze > 0) {
                         LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+=======
+                        partitionRowCount = tableStatistic.get();
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
                         if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
                             partitionRowCount +=
                                     basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
@@ -156,4 +173,36 @@ public class StatisticsCalcUtils {
         return 1;
     }
 
+<<<<<<< HEAD
+=======
+    private static void updateQueryDumpInfo(OptimizerContext optimizerContext, Table table,
+                                            String partitionName, long rowCount) {
+        if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
+            try {
+                optimizerContext.getDumpInfo().addPartitionRowCount(table, partitionName, rowCount);
+            } catch (Exception e) {
+                optimizerContext.getDumpInfo().addException(e.getMessage());
+            }
+        }
+    }
+
+    private static long deltaRows(Table table, long totalRowCount) {
+        long tblRowCount = 0L;
+        Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getTableStatistics(table.getId(), table.getPartitions());
+
+        for (Partition partition : table.getPartitions()) {
+            long partitionRowCount;
+            Optional<Long> statistic = tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
+            partitionRowCount = statistic.orElseGet(partition::getRowCount);
+            tblRowCount += partitionRowCount;
+        }
+        if (tblRowCount < totalRowCount) {
+            return Math.max(1, (totalRowCount - tblRowCount) / table.getPartitions().size());
+        } else {
+            return 0;
+        }
+    }
+
+>>>>>>> 16ca57cd0e ([Enhancement] Reduce the memory useage of TableStatistic (#50316))
 }
