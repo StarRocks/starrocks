@@ -378,7 +378,7 @@ class ChooseCase(object):
                         if len(_thread_sql_list) > _old_sql_size:
                             # new record was recorded
                             _ori_lines = f_lines[line_id: next_line_id]
-                            _thread_ori_sql_list.extend([_line.rstrip() for _line in _ori_lines])
+                            _thread_ori_sql_list.append("\n".join([_line.rstrip() for _line in _ori_lines]))
                         line_id = next_line_id
 
                         _next_line = f_lines[line_id].rstrip().lstrip()

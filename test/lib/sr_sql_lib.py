@@ -33,6 +33,7 @@ import sys
 import threading
 import traceback
 
+import pymysql
 import trino
 import pyhive
 
@@ -55,6 +56,8 @@ from nose import tools
 from cup import log
 from requests.auth import HTTPBasicAuth
 from timeout_decorator import timeout, TimeoutError
+from dbutils.pooled_db import PooledDB
+
 
 from lib import skip
 from lib import data_delete_lib
@@ -146,6 +149,8 @@ class StarrocksSQLApiLib(object):
         super().__init__(*args, **kwargs)
         self.root_path = root_path
         self.data_path = common_data_path
+        self.db = list()
+        self.resource = list()
         self.mysql_lib = MysqlLib()
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
@@ -162,6 +167,8 @@ class StarrocksSQLApiLib(object):
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
 
+        # connection pool
+        self.connection_pool = None
         # thread
         self.thread_res = {}
         self.thread_var = {}
@@ -452,6 +459,17 @@ class StarrocksSQLApiLib(object):
         }
         self.mysql_lib.connect(mysql_dict)
 
+    def create_starrocks_conn_pool(self):
+        self.connection_pool = PooledDB(
+            creator=pymysql,
+            mincached=3,  # 初始创建的连接数
+            blocking=True,  # 等待获取连接时阻塞
+            host=self.mysql_host,
+            port=int(self.mysql_port),
+            user=self.mysql_user,
+            password=self.mysql_password,
+        )
+
     def connect_trino(self):
         trino_dict = {
             "host": self.trino_host,
@@ -581,10 +599,13 @@ class StarrocksSQLApiLib(object):
             file_path_list.append(os.path.join(data_path, file_name))
         return file_path_list
 
-    def execute_sql(self, sql, ori=False):
+    def execute_sql(self, sql, ori=False, conn=None):
         """execute query"""
         try:
-            with self.mysql_lib.connector.cursor() as cursor:
+            if conn is None:
+                conn = self.mysql_lib.connector
+
+            with conn.cursor() as cursor:
                 cursor.execute(sql)
                 result = cursor.fetchall()
                 if isinstance(result, tuple):
@@ -636,6 +657,25 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
+    def get_now_db(self, conn=None):
+        """execute query"""
+        db = None
+        try:
+            if conn is None:
+                conn = self.mysql_lib.connector
+
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT DATABASE()")
+                result = cursor.fetchall()
+                db = result[0][0]
+
+        except _mysql.Error as e:
+            print("Get now db with _mysql.Error!", e.args)
+        except Exception as e:
+            print("Get now db with unknown error!", e)
+
+        return db
+
     @timeout(
         QUERY_TIMEOUT,
         timeout_exception=AssertionError,
@@ -643,11 +683,11 @@ class StarrocksSQLApiLib(object):
     )
     def conn_execute_sql(self, conn, sql):
         try:
-            cursor = conn.cursor()
-            if sql.endswith(";"):
-                sql = sql[:-1]
-            cursor.execute(sql)
-            result = cursor.fetchall()
+            with conn.cursor() as cursor:
+                if sql.endswith(";"):
+                    sql = sql[:-1]
+                cursor.execute(sql)
+                result = cursor.fetchall()
 
             for i in range(len(result)):
                 row = [str(item) for item in result[i]]
@@ -915,12 +955,16 @@ class StarrocksSQLApiLib(object):
         self.thread_res[args.thread.name] = trace_stack
         # tools.ok_(False, "Thread exit with exception!")
 
-    def execute_thread(self, exec_id, cmd_list, res_list, ori_cmd_list, record_mode):
+    def execute_thread(self, exec_id, cmd_list, res_list, ori_cmd_list, record_mode, init_db, conn):
 
         this_res = []
         self.thread_var[exec_id] = {}
         _t_info = exec_id[:str(exec_id).rindex("-")]
         _t_exec_id = exec_id.split("-")[-1]
+
+        if init_db:
+            self_print(f"Init conn's db: {init_db}", color=ColorEnum.CYAN, logout=True)
+            self.execute_sql("use %s" % init_db, conn=conn)
 
         for _cmd_id, _each_cmd in enumerate(cmd_list):
             uncheck = False
@@ -935,7 +979,7 @@ class StarrocksSQLApiLib(object):
 
             old_this_res_len = len(this_res)
             actual_res, actual_res_log, var, order = self.execute_single_statement(_each_cmd, _cmd_id_str, record_mode,
-                                                                                   this_res, var_key=exec_id)
+                                                                                   this_res, var_key=exec_id, conn=conn)
 
             if record_mode:
                 for new_res_lino in range(old_this_res_len, len(this_res)):
@@ -970,7 +1014,7 @@ class StarrocksSQLApiLib(object):
             self.thread_res_log.setdefault(_t_info, [])
             self.thread_res_log[_t_info].append(this_res)
 
-    def execute_single_statement(self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None):
+    def execute_single_statement(self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None, conn: any = None):
         """
         execute single statement and return result
         """
@@ -1070,7 +1114,7 @@ class StarrocksSQLApiLib(object):
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
 
-            actual_res = self.execute_sql(statement)
+            actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
 
             if record_mode:
