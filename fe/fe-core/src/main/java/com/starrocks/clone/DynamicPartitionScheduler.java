@@ -376,7 +376,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
             return true;
@@ -387,7 +387,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         String tableName;
         boolean skipAddPartition = false;
         OlapTable olapTable;
-        olapTable = (OlapTable) db.getTable(tableId);
+        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (olapTable == null) {
             LOG.warn("Automatically removes the schedule because table does not exist, " +
                         "tableId: {}", tableId);
@@ -488,13 +488,13 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             Pair<Long, Long> tableInfo = iterator.next();
             Long dbId = tableInfo.first;
             Long tableId = tableInfo.second;
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 iterator.remove();
                 LOG.warn("Could not get database={} info. remove it from scheduler", dbId);
                 continue;
             }
-            Table table = db.getTable(tableId);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             OlapTable olapTable;
             if (table instanceof OlapTable) {
                 olapTable = (OlapTable) table;
@@ -686,7 +686,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         Map<String, List<String>> ttlPartitionTables = new HashMap<>();
         long start = System.currentTimeMillis();
         for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -697,7 +697,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getDb(dbId).getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(dbId)) {
                     if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
                         registerDynamicPartitionTable(db.getId(), table.getId());
                         dynamicPartitionTables.computeIfAbsent(db.getFullName(), k -> new ArrayList<>())

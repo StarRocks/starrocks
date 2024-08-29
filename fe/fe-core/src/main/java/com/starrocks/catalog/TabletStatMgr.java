@@ -102,14 +102,14 @@ public class TabletStatMgr extends FrontendDaemon {
         long start = System.currentTimeMillis();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.WRITE);
             try {
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     long totalRowCount = 0L;
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
@@ -199,12 +199,12 @@ public class TabletStatMgr extends FrontendDaemon {
 
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
 
-            List<Table> tables = db.getTables();
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table table : tables) {
                 if (table.isCloudNativeTableOrMaterializedView()) {
                     updateLakeTableTabletStat(db, (OlapTable) table);

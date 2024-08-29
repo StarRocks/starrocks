@@ -59,6 +59,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -168,7 +169,8 @@ public class BrokerFileGroup implements Writable {
     // This will parse the input DataDescription to list for BrokerFileInfo
     public void parse(Database db, DataDescription dataDescription) throws DdlException {
         // tableId
-        Table table = db.getTable(dataDescription.getTableName());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), dataDescription.getTableName());
         if (table == null) {
             throw new DdlException("Unknown table " + dataDescription.getTableName()
                     + " in database " + db.getOriginName());
@@ -237,7 +239,7 @@ public class BrokerFileGroup implements Writable {
         if (dataDescription.isLoadFromTable()) {
             String srcTableName = dataDescription.getSrcTableName();
             // src table should be hive table
-            Table srcTable = db.getTable(srcTableName);
+            Table srcTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), srcTableName);
             if (srcTable == null) {
                 throw new DdlException("Unknown table " + srcTableName + " in database " + db.getOriginName());
             }

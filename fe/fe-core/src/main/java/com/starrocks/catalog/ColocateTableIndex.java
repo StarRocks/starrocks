@@ -492,14 +492,15 @@ public class ColocateTableIndex implements Writable {
 
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(groupId.dbId);
         int numOfTablets = 0;
         if (db != null && !allTableIds.isEmpty()) {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db, LockType.READ);
                 for (long tableId : allTableIds) {
-                    OlapTable tbl = (OlapTable) db.getTable(tableId);
+                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
                     if (tbl != null) {
                         numOfTablets += tbl.getNumberOfPartitions();
                     }
@@ -608,9 +609,9 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable(info.getTableId());
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId());
         Preconditions.checkNotNull(tbl);
 
         writeLock();
@@ -661,11 +662,11 @@ public class ColocateTableIndex implements Writable {
 
     protected Optional<String> getTableName(long dbId, long tableId) {
 
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             return Optional.empty();
         }
-        Table table = database.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
 
         if (table == null) {
             return Optional.empty();
@@ -986,9 +987,9 @@ public class ColocateTableIndex implements Writable {
         long tableId = info.getTableId();
         Map<String, String> properties = info.getPropertyMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tableId), LockType.WRITE)) {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
                     info.getGroupId());
         } catch (DdlException e) {

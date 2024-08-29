@@ -154,7 +154,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void alterLoadJob(AlterLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -237,7 +237,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
                                                int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
                                                Coordinator coordinator) throws UserException {
         // get db id
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
@@ -262,7 +262,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -662,7 +662,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     private Database checkDb(String dbName) throws DdlException {
         // get db
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new DdlException("Database[" + dbName + "] does not exist");

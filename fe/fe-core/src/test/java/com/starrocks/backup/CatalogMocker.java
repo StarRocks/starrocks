@@ -531,19 +531,19 @@ public class CatalogMocker {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb(TEST_DB_NAME);
+                globalStateMgr.getLocalMetastore().getDb(TEST_DB_NAME);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb(WRONG_DB);
+                globalStateMgr.getLocalMetastore().getDb(WRONG_DB);
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(TEST_DB_ID);
+                globalStateMgr.getLocalMetastore().getDb(TEST_DB_ID);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 

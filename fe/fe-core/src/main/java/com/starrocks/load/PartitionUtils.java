@@ -66,7 +66,7 @@ public class PartitionUtils {
         boolean success = false;
         try {
             // should check whether targetTable exists
-            Table tmpTable = db.getTable(targetTable.getId());
+            Table tmpTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), targetTable.getId());
             if (tmpTable == null) {
                 throw new DdlException("create partition failed because target table does not exist");
             }

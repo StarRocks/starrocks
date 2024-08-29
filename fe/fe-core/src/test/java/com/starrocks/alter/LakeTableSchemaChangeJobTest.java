@@ -76,8 +76,9 @@ public class LakeTableSchemaChangeJobTest {
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return (LakeTable) db.getTable(createTableStmt.getTableName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
@@ -101,9 +102,9 @@ public class LakeTableSchemaChangeJobTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
-        db = GlobalStateMgr.getServingState().getDb(DB_NAME);
+        db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(DB_NAME);
         table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
-                + NUM_BUCKETS);
+                    + NUM_BUCKETS);
         Config.enable_fast_schema_evolution_in_share_data_mode = false;
         alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 DOUBLE");
         schemaChangeJob = getAlterJob(table);
@@ -152,7 +153,7 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
 
             @Mock
@@ -413,7 +414,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertNotNull(partition);
         Assert.assertEquals(3, partition.getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -435,8 +436,8 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, long warehouseId)
-                    throws
-                    RpcException {
+                        throws
+                        RpcException {
                 throw new RpcException("publish version failed", "127.0.0.1");
             }
         };
@@ -468,7 +469,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         List<MaterializedIndex> shadowIndexes =
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
@@ -520,7 +521,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(0, shadowIndexes.size());
 
         List<MaterializedIndex> normalIndexes =
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Assert.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
 
@@ -557,7 +558,7 @@ public class LakeTableSchemaChangeJobTest {
             schemaChangeJob.runPendingJob();
         });
         Assert.assertTrue(exception.getMessage().contains(
-                "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
+                    "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
         Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
@@ -571,14 +572,14 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public Warehouse getWarehouseAllowNull(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
 
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
         LakeTableSchemaChangeJob alterJobV2 =
-                new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+                    new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
         alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
 
         schemaChangeHandler.addAlterJobV2(alterJobV2);
@@ -603,7 +604,7 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.setIsCancelling(true);
         schemaChangeJob.runPendingJob();
         schemaChangeJob.setIsCancelling(false);
-     
+
         schemaChangeJob.setWaitingCreatingReplica(true);
         schemaChangeJob.cancel("");
         schemaChangeJob.setWaitingCreatingReplica(false);

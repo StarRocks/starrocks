@@ -82,19 +82,19 @@ public class StatisticExecutor {
             if (dbId == null) {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
                 for (Long id : dbIds) {
-                    Database db = GlobalStateMgr.getCurrentState().getDb(id);
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
                     if (db == null) {
                         continue;
                     }
-                    table = db.getTable(tableId);
+                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                     if (table == null) {
                         continue;
                     }
                     break;
                 }
             } else {
-                Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-                table = database.getTable(tableId);
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
             }
 
             if (table == null) {
@@ -187,8 +187,16 @@ public class StatisticExecutor {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
-        Database db = MetaUtils.getDatabase(dbId);
-        Table table = MetaUtils.getTable(dbId, tableId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", dbId);
+        }
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+
         if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View",
                     table.getName());

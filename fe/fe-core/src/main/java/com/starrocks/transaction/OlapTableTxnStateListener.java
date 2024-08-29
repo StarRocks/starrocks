@@ -292,7 +292,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                           List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
-        Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
             locker.lockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);

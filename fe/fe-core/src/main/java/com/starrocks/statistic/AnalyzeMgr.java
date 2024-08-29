@@ -43,7 +43,6 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -265,10 +264,8 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
-        Table table;
-        try {
-            table = MetaUtils.getTable(dbId, tableId);
-        } catch (SemanticException e) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
             return;
         }
 
@@ -284,10 +281,9 @@ public class AnalyzeMgr implements Writable {
 
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
-        Table table;
-        try {
-            table = MetaUtils.getTable(catalogName, dbName, tableName);
-        } catch (Exception e) {
+
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
             return;
         }
 
@@ -328,11 +324,11 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void refreshHistogramStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (null == db) {
             return;
         }
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (null == table) {
             return;
         }
@@ -377,10 +373,8 @@ public class AnalyzeMgr implements Writable {
 
     public void refreshConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
                                                               List<String> columns, boolean async) {
-        Table table;
-        try {
-            table = MetaUtils.getTable(catalogName, dbName, tableName);
-        } catch (Exception e) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
             return;
         }
 
@@ -396,12 +390,12 @@ public class AnalyzeMgr implements Writable {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                 continue;
             }
 
-            for (Table table : db.getTables()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 /*
                  * If the meta contains statistical information, but the data is empty,
                  * it means that the table has been truncate or insert overwrite, and it is set to empty,
@@ -475,9 +469,11 @@ public class AnalyzeMgr implements Writable {
                     && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
                     && Duration.between(endTime, lastCleanTime).toMinutes() < 30) {
                 NativeAnalyzeStatus nativeAnalyzeStatus = (NativeAnalyzeStatus) analyzeStatus;
-                Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeStatus.getDbId());
-                if (db != null && db.getTable(nativeAnalyzeStatus.getTableId()) != null) {
-                    tables.add(db.getTable(nativeAnalyzeStatus.getTableId()));
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeStatus.getDbId());
+                if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), nativeAnalyzeStatus.getTableId()) != null) {
+                    tables.add(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), nativeAnalyzeStatus.getTableId()));
                 }
             }
         }
@@ -525,12 +521,12 @@ public class AnalyzeMgr implements Writable {
             checkTableIds.clear();
             List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
             for (Long dbId : dbIds) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
 
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
                         continue;
                     }
@@ -547,12 +543,12 @@ public class AnalyzeMgr implements Writable {
 
         int exprLimit = Config.expr_children_limit / 2;
         for (Pair<Long, Long> dbTableId : checkTableIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbTableId.first);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbTableId.first);
             if (null == db) {
                 continue;
             }
 
-            Table table = db.getTable(dbTableId.second);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), dbTableId.second);
             if (table == null) {
                 continue;
             }
@@ -676,7 +672,7 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void updateLoadRows(TransactionState transactionState) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(transactionState.getDbId());
         if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
             return;
         }
@@ -703,7 +699,8 @@ public class AnalyzeMgr implements Writable {
                 long tableId = transactionState.getTableIdList().get(0);
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 if (loadRows == 0) {
-                    OlapTable table = (OlapTable) db.getTable(tableId);
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
                     loadRows = table != null ? table.getRowCount() : 0;
                 }
                 updateBasicStatsMeta(db.getId(), tableId, loadRows);

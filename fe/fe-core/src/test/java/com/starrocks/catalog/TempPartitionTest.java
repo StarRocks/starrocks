@@ -379,7 +379,7 @@ public class TempPartitionTest {
                         "distributed by hash(k2) buckets 1\n" +
                         "properties('replication_num' = '1');");
 
-        Database db2 = GlobalStateMgr.getCurrentState().getDb("db2");
+        Database db2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
         OlapTable tbl2 = (OlapTable) db2.getTable("tbl2");
 
         Map<String, Long> originPartitionTabletIds = Maps.newHashMap();
@@ -608,7 +608,7 @@ public class TempPartitionTest {
         }
 
         OlapTable olapTable =
-                (OlapTable) GlobalStateMgr.getCurrentState().getDb("db2").getTable("tbl2");
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getTable("tbl2");
 
         // waiting table state to normal
         int retryTimes = 5;
@@ -675,7 +675,7 @@ public class TempPartitionTest {
                 "distributed by hash(k2) buckets 1\n" +
                 "properties('replication_num' = '1');");
 
-        Database db3 = GlobalStateMgr.getCurrentState().getDb("db3");
+        Database db3 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
         OlapTable tbl3 = (OlapTable) db3.getTable("tbl3");
 
         // base range is [min, 10), [10, 20), [20, 30)

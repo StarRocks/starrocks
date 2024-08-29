@@ -60,7 +60,7 @@ public class RepoCreator {
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
     }
 
     public static void createTable() throws UserException {
@@ -71,8 +71,7 @@ public class RepoCreator {
     public static boolean correctTable() {
         int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
-                .mayGetDb(FileListTableRepo.FILE_LIST_DB_NAME)
-                .flatMap(db -> db.mayGetTable(FileListTableRepo.FILE_LIST_TABLE_NAME))
+                .getLocalMetastore().mayGetTable(FileListTableRepo.FILE_LIST_DB_NAME, FileListTableRepo.FILE_LIST_TABLE_NAME)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
         if (numBackends < 3) {

@@ -512,7 +512,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public String getDbFullName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -524,11 +524,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public String getTableName() throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        Table table = database.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
         if (table == null) {
             throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
         }
@@ -856,12 +856,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws UserException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
         }
 
-        Table table = db.getTable(this.tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), this.tableId);
         if (table == null) {
             throw new MetaNotFoundException("table " + this.tableId + " does not exist");
         }
@@ -1287,7 +1287,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     protected static void unprotectedCheckMeta(Database db, String tblName, RoutineLoadDesc routineLoadDesc)
             throws UserException {
-        Table table = db.getTable(tblName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
 
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
@@ -1421,7 +1421,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public void update() throws UserException {
         // check if db and table exist
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                     .add("db_id", dbId)
@@ -1440,7 +1440,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // check table belong to database
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id).add("db_id", dbId)
                     .add("table_id", tableId)
@@ -1495,13 +1495,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected abstract String getStatistic();
 
     public List<String> getShowInfo() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         Table tbl = null;
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                tbl = db.getTable(tableId);
+                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }
@@ -1585,7 +1585,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public List<String> getShowStatistic() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         readLock();
         try {
             List<String> row = Lists.newArrayList();
@@ -2000,13 +2000,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public TRoutineLoadJobInfo toThrift() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         Table tbl = null;
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                tbl = db.getTable(tableId);
+                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }

@@ -394,7 +394,8 @@ public class TabletInvertedIndex implements MemoryTrackable {
                     if (creatingTableIds.containsKey(tableId)) {
                         continue;
                     }
-                    com.starrocks.catalog.Table table = db.getTable(tableId);
+                    com.starrocks.catalog.Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
                     if (table == null) {
                         table = recycleBin.getTable(dbId, tableId);
                         if (table != null) {
@@ -544,10 +545,11 @@ public class TabletInvertedIndex implements MemoryTrackable {
             long dbId = tabletMeta.getDbId();
             long tableId = tabletMeta.getTableId();
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
                 // getTable is thread-safe for caller, lock free
-                com.starrocks.catalog.Table tbl = db.getTable(tableId);
+                com.starrocks.catalog.Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
                 if (tbl != null && tbl instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) tbl;
                     if (olapTable.getState() == OlapTable.OlapTableState.RESTORE) {

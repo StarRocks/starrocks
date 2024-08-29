@@ -85,14 +85,14 @@ public class StorageMediumInferTest {
 
     @Test
     public void testCreateTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         be1.setStorageMediumForAllDisks(TStorageMedium.HDD);
         be2.setStorageMediumForAllDisks(TStorageMedium.HDD);
         createTable("create table test.tbl1(key1 int, key2 varchar(10)) \n" +
                 "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
-        OlapTable tbl1 = (OlapTable) db.getTable("tbl1");
+        OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         List<Partition> partitionList1 = Lists.newArrayList(tbl1.getPartitions());
         DataProperty dataProperty1 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl1.getPartitionInfo(),
@@ -105,7 +105,7 @@ public class StorageMediumInferTest {
                 + "duplicate key(k1)\n" + "partition by range(k2)\n" + "(partition p1 values less than(\"10\"))\n"
                 + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1'); ";
         createTable(sql);
-        OlapTable tbl2 = (OlapTable) db.getTable("tbl2");
+        OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
         List<Partition> partitionList2 = Lists.newArrayList(tbl2.getPartitions());
         DataProperty dataProperty2 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
@@ -117,7 +117,7 @@ public class StorageMediumInferTest {
         Config.tablet_sched_storage_cooldown_second = 123123213L;
         createTable("create table test.tbl3(key1 int, key2 varchar(10)) \n" +
                 "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
-        OlapTable tbl3 = (OlapTable) db.getTable("tbl3");
+        OlapTable tbl3 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl3");
         List<Partition> partitionList3 = Lists.newArrayList(tbl3.getPartitions());
         DataProperty dataProperty3 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
@@ -127,7 +127,7 @@ public class StorageMediumInferTest {
         Config.tablet_sched_storage_cooldown_second = -1L; // default value, no storage cool down
         createTable("create table test.tbl4(key1 int, key2 varchar(10)) \n" +
                 "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
-        OlapTable tbl4 = (OlapTable) db.getTable("tbl4");
+        OlapTable tbl4 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl4");
         List<Partition> partitionList4 = Lists.newArrayList(tbl4.getPartitions());
         DataProperty dataProperty4 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
@@ -137,7 +137,7 @@ public class StorageMediumInferTest {
 
     @Test
     public void testAlterTableAddPartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         be1.setStorageMediumForAllDisks(TStorageMedium.SSD);
         be2.setStorageMediumForAllDisks(TStorageMedium.SSD);
@@ -146,7 +146,7 @@ public class StorageMediumInferTest {
                 + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1'); ";
         createTable(sql);
         alterTableWithNewParser("ALTER TABLE test.tblp2 ADD PARTITION IF NOT EXISTS p2 VALUES LESS THAN (\"20\")");
-        OlapTable tbl2 = (OlapTable) db.getTable("tblp2");
+        OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tblp2");
         List<Partition> partitionList2 = Lists.newArrayList(tbl2.getPartitions());
         Assert.assertEquals(2, partitionList2.size());
         for (Partition partition : partitionList2) {

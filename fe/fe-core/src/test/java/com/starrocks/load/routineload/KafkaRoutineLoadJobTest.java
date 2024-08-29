@@ -279,7 +279,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                database.getTable(tableNameString);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = null;
             }
@@ -312,7 +312,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                database.getTable(tableNameString);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = table;
                 database.getId();
@@ -392,7 +392,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                database.getTable(tableNameString);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = table;
                 database.getId();
@@ -460,7 +460,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                database.getTable(tableNameString);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = table;
                 database.getId();

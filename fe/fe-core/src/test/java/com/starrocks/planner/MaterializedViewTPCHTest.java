@@ -48,9 +48,9 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         int scale = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("customer");
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("customer");
         setTableStatistics(t4, 150000 * scale);
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
 
         // When force rule based rewrite is enabled, query will be transformed into scan in Rule Rewrite Phase.

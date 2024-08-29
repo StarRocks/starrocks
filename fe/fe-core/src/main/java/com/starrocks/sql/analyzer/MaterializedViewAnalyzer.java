@@ -80,7 +80,6 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ViewRelation;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -242,7 +241,25 @@ public class MaterializedViewAnalyzer {
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
             final TableName tableNameObject = statement.getTableName();
-            MetaUtils.normalizeMVName(context, tableNameObject);
+            /*
+             * Materialized view name is a little bit different from a normal table
+             * 1. Use default catalog if not specified, actually it only support default catalog until now
+             */
+            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
+                tableNameObject.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            }
+            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getDb())) {
+                if (com.google.common.base.Strings.isNullOrEmpty(context.getDatabase())) {
+                    throw new SemanticException("No database selected. " +
+                            "You could set the database name through `<database>.<table>` or `use <database>` statement");
+                }
+                tableNameObject.setDb(context.getDatabase());
+            }
+
+            if (com.google.common.base.Strings.isNullOrEmpty(tableNameObject.getTbl())) {
+                throw new SemanticException("Table name cannot be empty");
+            }
+
             final String tableName = tableNameObject.getTbl();
             FeNameFormat.checkTableName(tableName);
             QueryStatement queryStatement = statement.getQueryStatement();
@@ -280,7 +297,7 @@ public class MaterializedViewAnalyzer {
                         "default_catalog through `set catalog <default_catalog>` statement",
                         statement.getTableName().getPos());
             }
-            Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
+            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
                         statement.getTableName().getPos());
@@ -1051,8 +1068,12 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
             TableName mvName = statement.getMvName();
-            MetaUtils.normalizationTableName(context, mvName);
-            Table table = MetaUtils.getTable(statement.getMvName());
+            mvName.normalization(context);
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(statement.getMvName().getCatalog(),
+                    statement.getMvName().getDb(), statement.getMvName().getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", mvName);
+            }
             if (!(table instanceof MaterializedView)) {
                 throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
             }
@@ -1067,11 +1088,12 @@ public class MaterializedViewAnalyzer {
                                                           ConnectContext context) {
             statement.getMvName().normalization(context);
             TableName mvName = statement.getMvName();
-            Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
+            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(mvName.getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
             }
-            OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getFullName(), mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }

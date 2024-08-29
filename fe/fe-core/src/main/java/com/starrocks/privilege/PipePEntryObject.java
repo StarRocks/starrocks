@@ -56,7 +56,7 @@ public class PipePEntryObject implements PEntryObject {
             pipeId = PrivilegeBuiltinConstants.ALL_PIPES_ID;
         } else {
             String dbName = tokens.get(0);
-            Database database = mgr.getDb(dbName);
+            Database database = mgr.getLocalMetastore().getDb(dbName);
             if (database == null) {
                 throw new PrivObjNotFoundException("cannot find db: " + dbName);
             }
@@ -129,7 +129,7 @@ public class PipePEntryObject implements PEntryObject {
                     .map(Pipe::getDbAndName)
                     .collect(Collectors.toList());
             for (Pair<Long, String> dbAndName : ListUtils.emptyIfNull(dbAndNames)) {
-                Optional<Database> db = GlobalStateMgr.getCurrentState().mayGetDb(dbAndName.first);
+                Optional<Database> db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbAndName.first);
                 db.ifPresent(database -> objects.add(
                         Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 database.getFullName(), dbAndName.second)));
@@ -206,7 +206,7 @@ public class PipePEntryObject implements PEntryObject {
                 return Optional.empty();
             }
             long dbId = Long.parseLong(getDbUUID());
-            return GlobalStateMgr.getCurrentState().mayGetDb(dbId);
+            return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbId);
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
@@ -227,7 +227,7 @@ public class PipePEntryObject implements PEntryObject {
             sb.append("ALL ").append("DATABASES");
         } else {
             String dbName;
-            Database database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(getDbUUID()));
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(getDbUUID()));
             if (database == null) {
                 throw new MetaNotFoundException("Cannot find database : " + getDbUUID());
             }

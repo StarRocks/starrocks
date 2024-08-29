@@ -57,8 +57,9 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        LakeTable table = (LakeTable) db.getTable(createTableStmt.getTableName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), createTableStmt.getTableName());
         table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
         return table;
     }
@@ -95,7 +96,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void test() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t0(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
+                    "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
 
         {
@@ -136,7 +137,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testGetInfo() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t1(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
+                    "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
         AlterJobV2 job = mustAlterTable(table, "ALTER TABLE t1 ADD COLUMN c1 BIGINT");
         List<List<Comparable>> infoList = new ArrayList<>();
         job.getInfo(infoList);
@@ -151,7 +152,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals(table.getBaseIndexId(), info.get(5));
         Assert.assertEquals(table.getBaseIndexId(), info.get(6));
         Assert.assertEquals(String.format("%d:0", table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaVersion()),
-                info.get(7));
+                    info.get(7));
         Assert.assertEquals(job.getTransactionId().get(), info.get(8));
         Assert.assertEquals(job.getJobState().name(), info.get(9));
         Assert.assertEquals(job.errMsg, info.get(10));
@@ -161,14 +162,14 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
     @Test
     public void testReplay() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         LakeTable table = createTable(connectContext, "CREATE TABLE t3(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
+                    "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
         SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser("ALTER TABLE t3 ADD COLUMN c1 INT",
-                connectContext);
+                    connectContext);
         LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob)
-                handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table);
+                    handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table);
         Assert.assertNotNull(job);
         Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
@@ -209,7 +210,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testSortKey() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key(c0 INT, c1 BIGINT) PRIMARY KEY(c0) " +
-                "DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c1)");
+                    "DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c1)");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
 
         {
@@ -242,7 +243,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testSortKeyIndexesChanged() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key_index_changed" +
-                "(c0 INT, c1 BIGINT, c2 BIGINT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c2)");
+                    "(c0 INT, c1 BIGINT, c2 BIGINT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c2)");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
 
         {
@@ -263,13 +264,13 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testModifyColumnType() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_modify_type" +
-                "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
-                "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
+                    "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
+                    "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
+                    "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
             mustAlterTable(table, "ALTER TABLE t_modify_type MODIFY COLUMN c1 BIGINT, MODIFY COLUMN c2 VARCHAR(10)," +
-                    "MODIFY COLUMN c3 DATETIME");
+                        "MODIFY COLUMN c3 DATETIME");
             List<Column> columns = table.getBaseSchema();
             Assert.assertEquals(4, columns.size());
 

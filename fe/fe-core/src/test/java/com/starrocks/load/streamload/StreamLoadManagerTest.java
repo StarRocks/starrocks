@@ -83,9 +83,13 @@ public class StreamLoadManagerTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_ID);
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;

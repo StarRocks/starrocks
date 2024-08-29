@@ -50,7 +50,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.thrift.TStorageMedium;
@@ -178,14 +178,14 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "7 months");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
 
-        new MockUp<MetadataMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(String dbName) {
                 return db;
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(String dbName, String tblName) {
                 return table;
             }
         };
@@ -213,14 +213,14 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "2 days");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
 
-        new MockUp<MetadataMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(String dbName) {
                 return db;
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(String dbName, String tblName) {
                 return table;
             }
         };
@@ -243,14 +243,14 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "4 hours");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        new MockUp<MetadataMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(String dbName) {
                 return db;
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(String dbName, String tblName) {
                 return table;
             }
         };

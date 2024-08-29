@@ -1521,7 +1521,7 @@ public class TabletScheduler extends FrontendDaemon {
             long tabletId = schedCtx.getTabletId();
             long indexId = schedCtx.getIndexId();
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -1530,7 +1530,7 @@ public class TabletScheduler extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                tbl = db.getTable(tableId);
+                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }

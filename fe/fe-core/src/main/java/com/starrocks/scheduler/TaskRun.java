@@ -171,13 +171,13 @@ public class TaskRun implements Comparable<TaskRun> {
         try {
             // NOTE: mvId is set in Task's properties when creating
             long mvId = Long.parseLong(properties.get(MV_ID));
-            Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
             if (database == null) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
                 return newProperties;
             }
 
-            Table table = database.getTable(mvId);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), mvId);
             if (table == null) {
                 LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                         ctx.getDatabase());

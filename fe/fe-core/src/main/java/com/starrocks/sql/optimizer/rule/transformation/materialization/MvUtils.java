@@ -174,12 +174,12 @@ public class MvUtils {
         }
         Set<Table> newMvs = Sets.newHashSet();
         for (MvId mvId : newMvIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
             if (db == null) {
                 logMVPrepare("Cannot find database from mvId:{}", mvId);
                 continue;
             }
-            Table table = db.getTable(mvId.getId());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
             if (table == null) {
                 logMVPrepare("Cannot find materialized view from mvId:{}", mvId);
                 continue;
@@ -1151,7 +1151,8 @@ public class MvUtils {
         }
         // inactive related asynchronous mvs
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
