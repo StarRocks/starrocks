@@ -1120,15 +1120,15 @@ Status TabletManager::start_trash_sweep() {
 
     if (!finished_tablets.empty() || !finished_tablets_redundant.empty()) {
         std::unique_lock l(_shutdown_tablets_lock);
-        for (auto tablet_info_finished : finished_tablets) {
+        for (const auto& tablet_info_finished : finished_tablets) {
             auto& tablet_finished = tablet_info_finished.tablet;
             _shutdown_tablets.erase(tablet_finished->tablet_id());
         }
 
-        for (auto& tablet_info : tablets_redundant_to_check) {
+        for (const auto& tablet_info : tablets_redundant_to_check) {
             auto& tablet = tablet_info.tablet;
             bool is_finished_tablet = false;
-            for (auto tablet_info_finished : finished_tablets_redundant) {
+            for (const auto& tablet_info_finished : finished_tablets_redundant) {
                 auto& tablet_finished = tablet_info_finished.tablet;
                 if (tablet->tablet_uid() == tablet_finished->tablet_uid()) {
                     is_finished_tablet = true;
