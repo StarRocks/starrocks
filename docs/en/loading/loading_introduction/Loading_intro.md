@@ -51,7 +51,7 @@ In asynchronous loading mode, after you submit a load job, StarRocks immediately
 
 - If the result indicates a job creation failure, you can determine whether you need to retry the job based on the failure information.
 
-StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md).
+StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md).
 
 The process of asynchronous loading is as follows:
 
@@ -106,7 +106,7 @@ The workflow of a Routine job is described as follows:
 
 ## Loading methods
 
-StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md).
+StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 | Loading method     | Data source                                        | Business scenario                                            | Data volume per load job                                     | Data file format                                | Loading mode | Protocol |
 | ------------------ | -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------- | ------------ | -------- |
@@ -153,7 +153,7 @@ When you load data, you can choose not to load the data from a specific field of
 
 - If you have specified the `DEFAULT` keyword for the destination StarRocks table column mapping the source field when you create the StarRocks table, StarRocks automatically fills the specified default value into the destination column.
 
-  [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
+  [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
 
   > **NOTE**
   >
@@ -165,13 +165,13 @@ When you load data, you can choose not to load the data from a specific field of
   >
   > If the destination column is defined as `NOT NULL`, the load fails.
 
-  For [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
+  For [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
 
-For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
 ### Set write quorum for data loading
 
-If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md). This property is supported from v2.5.
+If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md). This property is supported from v2.5.
 
 ## System configurations
 
@@ -227,7 +227,7 @@ You can configure the following parameters in the configuration file **be.conf**
 
 ### System variable configurations
 
-You can configure the following [system variable](../../reference/System_variable.md):
+You can configure the following [system variable](../../sql-reference/System_variable.md):
 
 - `query_timeout`
 

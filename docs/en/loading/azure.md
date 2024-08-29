@@ -8,7 +8,7 @@ keywords: ['Broker Load']
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks allows you to load data in bulk from Microsoft Azure Storage by using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+StarRocks allows you to load data in bulk from Microsoft Azure Storage by using [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 Broker Load runs in asynchronous mode. An asynchronous Broker Load process handles making the connection to Azure, pulling the data, and storing the data in StarRocks.
 

@@ -210,7 +210,7 @@ In v2.3 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker y
 >
 > From v2.5 onwards, StarRocks removes the dependency on brokers and implements "broker-free loading."
 >
-> You can use the [SHOW BROKER](../Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../../../deployment/deploy_broker.md).
+> You can use the [SHOW BROKER](../cluster-management/nodes_processes/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../../../deployment/deploy_broker.md).
 
 ### StorageCredentialParams
 
@@ -265,7 +265,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     > **NOTE**
     >
     > - In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If the broker group consists of multiple brokers, you must modify the **start_broker.sh** file on each broker node and then restart the broker nodes to make the modifications take effect.
-    > - You can use the [SHOW BROKER](../Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
+    > - You can use the [SHOW BROKER](../cluster-management/nodes_processes/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
 
 - HA configuration
 

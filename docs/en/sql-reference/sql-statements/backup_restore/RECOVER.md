@@ -8,11 +8,7 @@ displayed_sidebar: docs
 
 Recovers a database, table, or partition that was dropped by using the DROP command. The dropped database, table, or partition can be recovered within the period specified by the FE parameter `catalog_trash_expire_second` (1 day by default).
 
-<<<<<<<< HEAD:docs/en/sql-reference/sql-statements/table_bucket_part_index/RECOVER.md
-Data deleted by using [TRUNCATE TABLE](./TRUNCATE_TABLE.md) cannot be recovered.
-========
 Data deleted by using [TRUNCATE TABLE](../table_bucket_part_index/TRUNCATE_TABLE.md) cannot be recovered.
->>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/backup_restore/RECOVER.md
 
 ## Syntax
 
