@@ -33,8 +33,6 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-hdfs-client</artifactId>
-            <version>3.3.6</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.iceberg</groupId>
