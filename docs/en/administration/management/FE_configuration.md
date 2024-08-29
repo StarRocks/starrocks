@@ -2202,11 +2202,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-<<<<<<< HEAD
-- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/data-definition/RECOVER.md) command.
-=======
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 - Introduced in: -
 
 ##### enable_auto_tablet_distribution
@@ -2269,23 +2265,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
 
-<<<<<<< HEAD
-=======
-##### enable_fast_schema_evolution
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
-- Introduced in: v3.2.0
-
-> **NOTE**
->
-> - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ##### recover_with_empty_tablet
 
 - Default: false

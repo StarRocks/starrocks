@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD
-displayed_sidebar: "English"
-=======
 displayed_sidebar: docs
 toc_max_heading_level: 5
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # Iceberg catalog
@@ -964,30 +960,11 @@ You can specify the table attributes in the `"key" = "value"` format in `PROPERT
 
 The following table describes a few key properties.
 
-<<<<<<< HEAD
 | **Property**      | **Description**                                              |
 | ----------------- | ------------------------------------------------------------ |
 | location          | The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
 | file_format       | The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`. |
 | compression_codec | The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
-=======
-###### location
-
-Description: The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:
-
-- If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs.
-- If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.
-
-###### file_format
-
-Description: The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`.
-
-###### compression_codec
-
-Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec).
-
----
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ### Examples
 
