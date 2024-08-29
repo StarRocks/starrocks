@@ -40,6 +40,7 @@
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <event2/keyvalq_struct.h>
+#include <event2/thread.h>
 
 #include <memory>
 #include <sstream>
@@ -90,6 +91,11 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
+// Create bufferevent used for multi-threads, so set flat to BEV_OPT_THREADSAFE
+static struct bufferevent* bufferevent_create_cb(struct event_base* base, void* args) {
+    return bufferevent_socket_new(base, -1, BEV_OPT_THREADSAFE);
+}
+
 EvHttpServer::EvHttpServer(int port, int num_workers) : _port(port), _num_workers(num_workers), _real_port(0) {
     _host = BackendOptions::get_service_bind_address();
     DCHECK_GT(_num_workers, 0);
@@ -109,6 +115,13 @@ EvHttpServer::~EvHttpServer() {
 }
 
 Status EvHttpServer::start() {
+    if (config::be_http_enable_pthread) {
+        int ret = evthread_use_pthreads();
+        if (ret < 0) {
+            return Status::InternalError(fmt::format("Failed to set pthreads for libevent, return value: {}", ret));
+        }
+    }
+
     // bind to
     RETURN_IF_ERROR(_bind());
     for (int i = 0; i < _num_workers; ++i) {
@@ -132,6 +145,10 @@ Status EvHttpServer::start() {
             pthread_rwlock_wrlock(&_rw_lock);
             _https.push_back(http);
             pthread_rwlock_unlock(&_rw_lock);
+
+            if (config::be_http_enable_pthread) {
+                evhttp_set_bevcb(http, bufferevent_create_cb, nullptr);
+            }
 
             auto res = evhttp_accept_socket(http, _server_fd);
             if (res < 0) {
