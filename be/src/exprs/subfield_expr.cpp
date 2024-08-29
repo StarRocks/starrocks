@@ -66,6 +66,7 @@ public:
 
         DCHECK_EQ(col->size(), union_null_column->size());
 
+        // We need clone a new subfield column
         return NullableColumn::create(col->clone_shared(), union_null_column);
     }
 
