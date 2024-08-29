@@ -91,7 +91,7 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
-// Create bufferevent used for multi-threads, so set flat to BEV_OPT_THREADSAFE
+// Create bufferevent used for multi-threads, so set flag to BEV_OPT_THREADSAFE
 static struct bufferevent* bufferevent_create_cb(struct event_base* base, void* args) {
     return bufferevent_socket_new(base, -1, BEV_OPT_THREADSAFE);
 }
