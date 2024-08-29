@@ -216,5 +216,4 @@ public class TaskRunHistory {
         LOG.warn("Too much task metadata triggers forced task_run GC, " +
                 "size before GC:{}, size after GC:{}.", beforeSize, getTaskRunCount());
     }
-
 }
