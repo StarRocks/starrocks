@@ -415,7 +415,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ");");
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("emps");
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("emps");
         setTableStatistics(t7, 6000000);
     }
 
@@ -4563,7 +4563,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ");";
             starRocksAssert.withTable(table2);
 
-            OlapTable t4 = (OlapTable) GlobalStateMgr.getCurrentState().getDb(MATERIALIZED_DB_NAME)
+            OlapTable t4 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(MATERIALIZED_DB_NAME)
                     .getTable("test_sr_table_join");
             setTableStatistics(t4, 150000);
 

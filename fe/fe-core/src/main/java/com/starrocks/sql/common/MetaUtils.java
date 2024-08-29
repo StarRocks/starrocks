@@ -24,7 +24,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
@@ -91,70 +90,6 @@ public class MetaUtils {
         }
     }
 
-    public static Database getDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", dbId);
-        }
-        return db;
-    }
-
-    public static Table getTable(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", dbId);
-        }
-        Table table = db.getTable(tableId);
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableId);
-        }
-        return table;
-    }
-
-    public static Database getDatabase(ConnectContext session, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(session.getCurrentCatalog());
-        }
-        Database db = session.getGlobalStateMgr().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
-        }
-        return db;
-    }
-
-    public static Database getDatabase(String catalogName, String dbName) {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        if (db == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-        return db;
-    }
-
-    public static Table getTable(TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        }
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
-                tableName.getDb(), tableName.getTbl());
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName);
-        }
-        return table;
-    }
-
-    public static Table getTable(ConnectContext session, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(session.getCurrentCatalog());
-        }
-        Table table = session.getGlobalStateMgr().getMetadataMgr().getTable(tableName.getCatalog(),
-                tableName.getDb(), tableName.getTbl());
-
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName.toString());
-        }
-        return table;
-    }
-
     // get table by tableName, unlike getTable, this interface is session aware,
     // which means if there is a temporary table with the same name,
     // use temporary table first, otherwise, treat it as a permanent table
@@ -163,7 +98,13 @@ public class MetaUtils {
             tableName.setCatalog(session.getCurrentCatalog());
         }
         if (database == null) {
-            database = getDatabase(session, tableName);
+            if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+                tableName.setCatalog(session.getCurrentCatalog());
+            }
+            database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+            if (database == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
         }
 
         Table table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
@@ -177,54 +118,6 @@ public class MetaUtils {
             throw new SemanticException("Table %s is not found", tableName.getTbl());
         }
         return table;
-    }
-
-    public static Table getTable(String catalogName, String dbName, String tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName);
-        }
-        return table;
-    }
-
-    public static void normalizationTableName(ConnectContext connectContext, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
-                throw new SemanticException("No catalog selected");
-            }
-            tableName.setCatalog(connectContext.getCurrentCatalog());
-        }
-        if (Strings.isNullOrEmpty(tableName.getDb())) {
-            if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
-                throw new SemanticException("No database selected");
-            }
-            tableName.setDb(connectContext.getDatabase());
-        }
-
-        if (Strings.isNullOrEmpty(tableName.getTbl())) {
-            throw new SemanticException("Table name is null");
-        }
-    }
-
-    /**
-     * Materialized view name is a little bit different from a normal table
-     * 1. Use default catalog if not specified, actually it only support default catalog until now
-     */
-    public static void normalizeMVName(ConnectContext connectContext, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        }
-        if (Strings.isNullOrEmpty(tableName.getDb())) {
-            if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
-                throw new SemanticException("No database selected. " +
-                        "You could set the database name through `<database>.<table>` or `use <database>` statement");
-            }
-            tableName.setDb(connectContext.getDatabase());
-        }
-
-        if (Strings.isNullOrEmpty(tableName.getTbl())) {
-            throw new SemanticException("Table name cannot be empty");
-        }
     }
 
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
@@ -267,12 +160,12 @@ public class MetaUtils {
     }
 
     public static boolean isPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
-        Database db = stateMgr.getDb(dbId);
+        Database db = stateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return false;
         }
         // lake table or lake materialized view
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return false;
         }
@@ -326,7 +219,11 @@ public class MetaUtils {
     }
 
     public static Column getColumnByColumnName(long dbId, long tableId, String columnName) {
-        Table table = getTable(dbId, tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+
         Column column = table.getColumn(columnName);
         if (column == null) {
             throw new SemanticException(String.format("can not find column by name: %s", columnName));
@@ -343,7 +240,10 @@ public class MetaUtils {
     }
 
     public static String getColumnNameByColumnId(long dbId, long tableId, ColumnId columnId) {
-        Table table = getTable(dbId, tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
         Column column = table.getColumn(columnId);
         if (column == null) {
             throw new SemanticException(String.format("can not find column by column id: %s", columnId));

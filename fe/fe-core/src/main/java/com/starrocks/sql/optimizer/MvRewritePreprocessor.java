@@ -657,7 +657,7 @@ public class MvRewritePreprocessor {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
                 String mvName = olapTable.getIndexNameById(indexId);
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
                 // distribution info
                 DistributionInfo baseTableDistributionInfo = olapTable.getDefaultDistributionInfo();
@@ -865,7 +865,7 @@ public class MvRewritePreprocessor {
 
         // Add mv info into dump info
         if (context.getDumpInfo() != null) {
-            String dbName = GlobalStateMgr.getCurrentState().getDb(mv.getDbId()).getFullName();
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
             context.getDumpInfo().addTable(dbName, mv);
         }
 

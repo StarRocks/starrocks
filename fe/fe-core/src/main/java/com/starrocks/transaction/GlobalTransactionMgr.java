@@ -283,7 +283,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
             throws UserException {
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbId);
             throw new UserException("Database[" + dbId + "] does not exist");
@@ -697,7 +697,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         for (long dbId : dbIds) {
             List<Comparable> info = new ArrayList<Comparable>();
             info.add(dbId);
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }

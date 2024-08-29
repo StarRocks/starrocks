@@ -58,7 +58,6 @@ public class ExpressionRangePartitionInfoTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-
     @Before
     public void setUp() throws Exception {
         partitionExprs = Lists.newArrayList();
@@ -71,7 +70,7 @@ public class ExpressionRangePartitionInfoTest {
         fnChildren.add(slotRef2);
         functionCallExpr = new FunctionCallExpr("date_trunc", fnChildren);
         functionCallExpr.setFn(Expr.getBuiltinFunction(
-                "date_trunc", new Type[] {Type.VARCHAR, Type.DATETIME}, Function.CompareMode.IS_IDENTICAL));
+                    "date_trunc", new Type[] {Type.VARCHAR, Type.DATETIME}, Function.CompareMode.IS_IDENTICAL));
 
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -90,9 +89,9 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
         List<Column> schema = Collections.singletonList(k1);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(partitionExprs,
-                schema, PartitionType.RANGE);
+                    schema, PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
-                MetaUtils.buildIdToColumn(schema));
+                    MetaUtils.buildIdToColumn(schema));
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k1);
     }
@@ -102,9 +101,9 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(functionCallExpr));
         List<Column> schema = Collections.singletonList(k2);
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
+                    new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
-                MetaUtils.buildIdToColumn(schema));
+                    MetaUtils.buildIdToColumn(schema));
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k2);
     }
@@ -117,9 +116,9 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(functionCallExpr));
         List<Column> schema = Arrays.asList(k1, k2);
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
+                    new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
-                MetaUtils.buildIdToColumn(schema));
+                    MetaUtils.buildIdToColumn(schema));
         Assert.assertEquals(partitionColumns.size(), 2);
         Assert.assertEquals(partitionColumns.get(0), k1);
         Assert.assertEquals(partitionColumns.get(1), k2);
@@ -135,15 +134,15 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
-                new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-128"))),
-                null));
+                    new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-128"))),
+                    null));
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema),
-                    singleRangePartitionDesc, 20000L, false);
+                        singleRangePartitionDesc, 20000L, false);
         }
     }
 
@@ -154,15 +153,15 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
-                new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-32768"))),
-                null));
+                    new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-32768"))),
+                    null));
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema),
-                    singleRangePartitionDesc, 20000L, false);
+                        singleRangePartitionDesc, 20000L, false);
         }
     }
 
@@ -173,15 +172,15 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
-                new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-2147483648"))),
-                null));
+                    new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-2147483648"))),
+                    null));
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -192,13 +191,13 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("-9223372036854775808"))), null));
+                    .newArrayList(new PartitionValue("-9223372036854775808"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("-9223372036854775806"))), null));
+                    .newArrayList(new PartitionValue("-9223372036854775806"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("0"))), null));
+                    .newArrayList(new PartitionValue("0"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("9223372036854775806"))), null));
+                    .newArrayList(new PartitionValue("9223372036854775806"))), null));
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
@@ -206,7 +205,7 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -217,13 +216,13 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("-9223372036854775806"))), null));
+                    .newArrayList(new PartitionValue("-9223372036854775806"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("-9223372036854775805"))), null));
+                    .newArrayList(new PartitionValue("-9223372036854775805"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("0"))), null));
+                    .newArrayList(new PartitionValue("0"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
-                .newArrayList(new PartitionValue("9223372036854775806"))), null));
+                    .newArrayList(new PartitionValue("9223372036854775806"))), null));
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
@@ -231,7 +230,7 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -256,17 +255,17 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
         PartitionKeyDesc p2 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20190105"), new PartitionValue("10")),
-                Lists.newArrayList(new PartitionValue("20190107"), new PartitionValue("10")));
+                    Lists.newArrayList(new PartitionValue("20190105"), new PartitionValue("10")),
+                    Lists.newArrayList(new PartitionValue("20190107"), new PartitionValue("10")));
         PartitionKeyDesc p3 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20181231"), new PartitionValue("10")),
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
+                    Lists.newArrayList(new PartitionValue("20181231"), new PartitionValue("10")),
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
         PartitionKeyDesc p4 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20190105"), new PartitionValue("100")),
-                Lists.newArrayList(new PartitionValue("20190120"), new PartitionValue("10000000000")));
+                    Lists.newArrayList(new PartitionValue("20190105"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190120"), new PartitionValue("10000000000")));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", p2, null));
@@ -279,7 +278,7 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -306,14 +305,14 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("2019-02-01"), new PartitionValue("100"),
-                        new PartitionValue("200")));
+                    Lists.newArrayList(new PartitionValue("2019-02-01"), new PartitionValue("100"),
+                                new PartitionValue("200")));
         PartitionKeyDesc p2 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("2020-02-01"), new PartitionValue("100"),
-                        new PartitionValue("200")),
-                Lists.newArrayList(new PartitionValue("10000000000")));
+                    Lists.newArrayList(new PartitionValue("2020-02-01"), new PartitionValue("100"),
+                                new PartitionValue("200")),
+                    Lists.newArrayList(new PartitionValue("10000000000")));
         PartitionKeyDesc p3 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("2021-02-01")));
+                    Lists.newArrayList(new PartitionValue("2021-02-01")));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", p2, null));
@@ -331,7 +330,7 @@ public class ExpressionRangePartitionInfoTest {
             }
             singleRangePartitionDesc.analyze(partitionExprs.size(), null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -353,7 +352,7 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(new ArrayList<>(),
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -363,7 +362,7 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -386,8 +385,8 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")),
-                new ArrayList<>());
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")),
+                    new ArrayList<>());
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -397,7 +396,7 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -419,8 +418,8 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
-                Lists.newArrayList(new PartitionValue("20190201")));
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190201")));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -430,7 +429,7 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -453,8 +452,8 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -464,7 +463,7 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
-                    20000L, false);
+                        20000L, false);
         }
     }
 
@@ -472,35 +471,35 @@ public class ExpressionRangePartitionInfoTest {
     public void testExpressionRangePartitionInfoSerialized_FunctionExpr() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE table_hitcount (\n" +
-                "databaseName varchar(200) NULL COMMENT \"\",\n" +
-                "tableName varchar(200) NULL COMMENT \"\",\n" +
-                "queryTime varchar(50) NULL COMMENT \"\",\n" +
-                "queryId varchar(50) NULL COMMENT \"\",\n" +
-                "partitionHitSum int(11) NULL COMMENT \"\",\n" +
-                "partitionSum int(11) NULL COMMENT \"\",\n" +
-                "tabletHitNum int(11) NULL COMMENT \"\",\n" +
-                "tabletSum int(11) NULL COMMENT \"\",\n" +
-                "startHitPartition varchar(20) NULL COMMENT \"\",\n" +
-                "dt date NULL COMMENT \"\",\n" +
-                "clusterAddress varchar(50) NULL COMMENT \"\",\n" +
-                "costTime int(11) NULL COMMENT \"\",\n" +
-                "tableQueryCount int(11) NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(databaseName, tableName)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY date_trunc('day', dt)\n" +
-                "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
-                "\"replicated_storage\" = \"true\",\n" +
-                "\"compression\" = \"LZ4\"\n" +
-                ");";
+                    "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                    "tableName varchar(200) NULL COMMENT \"\",\n" +
+                    "queryTime varchar(50) NULL COMMENT \"\",\n" +
+                    "queryId varchar(50) NULL COMMENT \"\",\n" +
+                    "partitionHitSum int(11) NULL COMMENT \"\",\n" +
+                    "partitionSum int(11) NULL COMMENT \"\",\n" +
+                    "tabletHitNum int(11) NULL COMMENT \"\",\n" +
+                    "tabletSum int(11) NULL COMMENT \"\",\n" +
+                    "startHitPartition varchar(20) NULL COMMENT \"\",\n" +
+                    "dt date NULL COMMENT \"\",\n" +
+                    "clusterAddress varchar(50) NULL COMMENT \"\",\n" +
+                    "costTime int(11) NULL COMMENT \"\",\n" +
+                    "tableQueryCount int(11) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(databaseName, tableName)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY date_trunc('day', dt)\n" +
+                    "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"in_memory\" = \"false\",\n" +
+                    "\"enable_persistent_index\" = \"false\",\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"compression\" = \"LZ4\"\n" +
+                    ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = db.getTable("table_hitcount");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "table_hitcount");
         // serialize
         String json = GsonUtils.GSON.toJson(table);
         // deserialize
@@ -516,34 +515,34 @@ public class ExpressionRangePartitionInfoTest {
     public void testExpressionRangePartitionInfoSerialized_SlotRef() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test_table (\n" +
-                "databaseName varchar(200) NULL COMMENT \"\",\n" +
-                "tableName varchar(200) NULL COMMENT \"\",\n" +
-                "queryTime varchar(50) NULL COMMENT \"\",\n" +
-                "queryId varchar(50) NULL COMMENT \"\",\n" +
-                "dt date NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(databaseName, tableName)\n" +
-                "PARTITION BY RANGE (`dt`)\n" +
-                "(\n" +
-                "    PARTITION p1 values less than('2021-02-01'),\n" +
-                "    PARTITION p2 values less than('2021-03-01')\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");";
+                    "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                    "tableName varchar(200) NULL COMMENT \"\",\n" +
+                    "queryTime varchar(50) NULL COMMENT \"\",\n" +
+                    "queryId varchar(50) NULL COMMENT \"\",\n" +
+                    "dt date NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(databaseName, tableName)\n" +
+                    "PARTITION BY RANGE (`dt`)\n" +
+                    "(\n" +
+                    "    PARTITION p1 values less than('2021-02-01'),\n" +
+                    "    PARTITION p2 values less than('2021-03-01')\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
         starRocksAssert.withMaterializedView("create materialized view test_mv1 " +
-                " DISTRIBUTED BY HASH(dt, queryId) BUCKETS 4\n" +
-                " PARTITION BY dt\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ") as select dt, queryId, count(1) from test_table group by dt, queryId"
+                    " DISTRIBUTED BY HASH(dt, queryId) BUCKETS 4\n" +
+                    " PARTITION BY dt\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") as select dt, queryId, count(1) from test_table group by dt, queryId"
         );
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = db.getTable("test_mv1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_mv1");
         // serialize
         String json = GsonUtils.GSON.toJson(table);
         // deserialize
@@ -551,7 +550,7 @@ public class ExpressionRangePartitionInfoTest {
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs(readTable.getIdToColumn());
         Assert.assertTrue(readPartitionExprs.get(0) instanceof SlotRef);
-        SlotRef slotRef = (SlotRef)  readPartitionExprs.get(0);
+        SlotRef slotRef = (SlotRef) readPartitionExprs.get(0);
         Assert.assertTrue(!slotRef.getType().isInvalid());
         Assert.assertTrue(slotRef.getType().isDateType());
         starRocksAssert.dropMaterializedView("test_mv1");
@@ -562,30 +561,31 @@ public class ExpressionRangePartitionInfoTest {
     public void testExpressionRangePartitionInfoV2SerializedWrongNotFailed() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE `game_log2` (\n" +
-                "  `cloud_id` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `user_id` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `day` date NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`cloud_id`, `user_id`)\n" +
-                "PARTITION BY RANGE(cast(substr(cloud_id, 3, 11) as bigint))()\n" +
-                "DISTRIBUTED BY HASH(`cloud_id`, `user_id`) BUCKETS 1 \n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
-                "\"replicated_storage\" = \"true\",\n" +
-                "\"compression\" = \"ZSTD\"\n" +
-                ");";
+                    "  `cloud_id` varchar(65533) NULL COMMENT \"\",\n" +
+                    "  `user_id` varchar(65533) NULL COMMENT \"\",\n" +
+                    "  `day` date NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP \n" +
+                    "DUPLICATE KEY(`cloud_id`, `user_id`)\n" +
+                    "PARTITION BY RANGE(cast(substr(cloud_id, 3, 11) as bigint))()\n" +
+                    "DISTRIBUTED BY HASH(`cloud_id`, `user_id`) BUCKETS 1 \n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"in_memory\" = \"false\",\n" +
+                    "\"enable_persistent_index\" = \"false\",\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"compression\" = \"ZSTD\"\n" +
+                    ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable olapTable = (OlapTable) db.getTable("game_log2");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "game_log2");
         ExpressionRangePartitionInfoV2 expressionRangePartitionInfo =
-                (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo();
+                    (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo();
         expressionRangePartitionInfo.setPartitionExprs(Lists.newArrayList(
-                ColumnIdExpr.create(new FunctionCallExpr("abc", Lists.newArrayList(new SlotRef(
-                        new TableName("test", "game_log2"), "cloud_id"))))));
+                    ColumnIdExpr.create(new FunctionCallExpr("abc", Lists.newArrayList(new SlotRef(
+                                new TableName("test", "game_log2"), "cloud_id"))))));
         // serialize
         String json = GsonUtils.GSON.toJson(olapTable);
         // deserialize

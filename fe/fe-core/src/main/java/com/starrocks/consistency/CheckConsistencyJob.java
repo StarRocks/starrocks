@@ -128,13 +128,13 @@ public class CheckConsistencyJob {
             return false;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.debug("db[{}] does not exist", tabletMeta.getDbId());
             return false;
         }
 
-        Table table = db.getTable(tabletMeta.getTableId());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
         if (table == null) {
             LOG.debug("table[{}] does not exist", tabletMeta.getTableId());
             return false;
@@ -254,13 +254,13 @@ public class CheckConsistencyJob {
             return -1;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.warn("db[{}] does not exist", tabletMeta.getDbId());
             return -1;
         }
 
-        Table table = db.getTable(tabletMeta.getTableId());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
         if (table == null) {
             LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
             return -1;

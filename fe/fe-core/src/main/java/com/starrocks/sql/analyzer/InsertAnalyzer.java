@@ -38,6 +38,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -378,14 +379,17 @@ public class InsertAnalyzer {
             return insertStmt.makeBlackHoleTable();
         }
 
-        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
+        insertStmt.getTableName().normalization(session);
         String catalogName = insertStmt.getTableName().getCatalog();
         String dbName = insertStmt.getTableName().getDb();
         String tableName = insertStmt.getTableName().getTbl();
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (database == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);

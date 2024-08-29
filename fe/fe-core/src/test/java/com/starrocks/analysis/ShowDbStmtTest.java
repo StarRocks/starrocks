@@ -19,7 +19,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -51,30 +50,8 @@ public class ShowDbStmtTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                db.getTable(anyString);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
                 minTimes = 0;
-            }
-        };
-
-        // mock globalStateMgr.
-        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getDb("testCluster:testDb");
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getDb("testCluster:emptyDb");
-                minTimes = 0;
-                result = null;
-
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
             }
         };
 

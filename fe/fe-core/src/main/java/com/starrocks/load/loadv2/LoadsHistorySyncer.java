@@ -88,7 +88,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getDb(LOADS_HISTORY_DB_NAME) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(LOADS_HISTORY_DB_NAME) != null;
     }
 
     public static void createTable() throws UserException {
@@ -98,9 +98,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
 
     public static boolean correctTable() {
         int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
-        int replica = GlobalStateMgr.getCurrentState()
-                .mayGetDb(LOADS_HISTORY_DB_NAME)
-                .flatMap(db -> db.mayGetTable(LOADS_HISTORY_TABLE_NAME))
+        int replica = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .mayGetTable(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
         if (numBackends < 3) {

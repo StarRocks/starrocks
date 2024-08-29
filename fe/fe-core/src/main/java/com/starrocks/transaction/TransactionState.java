@@ -918,7 +918,7 @@ public class TransactionState implements Writable {
 
     public boolean checkCanFinish() {
         // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // consider txn finished if db is dropped
             return true;

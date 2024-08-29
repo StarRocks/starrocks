@@ -57,8 +57,8 @@ public class CatalogRecycleBinLakeTableTest {
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return db.getTable(createTableStmt.getTableName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void dropTable(ConnectContext connectContext, String sql) throws Exception {
@@ -215,7 +215,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         // Recover table2
         Assert.assertTrue(recycleBin.recoverTable(db, "t0"));
-        Assert.assertSame(table2, db.getTable("t0"));
+        Assert.assertSame(table2, GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0"));
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
         checkTableTablet(table2, true);
 

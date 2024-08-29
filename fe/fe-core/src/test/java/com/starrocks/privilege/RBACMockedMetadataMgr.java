@@ -118,17 +118,6 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public Table getTable(Long databaseId, Long tableId) {
-        for (Table table : tableMap.values()) {
-            if (table.getId() == tableId) {
-                return table;
-            }
-        }
-
-        return null;
-    }
-
-    @Override
     public List<String> listTableNames(String catalogName, String dbName) {
         return new ArrayList<>(tableMap.keySet());
     }

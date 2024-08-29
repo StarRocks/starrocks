@@ -284,7 +284,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                 // skip 'information_schema' database
                 continue;
             }
-            Database db = globalStateMgr.getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -301,7 +301,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                 long startTime = System.currentTimeMillis();
                 try {
                     // sort tables
-                    List<Table> tables = db.getTables();
+                    List<Table> tables = globalStateMgr.getLocalMetastore().getTables(db.getId());
                     Queue<MetaObject> tableQueue = new PriorityQueue<>(Math.max(tables.size(), 1), COMPARATOR);
                     for (Table table : tables) {
                         // Only check the OLAP table who is in NORMAL state.
@@ -416,12 +416,13 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDb(info.getDbId());
+        Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
         if (db == null) {
             LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
             return;
         }
-        OlapTable table = (OlapTable) db.getTable(info.getTableId());
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), info.getTableId());
         if (table == null) {
             LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
             return;

@@ -164,8 +164,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
         Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
         for (Long id : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(id);
-            if (db != null && db.getTable(tableId) != null) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+            if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
                 columnIdentifier.setDbId(db.getId());
                 break;
             }

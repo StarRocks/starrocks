@@ -92,11 +92,11 @@ public class RowCountAction extends RestBaseAction {
 
         Map<String, Long> indexRowCountMap = Maps.newHashMap();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException("Table[" + tableName + "] does not exist");
         }
