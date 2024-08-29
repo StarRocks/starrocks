@@ -66,7 +66,7 @@ public:
 
         DCHECK_EQ(col->size(), union_null_column->size());
 
-            return NullableColumn::create(col->clone_shared(), union_null_column);
+        return NullableColumn::create(col->clone_shared(), union_null_column);
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
