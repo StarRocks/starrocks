@@ -62,10 +62,6 @@
                 {
                     "type": "category",
                     "label": "Shared-nothing deployment",
-                    "link": {
-                        "type": "doc",
-                        "id": "cover_pages/shared_nothing_deployment"
-                    },
                     "items": [
                         "deployment/deploy_manually",
                         "deployment/sr_operator",
@@ -75,10 +71,6 @@
                 {
                     "type": "category",
                     "label": "Shared-data deployment",
-                    "link": {
-                        "type": "doc",
-                        "id": "cover_pages/shared_data_deployment"
-                    },
                     "items": [
                         "deployment/shared_data/s3",
                         "deployment/shared_data/gcs",
@@ -294,10 +286,6 @@
                 {
                     "type": "category",
                     "label": "Index",
-                    "link": {
-                        "type": "doc",
-                        "id": "cover_pages/index"
-                    },
                     "items": [
                         "using_starrocks/Bitmap_index",
                         "using_starrocks/Bloomfilter_index"
@@ -360,7 +348,6 @@
                         "integrations/IDE_integrations/jupysql"
                     ]
                 },
-                "integrations/hive_bitmap_udf",
                 "integrations/other_integrations/intro"
             ]
         },
