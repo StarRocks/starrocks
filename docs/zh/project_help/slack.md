@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_label: "技术支持"
 description: "与社区互动"
 ---

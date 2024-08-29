@@ -1,6 +1,6 @@
 ---
 keywords: ['xiugai'] 
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ALTER USER
