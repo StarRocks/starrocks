@@ -8,22 +8,7 @@ displayed_sidebar: docs
 
 Submits an ETL statement as an asynchronous task. This feature has been supported since StarRocks v2.5.
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md
-Currently, StarRocks supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md).
-=======
-You can use this statement to:
-
-- execute long-running tasks in the background (supported from v2.5 onwards)
-- schedule a task at a regular interval (supported from v3.3 onwards)
-
-Supported statements include:
-
-- [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
-- [INSERT](../INSERT.md) (from v3.0 onwards)
-- [CACHE SELECT](../../../../data_source/data_cache_warmup.md) (from v3.3 onwards)
-
-You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md
+Currently, StarRocks supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../INSERT.md).
 
 You can drop an asynchronous task using [DROP TASK](DROP_TASK.md).
 
@@ -35,27 +20,14 @@ SUBMIT TASK [task_name] AS <etl_statement>
 
 ## Parameters
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md
 | **Parameter** | **Description**                                              |
 | ------------- | ------------------------------------------------------------ |
 | task_name     | The task name.                                               |
-| etl_statement | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
+| etl_statement | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../../loading_unloading/INSERT.md). |
 
 ## Usage notes
 
-This statement creates a Task, which is a template for storing a task that executes the ETL statement. You can check the information of the Task by querying the metadata table `tasks` in [Information Schema](../../information_schema.md).
-=======
-| **Parameter**      | **Required** | **Description**                                                                                     |
-| -------------      | ------------ | ---------------------------------------------------------------------------------------------------- |
-| task_name          | Yes     | The name of the task.                                                                               |
-| schedule_start     | No      | The start time for the scheduled task.                                                                 |
-| schedule_interval  | No      | The interval at which the scheduled task is executed, with a minimum interval of 10 seconds.          |
-| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../../loading_unloading/INSERT.md). |
-
-## Usage notes
-
-This statement creates a Task, which is a template for storing a task that executes the ETL statement. You can check the information of the Task by querying the metadata view [`tasks` in Information Schema](../../../information_schema/tasks.md).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md
+This statement creates a Task, which is a template for storing a task that executes the ETL statement. You can check the information of the Task by querying the metadata table `tasks` in [Information Schema](../../../information_schema.md).
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
@@ -69,11 +41,7 @@ After you run the Task, a TaskRun is generated accordingly. A TaskRun indicates 
 - `FAILED`: The task failed.
 - `SUCCESS`: The task runs successfully.
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md
-You can check the state of a TaskRun by querying the metadata table `task_runs` in [Information Schema](../../information_schema.md).
-=======
-You can check the state of a TaskRun by querying the metadata view [`task_runs` in Information Schema](../../../information_schema/task_runs.md).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md
+You can check the state of a TaskRun by querying the metadata table `task_runs` in [Information Schema](../../../information_schema.md).
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.task_runs;

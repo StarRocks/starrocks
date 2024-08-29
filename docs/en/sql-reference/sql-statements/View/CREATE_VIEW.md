@@ -35,11 +35,7 @@ AS <query_statement>
 | --------------- | ------------------------------------------------------------ |
 | OR REPLACE      | Replace an existing view.                                    |
 | database        | The name of the database where the view resides.             |
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_VIEW.md
 | view_name       | The name of the view.                                        |
-=======
-| view_name       | The name of the view. For the naming conventions, see [System limits](../../System_limit.md).             |
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/View/CREATE_VIEW.md
 | column_name     | The name of the column(s) in the view. Note that the columns in the view and the columns queried in the `query_statement` must agree in number. |
 | COMMENT         | The comment on the column in the view or the view itself.    |
 | query_statement | The query statement used to create the view. It can be any query statement supported by StarRocks. |

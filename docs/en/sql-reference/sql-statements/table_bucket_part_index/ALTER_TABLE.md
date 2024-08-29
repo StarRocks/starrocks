@@ -197,36 +197,9 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 
 Note:
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/ALTER_TABLE.md
 1. Keep at least one partition for partitioned tables.
 2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./RECOVER.md) command within a specified period (1 day by default).
 3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally this operation is not recommended.
-=======
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
-
-partion_name_list ::= ( <partition_name> [, ... ] )
-
-multi_range_partitions ::=
-    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
-    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
-```
-
-Notes for `multi_range_partitions`:
-
-- It only appiles to Range Partitioning.
-- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
-- It only supports partitions with a single Partition Key.
-
-:::note
-
-- Keep at least one partition for partitioned tables.
-- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](../backup_restore/RECOVER.md) command within a specified period (1 day by default).
-- If FORCE is specified, the partitions will be deleted directly regardless of whether there are any unfinished operations on the partitions, and they cannot be recovered. Thus, generally, this operation is not recommended.
-
-:::
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md
 
 #### Add a temporary partition
 

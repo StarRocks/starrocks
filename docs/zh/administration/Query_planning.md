@@ -332,13 +332,7 @@ HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)
 
 ### 系统变量 Hint
 
-<<<<<<< HEAD
-在 SELECT、SUBMIT TASK 语句中通过 `/*+ ... */` 注释的形式设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
-=======
-在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../sql-reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
-
-相比于[系统变量的一般用法](../sql-reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+在 SELECT、SUBMIT TASK 语句中通过 `/*+ ... */` 注释的形式设置一个或多个[系统变量](../sql-reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
 
 #### 语法
 

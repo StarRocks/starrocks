@@ -45,19 +45,11 @@ DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES("bloom_filter_columns" = "k1,k2");
 ```
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bloomfilter_index.md
-You can create bloom filter indexes for multiple columns at a time by specifying these column names. Note that you need to separate these column names with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+You can create bloom filter indexes for multiple columns at a time by specifying these column names. Note that you need to separate these column names with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
 ## Display bloom filter indexes
 
-For example, the following statement displays bloom filter indexes of `table1`. For the output description, see [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md).
-=======
-You can create bloom filter indexes for multiple columns at a time by specifying these column names. Note that you need to separate these column names with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
-
-## Display bloom filter indexes
-
-For example, the following statement displays bloom filter indexes of `table1`. For the output description, see [SHOW CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/table_design/indexes/Bloomfilter_index.md
+For example, the following statement displays bloom filter indexes of `table1`. For the output description, see [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md).
 
 ```SQL
 SHOW CREATE TABLE table1;
@@ -65,11 +57,7 @@ SHOW CREATE TABLE table1;
 
 ## Modify bloom filter indexes
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bloomfilter_index.md
-You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement.
-=======
-You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) statement.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/table_design/indexes/Bloomfilter_index.md
+You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) statement.
 
 - The following statement adds a bloom filter index on the `v1` column.
 

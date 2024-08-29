@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md
-displayed_sidebar: "English"
-=======
 displayed_sidebar: docs
 toc_max_heading_level: 4
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md
 ---
 
 # STREAM LOAD

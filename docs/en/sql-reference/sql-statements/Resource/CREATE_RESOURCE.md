@@ -17,14 +17,8 @@ PROPERTIES ("key"="value", ...)
 
 Note:  
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_RESOURCE.md
 1. PROPERTIES specifies the resource type. Currently, only Spark and Hive are supported.
 2. The PROPERTIES vary depending on the resource type. See examples for details.
-=======
-- `resource_name`: the name of the resource to create. For the naming conventions, see [System limits](../../System_limit.md).
-
-- `PROPERTIES`: specifies the properties of the resource type. The PROPERTIES vary depending on the resource type. See Examples for details.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/Resource/CREATE_RESOURCE.md
 
 ## Examples
 

@@ -149,11 +149,6 @@ SELECT * FROM table1;
 
 #### Load JSON data
 
-<<<<<<< HEAD
-=======
-Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For the syntax, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ##### Prepare datasets
 
 In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
@@ -405,11 +400,7 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) statement or the curl command to view the progress of Broker Load jobs.
 
-<<<<<<< HEAD
 In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../sql-reference/information_schema.md#loads) view:
-=======
-In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../sql-reference/information_schema/loads.md) view:
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ```SQL
 SELECT * FROM information_schema.loads;

@@ -76,8 +76,4 @@ SHOW CREATE TABLE table1;
     ALTER TABLE table1 SET ("bloom_filter_columns" = "");
     ```
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bloomfilter_index.md
-> 说明：修改索引为异步操作，可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 命令查看索引修改进度。当前每张表只允许同时进行一个修改索引任务。
-=======
-> 说明：修改索引为异步操作，可通过 [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md) 命令查看索引修改进度。当前每张表只允许同时进行一个修改索引任务。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bloomfilter_index.md
+> 说明：修改索引为异步操作，可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md) 命令查看索引修改进度。当前每张表只允许同时进行一个修改索引任务。
