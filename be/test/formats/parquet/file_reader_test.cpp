@@ -3281,4 +3281,69 @@ TEST_F(FileReaderTest, TestReadNoMinMaxStatistics) {
     EXPECT_EQ(chunk->num_rows(), 111);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(FileReaderTest, TestIsNotNullStatistics) {
+    auto file = _create_file(_file1_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file1_path), _mock_datacache_options());
+    // init
+    auto* ctx = _create_file1_base_context();
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::is_null_pred(0, false, &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 0);
+}
+
+TEST_F(FileReaderTest, TestIsNullStatistics) {
+    const std::string small_page_file = "./be/test/formats/parquet/test_data/read_range_test.parquet";
+    auto file = _create_file(small_page_file);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(small_page_file));
+
+    auto ctx = _create_file_random_read_context(small_page_file);
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::is_null_pred(0, true, &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 0);
+}
+
+TEST_F(FileReaderTest, TestMapKeyIsStruct) {
+    const std::string filename = "./be/test/formats/parquet/test_data/map_key_is_struct.parquet";
+    auto file = _create_file(filename);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filename));
+
+    auto ctx = _create_file_random_read_context(filename);
+    Status status = file_reader->init(ctx);
+    ASSERT_FALSE(status.ok());
+    ASSERT_EQ("Map keys must be primitive type.", status.message());
+}
+
+TEST_F(FileReaderTest, TestInFilterStatitics) {
+    // there are 4 row groups
+    const std::string multi_rg_file = "./be/test/formats/parquet/test_data/page_index_big_page.parquet";
+    auto file = _create_file(multi_rg_file);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(multi_rg_file));
+
+    auto ctx = _create_file_random_read_context(multi_rg_file);
+    // min value and max value in this file, so it will be in the first and last row group
+    std::set<int32_t> in_oprands{1, 100000};
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 2);
+}
+
+>>>>>>> 942ffcd1e8 ([BugFix] Fix serveral complex type bugs in parquet reader (#50355))
 } // namespace starrocks::parquet
