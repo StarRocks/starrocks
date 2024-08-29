@@ -1,7 +1,7 @@
 {
   "version.label": {
-    "message": "current",
-    "description": "The label for version current"
+    "message": "3.2",
+    "description": "The label for version 3.2"
   },
   "sidebar.docs.category.Introduction to StarRocks": {
     "message": "产品简介",
