@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md
-displayed_sidebar: "English"
-=======
 displayed_sidebar: docs
 toc_max_heading_level: 5
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md
 ---
 
 # BROKER LOAD
@@ -41,11 +37,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ### database_name and label_name
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md
 `label_name` specifies the label of the load job.
-=======
-`label_name` specifies the label of the load job. For the naming conventions, see [System limits](../../System_limit.md).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md
 
 `database_name` optionally specifies the name of the database to which the destination table belongs.
 

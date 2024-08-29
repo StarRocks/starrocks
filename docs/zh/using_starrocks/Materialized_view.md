@@ -309,11 +309,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### 查看异步物化视图的执行状态
 
-<<<<<<< HEAD
 您可以通过查询 StarRocks 的 [Information Schema](../sql-reference/information_schema.md) 中的 `tasks` 和 `task_runs` 元数据表来查看异步物化视图的执行（构建或刷新）状态。
-=======
-您可以通过查询 StarRocks 的 [Information Schema](../sql-reference/information_schema/information_schema.md) 中的 [`tasks`](../sql-reference/information_schema/tasks.md) 和 [`task_runs`](../sql-reference/information_schema/task_runs.md) 元数据视图来查看异步物化视图的执行（构建或刷新）状态。
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 以下示例查看最新创建的异步物化视图的执行状态：
 

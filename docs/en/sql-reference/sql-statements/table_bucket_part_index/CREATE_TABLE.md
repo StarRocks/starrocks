@@ -29,16 +29,6 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 ## Parameters
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-=======
-:::tip
-
-- The table name, partition name, column name, and index name you create must follow the naming conventions in [System limits](../../System_limit.md).
-- When you specify database name, table name, column name, or partition name, note that some literals are used as reserved keywords in StarRocks. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../keywords.md) for these reserved keywords.
-
-:::
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 ### column_definition
 
 Syntax:
@@ -121,11 +111,6 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
 **From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../loading_unloading/INSERT.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-=======
-**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using [INSERT INTO](../loading_unloading/INSERT.md). From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using [INSERT INTO](../loading_unloading/INSERT.md). For more information, see [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table) and [Sink data to a Hive table](../../../data_source/catalog/hive_catalog.md#sink-data-to-a-hive-table).**
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 - For MySQL, specify the following properties:
 
     ```plaintext
@@ -261,13 +246,8 @@ Note:
 
 Please use specified key columns and specified value ranges for partitioning.
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
 - Partition name only supports [A-z0-9_]
 - Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
-=======
-- For the naming conventions of partitions, see [System limits](../../System_limit.md).
-- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
@@ -648,17 +628,6 @@ PROPERTIES (
   - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
   - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_TABLE.md
-=======
-#### Set fast schema evolution
-
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
-  > **NOTE**
-  >
-  > - This parameter is supported for shared-nothing clusters since v3.2.0, and shared-data clusters since v3.3.0.
-  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution).
-
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md
 ## Examples
 
 ### Create an Aggregate table that uses Hash bucketing and columnar storage

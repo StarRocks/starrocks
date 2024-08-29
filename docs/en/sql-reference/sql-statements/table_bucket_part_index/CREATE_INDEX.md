@@ -22,13 +22,8 @@ CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT 
 
 Note:
 
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-definition/CREATE_INDEX.md
 1. Only support bitmap index in the current version.
 2. Create BITMAP index only in a single column.
-=======
-1. For the naming conventions of indexes, see [System limits](../../System_limit.md).
-2. One column can have only one BITMAP index. If a column already has an index, you cannot create one more index on it.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md
 
 ## Examples
 

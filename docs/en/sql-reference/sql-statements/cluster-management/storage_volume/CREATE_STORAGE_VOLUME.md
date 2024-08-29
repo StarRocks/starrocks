@@ -29,11 +29,7 @@ PROPERTIES
 
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md
 | storage_volume_name | The name of the storage volume. Please note that you cannot create a storage volume named `builtin_storage_volume` because it is used to create the builtin storage volume. |
-=======
-| storage_volume_name | The name of the storage volume. Please note that you cannot create a storage volume named `builtin_storage_volume` because it is used to create the builtin storage volume. For the naming conventions, see [System limits](../../../System_limit.md).|
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md
 | TYPE                | The type of the remote storage system. Valid values: `S3` and `AZBLOB`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage (supported from v3.1.1 onwards). |
 | LOCATIONS           | The storage locations. The format is as follows:<ul><li>For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`.</li><li>For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.</li></ul> |
 | COMMENT             | The comment on the storage volume.                           |

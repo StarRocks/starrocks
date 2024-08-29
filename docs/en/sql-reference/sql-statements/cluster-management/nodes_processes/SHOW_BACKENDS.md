@@ -53,14 +53,6 @@ SHOW BACKENDS
 | DataTotalCapacity     | It is equivalent to `DataUsedCapacity` + `AvailCapacity`. It indicates the sum of the storage capacity occupied by the data file and the available storage capacity in the BE node. |
 | DataUsedPct           |  It is equivalent to `DataUsedCapacity`/`DataTotalCapacity`. It indicates the proportion of the storage capacity occupied by the data file to the sum of the data-occupied storage capacity and the available storage capacity. |
 | CpuCores              | The number of CPU cores in the BE node.                      |
-<<<<<<< HEAD:docs/en/sql-reference/sql-statements/Administration/SHOW_BACKENDS.md
-=======
-| NumRunningQueries     | The number of running queries on the BE node.                |
-| MemUsedPct            | The percentage of used memory.                               |
-| CpuUsedPct            | The percentage of used CPU cores.                            |
-| DataCacheMetrics      | The status of Data Cache:<ul><li>`Disabled`: Disabled</li><li>`Normal`: Normal </li><li>`Abnormal`: Abnormal </li><li>`Updating`: Data Cache is being updating, for example, scaling. </li></ul>                      |
-| Location              | The label of the BE node. For more information, see [Add labels on BEs](../../../../administration/management/resource_management/be_label.md).                     |
->>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKENDS.md
 
 ## Example
 

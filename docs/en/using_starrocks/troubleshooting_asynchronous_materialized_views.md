@@ -292,27 +292,10 @@ REFRESH ASYNC
 PROPERTIES ( 'session.enable_spill'='true' )
 AS <query>;
 
-<<<<<<< HEAD
 -- Add the properties.
 ALTER MATERIALIZED VIEW mv2 
     SET ('session.enable_spill' = 'true');
 ```
-=======
-  The default timeout for materialized view refresh tasks is 5 minutes in versions earlier than v3.2 and 1 hour in v3.2 and later. If you encounter timeout exceptions, you can adjust the timeout period by using the following statement:
-
-  ```sql
-  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
-  ```
-
-- **Analyze performance bottlenecks of the materialized view refresh**
-
-  Refreshing materialized views with complex computation is time-consuming. You can analyze its performance bottlenecks by analyzing the query profile of the refresh task:
-
-  - Obtain the `query_id` corresponding to the refresh task by querying `information_schema.task_runs`.
-  - Analyze the query profile of the refresh task using the following statements:
-    - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): Retrive the original query profile based on `query_id`.
-    - [ANALYZE PROFILE](../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): Analyze the query profile on a per-fragment basis, and display it in a tree structure.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ### Materialized view state is not active
 
