@@ -67,6 +67,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
@@ -279,9 +280,8 @@ public class PartitionsProcDir implements ProcDirInterface {
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
             List<Long> partitionIds;
             PartitionInfo tblPartitionInfo = table.getPartitionInfo();
 
@@ -319,8 +319,6 @@ public class PartitionsProcDir implements ProcDirInterface {
                     }
                 }
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
         return partitionInfos;
     }
@@ -430,11 +428,8 @@ public class PartitionsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
-        long partitionId = -1L;
-
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
             PhysicalPartition partition;
             try {
                 partition = table.getPhysicalPartition(Long.parseLong(partitionIdOrName));
@@ -450,8 +445,6 @@ public class PartitionsProcDir implements ProcDirInterface {
             }
 
             return new IndicesProcDir(db, table, partition);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
