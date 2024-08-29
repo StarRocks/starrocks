@@ -40,7 +40,7 @@ public:
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // append delta column group to builder
-    void append_dcg(uint32_t rssid, const std::vector<std::string>& filenames,
+    void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,

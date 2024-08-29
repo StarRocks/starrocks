@@ -60,6 +60,7 @@ message OldDeltaColumnGroupPB {
 message DeltaColumnGroupPB {
     repeated DeltaColumnGroupColumnIdsPB column_ids = 1;
     repeated string column_files = 2;
+    repeated bytes encryption_metas = 3;
 }
 
 message DeltaColumnGroupListPB {

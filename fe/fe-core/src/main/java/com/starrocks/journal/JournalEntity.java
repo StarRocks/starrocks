@@ -1153,6 +1153,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_KEY: {
+                data = new Text(Text.readBinary(in));
+                isRead = true;
+                break;
+            }
             default: {
                 if (Config.ignore_unknown_log_id) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

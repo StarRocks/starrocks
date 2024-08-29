@@ -14,11 +14,17 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
+import com.starrocks.encryption.KeyMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.EncryptionAlgorithmPB;
+import com.starrocks.proto.EncryptionKeyPB;
+import com.starrocks.proto.EncryptionKeyTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
@@ -30,6 +36,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -172,6 +180,42 @@ public class EditLogTest {
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+    }
+
+    @Test
+    public void testOpAddKeyJournalEntity() throws Exception {
+        EncryptionKeyPB pb = new EncryptionKeyPB();
+        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
+        pb.algorithm = EncryptionAlgorithmPB.AES_128;
+        pb.plainKey = new byte[16];
+        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
+        pb.createTime = 3L;
+        DataOutputBuffer buffer = new DataOutputBuffer(1024);
+        JournalEntity entity = new JournalEntity();
+        entity.setOpCode(OperationType.OP_ADD_KEY);
+        entity.setData(new Text(GsonUtils.GSON.toJson(pb)));
+        entity.write(buffer);
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+        JournalEntity replayEntry = new JournalEntity();
+        replayEntry.readFields(in);
+        Assert.assertEquals(OperationType.OP_ADD_KEY, replayEntry.getOpCode());
+    }
+
+    @Test
+    public void testOpAddKey() throws Exception {
+        GlobalStateMgr mgr = mockGlobalStateMgr();
+        EncryptionKeyPB pb = new EncryptionKeyPB();
+        pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);
+        pb.algorithm = EncryptionAlgorithmPB.AES_128;
+        pb.plainKey = new byte[16];
+        pb.type = EncryptionKeyTypePB.NORMAL_KEY;
+        pb.createTime = 3L;
+        JournalEntity journal = new JournalEntity();
+        journal.setOpCode(OperationType.OP_ADD_KEY);
+        journal.setData(new Text(GsonUtils.GSON.toJson(pb)));
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(mgr, journal);
+        Assert.assertEquals(1, mgr.getKeyMgr().numKeys());
     }
 
     @Test
