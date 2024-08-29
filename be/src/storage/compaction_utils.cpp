@@ -68,6 +68,7 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.max_rows_per_segment = max_rows_per_segment;
     context.writer_type =
             (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
+    context.is_compaction = true;
     Status st = RowsetFactory::create_rowset_writer(context, output_rowset_writer);
     if (!st.ok()) {
         std::stringstream ss;
