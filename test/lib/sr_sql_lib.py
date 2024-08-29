@@ -462,8 +462,8 @@ class StarrocksSQLApiLib(object):
     def create_starrocks_conn_pool(self):
         self.connection_pool = PooledDB(
             creator=pymysql,
-            mincached=3,  # 初始创建的连接数
-            blocking=True,  # 等待获取连接时阻塞
+            mincached=3,
+            blocking=True,
             host=self.mysql_host,
             port=int(self.mysql_port),
             user=self.mysql_user,
