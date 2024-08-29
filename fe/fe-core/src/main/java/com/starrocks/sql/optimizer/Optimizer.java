@@ -664,13 +664,18 @@ public class Optimizer {
         result = new PruneShuffleColumnRule().rewrite(result, rootTaskContext);
         result = new UseSortAggregateRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
+<<<<<<< HEAD
+=======
+        result = new LowCardinalityRewriteRule().rewrite(result, rootTaskContext);
+        // Put before ScalarOperatorsReuseRule
+        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+>>>>>>> 942ffcd1e8 ([BugFix] Fix serveral complex type bugs in parquet reader (#50355))
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
-        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator

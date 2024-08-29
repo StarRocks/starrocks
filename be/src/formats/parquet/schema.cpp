@@ -205,6 +205,7 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     //     <value-repetition> <value-type> value;
     //   }
     // }
+<<<<<<< HEAD
     if (pos + 2 >= t_schemas.size()) {
         return Status::InvalidArgument("SchemaElement is not enough to parse");
     }
@@ -229,6 +230,18 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
         (key_schema.type != tparquet::Type::type::FIXED_LEN_BYTE_ARRAY)) {
         return Status::InvalidArgument("key in map group must be required");
     }
+=======
+    //
+
+    // check map's key must be primitive type
+    ASSIGN_OR_RETURN(const auto* key_schema, _get_schema_element(t_schemas, pos + 2));
+    if (is_group(key_schema)) {
+        return Status::InvalidArgument("Map keys must be primitive type.");
+    }
+
+    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, key_field, next_pos));
+    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 3, cur_level_info, value_field, next_pos));
+>>>>>>> 942ffcd1e8 ([BugFix] Fix serveral complex type bugs in parquet reader (#50355))
 
     if (kv_schema.num_children == 1) {
         // This is a set, we see them as a list
