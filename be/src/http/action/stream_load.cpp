@@ -56,6 +56,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
+#include "http/stream_load_http_executor.h"
 #include "http/utils.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
@@ -128,7 +129,13 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
                                        TStreamLoadPutResult* result);
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
-        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
+        : StreamLoadAction(exec_env, limiter, nullptr) {}
+
+StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter,
+                                   StreamLoadHttpExecutor* stream_load_http_executor)
+        : _exec_env(exec_env),
+          _http_concurrent_limiter(limiter),
+          _stream_load_http_executor(stream_load_http_executor) {
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_requests_total",
                                                              &streaming_load_requests_total);
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
@@ -152,9 +159,25 @@ void StreamLoadAction::handle(HttpRequest* req) {
         return;
     }
 
+    if (config::be_http_enable_pthread && config::enable_stream_load_async_handle && _stream_load_http_executor) {
+        Status status = _stream_load_http_executor->thread_pool()->submit_func([this, req, ctx] { _handle(req, ctx); });
+        if (!status.ok()) {
+            // submitting fail will fall back to sync mode
+            LOG(WARNING) << "Failed to handle stream load asynchronously, label: " << ctx->label
+                         << ", txn_id: " << ctx->txn_id
+                         << ", query_id: " << print_id(ctx->put_result.params.params.query_id)
+                         << ", status: " << status;
+        } else {
+            return;
+        }
+    }
+    _handle(req, ctx);
+}
+
+void StreamLoadAction::_handle(HttpRequest* req, StreamLoadContext* ctx) {
     // status already set to fail
     if (ctx->status.ok()) {
-        ctx->status = _handle(ctx);
+        ctx->status = _finalize(ctx);
         if (!ctx->status.ok() && !ctx->status.is_publish_timeout()) {
             LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.message()
                          << " " << ctx->brief();
@@ -182,7 +205,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
     streaming_load_current_processing.increment(-1);
 }
 
-Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
+Status StreamLoadAction::_finalize(StreamLoadContext* ctx) {
     if (ctx->body_bytes > 0 && ctx->receive_bytes != ctx->body_bytes) {
         LOG(WARNING) << "receive body don't equal with body bytes, body_bytes=" << ctx->body_bytes
                      << ", receive_bytes=" << ctx->receive_bytes << ", id=" << ctx->id;

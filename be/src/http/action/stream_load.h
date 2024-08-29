@@ -48,10 +48,13 @@ class ExecEnv;
 class Status;
 class StreamLoadContext;
 class ConcurrentLimiter;
+class StreamLoadHttpExecutor;
 
 class StreamLoadAction : public HttpHandler {
 public:
     explicit StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter);
+    explicit StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter,
+                              StreamLoadHttpExecutor* stream_load_http_executor);
     ~StreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -65,7 +68,8 @@ public:
 
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);
-    Status _handle(StreamLoadContext* ctx);
+    void _handle(HttpRequest* req, StreamLoadContext* ctx);
+    Status _finalize(StreamLoadContext* ctx);
     Status _data_saved_path(HttpRequest* req, std::string* file_path);
     Status _execute_plan_fragment(StreamLoadContext* ctx);
     Status _process_put(HttpRequest* http_req, StreamLoadContext* ctx);
@@ -73,6 +77,7 @@ private:
 private:
     ExecEnv* _exec_env;
     ConcurrentLimiter* _http_concurrent_limiter = nullptr;
+    StreamLoadHttpExecutor* _stream_load_http_executor;
 };
 
 } // namespace starrocks

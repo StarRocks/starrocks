@@ -61,6 +61,7 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
+#include "http/stream_load_http_executor.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -72,7 +73,8 @@ HttpServiceBE::HttpServiceBE(ExecEnv* env, int port, int num_threads)
         : _env(env),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
-          _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
+          _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)),
+          _stream_load_http_executor(new StreamLoadHttpExecutor()) {}
 
 HttpServiceBE::~HttpServiceBE() {
     _ev_http_server.reset();
@@ -91,8 +93,10 @@ void HttpServiceBE::join() {
 Status HttpServiceBE::start() {
     add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
 
+    RETURN_IF_ERROR(_stream_load_http_executor->init());
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
+    auto* stream_load_action =
+            new StreamLoadAction(_env, _http_concurrent_limiter.get(), _stream_load_http_executor.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
