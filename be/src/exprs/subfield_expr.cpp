@@ -20,6 +20,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "exprs/function_helper.h"
 
 namespace starrocks {
 
@@ -35,9 +36,19 @@ public:
 
         ASSIGN_OR_RETURN(ColumnPtr col, _children.at(0)->evaluate_checked(context, chunk));
 
-        // Enter multiple subfield for struct type, remain last subfield
-        for (size_t i = 0; i < _used_subfield_names.size() - 1; i++) {
-            std::string fieldname = _used_subfield_names[i];
+        // handle nullable column
+        const size_t num_rows = col->size();
+        NullColumnPtr union_null_column = NullColumn::create(num_rows, false);
+
+        for (size_t i = 0; i < _used_subfield_names.size(); i++) {
+            const std::string& fieldname = _used_subfield_names[i];
+
+            // merge null flags for each level
+            if (col->is_nullable()) {
+                auto* nullable = down_cast<NullableColumn*>(col.get());
+                union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
+            }
+
             Column* tmp_col = ColumnHelper::get_data_column(col.get());
             DCHECK(tmp_col->is_struct());
             auto* struct_column = down_cast<StructColumn*>(tmp_col);
@@ -47,23 +58,23 @@ public:
             }
         }
 
-        // handle nullable column
-        std::vector<uint8_t> null_flags;
-        size_t num_rows = col->size();
-        null_flags.resize(num_rows, false);
         if (col->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(col.get());
+<<<<<<< HEAD
             const uint8_t* nulls = nullable->null_column()->raw_data();
             // for (size_t i = 0; i < num_rows; i++) {
             //     null_flags[i] = nulls[i];
             // }
             std::memcpy(&null_flags[0], &nulls[0], num_rows * sizeof(uint8_t));
+=======
+            union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
+            col = nullable->data_column();
+>>>>>>> 942ffcd1e8 ([BugFix] Fix serveral complex type bugs in parquet reader (#50355))
         }
 
-        Column* tmp_col = ColumnHelper::get_data_column(col.get());
-        DCHECK(tmp_col->is_struct());
-        auto* struct_column = down_cast<StructColumn*>(tmp_col);
+        DCHECK_EQ(col->size(), union_null_column->size());
 
+<<<<<<< HEAD
         std::string fieldname = _used_subfield_names.back();
         ColumnPtr subfield_column = struct_column->field_column(fieldname);
         if (subfield_column == nullptr) {
@@ -84,6 +95,14 @@ public:
 
         // We need clone a new subfield column
         return NullableColumn::create(subfield_column->clone_shared(), result_null);
+=======
+        // We need to clone a new subfield column
+        if (_copy_flag) {
+            return NullableColumn::create(col->clone_shared(), union_null_column);
+        } else {
+            return NullableColumn::create(col, union_null_column);
+        }
+>>>>>>> 942ffcd1e8 ([BugFix] Fix serveral complex type bugs in parquet reader (#50355))
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }

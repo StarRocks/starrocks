@@ -19,6 +19,12 @@ import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.RowOutputInfo;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+>>>>>>> 942ffcd1e8 ([BugFix] Fix serveral complex type bugs in parquet reader (#50355))
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -29,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+import java.util.List;
 import java.util.Map;
 
 public class PruneSubfieldsForComplexType implements TreeRewriteRule {
@@ -59,20 +66,14 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
 
         @Override
         public Void visit(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
-            ScalarOperator predicate = optExpression.getOp().getPredicate();
-            Projection projection = optExpression.getOp().getProjection();
-
-            if (projection != null) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                    context.add(entry.getKey(), entry.getValue());
-                }
-
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getCommonSubOperatorMap()
-                        .entrySet()) {
-                    context.add(entry.getKey(), entry.getValue());
-                }
+            // collect output ColumnRefOperator
+            RowOutputInfo rowOutputInfo = optExpression.getOp().getRowOutputInfo(optExpression.getInputs());
+            List<ColumnOutputInfo> columnOutputInfos = rowOutputInfo.getColumnOutputInfo();
+            for (ColumnOutputInfo columnOutputInfo : columnOutputInfos) {
+                context.add(columnOutputInfo.getColumnRef(), columnOutputInfo.getScalarOp());
             }
 
+            ScalarOperator predicate = optExpression.getOp().getPredicate();
             if (predicate != null) {
                 context.add(null, predicate);
             }

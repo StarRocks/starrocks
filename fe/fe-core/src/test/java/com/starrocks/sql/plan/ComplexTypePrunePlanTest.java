@@ -21,7 +21,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class StructTypePlanTest extends PlanTestBase {
+public class ComplexTypePrunePlanTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -149,11 +149,26 @@ public class StructTypePlanTest extends PlanTestBase {
 
     @Test
     public void testSelectStar() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select *, c1.b[10].a from test";
         assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11), b ARRAY<STRUCT<a int(11), b int(11)>>>]");
         assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
         assertVerbosePlanContains(sql,
                 "Pruned type: 4 <-> [STRUCT<a int(11), b int(11), c STRUCT<a int(11), b int(11)>, d ARRAY<int(11)>>]");
+        sql = "select * from index_struct_nest where index_struct[1].`index` = 5";
+        assertVerbosePlanContains(sql, "2 <-> [ARRAY<struct<index bigint(20), char_col varchar(1048576)>>]");
+        sql = "select index_struct from index_struct_nest where index_struct[1].`index` = 5";
+        assertVerbosePlanContains(sql, "2 <-> [ARRAY<struct<index bigint(20), char_col varchar(1048576)>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testCommonSubOperator() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // test for CommonSubOperator
+        String sql = "select abs(index_struct[1].`index`) + abs(index_struct[1].`index`) from index_struct_nest";
+        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [ARRAY<struct<index bigint(20)>>]");
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
