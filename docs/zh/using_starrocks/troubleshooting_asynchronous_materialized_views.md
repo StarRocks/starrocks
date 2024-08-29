@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 异步物化视图故障排除
@@ -16,14 +16,14 @@ displayed_sidebar: "Chinese"
 
 ### 检查异步物化视图工作状态
 
-您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 命令来检查异步物化视图的工作状态。在返回的所有信息中，您可以关注以下字段：
+您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) 命令来检查异步物化视图的工作状态。在返回的所有信息中，您可以关注以下字段：
 
 - `is_active`：物化视图的状态是否为 Active 状态。只有处于 Active 状态的物化视图才能用于查询加速和改写。
 - `last_refresh_state`：最近一次刷新的状态，包括 PENDING（等待中）、RUNNING（运行中）、FAILED（失败）和 SUCCESS（成功）。
 - `last_refresh_error_message`：上次刷新失败的原因（如果物化视图状态不为 Active 状态）。
 - `rows`：物化视图中的数据行数。请注意，这个值可能与物化视图的实际行数不同，因为更新可能有延迟。
 
-有关返回的其他字段的详细信息，请参阅 [SHOW MATERIALIZED VIEWS - 返回](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md#返回)。
+有关返回的其他字段的详细信息，请参阅 [SHOW MATERIALIZED VIEWS - 返回](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md#返回)。
 
 示例：
 
@@ -113,7 +113,7 @@ PROPERTIES    | {"FORCE":"true"}
 
 #### 刷新任务执行期间监控资源消耗
 
-刷新任务执行期间，您可以使用 [SHOW PROC '/current_queries'](../sql-reference/sql-statements/Administration/SHOW_PROC.md) 实时监控其资源消耗情况。
+刷新任务执行期间，您可以使用 [SHOW PROC '/current_queries'](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) 实时监控其资源消耗情况。
 
 在返回的所有信息中，您可以关注以下字段：
 
@@ -158,7 +158,7 @@ ExecTime      | 2.583 s
 
 ### 验证查询是否被异步物化视图改写
 
-您可以通过使用 [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) 查看查询计划，以检查查询是否可以被异步物化视图重写。
+您可以通过使用 [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) 查看查询计划，以检查查询是否可以被异步物化视图重写。
 
 如果查询计划中的 `SCAN` 指标显示了相应物化视图的名称，那么该查询已经被物化视图重写。
 
@@ -292,10 +292,27 @@ REFRESH ASYNC
 PROPERTIES ( 'session.enable_spill'='true' )
 AS <query>;
 
+<<<<<<< HEAD
 -- 添加属性。
 ALTER MATERIALIZED VIEW mv2 
     SET ('session.enable_spill' = 'true');
 ```
+=======
+  v3.2 之前版本中，物化视图刷新任务的默认超时时间为 5 分钟，v3.2 版本之后默认为 1 小时。当遇到超时异常时，可以尝试修改超时时间：
+
+  ```SQL
+  ALTER MATERIALIZED VIEW mv2 SET ( 'session.query_timeout' = '4000' );
+  ```
+
+- **分析物化视图性能瓶颈**
+
+  如果物化视图计算复杂，其本身计算耗时就会很久。您可以通过 Query Profile 分析性能瓶颈，并进行优化：
+
+  1. 通过查询 `information_schema.task_runs` 获取刷新任务的 `query_id`。
+  2. 通过上述的 `query_id`，获取并分析其 Query Profile。
+     - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): 根据 `query_id` 获取原始 Query Profile。
+     - [ANALYZE PROFILE](../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): 以 Fragment 为单位分析 Query Profile，并以树形结构展示。
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ### 物化视图不可用
 
@@ -331,7 +348,11 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
+<<<<<<< HEAD
 - 使用 SHOW PROCESSLIST 和 KILL 语句终止正在运行的刷新任务：
+=======
+- 通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 终止正在运行的刷新任务。
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
   ```SQL
   -- 获取正在运行的刷新任务的 ConnectionId。

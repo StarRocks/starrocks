@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Load data using Spark connector (recommended)
 
-StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you load data into a StarRocks table by using Spark. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md). The Spark connector is implemented based on Spark DataSource V2. A DataSource can be created by using Spark DataFrames or Spark SQL. And both batch and structured streaming modes are supported.
+StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you load data into a StarRocks table by using Spark. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md). The Spark connector is implemented based on Spark DataSource V2. A DataSource can be created by using Spark DataFrames or Spark SQL. And both batch and structured streaming modes are supported.
 
 > **NOTICE**
 >
@@ -88,6 +88,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
 ## Parameters
 
+<<<<<<< HEAD
 | Parameter                                      | Required | Default value | Description                                                  |
 | ---------------------------------------------- | -------- | ------------- | ------------------------------------------------------------ |
 | starrocks.fe.http.url                          | YES      | None          | The HTTP URL of the FE in your StarRocks cluster. You can specify multiple URLs, which must be separated by a comma (,). Format: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`. Since version 1.1.1, you can also add `http://` prefix to the URL, such as `http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`.|
@@ -111,6 +112,145 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.write.num.partitions                 | NO       | None          | The number of partitions into which Spark can write data in parallel. When the data volume is small, you can reduce the number of partitions to lower the loading concurrency and frequency. The default value for this parameter is determined by Spark. However, this method may cause Spark Shuffle cost. |
 | starrocks.write.partition.columns              | NO       | None          | The partitioning columns in Spark. The parameter takes effect only when `starrocks.write.num.partitions` is specified. If this parameter is not specified, all columns being written are used for partitioning. |
 | starrocks.timezone | NO | Default timezone of JVM | Supported since 1.1.1. The timezone used to convert Spark `TimestampType` to StarRocks `DATETIME`. The default is the timezone of JVM returned by `ZoneId#systemDefault()`. The format can be a timezone name such as `Asia/Shanghai`, or a zone offset such as `+08:00`. |
+=======
+### starrocks.fe.http.url
+
+**Required**:  YES<br/>
+**Default value**:  None<br/>
+**Description**:  The HTTP URL of the FE in your StarRocks cluster. You can specify multiple URLs, which must be separated by a comma (,). Format: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`. Since version 1.1.1, you can also add `http://` prefix to the URL, such as `http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`.
+
+### starrocks.fe.jdbc.url
+
+**Required**:  YES<br/>
+**Default value**:  None<br/>
+**Description**:  The address that is used to connect to the MySQL server of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`.
+
+### starrocks.table.identifier
+
+**Required**:  YES<br/>
+**Default value**:  None<br/>
+**Description**:  The name of the StarRocks table. Format: `<database_name>.<table_name>`.
+
+### starrocks.user
+
+**Required**:  YES<br/>
+**Default value**:  None<br/>
+**Description**:  The username of your StarRocks cluster account. The user needs the [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md) on the StarRocks table.
+
+### starrocks.password
+
+**Required**:  YES<br/>
+**Default value**:  None<br/>
+**Description**:  The password of your StarRocks cluster account.
+
+### starrocks.write.label.prefix
+
+**Required**:  NO<br/>
+**Default value**:  spark-<br/>
+**Description**:  The label prefix used by Stream Load.
+
+### starrocks.write.enable.transaction-stream-load
+
+**Required**:  NO<br/>
+**Default value**:  TRUE<br/>
+**Description**:  Whether to use [Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md) to load data. It requires StarRocks v2.5 or later. This feature can load more data in a transaction with less memory usage, and improve performance. <br/> **NOTICE:** Since 1.1.1, this parameter takes effect only when the value of `starrocks.write.max.retries` is non-positive because Stream Load transaction interface does not support retry.
+
+### starrocks.write.buffer.size
+
+**Required**:  NO<br/>
+**Default value**:  104857600<br/>
+**Description**:  The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency.
+
+### starrocks.write.buffer.rows
+
+**Required**:  NO<br/>
+**Default value**:  Integer.MAX_VALUE<br/>
+**Description**:  Supported since version 1.1.1. The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time.
+
+### starrocks.write.flush.interval.ms
+
+**Required**:  NO<br/>
+**Default value**:  300000<br/>
+**Description**:  The interval at which data is sent to StarRocks. This parameter is used to control the loading latency.
+
+### starrocks.write.max.retries
+
+**Required**:  NO<br/>
+**Default value**:  3<br/>
+**Description**:  Supported since version 1.1.1. The number of times that the connector retries to perform the Stream Load for the same batch of data if the load fails. <br/> **NOTICE:** Because Stream Load transaction interface does not support retry. If this parameter is positive, the connector always use Stream Load interface and ignore the value of `starrocks.write.enable.transaction-stream-load`.
+
+### starrocks.write.retry.interval.ms
+
+**Required**:  NO<br/>
+**Default value**:  10000<br/>
+**Description**:  Supported since version 1.1.1. The interval to retry the Stream Load for the same batch of data if the load fails.
+
+### starrocks.columns
+
+**Required**:  NO<br/>
+**Default value**:  None<br/>
+**Description**:  The StarRocks table column into which you want to load data. You can specify multiple columns, which must be separated by commas (,), for example, `"col0,col1,col2"`.
+
+### starrocks.column.types
+
+**Required**: NO<br/>
+**Default value**:  None<br/>
+**Description**:  Supported since version 1.1.1. Customize the column data types for Spark instead of using the defaults inferred from the StarRocks table and the [default mapping](#data-type-mapping-between-spark-and-starrocks). The parameter value is a schema in DDL format same as the output of Spark [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) , such as `col0 INT, col1 STRING, col2 BIGINT`. Note that you only need to specify columns that need customization. One use case is to load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) or [HLL](#load-data-into-columns-of-hll-type) type.
+
+### starrocks.write.properties.*
+
+**Required**:  NO<br/>
+**Default value**:  None<br/>
+**Description**:  The parameters that are used to control Stream Load behavior.  For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
+
+### starrocks.write.properties.format
+
+**Required**:  NO<br/>
+**Default value**:  CSV<br/>
+**Description**:  The file format based on which the Spark connector transforms each batch of data before the data is sent to StarRocks. Valid values: CSV and JSON.
+
+### starrocks.write.properties.row_delimiter
+
+**Required**:  NO<br/>
+**Default value**:  \n<br/>
+**Description**:  The row delimiter for CSV-formatted data.
+
+### starrocks.write.properties.column_separator
+
+**Required**:  NO<br/>
+**Default value**:  \t<br/>
+**Description**:  The column separator for CSV-formatted data.
+
+### starrocks.write.properties.partial_update
+
+**Required**:  NO<br/>
+**Default value**: `FALSE`<br/>
+**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
+
+### starrocks.write.properties.partial_update_mode
+
+**Required**:  NO<br/>
+**Default value**: `row`<br/>
+**Description**: Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
+
+### starrocks.write.num.partitions
+
+**Required**:  NO<br/>
+**Default value**:  None<br/>
+**Description**:  The number of partitions into which Spark can write data in parallel. When the data volume is small, you can reduce the number of partitions to lower the loading concurrency and frequency. The default value for this parameter is determined by Spark. However, this method may cause Spark Shuffle cost.
+
+### starrocks.write.partition.columns
+
+**Required**:  NO<br/>
+**Default value**:  None<br/>
+**Description**:  The partitioning columns in Spark. The parameter takes effect only when `starrocks.write.num.partitions` is specified. If this parameter is not specified, all columns being written are used for partitioning.
+
+### starrocks.timezone
+
+**Required**:  NO<br/>
+**Default value**:  Default timezone of JVM<br/>
+**Description**:  Supported since 1.1.1. The timezone used to convert Spark `TimestampType` to StarRocks `DATETIME`. The default is the timezone of JVM returned by `ZoneId#systemDefault()`. The format can be a timezone name such as `Asia/Shanghai`, or a zone offset such as `+08:00`.
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 ## Data type mapping between Spark and StarRocks
 

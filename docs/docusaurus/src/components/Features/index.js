@@ -52,7 +52,11 @@ const ChineseFeatureList = [
   },
   {
     title: '半结构化类型',
+<<<<<<< HEAD
     url: '../../sql-reference/data-types/semi_structured/',
+=======
+    url: '../../category/semi-structured/',
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
     description: (
       <>
         JSON, map, struct, array
@@ -79,7 +83,7 @@ const ChineseFeatureList = [
   },
   {
     title: '参考手册',
-    url: '../../reference/',
+    url: '../../category/reference/',
     description: (
       <>
         SQL 语法、命令、函数、变量
@@ -154,7 +158,11 @@ const EnglishFeatureList = [
   },
   {
     title: 'Work with semi-structured data',
+<<<<<<< HEAD
     url: '../../sql-reference/data-types/semi_structured/',
+=======
+    url: '../../category/semi-structured/',
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
     description: (
       <>
         JSON, map, struct, array
@@ -181,7 +189,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Reference',
-    url: '../../reference/',
+    url: '../../category/reference/',
     description: (
       <>
         SQL, functions, error codes, …

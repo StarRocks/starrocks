@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['suoyin']
 ---
 
@@ -88,17 +88,29 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     ```
 
+<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
    本示例中，创建了基于 `lo_orderdate` 列创建了名称为 `lo_orderdate_index` 的 Bitmap 索引。Bitmap 索引的命名要求参见[系统限制](../reference/System_limit.md)。在同一张表中不能创建名称相同的 Bitmap 索引。
+=======
+   本示例中，创建了基于 `lo_orderdate` 列创建了名称为 `lo_orderdate_index` 的 Bitmap 索引。Bitmap 索引的命名要求参见[系统限制](../../sql-reference/System_limit.md)。在同一张表中不能创建名称相同的 Bitmap 索引。
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bitmap_index.md
 
    并且，支持为多个列创建 Bitmap 索引，并且多个 Bitmap 索引定义之间用英文逗号（,）隔开。
 
   :::note
 
+<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
   建表的其他参数说明，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
   :::
 
 - 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
+=======
+  建表的其他参数说明，参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+
+  :::
+
+- 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md)。
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bitmap_index.md
 
     ```SQL
     CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
@@ -106,7 +118,11 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
 
 ### 创建进度
 
+<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
 创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
+=======
+创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bitmap_index.md
 
 ```SQL
 SHOW ALTER TABLE COLUMN [FROM db_name];
@@ -120,7 +136,11 @@ SHOW ALTER TABLE COLUMN [FROM db_name];
 
 ### 查看索引
 
+<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
 查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md)。
+=======
+查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_INDEX.md)。
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bitmap_index.md
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
@@ -134,7 +154,11 @@ SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
 
 ### 删除索引
 
+<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
 删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP_INDEX.md)。
+=======
+删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../../sql-reference/sql-statements/table_bucket_part_index/DROP_INDEX.md)。
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/table_design/indexes/Bitmap_index.md
 
 ```SQL
 DROP INDEX index_name ON [db_name.]table_name;

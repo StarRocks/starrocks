@@ -1,5 +1,10 @@
 ---
+<<<<<<< HEAD
 displayed_sidebar: "English"
+=======
+displayed_sidebar: docs
+toc_max_heading_level: 3
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # Overview of data loading
@@ -140,7 +145,11 @@ The following figure provides an overview of various data sources supported by S
 
 StarRocks provides parameters for you to limit the memory usage for each load job, thereby reducing memory consumption, especially in high concurrency scenarios. However, do not specify an excessively low memory usage limit. If the memory usage limit is excessively low, data may be frequently flushed from memory to disk because the memory usage for load jobs reaches the specified limit. We recommend that you specify a proper memory usage limit based on your business scenario.
 
+<<<<<<< HEAD
 The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
+=======
+### [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](../../loading/loading_introduction/Loading_intro.md#system-configurations)" section of this topic.
 
@@ -150,7 +159,11 @@ StarRocks also provides parameters for you to limit the total memory usage of al
 
 When you load data, you can choose not to load the data from a specific field of your data file:
 
+<<<<<<< HEAD
 - If you have specified the `DEFAULT` keyword for the destination StarRocks table column mapping the source field when you create the StarRocks table, StarRocks automatically fills the specified default value into the destination column.
+=======
+### [Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
   [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
 
@@ -168,7 +181,11 @@ When you load data, you can choose not to load the data from a specific field of
 
 For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
+<<<<<<< HEAD
 ### Set write quorum for data loading
+=======
+### [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md). This property is supported from v2.5.
 
@@ -176,7 +193,11 @@ If your StarRocks cluster has multiple data replicas, you can set different writ
 
 This section describes some parameter configurations that are applicable to all of the loading methods provided by StarRocks.
 
+<<<<<<< HEAD
 ### FE configurations
+=======
+### [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)
+>>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 
 You can configure the following parameters in the configuration file **fe.conf** of each FE:
 
