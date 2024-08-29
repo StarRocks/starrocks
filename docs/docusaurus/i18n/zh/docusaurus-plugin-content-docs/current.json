@@ -1,7 +1,7 @@
 {
   "version.label": {
-    "message": "current",
-    "description": "The label for version current"
+    "message": "Stable-3.1",
+    "description": "The label for version 3.1"
   },
   "sidebar.docs.category.Introduction to StarRocks": {
     "message": "产品简介",
@@ -550,5 +550,13 @@
   "sidebar.docs.category.系统元数据库": {
     "message": "系统元数据库",
     "description": "The label for category 系统元数据库 in sidebar docs"
+  },
+  "sidebar.docs.category.Query Data Lakes": {
+    "message": "Query Data Lakes",
+    "description": "The label for category Query Data Lakes in sidebar docs"
+  },
+  "sidebar.docs.category.Index": {
+    "message": "Index",
+    "description": "The label for category Index in sidebar docs"
   }
 }
