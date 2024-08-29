@@ -1,7 +1,7 @@
 {
   "version.label": {
-    "message": "current",
-    "description": "The label for version current"
+    "message": "2.5",
+    "description": "The label for version 2.5"
   },
   "sidebar.docs.category.Introduction to StarRocks": {
     "message": "产品简介",
@@ -550,5 +550,121 @@
   "sidebar.docs.category.系统元数据库": {
     "message": "系统元数据库",
     "description": "The label for category 系统元数据库 in sidebar docs"
+  },
+  "sidebar.docs.category.Query Data Lakes": {
+    "message": "Query Data Lakes",
+    "description": "The label for category Query Data Lakes in sidebar docs"
+  },
+  "sidebar.docs.category.Usage": {
+    "message": "Usage",
+    "description": "The label for category Usage in sidebar docs"
+  },
+  "sidebar.docs.category.Index": {
+    "message": "Index",
+    "description": "The label for category Index in sidebar docs"
+  },
+  "sidebar.docs.category.SQL Reference": {
+    "message": "SQL Reference",
+    "description": "The label for category SQL Reference in sidebar docs"
+  },
+  "sidebar.docs.category.User Account Management": {
+    "message": "User Account Management",
+    "description": "The label for category User Account Management in sidebar docs"
+  },
+  "sidebar.docs.category.Cluster Management": {
+    "message": "Cluster Management",
+    "description": "The label for category Cluster Management in sidebar docs"
+  },
+  "sidebar.docs.category.DDL": {
+    "message": "DDL",
+    "description": "The label for category DDL in sidebar docs"
+  },
+  "sidebar.docs.category.DML": {
+    "message": "DML",
+    "description": "The label for category DML in sidebar docs"
+  },
+  "sidebar.docs.category.Auxiliary Commands": {
+    "message": "Auxiliary Commands",
+    "description": "The label for category Auxiliary Commands in sidebar docs"
+  },
+  "sidebar.docs.category.Date": {
+    "message": "Date",
+    "description": "The label for category Date in sidebar docs"
+  },
+  "sidebar.docs.category.Function Reference": {
+    "message": "Function Reference",
+    "description": "The label for category Function Reference in sidebar docs"
+  },
+  "sidebar.docs.category.Aggregate Functions": {
+    "message": "Aggregate Functions",
+    "description": "The label for category Aggregate Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Array Functions": {
+    "message": "Array Functions",
+    "description": "The label for category Array Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Bit Functions": {
+    "message": "Bit Functions",
+    "description": "The label for category Bit Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Bitmap Functions": {
+    "message": "Bitmap Functions",
+    "description": "The label for category Bitmap Functions in sidebar docs"
+  },
+  "sidebar.docs.category.JSON Functions": {
+    "message": "JSON Functions",
+    "description": "The label for category JSON Functions in sidebar docs"
+  },
+  "sidebar.docs.category.JSON constructor functions": {
+    "message": "JSON constructor functions",
+    "description": "The label for category JSON constructor functions in sidebar docs"
+  },
+  "sidebar.docs.category.JSON query and processing functions": {
+    "message": "JSON query and processing functions",
+    "description": "The label for category JSON query and processing functions in sidebar docs"
+  },
+  "sidebar.docs.category.Map Functions": {
+    "message": "Map Functions",
+    "description": "The label for category Map Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Conditional Functions": {
+    "message": "Conditional Functions",
+    "description": "The label for category Conditional Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Cryptographic Functions": {
+    "message": "Cryptographic Functions",
+    "description": "The label for category Cryptographic Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Date and Time Functions": {
+    "message": "Date and Time Functions",
+    "description": "The label for category Date and Time Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Geographic Functions": {
+    "message": "Geographic Functions",
+    "description": "The label for category Geographic Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Math Functions": {
+    "message": "Math Functions",
+    "description": "The label for category Math Functions in sidebar docs"
+  },
+  "sidebar.docs.category.String Functions": {
+    "message": "String Functions",
+    "description": "The label for category String Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Pattern Matching Functions": {
+    "message": "Pattern Matching Functions",
+    "description": "The label for category Pattern Matching Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Percentile Functions": {
+    "message": "Percentile Functions",
+    "description": "The label for category Percentile Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Scalar Functions": {
+    "message": "Scalar Functions",
+    "description": "The label for category Scalar Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Utility Functions": {
+    "message": "Utility Functions",
+    "description": "The label for category Utility Functions in sidebar docs"
   }
 }
