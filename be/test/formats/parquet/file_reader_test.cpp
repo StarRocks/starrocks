@@ -3200,8 +3200,8 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
 TEST_F(FileReaderTest, TestMapKeyIsStruct) {
     const std::string filename = "./be/test/formats/parquet/test_data/map_key_is_struct.parquet";
     auto file = _create_file(filename);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filename));
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filename), 100000);
 
     auto ctx = _create_file_random_read_context(filename);
     Status status = file_reader->init(ctx);
