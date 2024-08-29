@@ -85,10 +85,6 @@ static TFileFormatType::type parse_stream_load_format(const std::string& format_
     return TFileFormatType::FORMAT_UNKNOWN;
 }
 
-TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) {
-    this(exec_env, nullptr);
-}
-
 TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env, StreamLoadHttpExecutor* stream_load_http_executor)
         : _exec_env(exec_env), _stream_load_http_executor(stream_load_http_executor) {}
 

@@ -247,7 +247,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
     _http_handlers.emplace_back(show_running_action);
 
-    auto* update_config_action = new UpdateConfigAction(_env);
+    auto* update_config_action = new UpdateConfigAction(_env, this);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
 

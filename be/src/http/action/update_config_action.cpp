@@ -53,6 +53,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "http/stream_load_http_executor.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/tablet_manager.h"
@@ -271,6 +272,30 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             workgroup::DefaultWorkGroupInitialization default_wg_initializer;
             auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
             workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
+        });
+        _config_callback.emplace("stream_load_async_handle_thread_pool_num_min", [&]() {
+            LOG(INFO) << "set stream_load_async_handle_thread_pool_num_min:"
+                      << config::stream_load_async_handle_thread_pool_num_min;
+            if (_http_server && _http_server->stream_load_http_executor()) {
+                Status status = _http_server->stream_load_http_executor()->thread_pool()->update_min_threads(
+                        std::max(0, config::stream_load_async_handle_thread_pool_num_min));
+                if (!status.ok()) {
+                    LOG(WARNING) << "Fail to set stream_load_async_handle_thread_pool_num_min, value: "
+                                 << config::stream_load_async_handle_thread_pool_num_min << ", status: " << status;
+                }
+            }
+        });
+        _config_callback.emplace("stream_load_async_handle_thread_pool_num_max", [&]() {
+            LOG(INFO) << "set stream_load_async_handle_thread_pool_num_max:"
+                      << config::stream_load_async_handle_thread_pool_num_max;
+            if (_http_server && _http_server->stream_load_http_executor()) {
+                Status status = _http_server->stream_load_http_executor()->thread_pool()->update_max_threads(
+                        std::max(1, config::stream_load_async_handle_thread_pool_num_max));
+                if (!status.ok()) {
+                    LOG(WARNING) << "Fail to set stream_load_async_handle_thread_pool_num_max, value: "
+                                 << config::stream_load_async_handle_thread_pool_num_max << ", status: " << status;
+                }
+            }
         });
 
 #ifdef USE_STAROS

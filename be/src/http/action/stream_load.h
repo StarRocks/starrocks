@@ -52,9 +52,9 @@ class StreamLoadHttpExecutor;
 
 class StreamLoadAction : public HttpHandler {
 public:
-    explicit StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter);
     explicit StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter,
-                              StreamLoadHttpExecutor* stream_load_http_executor);
+                              StreamLoadHttpExecutor* stream_load_http_executor = nullptr);
+
     ~StreamLoadAction() override;
 
     void handle(HttpRequest* req) override;

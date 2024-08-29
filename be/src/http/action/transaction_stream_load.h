@@ -32,8 +32,7 @@ class StreamLoadHttpExecutor;
 
 class TransactionManagerAction : public HttpHandler {
 public:
-    explicit TransactionManagerAction(ExecEnv* exec_env);
-    explicit TransactionManagerAction(ExecEnv* exec_env, StreamLoadHttpExecutor* stream_load_http_executor);
+    explicit TransactionManagerAction(ExecEnv* exec_env, StreamLoadHttpExecutor* stream_load_http_executor = nullptr);
     ~TransactionManagerAction() override;
 
     void handle(HttpRequest* req) override;

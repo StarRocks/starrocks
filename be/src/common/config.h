@@ -1300,8 +1300,8 @@ CONF_mBool(enable_stream_load_verbose_log, "false");
 CONF_mBool(enable_stream_load_async_handle, "true");
 CONF_mInt32(stream_load_async_handle_thread_pool_num_min, "0");
 CONF_mInt32(stream_load_async_handle_thread_pool_num_max, "48");
-CONF_mInt32(stream_load_async_handle_thread_pool_queue_size, "102400");
-CONF_mInt32(stream_load_async_handle_thread_pool_idle_time_ms, "2000");
+CONF_Int32(stream_load_async_handle_thread_pool_queue_size, "102400");
+CONF_Int32(stream_load_async_handle_thread_pool_idle_time_ms, "2000");
 
 CONF_mInt32(get_txn_status_internal_sec, "30");
 

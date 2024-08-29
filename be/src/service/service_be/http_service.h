@@ -57,6 +57,8 @@ public:
     void stop();
     void join();
 
+    StreamLoadHttpExecutor* stream_load_http_executor() { return _stream_load_http_executor.get(); }
+
 private:
     ExecEnv* _env;
 

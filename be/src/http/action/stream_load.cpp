@@ -128,9 +128,6 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
 static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,
                                        TStreamLoadPutResult* result);
 
-StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
-        : StreamLoadAction(exec_env, limiter, nullptr) {}
-
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter,
                                    StreamLoadHttpExecutor* stream_load_http_executor)
         : _exec_env(exec_env),
