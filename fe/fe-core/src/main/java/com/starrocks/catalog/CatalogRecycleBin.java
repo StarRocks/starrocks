@@ -904,7 +904,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     @VisibleForTesting
-    public synchronized boolean isContainedInidToRecycleTime(long id) {
+    synchronized boolean isContainedInidToRecycleTime(long id) {
         return idToRecycleTime.get(id) != null;
     }
 

@@ -32,6 +32,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
@@ -67,6 +68,9 @@ public class ReplaceLakePartitionTest {
 
     @Mocked
     private WarehouseManager warehouseManager;
+
+    @Mocked
+    private EditLog editLog;
 
     public ReplaceLakePartitionTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
@@ -125,17 +129,19 @@ public class ReplaceLakePartitionTest {
         return new Partition(newPartitionId, partitionName, index, null);
     }
 
-    @Test
-    public void testUnPartitionedLakeTableReplacePartition() {
-        LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
-        tbl.replacePartition(partitionName, tempPartitionName);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-
+    private void erasePartition() {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 minTimes = 0;
                 result = warehouseManager;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
             }
         };
 
@@ -153,6 +159,13 @@ public class ReplaceLakePartitionTest {
             }
         };
 
+        new MockUp<EditLog>() {
+            @Mock
+            public void logErasePartition(long partitionId) {
+                return;
+            }
+        };
+
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getBackgroundWarehouse() {
@@ -160,10 +173,15 @@ public class ReplaceLakePartitionTest {
             }
         };
 
-        try {
-            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
-        } catch (Exception ignore) {
-        }
+        ExceptionChecker.expectThrowsNoException(() -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
+    }
+
+    @Test
+    public void testUnPartitionedLakeTableReplacePartition() {
+        LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
+        tbl.replacePartition(partitionName, tempPartitionName);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+        erasePartition();
         Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
     }
 
@@ -173,40 +191,7 @@ public class ReplaceLakePartitionTest {
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(newPartition);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
-                return shardInfo;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getBackgroundWarehouse() {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
-        try {
-            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
-        } catch (Exception ignore) {
-        }
+        erasePartition();
         Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
     }
 
@@ -216,40 +201,7 @@ public class ReplaceLakePartitionTest {
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(newPartition);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
-                return shardInfo;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getBackgroundWarehouse() {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
-        try {
-            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
-        } catch (Exception ignore) {
-        }
+        erasePartition();
         Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
     }
 
@@ -259,40 +211,7 @@ public class ReplaceLakePartitionTest {
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(newPartition);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
-                return shardInfo;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getBackgroundWarehouse() {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
-        try {
-            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
-        } catch (Exception ignore) {
-        }
+        erasePartition();
         Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
     }
 }

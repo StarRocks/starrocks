@@ -2108,7 +2108,7 @@ public class OlapTable extends Table {
         // For cloud native table, add partition into recycle Bin after truncate table.
         // It is no necessary for share nothing mode because file will be deleted throught
         // tablet report in this case.
-        if (this.isCloudNativeTable()) {
+        if (this.isCloudNativeTableOrMaterializedView()) {
             RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
             recyclePartitionInfo.setRecoverable(false);
             GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
