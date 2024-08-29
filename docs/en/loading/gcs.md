@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---
@@ -8,7 +8,7 @@ keywords: ['Broker Load']
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks allows you to load data in bulk from Google Cloud Storage (GCS) by using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+StarRocks allows you to load data in bulk from Google Cloud Storage (GCS) by using [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 Broker Load runs in asynchronous mode. An asynchronous Broker Load process handles making the connection to GCS, pulling the data, and storing the data in StarRocks.
 
@@ -115,7 +115,7 @@ This job has four main sections:
 - `BROKER`: The connection details for the source.
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 ### Check load progress
 

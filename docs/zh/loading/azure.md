@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---
@@ -8,7 +8,7 @@ keywords: ['Broker Load']
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks 支持通过 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 从Microsoft Azure Storage 导入数据。
+StarRocks 支持通过 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 从Microsoft Azure Storage 导入数据。
 
 作为一种异步的导入方式，Broker Load 负责建立与 Azure 的连接、拉取数据、并将数据存储到 StarRocks 中。
 
@@ -109,7 +109,7 @@ PROPERTIES
 - `BROKER`：连接数据源的认证信息配置。
 - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 ### 查看导入进度
 

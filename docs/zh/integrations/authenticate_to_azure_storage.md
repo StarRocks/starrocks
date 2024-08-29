@@ -1,5 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_label: Microsoft Azure Storage
+description: "本文介绍如何认证 Azure 资源"
 ---
 
 # 配置 Microsoft Azure Storage 认证信息
@@ -17,7 +19,7 @@ StarRocks 支持通过以下类型的 Azure 存储账号来访问 Azure Storage�
 - Azure Data Lake Storage Gen1
 - Azure Data Lake Storage Gen2
 
-本文档以 Hive catalog、文件外部表和 Broker Load 为例，介绍 StarRocks 在各应用场景下如何通过不同类型的存储账号来访问 Azure Storage。有关下面示例中出现的参数详解，参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)和 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+本文档以 Hive catalog、文件外部表和 Broker Load 为例，介绍 StarRocks 在各应用场景下如何通过不同类型的存储账号来访问 Azure Storage。有关下面示例中出现的参数详解，参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)和 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 ## Blob Storage
 
@@ -37,7 +39,7 @@ StarRocks 支持通过以下认证方式来访问 Blob Storage：
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.storage_account` 和 `azure.blob.shared_key`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.storage_account` 和 `azure.blob.shared_key`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -52,7 +54,7 @@ PROPERTIES
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.shared_key` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.shared_key` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -72,7 +74,7 @@ PROPERTIES
 
 #### Broker Load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置  `azure.blob.storage_account`、`azure.blob.shared_key` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置  `azure.blob.storage_account`、`azure.blob.shared_key` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -92,7 +94,7 @@ WITH BROKER
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container` 和 `azure.blob.sas_token`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container` 和 `azure.blob.sas_token`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -108,7 +110,7 @@ PROPERTIES
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -129,7 +131,7 @@ PROPERTIES
 
 #### Broker load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -161,7 +163,7 @@ StarRocks 支持通过以下认证方式来访问 Data Lake Storage Gen1：
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls1.use_managed_service_identity`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls1.use_managed_service_identity`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -175,7 +177,7 @@ PROPERTIES
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls1.use_managed_service_identity` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls1.use_managed_service_identity` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -194,7 +196,7 @@ PROPERTIES
 
 #### Broker Load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls1.use_managed_service_identity` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls1.use_managed_service_identity` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -213,7 +215,7 @@ WITH BROKER
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls1.oauth2_client_id`、`azure.adls1.oauth2_credential` 和 `azure.adls1.oauth2_endpoint`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls1.oauth2_client_id`、`azure.adls1.oauth2_credential` 和 `azure.adls1.oauth2_endpoint`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -229,7 +231,7 @@ PROPERTIES
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls1.oauth2_client_id`、`azure.adls1.oauth2_credential`、`azure.adls1.oauth2_endpoint` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls1.oauth2_client_id`、`azure.adls1.oauth2_credential`、`azure.adls1.oauth2_endpoint` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -250,7 +252,7 @@ PROPERTIES
 
 #### Broker Load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls1.oauth2_client_id`、`azure.adls1.oauth2_credential`、`azure.adls1.oauth2_endpoint` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls1.oauth2_client_id`、`azure.adls1.oauth2_credential`、`azure.adls1.oauth2_endpoint` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -292,7 +294,7 @@ StarRocks 支持通过以下认证方式来访问 Data Lake Storage Gen2：
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_tenant_id` 和 `azure.adls2.oauth2_client_id`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_tenant_id` 和 `azure.adls2.oauth2_client_id`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -308,7 +310,7 @@ PROPERTIES
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -329,7 +331,7 @@ PROPERTIES
 
 #### Broker Load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -350,7 +352,7 @@ WITH BROKER
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls2.storage_account` 和 `azure.adls2.shared_key`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls2.storage_account` 和 `azure.adls2.shared_key`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -365,7 +367,7 @@ PROPERTIES
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls2.storage_account`、`azure.adls2.shared_key` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls2.storage_account`、`azure.adls2.shared_key` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -385,7 +387,7 @@ PROPERTIES
 
 #### Broker Load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls2.storage_account`、`azure.adls2.shared_key` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls2.storage_account`、`azure.adls2.shared_key` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -407,7 +409,7 @@ WITH BROKER
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls2.oauth2_client_id`、`azure.adls2.oauth2_client_secret` 和 `azure.adls2.oauth2_client_endpoint`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls2.oauth2_client_id`、`azure.adls2.oauth2_client_secret` 和 `azure.adls2.oauth2_client_endpoint`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -423,7 +425,7 @@ PROPERTIES
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls2.oauth2_client_id`、`azure.adls2.oauth2_client_secret`、`azure.adls2.oauth2_client_endpoint` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls2.oauth2_client_id`、`azure.adls2.oauth2_client_secret`、`azure.adls2.oauth2_client_endpoint` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -444,7 +446,7 @@ PROPERTIES
 
 #### Broker Load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls2.oauth2_client_id`、`azure.adls2.oauth2_client_secret`、`azure.adls2.oauth2_client_endpoint` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls2.oauth2_client_id`、`azure.adls2.oauth2_client_secret`、`azure.adls2.oauth2_client_endpoint` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000

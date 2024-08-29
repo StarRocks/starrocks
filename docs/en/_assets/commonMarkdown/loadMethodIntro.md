@@ -1,6 +1,6 @@
 
-- Synchronous loading using [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../../sql-reference/sql-functions/table-functions/files.md)
-- Asynchronous loading using [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+- Synchronous loading using [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../../sql-reference/sql-functions/table-functions/files.md)
+- Asynchronous loading using [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
 
 Each of these options has its own advantages, which are detailed in the following sections.
 

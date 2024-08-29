@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 导入和查询数据
@@ -85,7 +85,7 @@ select * from detailDemo;
 select * from detailDemo order by region_num desc;
 ```
 
-StarRocks 支持多种 select 用法，包括：[Join](../sql-reference/sql-statements/data-manipulation/SELECT.md)，[子查询](../sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子句](../sql-reference/sql-statements/data-manipulation/SELECT.md#with) 等，详见 [查询章节](../sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 支持多种 select 用法，包括：[Join](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)，[子查询](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md#子查询)，[With 子句](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md#with) 等，详见 [查询章节](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
 
 ## 扩展支持
 
@@ -97,7 +97,7 @@ StarRocks 中支持多种函数，包括：[日期函数](../sql-reference/sql-f
 
 ### 视图
 
-StarRocks 支持创建 [逻辑视图](../sql-reference/sql-statements/data-definition/CREATE_VIEW.md#功能) 和 [物化视图](../using_starrocks/Materialized_view.md)。具体使用方式详见对应章节。
+StarRocks 支持创建 [逻辑视图](../sql-reference/sql-statements/View/CREATE_VIEW.md#功能) 和 [物化视图](../using_starrocks/Materialized_view.md)。具体使用方式详见对应章节。
 
 ### 外部表
 

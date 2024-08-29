@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Information Schema
@@ -48,7 +48,7 @@ StarRocks has optimized the metadata information provided by the tables `tables`
 | [tables](#tables)                            | Provides general metadata information of tables.             |
 | [tables_config](#tables_config)                     | Provides additional table metadata information that is unique to StarRocks. |
 | [load_tracking_logs](#load_tracking_logs)                | Provides error information (if any) of load jobs. |
-| [loads](#loads)                             | Provides the results of load jobs. This table is supported from v3.1 onwards. Currently, you can only view the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/INSERT.md) jobs from this table.                 |
+| [loads](#loads)                             | Provides the results of load jobs. This table is supported from v3.1 onwards. Currently, you can only view the results of [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) and [Insert](../sql-reference/sql-statements/loading_unloading/INSERT.md) jobs from this table.                 |
 
 ### loads
 

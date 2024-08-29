@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Data Cache
@@ -37,7 +37,7 @@ hash(filename) + fileModificationTime + blockId
 SET enable_populate_block_cache = false;
 ```
 
-关于 `enable_populate_block_cache` 的更多信息，参见 [系统变量](../reference/System_variable.md#支持的变量)。
+关于 `enable_populate_block_cache` 的更多信息，参见 [系统变量](../sql-reference/System_variable.md#支持的变量)。
 
 ## 缓存介质
 

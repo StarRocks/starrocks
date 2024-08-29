@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Use HLL for approximate count distinct
@@ -77,7 +77,7 @@ DISTRIBUTED BY HASH(ID);
 
 > * Note: When the data volume is large, it is better to create a corresponding rollup table for high frequency HLL queries
 
-Load data using [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md):
+Load data using [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md):
 
 ~~~bash
 curl --location-trusted -u <username>:<password> -H "label:label_1600997542287" \

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['fenqu','fentong', 'lengre']
 toc_max_heading_level: 4
 description: 分区与分桶
@@ -380,7 +380,7 @@ DISTRIBUTED BY HASH(site_id);
 
 执行如下语句，删除 `site_access` 表中分区 p1 及数据：
 
-> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../sql-reference/sql-statements/data-definition/RECOVER.md)恢复分区及数据。
+> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../sql-reference/sql-statements/table_bucket_part_index/RECOVER.md)恢复分区及数据。
 
 ```SQL
 ALTER TABLE site_access
@@ -541,7 +541,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ```
 
     如果需要开启该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 为 `true`。
-    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
+    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
 
     > 如您的表单个分区原始数据规模预计超过100GB，建议您使用下述方式手动设置分桶数量。
 
@@ -568,7 +568,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     自 2.5.7 版本起， StarRocks 支持根据机器资源和数据量自动设置分区的分桶数量。
 
     如果需要启用该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 保持默认值 `true`。如果需要关闭该功能，则您可以执行`ADMIN SET FRONTEND CONFIG ("enable_auto_tablet_distribution" = "false");`，并且新增分区的时候未指定分桶数量，则新增分区的分桶数量会继承建表时的分桶数量。
-    新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为新增分区自动设置的分桶数量。
+    新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) 来查看 StarRocks 为新增分区自动设置的分桶数量。
 
   - 方式二：手动设置分桶数量
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Query analysis
@@ -16,7 +16,7 @@ Query performance in StarRocks is determined by query planning and query executi
 
 A query plan provides the DBA with a macro perspective to access query information. A query plan is the key to query performance and a good resource for the DBA to reference. The following code snippet uses `TPCDS query96` as an example to show how to view a query plan.
 
-Use the [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) statement to view the plan of a query.
+Use the [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) statement to view the plan of a query.
 
 ~~~SQL
 EXPLAIN select  count(*)
@@ -204,7 +204,7 @@ Query hints are directives or comments that explicitly suggest the query optimiz
 
 ### Variable-Setting hint
 
-You can set one or more [system variables](../reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can set one or more [system variables](../sql-reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
 
 #### Syntax
 

@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+toc_max_heading_level: 4
 ---
 
 # Elasticsearch catalog

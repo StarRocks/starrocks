@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['Yuanshuju']
 ---
 
@@ -49,7 +49,7 @@ StarRocks 优化了 `information_schema` 中表 `tables`、表 `tables_config` �
 | [tables](#tables)                      | 提供常规的表元数据信息。                     |
 | [tables_config](#tables_config)               | 提供额外的 StarRocks 独有的表元数据信息。     |
 | [load_tracking_logs](#load_tracking_logs)          | 提供导入作业相关的错误信息。                  |
-| [loads](#loads)                       | 提供导入作业的结果信息，从 3.1 版本起支持。当前仅支持查看 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [Insert](../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入作业的结果信息。                  |
+| [loads](#loads)                       | 提供导入作业的结果信息，从 3.1 版本起支持。当前仅支持查看 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 和 [Insert](../sql-reference/sql-statements/loading_unloading/INSERT.md) 导入作业的结果信息。                  |
 
 ### loads
 

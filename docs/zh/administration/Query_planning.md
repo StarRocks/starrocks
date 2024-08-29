@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 分析查询
@@ -43,7 +43,7 @@ order by count(*) limit 100;
 
 Query Plan 可以分为逻辑执行计划（Logical Query Plan），和物理执行计划（Physical Query Plan），本章节所讲述的 Query Plan 默认指代的都是逻辑执行计划。
 
-通过 [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) 命令查看 Query Plan。
+通过 [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) 命令查看 Query Plan。
 
 ```sql
 EXPLAIN sql_statement;
@@ -332,7 +332,7 @@ HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)
 
 ### 系统变量 Hint
 
-在 SELECT、SUBMIT TASK 语句中通过 `/*+ ... */` 注释的形式设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
+在 SELECT、SUBMIT TASK 语句中通过 `/*+ ... */` 注释的形式设置一个或多个[系统变量](../sql-reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
 
 #### 语法
 

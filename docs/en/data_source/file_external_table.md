@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # File external table
@@ -14,7 +14,7 @@ The File external feature was designed to help with importing data into StarRock
 
 ## Limits
 
-- File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query catalogs created in the cluster.
+- File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query catalogs created in the cluster.
 - Only Parquet and ORC data files are supported.
 - You can only use file external tables to query data in the target data file. Data write operations such as INSERT, DELETE, and DROP are not supported.
 
@@ -24,7 +24,7 @@ Before you create a file external table, you must configure your StarRocks clust
 
 ## Create a database (Optional)
 
-After connecting to your StarRocks cluster, you can create a file external table in an existing database or create a new database to manage file external tables. To query existing databases in the cluster, run [SHOW DATABASES](../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md). Then you can run `USE <db_name>` to switch to the target database.
+After connecting to your StarRocks cluster, you can create a file external table in an existing database or create a new database to manage file external tables. To query existing databases in the cluster, run [SHOW DATABASES](../sql-reference/sql-statements/Database/SHOW_DATABASES.md). Then you can run `USE <db_name>` to switch to the target database.
 
 The syntax for creating a database is as follows.
 
@@ -282,4 +282,4 @@ SELECT * FROM t0;
 
 ## Manage file external tables
 
-You can view the schema of the table using [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP_TABLE.md).
+You can view the schema of the table using [DESC](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md).

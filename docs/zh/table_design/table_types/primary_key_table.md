@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['zhujian']
 ---
 
@@ -116,7 +116,7 @@ PROPERTIES (
 
    > - 自 2.3.0 版本起，StarRocks 支持配置该参数。
    > - 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
-   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#修改表的属性) 。
+   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#修改表的属性) 。
    > - 自 3.1 版本起，存算分离模式支持创建主键模型表，并且自 3.1.4 版本起，支持基于本地磁盘上的持久化索引。
 
 - 如果未开启持久化索引，导入时主键索引存在内存中，可能会导致占用内存较多。因此建议您遵循如下建议：
@@ -147,4 +147,4 @@ PROPERTIES (
 ## 下一步
 
 建表完成后，您可以创建导入作业，导入数据至表中。具体导入方式，请参见[导入总览](../../loading/loading_introduction/Loading_intro.md)。
-如果需要更新主键模型表的数据，您可以通过[导入](../../loading/Load_to_Primary_Key_tables.md)或执行 DML 语句（[UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md) 或 [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)）实现，并且更新操作是原子性的。
+如果需要更新主键模型表的数据，您可以通过[导入](../../loading/Load_to_Primary_Key_tables.md)或执行 DML 语句（[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md) 或 [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md）实现，并且更新操作是原子性的。
