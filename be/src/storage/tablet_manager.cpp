@@ -1006,7 +1006,8 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
     return Status::OK();
 }
 
-void TabletManager::sweep_shutdown_tablet(const DroppedTabletInfo& info, std::vector<DroppedTabletInfo>& finished_tablets) {
+void TabletManager::sweep_shutdown_tablet(const DroppedTabletInfo& info,
+                                          std::vector<DroppedTabletInfo>& finished_tablets) {
     auto& tablet = info.tablet;
     // The current thread has two references: _shutdown_tablets[i] and tablets_to_checks[i], check
     // if there is another thread has reference to the tablet, and if so, does not remove the tablet for now.
