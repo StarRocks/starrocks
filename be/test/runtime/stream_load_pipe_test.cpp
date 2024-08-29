@@ -148,7 +148,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
-        auto buf = ByteBuffer::allocate(64);
+        auto buf = ByteBuffer::allocate_with_tracker(64).value();
         int k = 0;
         for (int j = 0; j < 64; ++j) {
             char c = '0' + (k++ % 10);
@@ -185,7 +185,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
-        auto buf = ByteBuffer::allocate(64);
+        auto buf = ByteBuffer::allocate_with_tracker(64).value();
         int k = 0;
         for (int j = 0; j < 64; ++j) {
             char c = '0' + (k++ % 10);

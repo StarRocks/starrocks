@@ -25,6 +25,16 @@ create resource group rg_${uuid0}
 with w1 as (select * from t1 union all select * from t1 
     union all select * from t1 union all select * from t1 
     union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
     union all select * from t1 union all select * from t1)
 select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from w1;
 

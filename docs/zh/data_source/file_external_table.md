@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 文件外部表
@@ -14,7 +14,7 @@ displayed_sidebar: "Chinese"
 
 ## 使用限制
 
-- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 来查询集群下的 catalog。
+- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 来查询集群下的 catalog。
 - 仅支持查询 Parquet、ORC、Avro、RCFile、或 SequenceFile 格式的数据文件。
 - 目前**仅支持读取**目标数据文件中的数据，不支持例如 INSERT、DELETE、DROP 等**写入**操作。
 
@@ -24,7 +24,7 @@ displayed_sidebar: "Chinese"
 
 ## 创建数据库 （可选）
 
-连接到 StarRocks 集群后，您可以在当前已有的数据库下创建文件外部表；也可以创建一个新的数据库来管理文件外部表。您可以使用 [SHOW DATABASES](../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 来查询集群中的数据库，然后执行 `USE <db_name>` 切换到目标数据库。
+连接到 StarRocks 集群后，您可以在当前已有的数据库下创建文件外部表；也可以创建一个新的数据库来管理文件外部表。您可以使用 [SHOW DATABASES](../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 来查询集群中的数据库，然后执行 `USE <db_name>` 切换到目标数据库。
 
 创建数据库的语法如下。
 
@@ -288,4 +288,4 @@ SELECT * FROM t0;
 
 ## 管理文件外部表
 
-您可以执行 [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) 来查询文件外部表的信息和表结构，或者通过 [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除文件外部表。
+您可以执行 [DESC](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 来查询文件外部表的信息和表结构，或者通过 [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除文件外部表。

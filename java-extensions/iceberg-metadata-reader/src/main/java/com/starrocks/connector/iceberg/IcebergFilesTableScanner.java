@@ -147,6 +147,9 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
     }
 
     private Map<Integer, String> getIntegerStringMap(Map<Integer, ByteBuffer> value) {
+        if (value == null) {
+            return null;
+        }
         return value.entrySet().stream()
                 .filter(entry -> idToTypeMapping.containsKey(entry.getKey()))
                 .collect(toImmutableMap(

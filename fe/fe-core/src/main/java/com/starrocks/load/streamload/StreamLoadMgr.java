@@ -33,6 +33,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -174,7 +175,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
-            table = db.getTable(tableName);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -191,7 +192,8 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws UserException {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
-        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) db.getTable(tableName),
+        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db,
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
                 label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
         return streamLoadTask;
     }
@@ -204,7 +206,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
-            table = db.getTable(tableName);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -222,7 +224,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
         }
 
-        Table table = db.getTable(tblName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
         }
@@ -247,7 +249,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public Database checkDbName(String dbName) throws UserException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new UserException("Database[" + dbName + "] does not exist");
@@ -471,9 +473,11 @@ public class StreamLoadMgr implements MemoryTrackable {
         long dbId = streamLoadTask.getDBId();
         String label = streamLoadTask.getLabel();
 
-        dbToLabelToStreamLoadTask.get(dbId).remove(label);
-        if (dbToLabelToStreamLoadTask.get(dbId).isEmpty()) {
-            dbToLabelToStreamLoadTask.remove(dbId);
+        if (dbToLabelToStreamLoadTask.containsKey(dbId)) {
+            dbToLabelToStreamLoadTask.get(dbId).remove(label);
+            if (dbToLabelToStreamLoadTask.get(dbId).isEmpty()) {
+                dbToLabelToStreamLoadTask.remove(dbId);
+            }
         }
     }
 
@@ -499,7 +503,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 }
 
                 long dbId = 0L;
-                Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
@@ -637,10 +641,10 @@ public class StreamLoadMgr implements MemoryTrackable {
         return streamLoadManager;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToStreamLoadTask.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STREAM_LOAD_MGR, numJson);
-        writer.writeJson(idToStreamLoadTask.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.STREAM_LOAD_MGR, numJson);
+        writer.writeInt(idToStreamLoadTask.size());
         for (StreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
             writer.writeJson(streamLoadTask);
         }

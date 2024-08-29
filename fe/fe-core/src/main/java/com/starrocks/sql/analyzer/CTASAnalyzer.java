@@ -36,7 +36,6 @@ import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.ParsingException;
 
 import java.util.HashMap;
@@ -88,7 +87,7 @@ public class CTASAnalyzer {
         }
 
         TableName tableNameObject = createTableStmt.getDbTbl();
-        MetaUtils.normalizationTableName(session, tableNameObject);
+        tableNameObject.normalization(session);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
 
         for (int i = 0; i < allFields.size(); i++) {
@@ -96,7 +95,7 @@ public class CTASAnalyzer {
                     createTableStmt.isOlapEngine());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                    null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+                    null, null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
             if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
                 columnDef.setAllowNull(false);
             }

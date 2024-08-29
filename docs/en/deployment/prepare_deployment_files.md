@@ -1,31 +1,39 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Prepare deployment files
 
 This topic describes how to prepare StarRocks deployment files.
 
-Currently, the binary distribution packages StarRocks provides on [the StarRocks official website](https://www.starrocks.io/download/community) support deployments only on x86-based CentOS 7.9. If you want to deploy StarRocks with the ARM architecture CPUs or on Ubuntu 22.04, you need to prepare the deployment files using the StarRocks Docker image.
+Currently, the binary distribution packages StarRocks provides on [the StarRocks official website](https://www.starrocks.io/download/community) support deployments only on x86-based CPU. If you want to deploy StarRocks with the ARM-based CPU, you need to prepare the deployment files using the StarRocks Docker image.
 
-## For x86-based CentOS 7.9
+## For x86-based CPU
 
-StarRocks binary distribution packages are named in the **StarRocks-version.tar.gz** format, where **version** is a number (for example, **2.5.2**) that indicates the version information of the binary distribution package. Make sure that you have chosen the correct version of the package.
+From v3.1.14, v3.2.10, and v3.3.3, StarRocks binary distribution packages are named in the `StarRocks-{Version}-{OS}-{ARCH}.tar.gz` format, where `Version` is a number (for example, `3.3.3`) that indicates the version information of the binary distribution package, `OS` indicates the operating system (including `centos` and `ubuntu`), and `ARCH` indicates the CPU architecture (currently only `amd64` is available, which is equivalent to x86_64). Make sure that you have chosen the correct version of the package.
 
-Follow these steps to prepare deployment files for the x86-based CentOS 7.9 platform:
+:::note
+
+In versions earlier than v3.1.14, v3.2.10, and v3.3.3, StarRocks provides binary distribution packages named in the `StarRocks-{Version}.tar.gz` format.
+
+:::
+
+Follow these steps to prepare deployment files for the x86-based platform:
 
 1. Obtain the StarRocks binary distribution package directly from the [Download StarRocks](https://www.starrocks.io/download/community) page or by running the following command in your terminal:
 
    ```Bash
-   # Replace <version> with the version of StarRocks you want to download, for example, 2.5.2.
-   wget https://releases.starrocks.io/starrocks/StarRocks-<version>.tar.gz
+   # Replace <version> with the version of StarRocks you want to download, for example, 3.3.3,
+   # and replace <OS> with centos or ubuntu.
+   wget https://releases.starrocks.io/starrocks/StarRocks-<version>-<OS>-amd64.tar.gz
    ```
 
 2. Extract the files in the package.
 
    ```Bash
-   # Replace <version> with the version of StarRocks you have downloaded.
-   tar -xzvf StarRocks-<version>.tar.gz
+   # Replace <version> with the version of StarRocks you want to download, for example, 3.3.3,
+   # and replace <OS> with centos or ubuntu.
+   tar -xzvf StarRocks-<version>-<OS>-amd64.tar.gz
    ```
 
    The package includes the following directories and files:
@@ -40,7 +48,7 @@ Follow these steps to prepare deployment files for the x86-based CentOS 7.9 plat
 
 3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../deployment/deploy_manually.md).
 
-## For ARM-based CPU or Ubuntu 22.04
+## For ARM-based CPU
 
 ### Prerequisites
 
@@ -48,46 +56,31 @@ You must have [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 
 
 ### Procedures
 
+From v3.1.14, v3.2.10, and v3.3.3, StarRocks provides Docker images in the `starrocks/{Component}-{OS}:{Version}` format, where `Component` indicates the component the image (including `fe`, `be`, and `cn`), `OS` indicates the operating system (including `centos` and `ubuntu`), and `Version` is the version number (for example, `3.3.3`). Docker will automatically identify your CPU architecture and pull the corresponding image. Make sure that you have chosen the correct version of the image.
+
+:::note
+
+In versions earlier than v3.1.14, v3.2.10, and v3.3.3, StarRocks provides Docker images in the repositories `starrocks/artifacts-ubuntu` and `starrocks/artifacts-centos7`.
+
+:::
+
 1. Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags). You can choose a specific version based on the tag of the image.
 
-   - If you use Ubuntu 22.04:
-
-     ```Bash
-     # Replace <image_tag> with the tag of the image that you want to download, for example, 2.5.4.
-     docker pull starrocks/artifacts-ubuntu:<image_tag>
-     ```
-
-   - If you use ARM-based CentOS 7.9:
-
-     ```Bash
-     # Replace <image_tag> with the tag of the image that you want to download, for example, 2.5.4.
-     docker pull starrocks/artifacts-centos7:<image_tag>
-     ```
+   ```Bash
+   # Replace <component> with the component you want to download, for example, fe,
+   # replace <version> with the version of StarRocks you want to download, for example, 3.3.3,
+   # and replace <OS> with centos or ubuntu.
+   docker pull starrocks/<Component>-<OS>:<version>
+   ```
 
 2. Copy the StarRocks deployment files from the Docker image to your host machine by running the following command:
 
-   - If you use Ubuntu 22.04:
+   ```Bash
+   # Replace <component> with the component you want to download, for example, fe,
+   # replace <version> with the version of StarRocks you want to download, for example, 3.3.3,
+   # and replace <OS> with centos or ubuntu.
+   docker run --rm starrocks/<Component>-<OS>:<version> \
+       tar -cf - -C /release . | tar -xvf -
+   ```
 
-     ```Bash
-     # Replace <image_tag> with the tag of the image that you have downloaded, for example, 2.5.4.
-     docker run --rm starrocks/artifacts-ubuntu:<image_tag> \
-         tar -cf - -C /release . | tar -xvf -
-     ```
-
-   - If you use ARM-based CentOS 7.9:
-
-     ```Bash
-     # Replace <image_tag> with the tag of the image that you have downloaded, for example, 2.5.4.
-     docker run --rm starrocks/artifacts-centos7:<image_tag> \
-         tar -cf - -C /release . | tar -xvf -
-     ```
-
-   The deployment files include the following directories:
-
-   | **Directory**        | **Description**                                              |
-   | -------------------- | ------------------------------------------------------------ |
-   | **be_artifacts**     | This directory includes the BE or CN deployment directory **be**, StarRocks license file **LICENSE.txt**, and StarRocks notice file **NOTICE.txt**. |
-   | **broker_artifacts** | This directory includes the Broker deployment directory **apache_hdfs_broker**. |
-   | **fe_artifacts**     | This directory includes the FE deployment directory **fe**, StarRocks license file **LICENSE.txt**, and StarRocks notice file **NOTICE.txt**. |
-
-3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../deployment/deploy_manually.md).
+3. Dispatch the deployment files to the corresponding instances for [manual deployment](../deployment/deploy_manually.md).

@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -82,7 +83,7 @@ public class TextMatchBasedRewriteRule extends Rule {
     );
     private final ConnectContext connectContext;
     private final StatementBase stmt;
-    private final Map<Operator, ParseNode> optToAstMap;
+    private final MVTransformerContext mvTransformerContext;
 
     // To avoid text match costing too much time, use parameters below to limit it.
     // limit for sub-query text match(default 4), no match when it <= 0
@@ -94,12 +95,12 @@ public class TextMatchBasedRewriteRule extends Rule {
 
     public TextMatchBasedRewriteRule(ConnectContext connectContext,
                                      StatementBase stmt,
-                                     Map<Operator, ParseNode> optToAstMap) {
+                                     MVTransformerContext mvTransformerContext) {
         super(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE, Pattern.create(OperatorType.PATTERN));
 
         this.connectContext = connectContext;
         this.stmt = stmt;
-        this.optToAstMap = optToAstMap;
+        this.mvTransformerContext = mvTransformerContext;
         this.mvSubQueryTextMatchMaxCount =
                 connectContext.getSessionVariable().getMaterializedViewSubQueryTextMatchMaxCount();
         this.mvRewriteRelatedMVsLimit =
@@ -141,11 +142,11 @@ public class TextMatchBasedRewriteRule extends Rule {
             return rewritten;
         }
         // try to rewrite sub-query again if exact-match failed.
-        if (optToAstMap == null || optToAstMap.isEmpty()) {
+        if (mvTransformerContext == null || mvTransformerContext.isOpASTEmpty()) {
             logMVRewrite(context, this, "OptToAstMap is empty, no try to rewrite sub-query again");
             return null;
         }
-        return input.getOp().accept(new TextBasedRewriteVisitor(context, optToAstMap), input, connectContext);
+        return input.getOp().accept(new TextBasedRewriteVisitor(context, mvTransformerContext), input, connectContext);
     }
 
     private boolean isSupportForTextBasedRewrite(OptExpression input) {
@@ -368,11 +369,11 @@ public class TextMatchBasedRewriteRule extends Rule {
 
     class TextBasedRewriteVisitor extends OptExpressionVisitor<OptExpression, ConnectContext> {
         private final OptimizerContext optimizerContext;
-        private final Map<Operator, ParseNode> optToAstMap;
+        private final MVTransformerContext mvTransformerContext;
         public TextBasedRewriteVisitor(OptimizerContext optimizerContext,
-                                       Map<Operator, ParseNode> optToAstMap) {
+                                       MVTransformerContext mvTransformerContext) {
             this.optimizerContext = optimizerContext;
-            this.optToAstMap = optToAstMap;
+            this.mvTransformerContext = mvTransformerContext;
         }
 
         private List<OptExpression> visitChildren(OptExpression optExpression, ConnectContext connectContext) {
@@ -405,10 +406,10 @@ public class TextMatchBasedRewriteRule extends Rule {
 
         private OptExpression doRewrite(OptExpression input) {
             Operator op = input.getOp();
-            if (!optToAstMap.containsKey(op)) {
+            if (!mvTransformerContext.hasOpAST(op)) {
                 return null;
             }
-            ParseNode parseNode = optToAstMap.get(op);
+            ParseNode parseNode = mvTransformerContext.getOpAST(op);
             OptExpression rewritten = rewriteByTextMatch(input, optimizerContext,
                     new CachingMvPlanContextBuilder.AstKey(parseNode));
             if (rewritten != null) {

@@ -48,10 +48,12 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -65,9 +67,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -492,14 +492,15 @@ public class ColocateTableIndex implements Writable {
 
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(groupId.dbId);
         int numOfTablets = 0;
         if (db != null && !allTableIds.isEmpty()) {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db, LockType.READ);
                 for (long tableId : allTableIds) {
-                    OlapTable tbl = (OlapTable) db.getTable(tableId);
+                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
                     if (tbl != null) {
                         numOfTablets += tbl.getNumberOfPartitions();
                     }
@@ -608,9 +609,9 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable(info.getTableId());
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId());
         Preconditions.checkNotNull(tbl);
 
         writeLock();
@@ -661,11 +662,11 @@ public class ColocateTableIndex implements Writable {
 
     protected Optional<String> getTableName(long dbId, long tableId) {
 
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             return Optional.empty();
         }
-        Table table = database.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
 
         if (table == null) {
             return Optional.empty();
@@ -802,22 +803,8 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
-        GlobalStateMgr.getCurrentState().getColocateTableIndex().readFields(dis);
-        // clean up if dbId or tableId not found, this is actually a bug
-        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
-        constructLakeGroups(GlobalStateMgr.getCurrentState());
-        LOG.info("finished replay colocateTableIndex from image");
-        return checksum;
-    }
-
-    public long saveColocateTableIndex(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
-    public void saveColocateTableIndexV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COLOCATE_TABLE_INDEX, 1);
+    public void saveColocateTableIndexV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.COLOCATE_TABLE_INDEX, 1);
         writer.writeJson(this);
         writer.close();
     }
@@ -1000,18 +987,14 @@ public class ColocateTableIndex implements Writable {
         long tableId = info.getTableId();
         Map<String, String> properties = info.getPropertyMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tableId), LockType.WRITE)) {
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
                     info.getGroupId());
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table colocate", e);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

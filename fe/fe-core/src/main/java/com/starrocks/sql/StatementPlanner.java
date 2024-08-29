@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;
@@ -28,6 +27,8 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -62,8 +63,8 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
@@ -216,9 +217,9 @@ public class StatementPlanner {
     /**
      * Create a map from opt expression to parse node for the optimizer to use which only used in text match rewrite for mv.
      */
-    public static Map<Operator, ParseNode> makeOptToAstMap(SessionVariable sessionVariable) {
+    public static MVTransformerContext makeMVTransformerContext(SessionVariable sessionVariable) {
         if (sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
-            return Maps.newHashMap();
+            return new MVTransformerContext();
         }
         return null;
     }
@@ -232,11 +233,11 @@ public class StatementPlanner {
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
-        Map<Operator, ParseNode> optToAstMap = makeOptToAstMap(session.getSessionVariable());
+        MVTransformerContext mvTransformerContext  = makeMVTransformerContext(session.getSessionVariable());
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
             // get a logicalPlan without inlining views
-            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, optToAstMap);
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, mvTransformerContext);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
@@ -249,7 +250,7 @@ public class StatementPlanner {
             optimizedPlan = optimizer.optimize(
                     session,
                     root,
-                    optToAstMap,
+                    mvTransformerContext,
                     stmt,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
@@ -298,10 +299,10 @@ public class StatementPlanner {
             }
 
             LogicalPlan logicalPlan;
-            Map<Operator, ParseNode> optToAstMap = makeOptToAstMap(session.getSessionVariable());
+            MVTransformerContext mvTransformerContext = makeMVTransformerContext(session.getSessionVariable());
             try (Timer ignored = Tracers.watchScope("Transformer")) {
                 // get a logicalPlan without inlining views
-                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, optToAstMap);
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, mvTransformerContext);
                 logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
@@ -319,7 +320,7 @@ public class StatementPlanner {
                 optimizedPlan = optimizer.optimize(
                         session,
                         root,
-                        optToAstMap,
+                        mvTransformerContext,
                         queryStmt,
                         new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
@@ -431,12 +432,15 @@ public class StatementPlanner {
             }
         }
 
-        MetaUtils.normalizationTableName(session, stmt.getTableName());
+        stmt.getTableName().normalization(session);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
-        Database db = MetaUtils.getDatabase(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
         if (targetTable == null) {
             throw new SemanticException("Table %s is not found", tableName);
@@ -522,10 +526,13 @@ public class StatementPlanner {
             return;
         }
 
-        MetaUtils.normalizationTableName(session, stmt.getTableName());
+        stmt.getTableName().normalization(session);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
-        Database db = MetaUtils.getDatabase(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
         try {
             if (targetTable instanceof ExternalOlapTable) {

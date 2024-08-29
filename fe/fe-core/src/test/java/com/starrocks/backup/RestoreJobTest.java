@@ -57,11 +57,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -153,13 +153,7 @@ public class RestoreJobTest {
     }
 
     public void testResetPartitionForRestore() {
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db, LockType.READ);
-            expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         OlapTable localTbl = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
                 expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
@@ -176,7 +170,7 @@ public class RestoreJobTest {
     public void testRunBackupMultiSubPartitionTable() {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -257,12 +251,7 @@ public class RestoreJobTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        try {
-            locker.lockDatabase(db, LockType.READ);
-            expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL4_ID;
         tblInfo.name = CatalogMocker.TEST_TBL4_NAME;
@@ -296,13 +285,25 @@ public class RestoreJobTest {
 
         }
 
-        try {
-            locker.lockDatabase(db, LockType.WRITE);
-            // drop this table, cause we want to try restoring this table
-            db.dropTable(expectedRestoreTbl.getName());
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
+        // drop this table, cause we want to try restoring this table
+        db.dropTable(expectedRestoreTbl.getName());
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
 
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
@@ -353,14 +354,15 @@ public class RestoreJobTest {
         // test get restore info
         try {
             job.getInfo();
-        } catch (Exception ignore) { }
+        } catch (Exception ignore) {
+        }
     }
 
     @Test
     public void testRunBackupRangeTable() {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -440,12 +442,7 @@ public class RestoreJobTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        try {
-            locker.lockDatabase(db, LockType.READ);
-            expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL2_ID;
         tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
@@ -472,13 +469,25 @@ public class RestoreJobTest {
             }
         }
 
-        try {
-            locker.lockDatabase(db, LockType.WRITE);
-            // drop this table, cause we want to try restoring this table
-            db.dropTable(expectedRestoreTbl.getName());
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
+        // drop this table, cause we want to try restoring this table
+        db.dropTable(expectedRestoreTbl.getName());
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
 
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
@@ -541,13 +550,7 @@ public class RestoreJobTest {
 
         Locker locker = new Locker();
 
-        OlapTable tbl = null;
-        try {
-            locker.lockDatabase(db, LockType.READ);
-            tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
@@ -560,13 +563,7 @@ public class RestoreJobTest {
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db, LockType.READ);
-            expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 

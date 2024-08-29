@@ -247,26 +247,15 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
             return Status::Cancelled("Shutdown");
         }
 
-        _update_bandwidth_control_period();
-
         if (_wg_entities.empty()) {
             if (!block) {
                 return nullptr;
             }
             _cv.wait(lock);
-        } else if (wg_entity = _take_next_wg(); wg_entity == nullptr) {
-            int64_t cur_ns = MonotonicNanos();
-            int64_t sleep_ns = _bandwidth_control_period_end_ns - cur_ns;
-            if (sleep_ns <= 0) {
-                continue;
-            }
-
-            if (!block) {
-                return nullptr;
-            }
-            // All the ready tasks are throttled, so wait until the new period or a new task comes.
-            _cv.wait_for(lock, std::chrono::nanoseconds(sleep_ns));
+            continue;
         }
+
+        wg_entity = _take_next_wg();
     }
 
     // If wg only contains one ready driver, it will be not ready anymore
@@ -301,12 +290,6 @@ void WorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) {
     int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
     auto* wg_entity = driver->workgroup()->driver_sched_entity();
 
-    // Update bandwidth control information.
-    _update_bandwidth_control_period();
-    if (!wg_entity->is_sq_wg()) {
-        _bandwidth_usage_ns += runtime_ns;
-    }
-
     // Update sched entity information.
     bool is_in_queue = _wg_entities.find(wg_entity) != _wg_entities.end();
     if (is_in_queue) {
@@ -329,28 +312,11 @@ size_t WorkGroupDriverQueue::size() const {
 }
 
 bool WorkGroupDriverQueue::should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const {
-    if (_throttled(driver->workgroup()->driver_sched_entity(), unaccounted_runtime_ns)) {
-        return true;
-    }
-
     // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
     auto* wg_entity = driver->workgroup()->driver_sched_entity();
     auto* min_entity = _min_wg_entity.load();
     return min_entity != wg_entity && min_entity &&
-           min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
-}
-
-bool WorkGroupDriverQueue::_throttled(const workgroup::WorkGroupDriverSchedEntity* wg_entity,
-                                      int64_t unaccounted_runtime_ns) const {
-    if (wg_entity->is_sq_wg()) {
-        return false;
-    }
-    if (!workgroup::WorkGroupManager::instance()->is_sq_wg_running()) {
-        return false;
-    }
-
-    int64_t bandwidth_usage = unaccounted_runtime_ns + _bandwidth_usage_ns;
-    return bandwidth_usage >= _bandwidth_quota_ns();
+           min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_weight();
 }
 
 template <bool from_executor>
@@ -380,21 +346,16 @@ void WorkGroupDriverQueue::_update_min_wg() {
     }
 }
 
-workgroup::WorkGroupDriverSchedEntity* WorkGroupDriverQueue::_take_next_wg() {
-    workgroup::WorkGroupDriverSchedEntity* min_unthrottled_wg_entity = nullptr;
-    for (auto* wg_entity : _wg_entities) {
-        if (!_throttled(wg_entity)) {
-            min_unthrottled_wg_entity = wg_entity;
-            break;
-        }
+workgroup::WorkGroupDriverSchedEntity* WorkGroupDriverQueue::_take_next_wg() const {
+    if (_wg_entities.empty()) {
+        return nullptr;
     }
-
-    return min_unthrottled_wg_entity;
+    return *_wg_entities.begin();
 }
 
 template <bool from_executor>
 void WorkGroupDriverQueue::_enqueue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity) {
-    _sum_cpu_limit += wg_entity->cpu_limit();
+    _sum_cpu_weight += wg_entity->cpu_weight();
     // The runtime needn't be adjusted for the workgroup put back from executor thread,
     // because it has updated before executor thread put the workgroup back by update_statistics().
     if constexpr (!from_executor) {
@@ -404,11 +365,11 @@ void WorkGroupDriverQueue::_enqueue_workgroup(workgroup::WorkGroupDriverSchedEnt
             // will starve. Therefore, the runtime is adjusted according the minimum vruntime in _ready_wgs,
             // and give it half of ideal runtime in a schedule period as compensation.
             int64_t new_vruntime_ns = std::min(min_wg_entity->vruntime_ns() - _ideal_runtime_ns(wg_entity) / 2,
-                                               min_wg_entity->runtime_ns() / int64_t(wg_entity->cpu_limit()));
+                                               min_wg_entity->runtime_ns() / int64_t(wg_entity->cpu_weight()));
             int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
             if (diff_vruntime_ns > 0) {
                 DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
-                wg_entity->adjust_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
+                wg_entity->adjust_runtime_ns(diff_vruntime_ns * wg_entity->cpu_weight());
             }
         }
     }
@@ -418,34 +379,13 @@ void WorkGroupDriverQueue::_enqueue_workgroup(workgroup::WorkGroupDriverSchedEnt
 }
 
 void WorkGroupDriverQueue::_dequeue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity) {
-    _sum_cpu_limit -= wg_entity->cpu_limit();
+    _sum_cpu_weight -= wg_entity->cpu_weight();
     _wg_entities.erase(wg_entity);
     _update_min_wg();
 }
 
 int64_t WorkGroupDriverQueue::_ideal_runtime_ns(workgroup::WorkGroupDriverSchedEntity* wg_entity) const {
-    return SCHEDULE_PERIOD_PER_WG_NS * _wg_entities.size() * wg_entity->cpu_limit() / _sum_cpu_limit;
-}
-
-void WorkGroupDriverQueue::_update_bandwidth_control_period() {
-    int64_t cur_ns = MonotonicNanos();
-    if (_bandwidth_control_period_end_ns == 0 || _bandwidth_control_period_end_ns <= cur_ns) {
-        _bandwidth_control_period_end_ns = cur_ns + BANDWIDTH_CONTROL_PERIOD_NS;
-
-        int64_t bandwidth_quota = _bandwidth_quota_ns();
-        int64_t bandwidth_usage = _bandwidth_usage_ns.load();
-        if (bandwidth_usage <= bandwidth_quota) {
-            _bandwidth_usage_ns = 0;
-        } else if (bandwidth_usage < 2 * bandwidth_quota) {
-            _bandwidth_usage_ns -= bandwidth_quota;
-        } else {
-            _bandwidth_usage_ns = bandwidth_quota;
-        }
-    }
-}
-
-int64_t WorkGroupDriverQueue::_bandwidth_quota_ns() const {
-    return BANDWIDTH_CONTROL_PERIOD_NS * workgroup::WorkGroupManager::instance()->normal_workgroup_cpu_hard_limit();
+    return SCHEDULE_PERIOD_PER_WG_NS * _wg_entities.size() * wg_entity->cpu_weight() / _sum_cpu_weight;
 }
 
 } // namespace starrocks::pipeline

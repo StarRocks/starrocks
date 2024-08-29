@@ -22,7 +22,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,7 +64,10 @@ public class UniqueConstraint {
         if (referencedTable != null) {
             targetTable = referencedTable;
         } else {
-            targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            if (targetTable == null) {
+                throw new SemanticException("Table %s is not found", tableName);
+            }
         }
         List<String> result = new ArrayList<>(uniqueColumns.size());
         for (ColumnId columnId : uniqueColumns) {

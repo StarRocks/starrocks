@@ -78,34 +78,14 @@ Status ReplicateChannel::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-    _mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
+    _mem_tracker = std::make_unique<MemTracker>(-1, "replicate: " + UniqueId(_opt->load_id).to_string(),
+                                                GlobalEnv::GetInstance()->load_mem_tracker());
     if (!_mem_tracker) {
         auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
     return Status::OK();
-}
-
-Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
-    RETURN_IF_ERROR(_st);
-
-    // 1. init sync channel
-    _st = _init();
-    RETURN_IF_ERROR(_st);
-
-    // 2. send segment sync request
-    _send_request(segment, data, eos);
-
-    // 3. wait result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
-
-    VLOG(1) << "Sync tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
-            << " eos " << eos << " to [" << _host << ":" << _port << "] res " << _closure->result.DebugString();
-
-    return _st;
 }
 
 Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
@@ -127,7 +107,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     _send_request(segment, data, eos);
 
     // 4. wait if eos=true
-    if (eos || _mem_tracker->limit_exceeded()) {
+    if (eos || _mem_tracker->any_limit_exceeded()) {
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
@@ -161,8 +141,9 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
         _closure->cntl.request_attachment().append(data);
     }
     _closure->request_size = _closure->cntl.request_attachment().size();
+
     // brpc send buffer is also considered as part of the memory used by load
-    _mem_tracker->consume(_closure->request_size);
+    _mem_tracker->consume_without_root(_closure->request_size);
 
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
@@ -175,7 +156,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                         std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     if (_closure->join()) {
-        _mem_tracker->release(_closure->request_size);
+        _mem_tracker->release_without_root(_closure->request_size);
         if (_closure->cntl.Failed()) {
             _st = Status::InternalError(_closure->cntl.ErrorText());
             LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;

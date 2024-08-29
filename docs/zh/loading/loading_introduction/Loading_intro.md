@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 3
 ---
 
@@ -55,7 +55,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 根据内存大小的不同而不同
 
-### [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+### [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
 **适用场景：** 从本地文件系统批量导入数据。
 
@@ -63,7 +63,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 10 GB 以内
 
-### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+### [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
 
 **适用场景：**
 
@@ -74,7 +74,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 数十到数百 GB
 
-### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+### [Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
 
 **适用场景：** 从 HDFS 或 AWS S3 批量或实时导入数据。
 
@@ -88,7 +88,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 100 GB 到 TB 级别
 
-### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
+### [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)
 
 **适用场景：** 从 Kafka 实时导入数据。
 
@@ -96,7 +96,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 微批导入 MB 到 GB 级别
 
-### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
+### [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)
 
 **适用场景：** 通过 Spark 集群从 HDFS 批量导入 Apache Hive™ 表的数据。
 

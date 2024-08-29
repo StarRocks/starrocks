@@ -49,7 +49,7 @@ public class CTASAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 "create table test_table1 (k1 bigint, k2 bigint, v0 string) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1);");
-        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
@@ -63,7 +63,7 @@ public class CTASAutoTabletTest {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            OlapTable table = (OlapTable) db.getTable("test_table1");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
             if (table == null) {
                 return;
             }
@@ -72,7 +72,7 @@ public class CTASAutoTabletTest {
             }
 
             // ctas1
-            table = (OlapTable) db.getTable("ctas1");
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "ctas1");
             if (table == null) {
                 return;
             }
@@ -81,7 +81,7 @@ public class CTASAutoTabletTest {
             }
 
             // ctas2
-            table = (OlapTable) db.getTable("ctas2");
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "ctas2");
             if (table == null) {
                 return;
             }

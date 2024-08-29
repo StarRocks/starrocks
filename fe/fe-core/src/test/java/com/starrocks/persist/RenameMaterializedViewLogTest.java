@@ -12,9 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
+import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.server.GlobalStateMgr;
+import mockit.Expectations;
+import mockit.Injectable;
+import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -29,7 +35,6 @@ public class RenameMaterializedViewLogTest {
 
     private String fileName = "./RenameMaterializedViewLogTest";
 
-
     @After
     public void tearDownDrop() {
         File file = new File(fileName);
@@ -37,14 +42,15 @@ public class RenameMaterializedViewLogTest {
     }
 
     @Test
-    public void testNormal() throws IOException {
+    public void testNormal(@Mocked GlobalStateMgr globalStateMgr,
+                           @Injectable Database db, @Injectable MaterializedView table) throws IOException {
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(Files.newOutputStream(file.toPath()));
         String newMvName = "new_mv_name";
         RenameMaterializedViewLog renameMaterializedViewLog =
-                new RenameMaterializedViewLog(1000, 100, newMvName);
+                    new RenameMaterializedViewLog(1000, 100, newMvName);
         renameMaterializedViewLog.write(out);
         out.flush();
         out.close();
@@ -57,6 +63,18 @@ public class RenameMaterializedViewLogTest {
         Assert.assertEquals(readRenameLog.getId(), 1000);
         Assert.assertEquals(readRenameLog.getDbId(), 100);
         in.close();
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                result = db;
+
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), anyLong);
+                result = table;
+            }
+        };
+
+        new AlterJobMgr(null, null, null)
+                    .replayRenameMaterializedView(renameMaterializedViewLog);
     }
 
 }

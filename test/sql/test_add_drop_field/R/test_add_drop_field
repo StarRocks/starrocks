@@ -1,11 +1,9 @@
 -- name: test_add_drop_field_struct
 create database test_add_drop_field_struct;
 -- result:
-[]
 -- !result
 use test_add_drop_field_struct;
 -- result:
-[]
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -20,11 +18,9 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-[]
 -- !result
 insert into tab1 values (1, row(1, row(1,1))), (2, row(2, row(2,2)));
 -- result:
-[]
 -- !result
 select * from tab1;
 -- result:
@@ -45,7 +41,6 @@ E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition
 -- !result
 alter table tab1 modify column c1 add field val1 int;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -58,7 +53,6 @@ select * from tab1;
 -- !result
 insert into tab1 values (3, row(3, row(3,3), 3));
 -- result:
-[]
 -- !result
 select * from tab1;
 -- result:
@@ -70,7 +64,6 @@ CREATE MATERIALIZED VIEW mv1
             distributed by hash(c0) as
             SELECT * from tab1;
 -- result:
-[]
 -- !result
 function: wait_mv_refresh_count('test_add_drop_field_struct', 'mv1', 1)
 -- result:
@@ -92,7 +85,6 @@ E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definitio
 -- !result
 alter table tab1 modify column c1 drop field v1;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -106,7 +98,6 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 add field v1 int AFTER v2;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -120,7 +111,6 @@ select * from tab1;
 -- !result
 insert into tab1 values (4, row(row(4,4), 4, 4));
 -- result:
-[]
 -- !result
 select * from tab1;
 -- result:
@@ -131,11 +121,9 @@ select * from tab1;
 -- !result
 drop table tab1;
 -- result:
-[]
 -- !result
 drop database test_add_drop_field_struct;
 -- result:
-[]
 -- !result
 
 
@@ -144,11 +132,9 @@ drop database test_add_drop_field_struct;
 -- name: test_add_drop_field_array
 create database test_add_drop_field_array;
 -- result:
-[]
 -- !result
 use test_add_drop_field_array;
 -- result:
-[]
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -163,11 +149,9 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-[]
 -- !result
 insert into tab1 values (1, [row(1,1), row(1,2)]), (2, [row(2,1), row(2,2)]);
 -- result:
-[]
 -- !result
 select * from tab1;
 -- result:
@@ -188,7 +172,6 @@ E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition
 -- !result
 alter table tab1 modify column c1 add field [*].val1 int;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -201,7 +184,6 @@ select * from tab1;
 -- !result
 insert into tab1 values (3, [row(3,1,1), row(3,2,1)]);
 -- result:
-[]
 -- !result
 select * from tab1;
 -- result:
@@ -213,7 +195,6 @@ CREATE MATERIALIZED VIEW mv1
             distributed by hash(c0) as
             SELECT * from tab1;
 -- result:
-[]
 -- !result
 function: wait_mv_refresh_count('test_add_drop_field_array', 'mv1', 1)
 -- result:
@@ -231,7 +212,6 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 drop field [*].v1;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -245,7 +225,6 @@ select * from tab1;
 -- !result
 insert into tab1 values (4, [row(4,4), row(4,5)]);
 -- result:
-[]
 -- !result
 select * from tab1;
 -- result:
@@ -256,7 +235,6 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 add field [*].v1 int;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -271,7 +249,6 @@ select * from tab1;
 -- !result
 insert into tab1 values (5, [row(5,5,5), row(5,6,6)]);
 -- result:
-[]
 -- !result
 select * from tab1;
 -- result:
@@ -283,11 +260,9 @@ select * from tab1;
 -- !result
 drop table tab1;
 -- result:
-[]
 -- !result
 drop database test_add_drop_field_array;
 -- result:
-[]
 -- !result
 
 
@@ -331,11 +306,9 @@ drop database test_add_drop_field_not_allowed;
 -- name: test_drop_last_field
 create database test_drop_last_field;
 -- result:
-[]
 -- !result
 use test_drop_last_field;
 -- result:
-[]
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -350,7 +323,6 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-[]
 -- !result
 alter table tab1 modify column c1 drop field v1;
 -- result:
@@ -358,11 +330,9 @@ E: (1064, 'Field[v1] is the last field of column[c1], can not drop any more.')
 -- !result
 drop table tab1;
 -- result:
-[]
 -- !result
 drop database test_drop_last_field;
 -- result:
-[]
 -- !result
 
 
@@ -371,11 +341,9 @@ drop database test_drop_last_field;
 -- name: test_drop_add_same_name_field
 create database test_drop_add_same_name_field;
 -- result:
-[]
 -- !result
 use test_drop_add_same_name_field;
 -- result:
-[]
 -- !result
 CREATE TABLE `t` (
   `c1` int(11) NULL COMMENT "",
@@ -390,15 +358,12 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-[]
 -- !result
 insert into t values(1, row(1)),(2,row(2));
 -- result:
-[]
 -- !result
 alter table t modify column c2 add field v2_2 string;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -411,11 +376,9 @@ select * from t;
 -- !result
 insert into t values(3, row(3, 'Beijing')),(4,row(4,'Shanghai'));
 -- result:
-[]
 -- !result
 alter table t modify column c2 drop field v2_2;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -423,7 +386,6 @@ None
 -- !result
 alter table t modify column c2 add field v2_2 date;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -438,9 +400,7 @@ select * from t;
 -- !result
 drop table t;
 -- result:
-[]
 -- !result
 drop database test_drop_add_same_name_field;
 -- result:
-[]
 -- !result

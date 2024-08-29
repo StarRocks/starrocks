@@ -92,7 +92,7 @@ public class TableRowCountAction extends RestBaseAction {
             // check privilege for select, otherwise return HTTP 401
             Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
                     dbName, tableName, PrivilegeType.SELECT);
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
@@ -100,7 +100,7 @@ public class TableRowCountAction extends RestBaseAction {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.WRITE);
             try {
-                Table table = db.getTable(tableName);
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                             "Table [" + tableName + "] " + "does not exists");

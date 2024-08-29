@@ -129,7 +129,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     public void checkAnyActionOnAnyTable(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
             throws AccessDeniedException {
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog, db);
-        for (Table table : database.getTables()) {
+        for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
             try {
                 hasPermission(
                         RangerStarRocksResource.builder()
@@ -187,7 +187,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
 
     @Override
     public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
-        Database database = GlobalStateMgr.getServingState().getDb(db);
+        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(db);
         for (Table table : database.getViews()) {
             try {
                 hasPermission(
@@ -235,7 +235,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnAnyMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db)
             throws AccessDeniedException {
-        Database database = GlobalStateMgr.getServingState().getDb(db);
+        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(db);
         for (Table table : database.getMaterializedViews()) {
             try {
                 hasPermission(
@@ -282,7 +282,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
 
     @Override
     public void checkAnyActionOnAnyFunction(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
-        Database database = GlobalStateMgr.getServingState().getDb(db);
+        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(db);
         for (Function function : database.getFunctions()) {
             try {
                 hasPermission(
@@ -329,8 +329,8 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkActionInDb(UserIdentity userIdentity, Set<Long> roleIds, String db, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        Database database = GlobalStateMgr.getCurrentState().getDb(db);
-        for (Table table : database.getTables()) {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db);
+        for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
             if (table.isOlapView()) {
                 checkViewAction(userIdentity, roleIds, new TableName(database.getFullName(), table.getName()), privilegeType);
             } else if (table.isMaterializedView()) {

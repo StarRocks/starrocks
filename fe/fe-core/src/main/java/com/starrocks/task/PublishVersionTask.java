@@ -189,7 +189,7 @@ public class PublishVersionTask extends AgentTask {
             LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("db not found dbid={}", dbId);
             return;

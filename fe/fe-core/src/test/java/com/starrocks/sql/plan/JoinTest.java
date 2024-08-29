@@ -1125,8 +1125,8 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Database db = globalStateMgr.getDb("test");
-        Table table = db.getTable("join2");
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "join2");
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1149,7 +1149,7 @@ public class JoinTest extends PlanTestBase {
     public void testJoinReorderWithWithClause() throws Exception {
         connectContext.setDatabase("test");
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getDb("test").getTable("join2");
+        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1652,7 +1652,7 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getDb("test").getTable("join2");
+        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1723,24 +1723,15 @@ public class JoinTest extends PlanTestBase {
                 "address as (select 1 as user_id, 'newzland' as address_name) \n" +
                 "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: expr = 5: expr");
-        assertContains(plan, "  4:Project\n" +
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : NULL\n" +
+                "  |  <slot 3> : NULL\n" +
                 "  |  <slot 5> : 2\n" +
                 "  |  <slot 6> : 'mike'\n" +
                 "  |  \n" +
-                "  3:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 2> : 1\n" +
-                "  |  <slot 3> : 'newzland'\n" +
-                "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         NULL\n");
+                "         NULL");
     }
 
     @Test

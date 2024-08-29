@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
 #include "exprs/anyval_util.h"
@@ -333,6 +334,7 @@ Status Analytor::open(RuntimeState* state) {
             }
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
         return Status::OK();
     };
@@ -360,8 +362,11 @@ void Analytor::close(RuntimeState* state) {
 
     auto agg_close = [this, state]() {
         // Note: we must free agg_states before _mem_pool free_all;
-        _managed_fn_states.clear();
-        _managed_fn_states.shrink_to_fit();
+        {
+            SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+            _managed_fn_states.clear();
+            _managed_fn_states.shrink_to_fit();
+        }
 
         if (_mem_pool != nullptr) {
             _mem_pool->free_all();
@@ -547,6 +552,7 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             _order_columns[i]->remove_first_n_values(remove_rows);
         }
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             _agg_functions[i]->reset_state_for_contraction(
                     _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_rows);
@@ -927,6 +933,7 @@ void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
 
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
                                     int64_t frame_end) {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -952,6 +959,7 @@ void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_e
 }
 
 void Analytor::_update_window_batch_removable_cumulatively() {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         const Column* agg_column = _agg_intput_columns[i][0].get();
         _agg_functions[i]->update_state_removable_cumulatively(
@@ -993,6 +1001,7 @@ void Analytor::_reset_state_for_next_partition() {
 }
 
 void Analytor::_reset_window_state() {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -1187,6 +1196,7 @@ void Analytor::_find_candidate_peer_group_ends() {
 }
 
 void Analytor::_get_window_function_result(size_t frame_start, size_t frame_end) {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     DCHECK_GT(frame_end, frame_start);

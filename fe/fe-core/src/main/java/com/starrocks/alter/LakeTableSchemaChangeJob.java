@@ -153,6 +153,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
     private AtomicBoolean isCancelling = new AtomicBoolean(false);
 
+    // for deserialization
+    public LakeTableSchemaChangeJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
+
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
@@ -692,9 +697,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (modifiedColumns.isEmpty()) {
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -1050,13 +1056,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @Nullable
     ReadLockedDatabase getReadLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         return db != null ? new ReadLockedDatabase(db) : null;
     }
 
     @Nullable
     WriteLockedDatabase getWriteLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         return db != null ? new WriteLockedDatabase(db) : null;
     }
 
@@ -1083,7 +1089,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         @Nullable
         OlapTable getTable(long tableId) {
-            return (OlapTable) db.getTable(tableId);
+            return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
 
         @Override

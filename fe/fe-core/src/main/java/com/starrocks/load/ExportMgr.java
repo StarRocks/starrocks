@@ -43,13 +43,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -65,8 +65,6 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -136,7 +134,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public ExportJob getExportJob(String dbName, UUID queryId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();
         ExportJob matchedJob = null;
@@ -236,7 +234,7 @@ public class ExportMgr implements MemoryTrackable {
                 TableName tableName = job.getTableName();
                 if (tableName == null || tableName.getTbl().equals("DUMMY")) {
                     // forward compatibility, no table name is saved before
-                    Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                     if (db == null) {
                         continue;
                     }
@@ -415,46 +413,10 @@ public class ExportMgr implements MemoryTrackable {
         return size;
     }
 
-    public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
-        long currentTimeMs = System.currentTimeMillis();
-        long newChecksum = checksum;
-        int size = dis.readInt();
-        newChecksum = checksum ^ size;
-        for (int i = 0; i < size; ++i) {
-            long jobId = dis.readLong();
-            newChecksum ^= jobId;
-            ExportJob job = new ExportJob();
-            job.readFields(dis);
-            // discard expired job right away
-            if (isJobExpired(job, currentTimeMs)) {
-                LOG.info("discard expired job: {}", job);
-                continue;
-            }
-            unprotectAddJob(job);
-        }
-        LOG.info("finished replay exportJob from image");
-        return newChecksum;
-    }
-
-    public long saveExportJob(DataOutputStream dos, long checksum) throws IOException {
-        Map<Long, ExportJob> idToJob = getIdToJob();
-        int size = idToJob.size();
-        checksum ^= size;
-        dos.writeInt(size);
-        for (ExportJob job : idToJob.values()) {
-            long jobId = job.getId();
-            checksum ^= jobId;
-            dos.writeLong(jobId);
-            job.write(dos);
-        }
-
-        return checksum;
-    }
-
-    public void saveExportJobV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveExportJobV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToJob.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.EXPORT_MGR, numJson);
-        writer.writeJson(idToJob.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.EXPORT_MGR, numJson);
+        writer.writeInt(idToJob.size());
         for (ExportJob job : idToJob.values()) {
             writer.writeJson(job);
         }

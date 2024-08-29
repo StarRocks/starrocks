@@ -21,6 +21,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -47,8 +48,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -262,21 +261,6 @@ public class ResourceGroupMgr implements Writable {
                 replayAddResourceGroup(workgroup);
             }
         }
-    }
-
-    public long loadResourceGroups(DataInputStream dis, long checksum) throws IOException {
-        try {
-            readFields(dis);
-            LOG.info("finished replaying ResourceGroups from image");
-        } catch (EOFException e) {
-            LOG.info("no ResourceGroups to replay.");
-        }
-        return checksum;
-    }
-
-    public long saveResourceGroups(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     private void replayAddResourceGroup(ResourceGroup workgroup) {
@@ -604,10 +588,10 @@ public class ResourceGroupMgr implements Writable {
         public List<ResourceGroup> resourceGroups;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + resourceGroupMap.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
-        writer.writeJson(resourceGroupMap.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
+        writer.writeInt(resourceGroupMap.size());
         for (ResourceGroup resourceGroup : resourceGroupMap.values()) {
             writer.writeJson(resourceGroup);
         }

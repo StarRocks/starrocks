@@ -1016,11 +1016,11 @@ public class OlapTable extends Table {
             if (localMvId == null) {
                 continue;
             }
-            Database mvDb = GlobalStateMgr.getCurrentState().getDb(localMvId.getDbId());
+            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(localMvId.getDbId());
             if (mvDb == null) {
                 continue;
             }
-            Table mvTable = mvDb.getTable(localMvId.getId());
+            Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvDb.getId(), localMvId.getId());
             if (mvTable == null) {
                 continue;
             }
@@ -1389,6 +1389,12 @@ public class OlapTable extends Table {
                     rangePartitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isListPartition()) {
             return new RecycleListPartitionInfo(dbId, id, partition,
+                    partitionInfo.getDataProperty(partition.getId()),
+                    partitionInfo.getReplicationNum(partition.getId()),
+                    partitionInfo.getIsInMemory(partition.getId()),
+                    partitionInfo.getDataCacheInfo(partition.getId()));
+        } else if (partitionInfo.isUnPartitioned()) {
+            return new RecycleUnPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
                     partitionInfo.getIsInMemory(partition.getId()),
@@ -2099,6 +2105,15 @@ public class OlapTable extends Table {
     public Partition replacePartition(Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
 
+        // For cloud native table, add partition into recycle Bin after truncate table.
+        // It is no necessary for share nothing mode because file will be deleted throught
+        // tablet report in this case.
+        if (this.isCloudNativeTableOrMaterializedView()) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
+            recyclePartitionInfo.setRecoverable(false);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        }
+
         oldPartition.getSubPartitions().forEach(physicalPartition -> {
             physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
             physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
@@ -2768,10 +2783,7 @@ public class OlapTable extends Table {
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            idToPartition.remove(srcPartition.getId());
-            nameToPartition.remove(sourcePartitionName);
-            partitionInfo.dropPartition(srcPartition.getId());
-            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(srcPartition);
+            dropPartition(-1, sourcePartitionName, true);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);

@@ -74,7 +74,7 @@ public class CreateViewTest {
                 .withView("create view test_null_view as select * from site_access;");
 
         Table view = starRocksAssert.getCtx().getGlobalStateMgr()
-                .getDb("test").getTable("test_null_view");
+                .getLocalMetastore().getDb("test").getTable("test_null_view");
         Assert.assertTrue(view instanceof View);
         List<Column> columns = view.getColumns();
         for (Column column : columns) {
@@ -135,7 +135,7 @@ public class CreateViewTest {
                         ", lead(price ignore nulls,1,0) over (partition by username) as leadValue\n" +
                         "from sample_data;");
 
-        Table view = starRocksAssert.getCtx().getGlobalStateMgr()
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                 .getDb("test").getTable("test_ignore_nulls");
         Assert.assertTrue(view instanceof View);
         String str = ((View) view).getInlineViewDef();

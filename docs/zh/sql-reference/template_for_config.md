@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+unlisted: true
 ---
 
 # FE/BE 参数和变量模板

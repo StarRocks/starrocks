@@ -51,6 +51,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -573,7 +574,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getDb("db1");
+                globalStateMgr.getLocalMetastore().getDb("db1");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -623,7 +624,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getDb("db1");
+                globalStateMgr.getLocalMetastore().getDb("db1");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -663,7 +664,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.isFinal();
                 minTimes = 0;
                 result = true;
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -717,7 +718,7 @@ public class RoutineLoadManagerTest {
                 pauseRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -768,7 +769,7 @@ public class RoutineLoadManagerTest {
                 resumeRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -805,7 +806,7 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -945,7 +946,7 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -1039,9 +1040,9 @@ public class RoutineLoadManagerTest {
         leaderLoadManager.addRoutineLoadJob(pulsarRoutineLoadJob, db);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getDataOutputStream());
+        leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getImageWriter());
         RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
         restartedRoutineLoadManager.loadRoutineLoadJobsV2(reader);
         reader.close();
 

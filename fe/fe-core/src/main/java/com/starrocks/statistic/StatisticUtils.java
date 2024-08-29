@@ -235,8 +235,8 @@ public class StatisticUtils {
         }
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-            if (null != db && null != db.getTable(tableId)) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -248,7 +248,7 @@ public class StatisticUtils {
         if (FeConstants.runningUnitTest) {
             return true;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
@@ -260,7 +260,7 @@ public class StatisticUtils {
 
         for (String tableName : tableNameList) {
             // check table
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 return false;
             }
@@ -390,9 +390,9 @@ public class StatisticUtils {
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
@@ -403,9 +403,9 @@ public class StatisticUtils {
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );

@@ -88,7 +88,7 @@ public abstract class TableBaseAction extends RestBaseAction {
                 PrivilegeType.SELECT
         );
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (null == db || !Optional.ofNullable(db.getCatalogName())
                 .orElse(DEFAULT_INTERNAL_CATALOG_NAME).equalsIgnoreCase(catalogName)) {
             throw new StarRocksHttpException(
@@ -99,7 +99,7 @@ public abstract class TableBaseAction extends RestBaseAction {
         final Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (null == table) {
                 throw new StarRocksHttpException(
                         HttpResponseStatus.NOT_FOUND, ErrorCode.ERR_BAD_TABLE_ERROR.formatErrorMsg(tableName)

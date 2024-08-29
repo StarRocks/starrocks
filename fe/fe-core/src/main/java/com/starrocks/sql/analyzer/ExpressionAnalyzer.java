@@ -62,7 +62,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -79,7 +78,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -104,11 +102,6 @@ import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -129,7 +122,6 @@ import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpressi
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ExpressionAnalyzer {
-    private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
@@ -1018,190 +1010,16 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
-            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-
             if (node.isNondeterministicBuiltinFnName()) {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);
             }
-
-            Function fn;
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             String fnName = node.getFnName().getFunction();
-
-            // throw exception direct
+            // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
-            if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
-                // For the typeof function, the parameter type of the function is the result of this function.
-                // At this time, the parameter type has been obtained. You can directly replace the current 
-                // function with StringLiteral. However, since the parent node of the current node in ast 
-                // cannot be obtained, this cannot be done directly. Replacement, here the StringLiteral is 
-                // stored in the parameter of the function, so that the StringLiteral can be obtained in the 
-                // subsequent rule rewriting, and then the typeof can be replaced.
-                Type originType = argumentTypes[0];
-                argumentTypes[0] = Type.STRING;
-                fn = new Function(new FunctionName("typeof_internal"), argumentTypes, Type.STRING, false);
-                Expr newChildExpr = new StringLiteral(originType.toTypeString());
-                node.getParams().exprs().set(0, newChildExpr);
-                node.setChild(0, newChildExpr);
-            } else if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
-                // Compatible with the logic of the original search function "count distinct"
-                // TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                fn = fn.copy();
-                fn.setArgsType(argumentTypes); // as accepting various types
-                fn.setIsNullable(false);
-            } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
-                // move order by expr to node child, and extract is_asc and null_first information.
-                fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                fn = fn.copy();
-                List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
-                List<Boolean> isAscOrder = new ArrayList<>();
-                List<Boolean> nullsFirst = new ArrayList<>();
-                if (orderByElements != null) {
-                    for (OrderByElement elem : orderByElements) {
-                        isAscOrder.add(elem.getIsAsc());
-                        nullsFirst.add(elem.getNullsFirstParam());
-                    }
-                }
-                Type[] argsTypes = new Type[argumentTypes.length];
-                for (int i = 0; i < argumentTypes.length; ++i) {
-                    argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
-                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < node.getChildren().size() - isAscOrder.size()) {
-                        argsTypes[i] = Type.VARCHAR;
-                    }
-                }
-                fn.setArgsType(argsTypes); // as accepting various types
-                ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
-                for (Type t : argsTypes) {
-                    structTypes.add(new ArrayType(t));
-                }
-                ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
-                ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
-                ((AggregateFunction) fn).setNullsFirst(nullsFirst);
-                boolean outputConst = true;
-                if (fnName.equals(FunctionSet.ARRAY_AGG)) {
-                    fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
-                    outputConst = node.getChild(0).isConstant();
-                } else {
-                    fn.setRetType(Type.VARCHAR);
-                    for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
-                        if (!node.getChild(i).isConstant()) {
-                            outputConst = false;
-                            break;
-                        }
-                    }
-                }
-                // need to distinct output columns in finalize phase
-                ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
-                        (!isAscOrder.isEmpty() || outputConst));
-            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
-                argumentTypes[1] = Type.DOUBLE;
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
-                // correct decimal's precision and scale
-                if (fn.getArgs()[0].isDecimalV3()) {
-                    List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
-
-                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), argTypes, argumentTypes[0],
-                            ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
-
-                    newFn.setFunctionId(fn.getFunctionId());
-                    newFn.setChecksum(fn.getChecksum());
-                    newFn.setBinaryType(fn.getBinaryType());
-                    newFn.setHasVarArgs(fn.hasVarArgs());
-                    newFn.setId(fn.getId());
-                    newFn.setUserVisible(fn.isUserVisible());
-                    newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
-
-                    fn = newFn;
-                }
-            } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
-                    child.getType().isArrayType())) {
-                List<Type> arrayTypes = Arrays.stream(argumentTypes).map(argumentType -> {
-                    if (argumentType.isArrayType()) {
-                        return argumentType;
-                    } else {
-                        return new ArrayType(argumentType);
-                    }
-                }).collect(Collectors.toList());
-                // check if all array types are compatible
-                TypeManager.getCommonSuperType(arrayTypes);
-                for (int i = 0; i < argumentTypes.length; ++i) {
-                    if (!argumentTypes[i].isArrayType()) {
-                        node.setChild(i, new ArrayExpr(new ArrayType(argumentTypes[i]),
-                                Lists.newArrayList(node.getChild(i))));
-                    }
-                }
-
-                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-                node.resetFnName(null, FunctionSet.ARRAY_CONCAT);
-                if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(FunctionSet.ARRAY_CONCAT, argumentTypes)) {
-                    fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
-                } else {
-                    fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
-                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                }
-            } else if (FunctionSet.NAMED_STRUCT.equals(fnName)) {
-                // deriver struct type
-                fn = Expr.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                fn = fn.copy();
-                ArrayList<StructField> sf = Lists.newArrayList();
-                for (int i = 0; i < node.getChildren().size(); i = i + 2) {
-                    StringLiteral literal = (StringLiteral) node.getChild(i);
-                    sf.add(new StructField(literal.getStringValue(), node.getChild(i + 1).getType()));
-                }
-                fn.setRetType(new StructType(sf));
-            } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
-                // Since the priority of decimal version is higher than double version (according functionId),
-                // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
-                // return decimal version even if the input parameters are not decimal, such as (INT, INT),
-                // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
-                // to go through `getDecimalV3Function` here
-                fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
-            } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                if (fn instanceof AggregateFunction) {
-                    throw new SemanticException("Time Type can not used in" + fnName + " function", node.getPos());
-                }
-            } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
-                fn = getStrToDateFunction(node, argumentTypes);
-            } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
-                fn = getArrayGenerateFunction(node);
-                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-            } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
-                fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
-            } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
-                if (session.getSessionVariable().isEnableRewriteBitmapUnionToBitmapAgg() &&
-                        node.getChild(0) instanceof FunctionCallExpr) {
-                    FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
-                    // Convert bitmap_union(to_bitmap(v1)) to bitmap_agg(v1) when v1's type
-                    // is a numeric type.
-                    if (FunctionSet.TO_BITMAP.equals(arg0Func.getFnName().getFunction())) {
-                        Expr toBitmapArg0 = arg0Func.getChild(0);
-                        Type toBitmapArg0Type = toBitmapArg0.getType();
-                        if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
-                                || toBitmapArg0Type.isLargeIntType()) {
-                            node.setChild(0, toBitmapArg0);
-                            node.resetFnName("", FunctionSet.BITMAP_AGG);
-                        }
-                    }
-                }
-            } else {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            }
-
-            if (fn == null) {
-                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
-            }
-            if (fn == null) {
-                fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
-            }
-
+            // get function by function expression and argument types
+            Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
             if (fn == null) {
                 String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
@@ -1209,34 +1027,6 @@ public class ExpressionAnalyzer {
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 throw new SemanticException(msg, node.getPos());
             }
-
-            if (fn instanceof TableFunction) {
-                throw new SemanticException("Table function cannot be used in expression", node.getPos());
-            }
-
-            for (int i = 0; i < fn.getNumArgs(); i++) {
-                if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
-                        !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
-                    String msg = String.format("No matching function with signature: %s(%s)", fnName,
-                            node.getParams().isStar() ? "*" :
-                                    Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
-                    throw new SemanticException(msg, node.getPos());
-                }
-            }
-
-            if (fn.hasVarArgs()) {
-                Type varType = fn.getArgs()[fn.getNumArgs() - 1];
-                for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
-                    if (!argumentTypes[i].matchesType(varType) &&
-                            !Type.canCastTo(argumentTypes[i], varType)) {
-                        String msg = String.format("Variadic function %s(%s) can't support type: %s", fnName,
-                                Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
-                                argumentTypes[i]);
-                        throw new SemanticException(msg, node.getPos());
-                    }
-                }
-            }
-
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
@@ -1500,84 +1290,11 @@ public class ExpressionAnalyzer {
             }
         }
 
-        private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
-            /*
-             * @TODO: Determine the return type of this function
-             * If is format is constant and don't contains time part, return date type, to compatible with mysql.
-             * In fact we don't want to support str_to_date return date like mysql, reason:
-             * 1. The return type of FE/BE str_to_date function signature is datetime, return date
-             *    let type different, it's will throw unpredictable error
-             * 2. Support return date and datetime at same time in one function is complicated.
-             * 3. The meaning of the function is confusing. In mysql, will return date if format is a constant
-             *    string and it's not contains "%H/%M/%S" pattern, but it's a trick logic, if format is a variable
-             *    expression, like: str_to_date(col1, col2), and the col2 is '%Y%m%d', the result always be
-             *    datetime.
-             */
-            Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
-                    argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-            if (fn == null) {
-                return null;
-            }
-
-            if (!node.getChild(1).isConstant()) {
-                return fn;
-            }
-
-            ExpressionMapping expressionMapping =
-                    new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
-                            Lists.newArrayList());
-
-            ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
-                    new ColumnRefFactory());
-            if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
-                return Expr.getBuiltinFunction("str2date", argumentTypes,
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            }
-
-            return fn;
-        }
-
-        private Function getArrayGenerateFunction(FunctionCallExpr node) {
-            // add the default parameters for array_generate
-            if (node.getChildren().size() == 1) {
-                LiteralExpr secondParam = (LiteralExpr) node.getChild(0);
-                node.clearChildren();
-                node.addChild(new IntLiteral(1));
-                node.addChild(secondParam);
-            }
-            if (node.getChildren().size() == 2) {
-                int idx = 0;
-                BigInteger[] childValues = new BigInteger[2];
-                Boolean hasNUll = false;
-                for (Expr expr : node.getChildren()) {
-                    if (expr instanceof NullLiteral) {
-                        hasNUll = true;
-                    } else if (expr instanceof IntLiteral) {
-                        childValues[idx++] = BigInteger.valueOf(((IntLiteral) expr).getValue());
-                    } else {
-                        childValues[idx++] = ((LargeIntLiteral) expr).getValue();
-                    }
-                }
-
-                if (hasNUll || childValues[0].compareTo(childValues[1]) < 0) {
-                    node.addChild(new IntLiteral(1));
-                } else {
-                    node.addChild(new IntLiteral(-1));
-                }
-            }
-            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-            return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes,
-                    Function.CompareMode.IS_SUPERTYPE_OF);
-        }
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters", node.getPos());
-            }
-            if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
-                throw new SemanticException("grouping functions only support column", node.getPos());
             }
 
             Type[] childTypes = new Type[1];
@@ -1798,11 +1515,11 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
             if (db == null) {
                 throw new SemanticException("Database %s is not found", tableName.getDb());
             }
-            Table table = db.getTable(tableName.getTbl());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", tableName.getTbl());
             }
@@ -1985,10 +1702,17 @@ public class ExpressionAnalyzer {
             List<String> dictionaryKeys = dictionary.getKeys();
             int dictionaryKeysSize = dictionaryKeys.size();
             int paramDictionaryKeysSize = params.size() - 1;
-            if (paramDictionaryKeysSize != dictionaryKeysSize) {
-                throw new SemanticException("dictionary: " + dictionaryName + " has keys size: " +
-                                            Integer.toString(dictionaryKeysSize) +
-                                            " but param give: " + Integer.toString(paramDictionaryKeysSize));
+            if (!(paramDictionaryKeysSize == dictionaryKeysSize || paramDictionaryKeysSize == dictionaryKeysSize + 1)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " has expected keys size: " +
+                                            Integer.toString(dictionaryKeysSize) + " keys: " +
+                                            "[" + String.join(", ", dictionaryKeys) + "]" +
+                                            " plus null_if_not_exist flag(optional)" +
+                                            " but param given: " + Integer.toString(paramDictionaryKeysSize));
+            }
+
+            if (paramDictionaryKeysSize == dictionaryKeysSize + 1 && !(params.get(params.size() - 1) instanceof BoolLiteral)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " has invalid parameter for `null_if_not_exist` "
+                                            + "invalid parameter: " + params.get(params.size() - 1).toString());
             }
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
@@ -2035,6 +1759,9 @@ public class ExpressionAnalyzer {
                 }
             }
 
+            boolean nullIfNotExist = (paramDictionaryKeysSize == dictionaryKeysSize + 1) ?
+                                     ((BoolLiteral) params.get(params.size() - 1)).getValue() : false;
+            node.setNullIfNotExist(nullIfNotExist);
             node.setDictionaryId(dictionary.getDictionaryId());
             node.setDictionaryTxnId(GlobalStateMgr.getCurrentState().getDictionaryMgr().
                     getLastSuccessTxnId(dictionary.getDictionaryId()));

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.UserException;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -27,8 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -170,34 +169,12 @@ public class GlobalFunctionMgr {
         }
     }
 
-    public long loadGlobalFunctions(DataInputStream dis, long checksum) throws IOException {
-        int count = dis.readInt();
-        checksum ^= count;
-        for (long i = 0; i < count; ++i) {
-            Function f = Function.read(dis);
-            replayAddFunction(f);
-        }
-        return checksum;
-    }
-
-    public long saveGlobalFunctions(DataOutputStream dos, long checksum) throws IOException {
-        List<Function> functions = getFunctions();
-        int size = functions.size();
-        checksum ^= size;
-        dos.writeInt(size);
-
-        for (Function f : functions) {
-            f.write(dos);
-        }
-        return checksum;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<Function> functions = getFunctions();
 
         int numJson = 1 + functions.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_FUNCTION_MGR, numJson);
-        writer.writeJson(functions.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.GLOBAL_FUNCTION_MGR, numJson);
+        writer.writeInt(functions.size());
         for (Function function : functions) {
             writer.writeJson(function);
         }

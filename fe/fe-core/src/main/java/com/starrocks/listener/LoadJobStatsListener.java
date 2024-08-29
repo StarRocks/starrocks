@@ -45,7 +45,8 @@ public class LoadJobStatsListener implements LoadJobListener {
 
     @Override
     public void onLoadJobTransactionFinish(TransactionState transactionState) {
-        onTransactionFinish(transactionState, true);
+        // For compatibility reasons, broker load still uses async collect.
+        onTransactionFinish(transactionState, false);
     }
 
     @Override
@@ -79,7 +80,7 @@ public class LoadJobStatsListener implements LoadJobListener {
             List<Table> tables = transactionState.getIdToTableCommitInfos().values().stream()
                     .map(x -> x.getTableId())
                     .distinct()
-                    .map(db::getTable)
+                    .map(tableId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId))
                     .filter(Objects::nonNull)
                     .filter(t -> !t.isMaterializedView()) // skip mvs since its stats will be triggered after refresh
                     .collect(Collectors.toList());

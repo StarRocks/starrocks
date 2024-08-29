@@ -41,6 +41,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -82,10 +83,10 @@ public class LoadMgrTest {
                                         @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -114,10 +115,10 @@ public class LoadMgrTest {
                                                 @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -149,10 +150,10 @@ public class LoadMgrTest {
                                                 @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -205,7 +206,7 @@ public class LoadMgrTest {
                                      @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = db;
             }
         };
@@ -319,7 +320,7 @@ public class LoadMgrTest {
                                   @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = db;
             }
         };
@@ -339,10 +340,10 @@ public class LoadMgrTest {
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
 
-        loadManager.saveLoadJobsV2JsonFormat(image.getDataOutputStream());
+        loadManager.saveLoadJobsV2JsonFormat(image.getImageWriter());
 
         LoadMgr loadManager2 = new LoadMgr(new LoadJobScheduler());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         loadManager2.loadLoadJobsV2JsonFormat(reader);
         reader.close();
 

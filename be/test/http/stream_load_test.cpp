@@ -34,6 +34,7 @@
 
 #include "http/action/stream_load.h"
 
+#include <event2/buffer.h>
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <gtest/gtest.h>
@@ -45,6 +46,7 @@
 #include "http/http_request.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
+#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
@@ -297,6 +299,87 @@ TEST_F(StreamLoadActionTest, plan_fail) {
 
     SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::execute_plan_fragment:1");
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_F(StreamLoadActionTest, huge_malloc) {
+    StreamLoadAction action(&_env, _limiter.get());
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    HttpRequest request(_evhttp_req);
+    std::string content = "abc";
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    auto evb = evbuffer_new();
+    ev_req.input_buffer = evb;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_DB_KEY, "db");
+    request._headers.emplace(HTTP_LABEL_KEY, "123");
+    request._headers.emplace(HTTP_COLUMN_SEPARATOR, "|");
+    request.set_handler(&action);
+    request.set_handler_ctx(ctx);
+
+    evbuffer_add(evb, content.data(), content.size());
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+
+    evbuffer_add(evb, content.data(), content.size());
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    ctx->buffer = nullptr;
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+
+    evbuffer_add(evb, content.data(), content.size());
+    auto old_format = ctx->format;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    ctx->format = TFileFormatType::FORMAT_JSON;
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    ctx->buffer = nullptr;
+    SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ctx->format = TFileFormatType::FORMAT_JSON;
+    ctx->buffer = ByteBufferPtr(new ByteBuffer(1));
+    ctx->status = Status::OK();
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ctx->buffer = nullptr;
+    ctx->format = old_format;
+
+    request.set_handler_ctx(nullptr);
+    request.set_handler(nullptr);
+    if (ctx->unref()) {
+        delete ctx;
+    }
+    evbuffer_free(evb);
 }
 
 } // namespace starrocks

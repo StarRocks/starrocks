@@ -100,6 +100,15 @@ public class Config extends ConfigBase {
 
     @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
     public static String sys_log_format = "plaintext";
+
+    @ConfField(comment = "Max length of a log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 1MB")
+    public static int sys_log_json_max_string_length = 1048576;
+
+    @ConfField(comment = "Max length of a profile log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 100MB")
+    public static int sys_log_json_profile_max_string_length = 104857600;
+
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
@@ -1265,6 +1274,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
 
+    @ConfField(mutable = true, comment = "Whether to ignore task run history replay error in querying information_schema" +
+            ".task_runs")
+    public static boolean ignore_task_run_history_replay_error = false;
+
     /**
      * whether backup materialized views in backing databases. If not, will skip backing materialized views.
      */
@@ -1332,6 +1345,42 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long memory_tracker_interval_seconds = 60;
+
+    /**
+     * true to enable collect proc memory alloc profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc memory alloc profile")
+    public static boolean proc_profile_mem_enable = true;
+
+    /**
+     * true to enable collect proc cpu profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc cpu profile")
+    public static boolean proc_profile_cpu_enable = true;
+
+    /**
+     * The number of seconds between proc profile collections
+     */
+    @ConfField(mutable = true, comment = "The number of seconds between proc profile collections")
+    public static long proc_profile_collect_interval_s = 600;
+
+    /**
+     * The number of seconds it takes to collect single proc profile
+     */
+    @ConfField(mutable = true, comment = "The number of seconds it takes to collect single proc profile")
+    public static long proc_profile_collect_time_s = 300;
+
+    /**
+     * The number of days to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of days to retain profile files")
+    public static int proc_profile_file_retained_days = 2;
+
+    /**
+     * The number of bytes to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of bytes to retain profile files")
+    public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -2919,8 +2968,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
 
-    @ConfField(mutable = true, comment = "Whether enable strict insert in mv refresh or not by default")
-    public static boolean enable_mv_refresh_insert_strict = false;
+    @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, false by default")
+    public static boolean mv_refresh_fail_on_filter_data = false;
 
     @ConfField(mutable = true, comment = "The default timeout for planner optimize when refresh materialized view, 30s by " +
             "default")

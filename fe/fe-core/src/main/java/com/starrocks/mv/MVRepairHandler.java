@@ -88,7 +88,7 @@ public interface MVRepairHandler {
         }
 
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
-            Table table = db.getTable(tableCommitInfo.getTableId());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
             if (table == null || !(table instanceof OlapTable) || table.getRelatedMaterializedViews().isEmpty()) {
                 continue;
             }

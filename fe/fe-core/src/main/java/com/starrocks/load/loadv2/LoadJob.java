@@ -256,7 +256,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public Database getDb() throws MetaNotFoundException {
         // get db
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + " already has been deleted");
         }
@@ -378,7 +378,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return state == JobState.FINISHED || state == JobState.CANCELLED || state == JobState.UNKNOWN;
     }
 
-    protected void setJobProperties(Map<String, String> properties) throws DdlException {
+    public void setJobProperties(Map<String, String> properties) throws DdlException {
         // resource info
         if (ConnectContext.get() != null) {
             loadMemLimit = ConnectContext.get().getSessionVariable().getLoadMemLimit();
@@ -748,7 +748,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         idToTasks.clear();
     }
 
-    protected boolean checkDataQuality() {
+    public boolean checkDataQuality() {
         Map<String, String> counters = loadingStatus.getCounters();
         if (!counters.containsKey(DPP_NORMAL_ALL) || !counters.containsKey(DPP_ABNORMAL_ALL)) {
             return true;

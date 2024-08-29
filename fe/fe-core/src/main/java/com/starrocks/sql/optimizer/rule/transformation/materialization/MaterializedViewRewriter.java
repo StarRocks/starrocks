@@ -1765,6 +1765,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (materializationContext.getMv().getRefreshScheme().isSync()) {
             return null;
         }
+        JoinPredicatePushdown.JoinPredicatePushDownContext params = optimizerContext.getJoinPushDownParams();
+        if (!params.enableJoinPredicatePushDown) {
+            return null;
+        }
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(rewriteContext.getMvExpression());
         if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
             // TODO: support union rewrite for view based mv rewrite
@@ -1954,8 +1958,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
-        queryExpression = MvUtils.replaceLogicalViewScanOperator(queryExpression,
-                materializationContext.getOptimizerContext().getQueryMaterializationContext());
+        queryExpression = MvUtils.replaceLogicalViewScanOperator(queryExpression);
         if (queryExpression == null) {
             return null;
         }
@@ -1978,6 +1981,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return null;
             }
 
+            // TODO(fixme): Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
+            // push-down predicates.
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
             if (mvRewriteContext.getEnforcedNonExistedColumns() != null &&
@@ -2060,8 +2065,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
         optimizerContext.clearNotNullPredicates();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
-                false, true, materializationContext.getQueryRefFactory(),
-                true, optimizerContext);
+                false, true, materializationContext.getQueryRefFactory(), optimizerContext);
         return joinPredicatePushdown.pushdown(predicate);
     }
 
@@ -2143,8 +2147,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
 
         // for view based mv rewrite, we should mapping the partition column to output column of view scan
-        if (queryMaterializationContext.getViewScans() != null) {
-            for (LogicalViewScanOperator viewScanOperator : queryMaterializationContext.getViewScans()) {
+        if (queryMaterializationContext.getQueryViewScanOps() != null) {
+            for (LogicalViewScanOperator viewScanOperator : queryMaterializationContext.getQueryViewScanOps()) {
                 Projection projection = viewScanOperator.getProjection();
                 if (viewScanOperator.getProjection() != null) {
                     for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {

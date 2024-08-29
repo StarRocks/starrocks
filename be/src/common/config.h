@@ -95,11 +95,15 @@ CONF_Int32(push_worker_count_high_priority, "3");
 
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
+// The min count of thread to publish version per transaction
+CONF_mInt32(transaction_publish_version_thread_pool_num_min, "0");
 
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
 CONF_mInt32(get_pindex_worker_count, "0");
+CONF_mInt32(transaction_apply_thread_pool_num_min, "0");
+CONF_Int32(transaction_apply_worker_idle_time_ms, "500");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -782,15 +786,6 @@ CONF_mBool(pipeline_print_profile, "false");
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
 CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
-// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
-// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
-// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
-//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
-CONF_Int64(pipeline_scan_queue_mode, "0");
-// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
-// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
-CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
-CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
@@ -1327,8 +1322,14 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
 CONF_mBool(enable_json_flat, "true");
 
-// extract flat json column when row_num * null_factor < null_row_num
-CONF_mDouble(json_flat_null_factor, "0.4");
+// enable compaction is base on flat json, not whole json
+CONF_mBool(enable_compaction_flat_json, "true");
+
+// direct read flat json
+CONF_mBool(enable_lazy_dynamic_flat_json, "true");
+
+// extract flat json column when row_num * null_factor > null_row_num
+CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
@@ -1373,6 +1374,10 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
+
+// When the keys that we want to delete, number of them is larger than this config,
+// we will fallback and using `DeleteRange` in rocksdb.
+CONF_mInt32(rocksdb_opt_delete_range_limit, "500");
 
 // python envs config
 // create time worker timeout
@@ -1430,5 +1435,11 @@ CONF_mInt32(thrift_max_frame_size, "16384000");
 // The RecursionLimit defines, how deep structures may be nested into each other. The default named DEFAULT_RECURSION_DEPTH
 // allows for structures nested up to 64 levels deep.
 CONF_mInt32(thrift_max_recursion_depth, "64");
+
+// if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
+// for now, only support non-pk LAKE compaction in size tierd compaction.
+CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// chunk size used by lake compaction
+CONF_mInt32(lake_compaction_chunk_size, "4096");
 
 } // namespace starrocks::config

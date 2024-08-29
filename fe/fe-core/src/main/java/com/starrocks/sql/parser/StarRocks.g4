@@ -373,7 +373,7 @@ createTableStatement
 
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
+    : identifier type? charsetName? KEY? aggDesc? columnNullable?
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     comment?
     ;
@@ -416,6 +416,19 @@ orderByDesc
     : ORDER BY identifierList
     ;
 
+columnNullable
+    : NULL
+    | NOT NULL
+    ;
+
+typeWithNullable
+    : type columnNullable?
+    ;
+
+aggStateDesc
+    : identifier '(' typeWithNullable (',' typeWithNullable)* ')'
+    ;
+
 aggDesc
     : SUM
     | MAX
@@ -425,6 +438,7 @@ aggDesc
     | BITMAP_UNION
     | PERCENTILE_UNION
     | REPLACE_IF_NOT_NULL
+    | aggStateDesc
     ;
 
 rollupDesc
@@ -862,6 +876,7 @@ alterClause
     | createOrReplaceTagClause
     | dropBranchClause
     | dropTagClause
+    | tableOperationClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1046,6 +1061,10 @@ dropTagClause
     : DROP TAG (IF EXISTS)? identifier
     ;
 
+tableOperationClause
+    : EXECUTE functionCall
+    ;
+
 tagOptions
     : (AS OF VERSION snapshotId)? (refRetain)?
     ;
@@ -1114,9 +1133,15 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) writeBranch? partitionNames?
-        (WITH LABEL label=identifier)? columnAliases?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName writeBranch? partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
+        insertLabelOrColumnAliases* properties?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
+    ;
+
+// for compatibility with the case 'LABEL before columnAliases'
+insertLabelOrColumnAliases
+    : WITH LABEL label=identifier
+    | columnAliases
     ;
 
 updateStatement

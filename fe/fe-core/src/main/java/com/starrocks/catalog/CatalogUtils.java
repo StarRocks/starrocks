@@ -57,7 +57,7 @@ public class CatalogUtils {
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -115,12 +115,12 @@ public class CatalogUtils {
 
     // Used to temporarily disable some command on lake table and remove later.
     public static void checkIsLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             return;
         }
 
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             return;
         }
@@ -213,21 +213,21 @@ public class CatalogUtils {
         Set<Object> tempSet = new HashSet<>();
         Set<List<Object>> tempMultiSet = new HashSet<>();
         for (Partition partition : tempPartitionList) {
-            if (!listMap.isEmpty()) {
-                listMap.get(partition.getId()).forEach(item -> {
-                    tempSet.add(item.getRealObjectValue());
-                });
-                newListMap.remove(partition.getId());
-            }
-            if (!multiListMap.isEmpty()) {
-                multiListMap.get(partition.getId()).forEach(itemList -> {
-                    List<Object> cur = new ArrayList<>();
-                    itemList.forEach(item -> {
-                        cur.add(item.getRealObjectValue());
-                    });
-                    tempMultiSet.add(cur);
-                });
+            if (listPartitionInfo.isMultiColumnPartition()) {
+                tempMultiSet = multiListMap.get(partition.getId())
+                        .stream()
+                        .map(literalExprs -> literalExprs
+                                .stream()
+                                .map(LiteralExpr::getRealObjectValue)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toSet());
                 newMultiListMap.remove(partition.getId());
+            } else {
+                tempSet = listMap.get(partition.getId())
+                        .stream()
+                        .map(LiteralExpr::getRealObjectValue)
+                        .collect(Collectors.toSet());
+                newListMap.remove(partition.getId());
             }
         }
 

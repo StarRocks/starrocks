@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 description: Partition data in StarRocks
 ---
 
@@ -136,7 +136,6 @@ However, in some special scenarios, such as when the table contains a column `ci
 ```sql
 PARTITION BY expression
 ...
-[ PROPERTIES("partition_live_number" = "xxx") ]
 
 expression ::=
     ( partition_columns )
@@ -151,11 +150,6 @@ partition_columns ::=
 
 **Required**: YES<br/>
 **Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
-
-#### `partition_live_number` 
-
-**Required**: No<br/>
-**Description**: The number of partitions to be retained. Compare the values of partition columns among partitions, and periodically delete partitions with smaller values while retaining those with larger values.<br/>StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes).<br/>**NOTE**<br/>If the values in the partition column are strings, StarRocks compares the lexicographical order of the partition names and periodically retains the partitions that come earlier while deleting the partitions that come later. <br/>
 
 
 ### Usage notes
@@ -215,24 +209,6 @@ LastConsistencyCheckTime: NULL
               IsInMemory: false
                 RowCount: 1
 1 row in set (0.00 sec)
-```
-
-Example 2: You can also configure the `partition_live_number` property at table creation for partition lifecycle management, for example, specifying that the table should only retain 3 partitions.
-
-```SQL
-CREATE TABLE t_recharge_detail2 (
-    id bigint,
-    user_id bigint,
-    recharge_money decimal(32,2), 
-    city varchar(20) not null,
-    dt varchar(20) not null
-)
-DUPLICATE KEY(id)
-PARTITION BY (dt,city)
-DISTRIBUTED BY HASH(`id`) 
-PROPERTIES(
-    "partition_live_number" = "3" -- only retains the most recent three partitions
-);
 ```
 
 ## Manage partitions

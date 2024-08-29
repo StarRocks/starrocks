@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
@@ -1604,7 +1604,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
+- Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
 
 <!--
@@ -3300,6 +3300,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<!--
 ##### starlet_cache_evict_interval
 
 - Default: 60
@@ -3308,7 +3309,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval at which the system performs cache eviction in a shared-data cluster with file data cache enabled.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_low_water
 
 - Default: 0.1
@@ -3317,7 +3320,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The low water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_high_water
 
 - Default: 0.2
@@ -3326,6 +3331,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The high water at which cache eviction is stopped. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is higher than this value, cache eviction will be stopped.
 - Introduced in: v3.0
+-->
 
 <!--
 ##### starlet_cache_dir_allocate_policy

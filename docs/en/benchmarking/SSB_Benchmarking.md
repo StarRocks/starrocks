@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # SSB Flat-table Benchmarking
@@ -19,7 +19,7 @@ This test compares the performance of StarRocks, Apache Druid, and ClickHouse ag
 
 ### Hardware
 
-| Machine           | 3 cloud hosts                                                |
+| Machine           | 4 cloud hosts                                                |
 | ----------------- | ------------------------------------------------------------ |
 | CPU               | 16-Core Intel (R) Xeon (R) Platinum 8269CY CPU @2.50GHz <br />Cache size: 36608 KB |
 | Memory            | 64 GB                                                        |
@@ -55,7 +55,7 @@ Software version: StarRocks Community Version 3.0, ClickHouse 23.3, Apache Druid
 
 ### Test results
 
-The following table shows the performance test results on thirteen queries. The unit of query latency is ms. `ClickHouse vs StarRocks` in the table header means using the query response time of ClickHouse to divide the query response time of StarRocks. A larger value indicates better performance of StarRocks.
+The following table shows the performance test results on thirteen queries. The unit of query latency is ms. All queries are warmed up 1 time and then executed 3 times to take the average value as the result. `ClickHouse vs StarRocks` in the table header means using the query response time of ClickHouse to divide the query response time of StarRocks. A larger value indicates better performance of StarRocks.
 
 |      | StarRocks-3.0 | StarRocks-3.0-index | ClickHouse-23.3 | ClickHouse vs StarRocks | Druid-25.0.0 | Druid vs StarRocks |
 | ---- | ------------- | ------------------- | ------------------- | ----------------------- | ---------------- | ------------------ |

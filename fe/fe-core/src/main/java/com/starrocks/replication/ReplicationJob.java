@@ -572,7 +572,7 @@ public class ReplicationJob implements GsonPostProcessable {
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(request.database_id);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.database_id);
         if (db == null) {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
@@ -580,7 +580,7 @@ public class ReplicationJob implements GsonPostProcessable {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = db.getTable(request.table_id);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), request.table_id);
             if (table == null) {
                 throw new MetaNotFoundException(
                         "Table " + request.table_id + " in database " + db.getFullName() + " not found");
@@ -830,8 +830,8 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
-            Database db = GlobalStateMgr.getServingState().getDb(databaseId);
-            if (db == null || db.getTable(tableId) == null) {
+            Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseId);
+            if (db == null || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) == null) {
                 abortTransaction("Table is deleted");
                 return true;
             }
@@ -866,8 +866,9 @@ public class ReplicationJob implements GsonPostProcessable {
         sendRunningTasks();
     }
 
-    private void sendReplicateSnapshotTasks() {
+    private void sendReplicateSnapshotTasks() throws Exception {
         runningTasks.clear();
+        byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
         for (PartitionInfo partitionInfo : partitionInfos.values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
@@ -893,7 +894,7 @@ public class ReplicationJob implements GsonPostProcessable {
                                 indexInfo.getSchemaHash(), partitionInfo.getVersion(),
                                 srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                 indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
-                                flippedSrcSnapshotInfos);
+                                flippedSrcSnapshotInfos, encryptionMeta);
                         runningTasks.put(task, task);
                     }
                 }

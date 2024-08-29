@@ -65,6 +65,8 @@ static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggr
         return STORAGE_AGGREGATE_SUM;
     case TAggregationType::PERCENTILE_UNION:
         return STORAGE_AGGREGATE_PERCENTILE_UNION;
+    case TAggregationType::AGG_STATE_UNION:
+        return STORAGE_AGGREGATE_AGG_STATE_UNION;
     }
     return STORAGE_AGGREGATE_NONE;
 }
@@ -211,7 +213,12 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
     }
-
+    // agg state type desc
+    if (t_column.__isset.agg_state_desc) {
+        auto& agg_state_desc = t_column.agg_state_desc;
+        auto* agg_state_pb = column_pb->mutable_agg_state_desc();
+        AggStateDesc::thrift_to_protobuf(agg_state_desc, agg_state_pb);
+    }
     return Status::OK();
 }
 

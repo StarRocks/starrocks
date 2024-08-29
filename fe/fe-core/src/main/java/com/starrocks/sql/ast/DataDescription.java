@@ -28,7 +28,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
@@ -41,9 +40,10 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -673,7 +673,11 @@ public class DataDescription implements ParseNode {
     }
 
     public void analyzeTable(String fullDbName) throws AnalysisException {
-        Table table = MetaUtils.getTable(ConnectContext.get(), new TableName(fullDbName, tableName));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(fullDbName, tableName);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +

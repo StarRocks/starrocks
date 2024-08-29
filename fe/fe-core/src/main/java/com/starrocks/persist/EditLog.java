@@ -228,7 +228,7 @@ public class EditLog {
                 case OperationType.OP_DROP_TABLE:
                 case OperationType.OP_DROP_TABLE_V2: {
                     DropInfo info = (DropInfo) journal.getData();
-                    Database db = globalStateMgr.getDb(info.getDbId());
+                    Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
                     if (db == null) {
                         LOG.warn("failed to get db[{}]", info.getDbId());
                         break;
@@ -1188,6 +1188,12 @@ public class EditLog {
                 case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
+                    break;
+                }
+                case OperationType.OP_ADD_KEY: {
+                    Text keyJson = (Text) journal.getData();
+                    EncryptionKeyPB keyPB = GsonUtils.GSON.fromJson(keyJson.toString(), EncryptionKeyPB.class);
+                    GlobalStateMgr.getCurrentState().getKeyMgr().replayAddKey(keyPB);
                     break;
                 }
                 default: {

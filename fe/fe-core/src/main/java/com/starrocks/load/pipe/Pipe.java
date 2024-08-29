@@ -36,7 +36,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -134,7 +133,7 @@ public class Pipe implements GsonPostProcessable {
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
-        long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(pipeName.getDbName()).getId();
         PipeId pipeId = new PipeId(dbId, id);
         Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
@@ -154,7 +153,7 @@ public class Pipe implements GsonPostProcessable {
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
-                    pipeSource.setAutoIngest(VariableMgr.parseBooleanVariable(value));
+                    pipeSource.setAutoIngest(ParseUtil.parseBooleanValue(value, PipeAnalyzer.PROPERTY_AUTO_INGEST));
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
@@ -315,7 +314,7 @@ public class Pipe implements GsonPostProcessable {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
-            String dbName = GlobalStateMgr.getCurrentState().mayGetDb(pipeId.getDbId())
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipeId.getDbId())
                     .map(Database::getOriginName)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);

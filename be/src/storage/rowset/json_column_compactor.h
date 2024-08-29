@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <algorithm>
-
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/json_column_writer.h"
 
@@ -32,6 +30,10 @@ public:
 
 private:
     Status _compact_columns(std::vector<ColumnPtr>& json_datas);
+
+    Status _merge_columns(std::vector<ColumnPtr>& json_datas);
+
+    Status _flatten_columns(std::vector<ColumnPtr>& json_datas);
 };
 
 class JsonColumnCompactor final : public ColumnWriter {

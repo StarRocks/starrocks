@@ -50,6 +50,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
@@ -439,10 +440,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_with_workgroup));
-    _connector_scan_executor =
-            new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
-                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
+    _connector_scan_executor = new workgroup::ScanExecutor(
+            std::move(connector_scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::CONNECTOR));
     _connector_scan_executor->initialize(connector_num_io_threads);
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
@@ -514,9 +514,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_with_workgroup));
-    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
-                                                 std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                         workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor = new workgroup::ScanExecutor(
+            std::move(scan_worker_thread_pool_with_workgroup),
+            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::OLAP));
     _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();

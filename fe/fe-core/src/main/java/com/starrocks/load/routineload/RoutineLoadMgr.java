@@ -53,6 +53,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -76,9 +77,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -509,7 +508,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 sortRoutineLoadJob(result);
             } else {
                 long dbId = 0L;
-                Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
@@ -774,21 +773,10 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long loadRoutineLoadJobs(DataInputStream dis, long checksum) throws IOException {
-        readFields(dis);
-        LOG.info("finished replay routineLoadJobs from image");
-        return checksum;
-    }
-
-    public long saveRoutineLoadJobs(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
-    public void saveRoutineLoadJobsV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveRoutineLoadJobsV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         final int cnt = 1 + idToRoutineLoadJob.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);
-        writer.writeJson(idToRoutineLoadJob.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);
+        writer.writeInt(idToRoutineLoadJob.size());
         for (RoutineLoadJob loadJob : idToRoutineLoadJob.values()) {
             writer.writeJson(loadJob);
         }

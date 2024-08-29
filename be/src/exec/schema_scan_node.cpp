@@ -302,8 +302,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompos
         pipeline::PipelineBuilderContext* context) {
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
-    // the dop of SchemaScanOperator should always be 1.
-    size_t dop = 1;
+    size_t dop = context->dop_of_source_operator(_id);
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(

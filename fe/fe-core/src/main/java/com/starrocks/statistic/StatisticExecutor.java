@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -81,19 +82,19 @@ public class StatisticExecutor {
             if (dbId == null) {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
                 for (Long id : dbIds) {
-                    Database db = GlobalStateMgr.getCurrentState().getDb(id);
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
                     if (db == null) {
                         continue;
                     }
-                    table = db.getTable(tableId);
+                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                     if (table == null) {
                         continue;
                     }
                     break;
                 }
             } else {
-                Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-                table = database.getTable(tableId);
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
             }
 
             if (table == null) {
@@ -186,8 +187,16 @@ public class StatisticExecutor {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
-        Database db = MetaUtils.getDatabase(dbId);
-        Table table = MetaUtils.getTable(dbId, tableId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", dbId);
+        }
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+
         if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View",
                     table.getName());
@@ -220,8 +229,8 @@ public class StatisticExecutor {
         }
     }
 
-    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId) {
-        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId);
+    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId, List<Long> partitions) {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId, partitions);
         return executeStatisticDQL(context, sql);
     }
 
@@ -233,7 +242,7 @@ public class StatisticExecutor {
     private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
         List<TStatisticData> statistics = Lists.newArrayList();
 
-        if (sqlResult.size() < 1) {
+        if (sqlResult.isEmpty()) {
             return statistics;
         }
 
@@ -249,7 +258,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_BATCH_VERSION
                 || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
                 || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
+                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -275,6 +285,7 @@ public class StatisticExecutor {
         Table table = statsJob.getTable();
 
         try {
+            Stopwatch watch = Stopwatch.createStarted();
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
@@ -283,8 +294,9 @@ public class StatisticExecutor {
 
             statsConnectCtx.setStatisticsConnection(true);
             statsJob.collect(statsConnectCtx, analyzeStatus);
+            LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
-            LOG.warn("Collect statistics error ", e);
+            LOG.warn("execute statistics job failed: {}", statsJob, e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
