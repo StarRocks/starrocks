@@ -134,6 +134,9 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
         for (int i = 0; i < _source_paths.size(); i++) {
             opts.stats->flat_json_hits[_source_paths[i]] += 1;
         }
+        if (has_remain) {
+            opts.stats->flat_json_hits["remain"] += 1;
+        }
         return Status::OK();
     }
 
@@ -161,6 +164,9 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
         auto fp = transformer->flat_paths();
         for (int i = 0; i < fp.size(); i++) {
             opts.stats->dynamic_json_hits[fp[i]] += 1;
+        }
+        if (has_remain) {
+            opts.stats->flat_json_hits["remain"] += 1;
         }
     }
 
@@ -489,6 +495,9 @@ Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
 
     for (auto& p : _src_paths) {
         opts.stats->merge_json_hits[p] += 1;
+    }
+    if (has_remain) {
+        opts.stats->merge_json_hits["remain"] += 1;
     }
     SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
     _merger = std::make_unique<JsonMerger>(_src_paths, _src_types, has_remain);
