@@ -42,6 +42,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -103,10 +104,12 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                             // We place the set session environment code here, because we want to notify user if there
                             // are some errors when setting session environment.
                             // Unfortunately, the client cannot receive the message.
-                            UserProperty userProperty = context.getGlobalStateMgr().getAuthenticationMgr()
-                                    .getUserProperty(context.getCurrentUserIdentity().getUser());
-                            context.updateByUserProperty(userProperty);
-
+                            UserIdentity userIdentity = context.getCurrentUserIdentity();
+                            if (!userIdentity.isEphemeral()) {
+                                UserProperty userProperty = context.getGlobalStateMgr().getAuthenticationMgr()
+                                        .getUserProperty(userIdentity.getUser());
+                                context.updateByUserProperty(userProperty);
+                            }
                             MysqlProto.sendResponsePacket(context);
                         } else {
                             context.getState().setError(registerResult.second);
