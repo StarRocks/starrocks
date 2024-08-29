@@ -35,7 +35,8 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
-        DCHECK_EQ(_type, _children[0]->type().children[0]);
+        // After DLA's complex type prune, ArrayElement expr's type is different from children's type
+        // DCHECK_EQ(_type, _children[0]->type().children[0]);
         ASSIGN_OR_RETURN(ColumnPtr arg0, _children[0]->evaluate_checked(context, chunk));
         ASSIGN_OR_RETURN(ColumnPtr arg1, _children[1]->evaluate_checked(context, chunk));
         size_t num_rows = std::max(arg0->size(), arg1->size());
