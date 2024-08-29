@@ -95,12 +95,4 @@ Shared-data StarRocks clusters support all loading methods provided by StarRocks
 
 ### Query in a shared-data StarRocks cluster
 
-<<<<<<< HEAD
-Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) for more information.
-=======
 Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) for more information.
-
-> **NOTE**
->
-> Shared-data StarRocks clusters do not support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md).
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))

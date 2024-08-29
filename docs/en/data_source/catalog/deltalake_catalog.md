@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD
-displayed_sidebar: "English"
-=======
 displayed_sidebar: docs
 toc_max_heading_level: 5
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # Delta Lake catalog

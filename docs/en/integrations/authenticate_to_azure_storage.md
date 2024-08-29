@@ -1,11 +1,7 @@
 ---
-<<<<<<< HEAD
-displayed_sidebar: "English"
-=======
 displayed_sidebar: docs
 sidebar_label: Microsoft Azure Storage
 description: "This topic describes how to authenticate with Azure"
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # Authenticate to Microsoft Azure Storage

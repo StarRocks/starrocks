@@ -14,13 +14,8 @@ The File external feature was designed to help with importing data into StarRock
 
 ## Limits
 
-<<<<<<< HEAD
-- File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query catalogs created in the cluster.
-- Only Parquet and ORC data files are supported.
-=======
 - File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query catalogs created in the cluster.
-- Only Parquet, ORC, Avro, RCFile, and SequenceFile data files are supported.
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
+- Only Parquet and ORC data files are supported.
 - You can only use file external tables to query data in the target data file. Data write operations such as INSERT, DELETE, and DROP are not supported.
 
 ## Prerequisites

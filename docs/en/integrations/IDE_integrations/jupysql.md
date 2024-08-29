@@ -1,10 +1,6 @@
 ---
-<<<<<<< HEAD
-displayed_sidebar: "English"
-=======
 displayed_sidebar: docs
 description: "Jupyter notebooks with StarRocks"
->>>>>>> e06217c368 ([Doc] Ref docs (#50111))
 ---
 
 # Jupyter
