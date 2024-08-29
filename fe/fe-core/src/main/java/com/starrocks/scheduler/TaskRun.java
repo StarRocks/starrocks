@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
@@ -41,6 +42,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -48,10 +50,18 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
+    public static final String MV_ID = "mvId";
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    // All properties that can be set in TaskRun
+    public static final Set<String> TASK_RUN_PROPERTIES =
+            ImmutableSet.of(
+                    MV_ID, PARTITION_START, PARTITION_END,
+                    FORCE, START_TASK_RUN_ID);
+
+    // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
@@ -160,7 +170,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
         try {
             // NOTE: mvId is set in Task's properties when creating
-            long mvId = Long.parseLong(properties.get(PartitionBasedMvRefreshProcessor.MV_ID));
+            long mvId = Long.parseLong(properties.get(MV_ID));
             Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
             if (database == null) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
@@ -227,12 +237,9 @@ public class TaskRun implements Comparable<TaskRun> {
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         runCtx.setThreadLocalInfo();
-        LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}",
-                runCtx.getQueryId(), ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId);
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
-
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {
@@ -246,6 +253,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
+        LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}, " +
+                        "taskRunContextProperties:{}", runCtx.getQueryId(),
+                ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId, taskRunContextProperties);
         // If this is the first task run of the job, use its uuid as the job id.
         taskRunContext.setTaskRunId(taskRunId);
         taskRunContext.setCtx(runCtx);
