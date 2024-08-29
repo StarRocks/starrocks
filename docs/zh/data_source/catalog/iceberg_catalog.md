@@ -485,18 +485,16 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
 
 指定元数据缓存更新策略的一组参数。StarRocks 根据该策略更新缓存的 Iceberg 元数据。此组参数为可选。
 
-StarRocks 默认采用[自适应元数据检索方案](#附录自适应元数据检索方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
+自 v3.3.3 起，StarRocks 采用[元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。大多数情况下，推荐您通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
 
-如果 Iceberg 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
+如果 Iceberg 数据更新频率较高，那么您可以对这些参数进行调优，从而优化该方案的性能。
 
-| 参数                                          | 默认值                  | 说明                                                         |
+| **参数**                                       | **默认值**             | **说明**                                                      |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
-| enable_iceberg_metadata_cache                 | 对于 AWS Glue 为 true，对于 HMS 或其他为 false | 是否缓存 Iceberg 相关的元数据，包括 Table Cache，Partition Name Cache，Data File Cache 和 Delete Data File Cache。该参数自 3.2.1 版本起支持：<ul><li>在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。</li><li>自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 HMS 或其他，则该参数默认值变更为 `false`。</li></ul> |
-| iceberg_meta_cache_ttl_sec                    | 48 * 60 * 60          | 除 Table Cache 外，所有元数据缓存的 Time-To-Live（TTL）。单位：秒。 |
-| iceberg_local_planning_max_slot_bytes         | 8 * 1024 * 1024       | Iceberg 每个线程能够处理的 Manifest 文件的最大大小。单位：Byte。 |
+| enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括 Table Cache，Partition Name Cache，以及 Manifest 中的 Data File Cache 和 Delete Data File Cache。 |
 | iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列统计信息。                                         |
 | iceberg_manifest_cache_max_num                | 100000                | 可缓存的 Manifest 文件的最大数量。                           |
-| refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发 Data File 缓存刷新的最小 Manifest 文件长度。            |
+| refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发 Data File Cache 刷新的最小 Manifest 文件长度。          |
 
 ### 示例
 
@@ -1161,7 +1159,7 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
 
-自 v3.3.3 起，Iceberg Catalog 支持 [自适应元数据检索方案](#附录自适应元数据检索方案)。您可以通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+自 v3.3.3 起，Iceberg Catalog 支持 [元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)。您可以通过系统变量 [`plan_mode`](../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
 
 您可以通过以下 FE 配置项来设置 Iceberg 元数据缓存刷新行为：
 
@@ -1171,15 +1169,15 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | background_refresh_metadata_interval_millis                  | 毫秒 | 600000（10 分钟）           | 接连两次 Iceberg 元数据缓存刷新之间的间隔。                     |
 | background_refresh_metadata_time_secs_since_last_access_sec  | 秒   | 86400（24 小时）            | Iceberg 元数据缓存刷新任务过期时间。对于已被访问过的 Iceberg Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Iceberg Catalog，StarRocks 不会刷新其元数据缓存。 |
 
-## 附录：自适应元数据检索方案
+## 附录：元数据周期性后台刷新方案
 
-自适应元数据检索方案是 StarRocks 用于加速检索 Iceberg Catalog 中元数据的默认策略。
+元数据周期性后台刷新方案是 StarRocks 用于加速检索 Iceberg Catalog 中元数据的策略。
 
 自 v3.3.3 起，StarRocks 优化了 Iceberg 元数据的缓存机制，针对不同元数据使用场景，分别设定了不同检索方案。
 
 - **针对大体量元数据的分布式方案**
 
-  为了有效处理大体量元数据，StarRocks 通过多 BE/CN 节点实现分布式元数据检索方案。该方案利用现代查询引擎的并行计算能力，可以将过滤、读取和解压 Manifest 文件等任务分布在多个节点上。通过并行处理这些 Manifest 文件，可以显著减少元数据检索所需的时间，从而加快作业计划的速度。该方案对涉及大量 Manifest 文件的大型查询特别有利，因为可以消除单点瓶颈，提高整体查询执行效率。
+  为了有效处理大体量元数据，StarRocks 通过多 BE/CN 节点实现分布式元数据检索方案。该方案利用现代查询引擎的并行计算能力，可以将读取、解压和过滤 Manifest 文件等任务分布在多个节点上。通过并行处理这些 Manifest 文件，可以显著减少元数据检索所需的时间，从而加快作业计划的速度。该方案对涉及大量 Manifest 文件的大型查询特别有利，因为可以消除单点瓶颈，提高整体查询执行效率。
 
 - **针对小体量元数据的本地方案**
 
