@@ -37,6 +37,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
+#include "http/stream_load_http_executor.h"
 #include "http/utils.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
@@ -84,7 +85,12 @@ static TFileFormatType::type parse_stream_load_format(const std::string& format_
     return TFileFormatType::FORMAT_UNKNOWN;
 }
 
-TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) {
+    this(exec_env, nullptr);
+}
+
+TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env, StreamLoadHttpExecutor* stream_load_http_executor)
+        : _exec_env(exec_env), _stream_load_http_executor(stream_load_http_executor) {}
 
 TransactionManagerAction::~TransactionManagerAction() = default;
 
@@ -117,10 +123,13 @@ void TransactionManagerAction::handle(HttpRequest* req) {
         return _send_error_reply(req, Status::InvalidArgument(fmt::format("empty label")));
     }
 
+    if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
+        _handle_prepare_and_commit(req);
+        return;
+    }
+
     if (boost::iequals(txn_op, TXN_BEGIN)) {
         st = _exec_env->transaction_mgr()->begin_transaction(req, &resp);
-    } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
-        st = _exec_env->transaction_mgr()->commit_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_ROLLBACK)) {
         st = _exec_env->transaction_mgr()->rollback_transaction(req, &resp);
     } else {
@@ -129,6 +138,35 @@ void TransactionManagerAction::handle(HttpRequest* req) {
     }
 
     _send_reply(req, resp);
+}
+
+void TransactionManagerAction::_handle_prepare_and_commit(HttpRequest* req) {
+    if (config::be_http_enable_pthread && config::enable_stream_load_async_handle && _stream_load_http_executor) {
+        Status status = _stream_load_http_executor->thread_pool()->submit_func([this, req] {
+            std::string resp;
+            Status st = _exec_env->transaction_mgr()->commit_transaction(req, &resp);
+            _send_reply(req, resp);
+        });
+        if (status.ok()) {
+            if (config::enable_stream_load_verbose_log) {
+                LOG(INFO) << "Submit transaction stream load to handle asynchronously"
+                          << ", op: " << req->param(HTTP_TXN_OP_KEY) << ", label: " << req->param(HTTP_LABEL_KEY);
+            }
+            return;
+        }
+
+        std::string label = req->header(HTTP_LABEL_KEY);
+        LOG(ERROR) << "Failed to handle transaction stream load asynchronously, label: " << label
+                   << ", status: " << status;
+        Status reply_st =
+                Status::InternalError("Failed to handle stream load asynchronously, error: " + status.to_string());
+        std::string resp = _exec_env->transaction_mgr()->_build_reply(label, req->param(HTTP_TXN_OP_KEY), reply_st);
+        _send_reply(req, resp);
+    } else {
+        std::string resp;
+        Status st = _exec_env->transaction_mgr()->commit_transaction(req, &resp);
+        _send_reply(req, resp);
+    }
 }
 
 TransactionStreamLoadAction::TransactionStreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {}

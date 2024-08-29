@@ -28,18 +28,22 @@ class ExecEnv;
 class Status;
 class StreamLoadContext;
 class TStreamLoadPutRequest;
+class StreamLoadHttpExecutor;
 
 class TransactionManagerAction : public HttpHandler {
 public:
     explicit TransactionManagerAction(ExecEnv* exec_env);
+    explicit TransactionManagerAction(ExecEnv* exec_env, StreamLoadHttpExecutor* stream_load_http_executor);
     ~TransactionManagerAction() override;
 
     void handle(HttpRequest* req) override;
 
 private:
+    void _handle_prepare_and_commit(HttpRequest* req);
     void _send_error_reply(HttpRequest* req, const Status& st);
 
     ExecEnv* _exec_env;
+    StreamLoadHttpExecutor* _stream_load_http_executor;
 };
 
 class TransactionStreamLoadAction : public HttpHandler {

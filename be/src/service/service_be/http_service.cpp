@@ -83,6 +83,7 @@ HttpServiceBE::~HttpServiceBE() {
 }
 
 void HttpServiceBE::stop() {
+    _stream_load_http_executor->stop();
     _ev_http_server->stop();
 }
 
@@ -110,7 +111,7 @@ Status HttpServiceBE::start() {
     // PrepreTransaction:   POST /api/transaction/prepare
     //
     // ListTransactions:    POST /api/transaction/list
-    auto* transaction_manager_action = new TransactionManagerAction(_env);
+    auto* transaction_manager_action = new TransactionManagerAction(_env, _stream_load_http_executor.get());
     _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);

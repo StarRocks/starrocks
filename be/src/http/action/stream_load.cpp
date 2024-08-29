@@ -161,17 +161,24 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
     if (config::be_http_enable_pthread && config::enable_stream_load_async_handle && _stream_load_http_executor) {
         Status status = _stream_load_http_executor->thread_pool()->submit_func([this, req, ctx] { _handle(req, ctx); });
-        if (!status.ok()) {
-            // submitting fail will fall back to sync mode
-            LOG(WARNING) << "Failed to handle stream load asynchronously, label: " << ctx->label
-                         << ", txn_id: " << ctx->txn_id
-                         << ", query_id: " << print_id(ctx->put_result.params.params.query_id)
-                         << ", status: " << status;
-        } else {
+        if (status.ok()) {
+            if (config::enable_stream_load_verbose_log) {
+                LOG(INFO) << "Submit stream load to handle asynchronously"
+                          << ", label: " << ctx->label << ", txn_id: " << ctx->txn_id;
+            }
             return;
         }
+
+        LOG(ERROR) << "Failed to handle stream load asynchronously, label: " << ctx->label
+                   << ", txn_id: " << ctx->txn_id << ", query_id: " << print_id(ctx->put_result.params.params.query_id)
+                   << ", status: " << status;
+
+        ctx->status =
+                Status::InternalError("Failed to handle stream load asynchronously, error: " + status.to_string());
+        _send_reply(req, ctx->to_json());
+    } else {
+        _handle(req, ctx);
     }
-    _handle(req, ctx);
 }
 
 void StreamLoadAction::_handle(HttpRequest* req, StreamLoadContext* ctx) {
