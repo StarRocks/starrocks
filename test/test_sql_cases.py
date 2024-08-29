@@ -131,7 +131,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.close_starrocks()
         # destroy connection pool
         while self.connection_pool and len(self.connection_pool._idle_cache) > 0:
-            print(f"Teardown: freeze conn pool, size: {len(self.connection_pool._idle_cache)}")
+            log.info(f"Teardown: freeze conn pool, size: {len(self.connection_pool._idle_cache)}")
             conn = self.connection_pool._idle_cache.pop()
             conn.close()
 
