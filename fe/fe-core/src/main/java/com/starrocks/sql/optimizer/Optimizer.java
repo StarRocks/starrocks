@@ -664,13 +664,14 @@ public class Optimizer {
         result = new PruneShuffleColumnRule().rewrite(result, rootTaskContext);
         result = new UseSortAggregateRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
+        // Put before ScalarOperatorsReuseRule
+        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
-        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
