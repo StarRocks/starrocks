@@ -9,11 +9,7 @@ keywords: ['beifen']
 
 备份指定数据库、表或分区的数据。当前 StarRocks 仅支持备份 OLAP 类型表。更多信息，请见 [备份和恢复](../../../administration/management/Backup_and_restore.md)。
 
-<<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/table_bucket_part_index/BACKUP.md
 数据备份为异步操作。您可以通过 [SHOW BACKUP](../backup_restore/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../backup_restore/CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](../backup_restore/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
-========
-数据备份为异步操作。您可以通过 [SHOW BACKUP](./SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](./CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
->>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/backup_restore/BACKUP.md
 
 > **注意**
 >
