@@ -46,14 +46,12 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.util.List;
+import java.util.Collection;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ShowDataAction extends RestBaseAction {
-    private static final Logger LOG = LogManager.getLogger(ShowDataAction.class);
 
     public ShowDataAction(ActionController controller) {
         super(controller);
@@ -64,44 +62,73 @@ public class ShowDataAction extends RestBaseAction {
     }
 
     public long getDataSizeOfDatabase(Database db) {
-        long totalSize = 0;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            // sort by table name
-            List<Table> tables = db.getTables();
-            for (Table table : tables) {
-                if (!table.isNativeTableOrMaterializedView()) {
-                    continue;
-                }
-                long tableSize = ((OlapTable) table).getDataSize();
-                totalSize += tableSize;
-            } // end for tables
+            return db.getTables().stream()
+                    .filter(Table::isNativeTableOrMaterializedView)
+                    .mapToLong(table -> ((OlapTable) table).getDataSize())
+                    .sum();
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
-        return totalSize;
     }
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String dbName = request.getSingleParameter("db");
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
-        long totalSize = 0;
+        String tableName = request.getSingleParameter("table");
+        long totalSize;
         if (dbName != null) {
             Database db = fullNameToDb.get(dbName);
             if (db == null) {
-                response.getContent().append("database " + dbName + " not found.");
+                response.getContent().append("database ").append(dbName).append(" not found.");
                 sendResult(request, response, HttpResponseStatus.NOT_FOUND);
                 return;
             }
-            totalSize = getDataSizeOfDatabase(db);
+            if (tableName == null) {
+                totalSize = getDataSizeOfDatabase(db);
+            } else {
+                Optional<Table> tableOptional = db.getTables().stream()
+                        .filter(t -> t.getName().equals(tableName))
+                        .findAny();
+                if (tableOptional.isEmpty()) {
+                    response.getContent().append("table ").append(tableName).append(" not found.");
+                    sendResult(request, response, HttpResponseStatus.NOT_FOUND);
+                    return;
+                } else {
+                    totalSize = getDataSizeOfTable(tableOptional.get());
+                }
+            }
         } else {
-            for (Database db : fullNameToDb.values()) {
-                totalSize += getDataSizeOfDatabase(db);
+            if (tableName == null) {
+                totalSize = getDataSizeOfDatabases(fullNameToDb.values());
+            } else {
+                totalSize = fullNameToDb.values()
+                        .parallelStream()
+                        .map(Database::getTables)
+                        .flatMap(Collection::stream)
+                        .filter(Table::isNativeTableOrMaterializedView)
+                        .filter(t -> t.getName().equals(tableName))
+                        .mapToLong(this::getDataSizeOfTable)
+                        .sum();
             }
         }
-        response.getContent().append(String.valueOf(totalSize));
+        response.getContent().append(totalSize);
         sendResult(request, response);
+    }
+
+    private long getDataSizeOfTable(Table table) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            return 0;
+        }
+        return ((OlapTable) table).getDataSize();
+    }
+
+    private long getDataSizeOfDatabases(Collection<Database> dbs) {
+        return dbs.parallelStream()
+                .mapToLong(this::getDataSizeOfDatabase)
+                .sum();
     }
 }
