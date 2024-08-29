@@ -274,9 +274,9 @@ TEST_F(MetaFileTest, test_dcg) {
         rowset_metadata.add_segments("bbb.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
-        std::vector<std::string> filenames;
-        filenames.push_back("aaa.cols");
-        filenames.push_back("bbb.cols");
+        std::vector<std::pair<std::string, std::string>> filenames;
+        filenames.emplace_back("aaa.cols", "");
+        filenames.emplace_back("bbb.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 4, 5});
         unique_column_id_list.push_back({6, 7, 8});
@@ -294,8 +294,8 @@ TEST_F(MetaFileTest, test_dcg) {
         rowset_metadata.add_segments("ccc.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
-        std::vector<std::string> filenames;
-        filenames.push_back("ccc.cols");
+        std::vector<std::pair<std::string, std::string>> filenames;
+        filenames.emplace_back("ccc.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({4, 7});
         builder.append_dcg(110, filenames, unique_column_id_list);
@@ -313,8 +313,8 @@ TEST_F(MetaFileTest, test_dcg) {
         rowset_metadata.add_segments("ddd.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
-        std::vector<std::string> filenames;
-        filenames.push_back("ddd.cols");
+        std::vector<std::pair<std::string, std::string>> filenames;
+        filenames.emplace_back("ddd.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 5});
         builder.append_dcg(110, filenames, unique_column_id_list);
