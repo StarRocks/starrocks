@@ -107,6 +107,7 @@ Status BlockSpillOutputDataStream::flush() {
 
     // release block if not exclusive
     RETURN_IF_ERROR(_block_manager->release_block(std::move(_cur_block)));
+    DCHECK(_cur_block == nullptr);
 
     return Status::OK();
 }
