@@ -12,11 +12,7 @@ Creates a repository in a remote storage system that is used to store data snaps
 >
 > Only users with the ADMIN privilege can create a repository.
 
-<<<<<<<< HEAD:docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_REPOSITORY.md
-For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP_REPOSITORY.md).
-========
 For detailed instructions on deleting a repository, see [DROP REPOSITORY](./DROP_REPOSITORY.md).
->>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/en/sql-reference/sql-statements/backup_restore/CREATE_REPOSITORY.md
 
 ## Syntax
 

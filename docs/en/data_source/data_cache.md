@@ -39,7 +39,7 @@ After Data Cache is enabled, StarRocks caches data blocks read from external sto
 SET enable_populate_block_cache = false;
 ```
 
-For more information about `enable_populate_block_cache`, see [System variables](../reference/System_variable.md).
+For more information about `enable_populate_block_cache`, see [System variables](../sql-reference/System_variable.md).
 
 ## Storage media of blocks
 

@@ -310,7 +310,7 @@ Before you can use Broker Load to load data from a local file system, finish the
    >
    > Deploy only a single broker and make sure that the broker version is v2.5 or later.
 
-2. Execute [ALTER SYSTEM](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md#broker) to add the broker you have deployed in the previous step to your StarRocks cluster, and define a new name for the broker. The following example adds a broker `172.26.199.40:8000` to the StarRocks cluster and defines the broker name as `sole_broker`:
+2. Execute [ALTER SYSTEM](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md#broker) to add the broker you have deployed in the previous step to your StarRocks cluster, and define a new name for the broker. The following example adds a broker `172.26.199.40:8000` to the StarRocks cluster and defines the broker name as `sole_broker`:
 
    ```SQL
    ALTER SYSTEM ADD BROKER sole_broker "172.26.199.40:8000";
