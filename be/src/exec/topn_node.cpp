@@ -372,8 +372,9 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     bool is_partition_skewed =
             _tnode.sort_node.__isset.analytic_partition_skewed && _tnode.sort_node.analytic_partition_skewed;
     bool need_merge = _analytic_partition_exprs.empty() || is_partition_skewed;
-    bool enable_parallel_merge =
-            _tnode.sort_node.__isset.enable_parallel_merge && _tnode.sort_node.enable_parallel_merge;
+    bool enable_parallel_merge = _tnode.sort_node.__isset.enable_parallel_merge &&
+                                 _tnode.sort_node.enable_parallel_merge &&
+                                 !_sort_exec_exprs.lhs_ordering_expr_ctxs().empty();
 
     OpFactories operators_source_with_sort;
 
