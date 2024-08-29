@@ -126,7 +126,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         Preconditions.checkState(!idToDatabase.containsKey(db.getId()));
 
         // db should be empty. all tables are recycled before
-        Preconditions.checkState(db.getTables().isEmpty());
+        Preconditions.checkState(GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).isEmpty());
 
         // erase db with same name
         eraseDatabaseWithSameName(db.getFullName());
@@ -832,7 +832,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // we need to get olap table to get schema hash info
             // first find it in globalStateMgr. if not found, it should be in recycle bin
             OlapTable olapTable = null;
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 // just log. db should be in recycle bin
                 if (!idToDatabase.containsKey(dbId)) {
@@ -842,7 +842,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     continue;
                 }
             } else {
-                olapTable = (OlapTable) db.getTable(tableId);
+                olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             }
 
             if (olapTable == null) {

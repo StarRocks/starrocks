@@ -827,13 +827,13 @@ public final class MetricRepo {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (null == db) {
                 continue;
             }
 
             // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
-            for (Table table : db.getTables()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 long tableId = table.getId();
                 String tableName = table.getName();
 
@@ -875,7 +875,7 @@ public final class MetricRepo {
                 "database_num", MetricUnit.OPERATIONS, "count of database");
         int dbNum = 0;
         for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (null == db) {
                 continue;
             }

@@ -30,7 +30,7 @@ public class GroupingSetsTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         Config.alter_scheduler_interval_millisecond = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, NUM_TABLE0_ROWS);
         FeConstants.runningUnitTest = true;
     }

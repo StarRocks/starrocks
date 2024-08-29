@@ -152,7 +152,8 @@ public class RestoreJobTest {
     }
 
     public void testResetPartitionForRestore() {
-        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
+        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), CatalogMocker.TEST_TBL4_ID);
 
         OlapTable localTbl = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
                     expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
@@ -169,7 +170,7 @@ public class RestoreJobTest {
     public void testRunBackupMultiSubPartitionTable() {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -250,7 +251,8 @@ public class RestoreJobTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
+        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), CatalogMocker.TEST_TBL4_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL4_ID;
         tblInfo.name = CatalogMocker.TEST_TBL4_NAME;
@@ -344,7 +346,7 @@ public class RestoreJobTest {
     public void testRunBackupRangeTable() {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -424,7 +426,8 @@ public class RestoreJobTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
+        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), CatalogMocker.TEST_TBL2_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL2_ID;
         tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
@@ -515,7 +518,8 @@ public class RestoreJobTest {
 
         Locker locker = new Locker();
 
-        OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
@@ -528,7 +532,8 @@ public class RestoreJobTest {
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
-        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
+        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), CatalogMocker.TEST_TBL4_ID);
 
         expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 

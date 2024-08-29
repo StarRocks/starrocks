@@ -149,7 +149,7 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 result = db;
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
@@ -324,7 +324,7 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 result = db;
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();

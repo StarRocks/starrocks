@@ -421,11 +421,11 @@ public class SystemInfoService implements GsonPostProcessable {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
         List<Long> dbs = globalStateMgr.getLocalMetastore().getDbIds();
 
-        dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
+        dbs.stream().map(dbId -> globalStateMgr.getLocalMetastore().getDb(dbId)).forEach(db -> {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                db.getTables().stream()
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
                         .filter(Table::isOlapTableOrMaterializedView)
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
@@ -953,7 +953,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (node instanceof Backend) {
             AtomicLong atomicLong;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);

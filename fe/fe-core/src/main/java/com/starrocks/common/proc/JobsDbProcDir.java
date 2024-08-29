@@ -76,7 +76,7 @@ public class JobsDbProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AnalysisException("Database[" + dbId + "] does not exist.");
         }
@@ -98,7 +98,7 @@ public class JobsDbProcDir implements ProcDirInterface {
         }
 
         for (String name : names) {
-            Database db = globalStateMgr.getDb(name);
+            Database db = globalStateMgr.getLocalMetastore().getDb(name);
             result.addRow(Lists.newArrayList(String.valueOf(db.getId()), name));
         }
 

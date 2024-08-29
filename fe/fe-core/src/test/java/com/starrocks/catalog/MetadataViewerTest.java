@@ -96,7 +96,7 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
             }

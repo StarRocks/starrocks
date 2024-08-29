@@ -112,7 +112,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 

@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -45,13 +46,14 @@ public class InformationSchemaMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) {
-        return infoSchemaDb.getTables().stream().map(Table::getName).collect(Collectors.toList());
+        return GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTables(infoSchemaDb.getId()).stream().map(Table::getName).collect(Collectors.toList());
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
         if (isInfoSchemaDb(dbName)) {
-            return infoSchemaDb.getTable(tblName);
+            return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(infoSchemaDb.getFullName(), tblName);
         }
         return null;
     }

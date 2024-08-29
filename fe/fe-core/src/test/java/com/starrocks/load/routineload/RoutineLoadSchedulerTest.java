@@ -104,10 +104,10 @@ public class RoutineLoadSchedulerTest {
                 routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
                 minTimes = 0;
                 result = routineLoadJobList;
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(1L);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), 1L);
                 minTimes = 0;
                 result = olapTable;
                 systemInfoService.getBackendIds(true);
@@ -172,7 +172,7 @@ public class RoutineLoadSchedulerTest {
                 globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 systemInfoService.getBackendIds(true);

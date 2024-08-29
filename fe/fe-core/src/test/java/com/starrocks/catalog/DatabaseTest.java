@@ -121,8 +121,9 @@ public class DatabaseTest {
         // duplicate
         Assert.assertFalse(db.registerTableUnlocked(table));
 
-        Assert.assertEquals(table, db.getTable(table.getId()));
-        Assert.assertEquals(table, db.getTable(table.getName()));
+        Assert.assertEquals(table, GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()));
+        Assert.assertEquals(table, GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), table.getName()));
 
         Assert.assertEquals(1, db.getTables().size());
         Assert.assertEquals(table, db.getTables().get(0));

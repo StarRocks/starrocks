@@ -137,7 +137,7 @@ public class RestoreJobPrimaryKeyTest {
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
-            new BlobStorage("broker", Maps.newHashMap()));
+                new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
 
@@ -151,7 +151,7 @@ public class RestoreJobPrimaryKeyTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -230,7 +230,8 @@ public class RestoreJobPrimaryKeyTest {
         jobInfo.name = label;
         jobInfo.success = true;
 
-        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL3_ID);
+        expectedRestoreTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), CatalogMocker.TEST_TBL3_ID);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = CatalogMocker.TEST_TBL3_ID;
         tblInfo.name = CatalogMocker.TEST_TBL3_NAME;
@@ -264,8 +265,8 @@ public class RestoreJobPrimaryKeyTest {
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+                    jobInfo, false, 3, 100000,
+                    globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
     }
 
     @Ignore
@@ -301,7 +302,7 @@ public class RestoreJobPrimaryKeyTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    task.getSignature(), taskStatus);
+                        task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
@@ -334,7 +335,7 @@ public class RestoreJobPrimaryKeyTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    agentTask.getSignature(), taskStatus);
+                        agentTask.getSignature(), taskStatus);
             request.setDownloaded_tablet_ids(downloadedTabletIds);
             Assert.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
         }
@@ -366,7 +367,7 @@ public class RestoreJobPrimaryKeyTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    agentTask.getSignature(), taskStatus);
+                        agentTask.getSignature(), taskStatus);
             job.finishDirMoveTask((DirMoveTask) agentTask, request);
         }
 
@@ -387,7 +388,8 @@ public class RestoreJobPrimaryKeyTest {
         sig2.update("name1".getBytes());
         System.out.println("sig2: " + Math.abs((int) sig2.getValue()));
 
-        OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));

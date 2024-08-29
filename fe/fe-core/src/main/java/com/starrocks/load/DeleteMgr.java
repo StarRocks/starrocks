@@ -176,12 +176,12 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
 
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException("Table does not exist. name: " + tableName);
         }
@@ -722,7 +722,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // show delete stmt
     public List<List<Comparable>> getDeleteInfosByDb(long dbId) {
         LinkedList<List<Comparable>> infos = new LinkedList<List<Comparable>>();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             return infos;
         }
@@ -816,11 +816,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void updateTableDeleteInfo(GlobalStateMgr globalStateMgr, long dbId, long tableId) {
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return;
         }
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return;
         }

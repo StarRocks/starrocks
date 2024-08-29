@@ -44,7 +44,7 @@ public class ForeignKeyConstraintTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
             }

@@ -90,8 +90,8 @@ public class LakePublishBatchTest {
 
     @Test
     public void testNormal() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
 
@@ -159,8 +159,8 @@ public class LakePublishBatchTest {
 
     @Test
     public void testPublishTransactionState() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
 
         for (Partition partition : table.getPartitions()) {
@@ -192,8 +192,8 @@ public class LakePublishBatchTest {
 
     @Test
     public void testPublishDbDroped() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
@@ -248,8 +248,8 @@ public class LakePublishBatchTest {
 
     @Test
     public void testPublishTableDropped() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
@@ -304,8 +304,8 @@ public class LakePublishBatchTest {
 
     @Test
     public void testTransformBatchToSingle() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
 

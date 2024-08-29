@@ -62,7 +62,8 @@ public class MVMetaVersionRepairer {
                 LOG.warn("mv db {} not found", mvId.getDbId());
                 continue;
             }
-            MaterializedView mv = (MaterializedView) mvDb.getTable(mvId.getId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(mvDb.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("mv {} not found", mvId.getId());
                 continue;

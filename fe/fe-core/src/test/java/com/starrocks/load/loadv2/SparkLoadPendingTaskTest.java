@@ -125,11 +125,11 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
                 sparkLoadJob.getHandle();
                 result = handle;
-                database.getTable(tableId);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
                 result = table;
                 table.getPartitions();
                 result = partitions;
@@ -181,7 +181,7 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = null;
             }
         };
@@ -210,9 +210,9 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
-                database.getTable(tableId);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
                 result = null;
             }
         };
@@ -286,9 +286,9 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
-                database.getTable(tableId);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
                 result = table;
                 table.getPartitions();
                 result = partitions;

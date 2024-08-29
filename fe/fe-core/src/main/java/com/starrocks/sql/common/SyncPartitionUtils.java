@@ -716,11 +716,11 @@ public class SyncPartitionUtils {
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
 
-        Database baseDb = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+        Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
         if (baseDb == null) {
             return;
         }
-        Table baseTable = baseDb.getTable(tableName.getTbl());
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(baseDb.getFullName(), tableName.getTbl());
         if (baseTable == null) {
             return;
         }

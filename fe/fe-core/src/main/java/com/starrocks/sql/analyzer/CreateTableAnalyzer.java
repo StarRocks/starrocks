@@ -78,7 +78,7 @@ public class CreateTableAnalyzer {
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
         final TableName tableNameObject = statement.getDbTbl();
-        MetaUtils.normalizationTableName(context, tableNameObject);
+        tableNameObject.normalization(context);
 
         final String catalogName = tableNameObject.getCatalog();
         MetaUtils.checkCatalogExistAndReport(catalogName);
@@ -86,11 +86,15 @@ public class CreateTableAnalyzer {
         final String tableName = tableNameObject.getTbl();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, tableNameObject.getDb());
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableNameObject.getDb());
+        }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, db, tableName);
         } else {
-            if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getFullName(), tableName) != null && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }

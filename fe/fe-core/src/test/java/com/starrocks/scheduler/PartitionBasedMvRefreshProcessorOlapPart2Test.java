@@ -108,13 +108,15 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             String mvName = (String) obj;
                             assertPlanWithoutPushdownBelowScan(mvName);
                         });
-                    };
+                    }
+                    ;
                 });
     }
 
     private void assertPlanWithoutPushdownBelowScan(String mvName) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
         Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         Map<String, String> testProperties = task.getProperties();
@@ -188,13 +190,15 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             String mvName = (String) obj;
                             assertPlanWithPushdownBelowScan(mvName);
                         });
-                    };
+                    }
+                    ;
                 });
     }
 
     private void assertPlanWithPushdownBelowScan(String mvName) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
         Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         Map<String, String> testProperties = task.getProperties();
@@ -268,7 +272,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 2, 10)");
                     Partition p2 = table.getPartition("p2");
-                    while (p2.getVisibleVersion()  != 3) {
+                    while (p2.getVisibleVersion() != 3) {
                         System.out.println("waiting for partition p2 to be visible:" + p2.getVisibleVersion());
                         Thread.sleep(1000);
                     }
@@ -318,7 +322,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                     "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                                     "as select k1, k2 from tbl6;");
                     String mvName = "mv_refresh_priority";
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
@@ -384,7 +388,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             "refresh deferred manual\n" +
                             "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                             "as select k1, k2 from tbl6;");
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(mv.getId())).getId();

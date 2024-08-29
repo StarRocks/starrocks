@@ -111,7 +111,7 @@ public class BrokerLoadJobTest {
                 labelName.getDbName();
                 minTimes = 0;
                 result = databaseName;
-                globalStateMgr.getDb(databaseName);
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -120,7 +120,7 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                database.getTable(tableName);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
                 minTimes = 0;
                 result = null;
             }
@@ -162,7 +162,7 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
-                globalStateMgr.getDb(databaseName);
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -171,7 +171,7 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                database.getTable(tableName);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -231,7 +231,7 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
-                globalStateMgr.getDb(databaseName);
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -240,7 +240,7 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                database.getTable(tableName);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -296,10 +296,10 @@ public class BrokerLoadJobTest {
                 fileGroupAggInfo.getAllTableIds();
                 minTimes = 0;
                 result = Sets.newHashSet(1L);
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(1L);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), 1L);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -567,7 +567,7 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
             }
@@ -719,7 +719,7 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 globalStateMgr.getCurrentState().getGlobalTransactionMgr();

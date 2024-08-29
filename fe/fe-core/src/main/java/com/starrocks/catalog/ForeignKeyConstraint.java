@@ -22,7 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -107,19 +107,37 @@ public class ForeignKeyConstraint {
 
     private Table getParentTable() {
         if (parentTableInfo.isInternalCatalog()) {
-            return MetaUtils.getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", parentTableInfo.getTableId());
+            }
+            return table;
         } else {
-            return MetaUtils.getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(),
-                    parentTableInfo.getTableName());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(), parentTableInfo.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", parentTableInfo.getTableName());
+            }
+            return table;
         }
     }
 
     private Table getChildTable() {
         if (childTableInfo.isInternalCatalog()) {
-            return MetaUtils.getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", childTableInfo.getTableId());
+            }
+            return table;
         } else {
-            return MetaUtils.getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(),
-                    childTableInfo.getTableName());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(), childTableInfo.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", childTableInfo.getTableName());
+            }
+            return table;
         }
     }
 
@@ -221,12 +239,12 @@ public class ForeignKeyConstraint {
                     "BaseTableInfo table %s should be tableId for internal catalog", table);
             long dbId = Long.parseLong(db);
             long tableId = Long.parseLong(table);
-            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (database == null) {
                 throw new IllegalArgumentException(String.format("BaseInfo's db %s should not be null in the foreign key " +
                         "constraint, please drop foreign key constraints and retry", dbId));
             }
-            Table baseTable = database.getTable(tableId);
+            Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
             if (baseTable == null) {
                 throw new IllegalArgumentException(String.format("BaseInfo' base table %s should not be null in the foreign kee" +
                                 " constraint, please drop foreign key constraints and retry",

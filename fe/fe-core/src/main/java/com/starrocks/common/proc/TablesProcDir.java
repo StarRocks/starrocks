@@ -52,6 +52,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -95,9 +96,9 @@ public class TablesProcDir implements ProcDirInterface {
         locker.lockDatabase(db, LockType.READ);
         try {
             try {
-                table = db.getTable(Long.parseLong(tableIdOrName));
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
             } catch (NumberFormatException e) {
-                table = db.getTable(tableIdOrName);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableIdOrName);
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
@@ -119,7 +120,7 @@ public class TablesProcDir implements ProcDirInterface {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            for (Table table : db.getTables()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 List<Comparable> tableInfo = new ArrayList<Comparable>();
                 TableType tableType = table.getType();
                 tableInfo.add(table.getId());

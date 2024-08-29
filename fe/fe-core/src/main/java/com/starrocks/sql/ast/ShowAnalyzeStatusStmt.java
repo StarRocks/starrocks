@@ -25,9 +25,9 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -74,8 +74,11 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         Table table;
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            table = MetaUtils.getTable(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(),
-                    analyzeStatus.getTableName());
+            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                    analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
+            }
             Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
         } catch (AccessDeniedException | SemanticException e) {

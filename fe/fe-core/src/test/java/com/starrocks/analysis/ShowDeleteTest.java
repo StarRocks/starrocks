@@ -45,7 +45,7 @@ public class ShowDeleteTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                db.getTable(anyString);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
                 minTimes = 0;
             }
         };
@@ -54,11 +54,11 @@ public class ShowDeleteTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb("testCluster:testDb");
+                globalStateMgr.getLocalMetastore().getDb("testCluster:testDb");
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb("testCluster:emptyDb");
+                globalStateMgr.getLocalMetastore().getDb("testCluster:emptyDb");
                 minTimes = 0;
                 result = null;
 

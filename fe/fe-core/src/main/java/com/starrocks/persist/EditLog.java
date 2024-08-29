@@ -228,7 +228,7 @@ public class EditLog {
                 case OperationType.OP_DROP_TABLE:
                 case OperationType.OP_DROP_TABLE_V2: {
                     DropInfo info = (DropInfo) journal.getData();
-                    Database db = globalStateMgr.getDb(info.getDbId());
+                    Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
                     if (db == null) {
                         LOG.warn("failed to get db[{}]", info.getDbId());
                         break;

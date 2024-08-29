@@ -58,8 +58,8 @@ public class OlapTableSinkTest2 {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("db2");
-        OlapTable olapTable = (OlapTable) db.getTable("tbl1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
 
         List<Long> partitionIds = olapTable.getAllPartitionIds();
 

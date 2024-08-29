@@ -153,7 +153,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -192,13 +192,13 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public Set<String> getTableNamesForShow() {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             return Sets.newHashSet(String.valueOf(tableId));
         }
         // The database will not be locked in here.
         // The getTable is a thread-safe method called without read lock of database
-        Table table = database.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
         if (table == null) {
             return Sets.newHashSet(String.valueOf(tableId));
         }
@@ -207,11 +207,11 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        Table table = database.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
         if (table == null) {
             if (noThrow) {
                 return Sets.newHashSet();
@@ -224,12 +224,12 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public boolean hasTxn() {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             return true;
         }
 
-        Table table = database.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
         if (table == null) {
             return true;
         }

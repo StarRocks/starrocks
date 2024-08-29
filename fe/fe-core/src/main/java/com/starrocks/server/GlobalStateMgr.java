@@ -248,7 +248,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -2044,26 +2043,6 @@ public class GlobalStateMgr {
         };
     }
 
-    public Database getDb(String name) {
-        return localMetastore.getDb(name);
-    }
-
-    public Optional<Table> mayGetTable(long dbId, long tableId) {
-        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
-    }
-
-    public Optional<Database> mayGetDb(String name) {
-        return Optional.ofNullable(localMetastore.getDb(name));
-    }
-
-    public Optional<Database> mayGetDb(long dbId) {
-        return Optional.ofNullable(localMetastore.getDb(dbId));
-    }
-
-    public Database getDb(long dbId) {
-        return localMetastore.getDb(dbId);
-    }
-
     public EditLog getEditLog() {
         return editLog;
     }
@@ -2086,11 +2065,11 @@ public class GlobalStateMgr {
     }
 
     public SchemaChangeHandler getSchemaChangeHandler() {
-        return (SchemaChangeHandler) this.alterJobMgr.getSchemaChangeHandler();
+        return this.alterJobMgr.getSchemaChangeHandler();
     }
 
     public MaterializedViewHandler getRollupHandler() {
-        return (MaterializedViewHandler) this.alterJobMgr.getMaterializedViewHandler();
+        return this.alterJobMgr.getMaterializedViewHandler();
     }
 
     public BackupHandler getBackupHandler() {
@@ -2452,7 +2431,7 @@ public class GlobalStateMgr {
         try {
             // sort all dbs
             for (long dbId : localMetastore.getDbIds()) {
-                Database db = getDb(dbId);
+                Database db = localMetastore.getDb(dbId);
                 Preconditions.checkNotNull(db);
                 lockedDbMap.put(dbId, db);
             }
