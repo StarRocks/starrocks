@@ -59,6 +59,7 @@ message DeltaColumnGroupVerPB {
     repeated string column_files = 2;
     // To do conflict check with compaction task
     repeated int64 versions = 3;
+    repeated bytes encryption_metas = 4;
 }
 
 message DeltaColumnGroupMetadataPB {
@@ -84,6 +85,7 @@ message DelfileWithRowsetId {
     //      there are <DELETE, DELETE> in a transaction, so the `op_offset` of this DELETE is 0.
     //      And rssid of them will be rowset_id + [0, 0].
     optional uint32 op_offset = 3;
+    optional bytes encryption_meta = 4;
 }
 
 message RowsetMetadataPB {
