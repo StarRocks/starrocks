@@ -1763,3 +1763,19 @@ class StarrocksSQLApiLib(object):
             timeout -= 10
         else:
             tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
+    
+    def print_hit_materialized_view(self, query, *expects) -> bool:
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return False
+        plan = str(res["result"])
+        for expect in expects:
+            if plan.find(expect) > 0:
+                return True
+        return False
