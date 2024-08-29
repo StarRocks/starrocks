@@ -43,7 +43,7 @@ WITH BROKER
 
 每个导入作业都对应一个在该数据库内唯一的标签。通过标签，可以查看对应导入作业的执行情况，并防止导入相同的数据。导入作业的状态为 **FINISHED** 时，其标签不可再复用给其他导入作业。导入作业的状态为 **CANCELLED** 时，其标签可以复用给其他导入作业，但通常都是用来重试同一个导入作业（即使用同一个标签导入相同的数据）以实现数据“精确一次 (Exactly-Once)”语义。
 
-有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。
+有关标签的命名规范，请参见[系统限制](../../../sql-reference/System_limit.md)。
 
 ### data_desc
 
@@ -209,7 +209,7 @@ INTO TABLE <table_name>
 >
 > 自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。
 >
-> 您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../../../deployment/deploy_broker.md)完成 Broker 部署。
+> 您可以通过 [SHOW BROKER](../cluster-management/nodes_processes/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../../../deployment/deploy_broker.md)完成 Broker 部署。
 
 ### StorageCredentialParams
 
@@ -264,7 +264,7 @@ StarRocks 访问存储系统的认证配置。
     > **说明**
     >
     > - **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker 时，每个 Broker 节点均需要修改如上信息，然后重启各 Broker 节点使配置生效。
-    > - 您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
+    > - 您可以通过 [SHOW BROKER](../cluster-management/nodes_processes/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
 
 - HA 配置
 

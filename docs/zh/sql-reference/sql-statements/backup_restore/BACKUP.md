@@ -9,11 +9,7 @@ keywords: ['beifen']
 
 备份指定数据库、表或分区的数据。当前 StarRocks 仅支持备份 OLAP 类型表。更多信息，请见 [备份和恢复](../../../administration/management/Backup_and_restore.md)。
 
-<<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/table_bucket_part_index/BACKUP.md
-数据备份为异步操作。您可以通过 [SHOW BACKUP](../data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../data-definition/CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](../data-manipulation/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
-========
 数据备份为异步操作。您可以通过 [SHOW BACKUP](./SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](./CANCEL_BACKUP.md) 语句取消备份作业。作业成功后，您可以通过 [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
->>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/backup_restore/BACKUP.md
 
 > **注意**
 >
@@ -61,11 +57,7 @@ TO <repository_name>
 | --------------- | ------------------------------------------------------------ |
 | db_name         | 需要备份的数据所属的数据库名。                                   |
 | snapshot_name   | 指定数据快照名。全局范围内，快照名不可重复。                      |
-<<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/table_bucket_part_index/BACKUP.md
-| repository_name | 仓库名。您可以通过 [CREATE REPOSITORY](../data-definition/CREATE_REPOSITORY.md) 创建仓库。 |
-========
 | repository_name | 仓库名。您可以通过 [CREATE REPOSITORY](./CREATE_REPOSITORY.md) 创建仓库。 |
->>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/backup_restore/BACKUP.md
 | ON              | 需要备份的表名。如不指定则备份整个数据库。                         |
 | PARTITION       | 需要备份的分区名。如不指定则备份对应表的所有分区。                   |
 | PROPERTIES      | 数据快照属性。现支持以下属性：`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。`timeout`：任务超时时间。单位：秒。默认：`86400`。 |

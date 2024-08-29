@@ -5,7 +5,7 @@ toc_max_heading_level: 5
 
 # Hive catalog
 
-Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
+Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力来实现数据转换和导入。
 
 StarRocks 从 2.3 版本开始支持 Hive Catalog。另外从 3.1 版本起，还支持访问 Hive Catalog 内的视图。
 

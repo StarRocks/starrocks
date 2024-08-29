@@ -309,7 +309,7 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
    >
    > 只能从单个 Broker 中导入数据，并且 Broker 版本必须为 2.5 及以后。
 
-2. 通过 [ALTER SYSTEM](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md#broker) 语句在 StarRocks 中添加上一步骤中部署好的 Broker（如 `172.26.199.40:8000`），并给 Broker 指定新名称（如 `sole_broker`）：
+2. 通过 [ALTER SYSTEM](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md#broker) 语句在 StarRocks 中添加上一步骤中部署好的 Broker（如 `172.26.199.40:8000`），并给 Broker 指定新名称（如 `sole_broker`）：
 
    ```SQL
    ALTER SYSTEM ADD BROKER sole_broker "172.26.199.40:8000";
