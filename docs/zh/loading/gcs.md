@@ -8,7 +8,7 @@ keywords: ['Broker Load']
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks 支持通过 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 从 Google Cloud Storage（简称 GCS）导入数据。
+StarRocks 支持通过 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 从 Google Cloud Storage（简称 GCS）导入数据。
 
 作为一种异步的导入方式，Broker Load 负责建立与 GCS 的连接、拉取数据、并将数据存储到 StarRocks 中。
 

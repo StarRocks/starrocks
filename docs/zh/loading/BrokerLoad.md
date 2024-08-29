@@ -26,7 +26,7 @@ Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DE
 
 > **说明**
 >
-> 您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
+> 您可以通过 [SHOW BROKER](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据文件格式
 

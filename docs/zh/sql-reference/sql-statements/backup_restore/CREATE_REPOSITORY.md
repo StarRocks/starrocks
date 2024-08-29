@@ -14,7 +14,7 @@ keywords: ['beifen']
 > 只有拥有 System 级 REPOSITORY 权限的用户才可以创建仓库。
 
 <<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/table_bucket_part_index/CREATE_REPOSITORY.md
-删除仓库操作请参考 [DROP REPOSITORY](../data-definition/DROP_REPOSITORY.md) 章节。
+删除仓库操作请参考 [DROP REPOSITORY](../backup_restore/DROP_REPOSITORY.md) 章节。
 ========
 删除仓库操作请参考 [DROP REPOSITORY](./DROP_REPOSITORY.md) 章节。
 >>>>>>>> e06217c368 ([Doc] Ref docs (#50111)):docs/zh/sql-reference/sql-statements/backup_restore/CREATE_REPOSITORY.md
