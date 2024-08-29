@@ -44,6 +44,7 @@
 #include "agent/master_info.h"
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
+#include "heartbeat_monitor.h"
 #include "runtime/heartbeat_flags.h"
 #include "service/backend_options.h"
 #include "storage/storage_engine.h"
@@ -73,6 +74,8 @@ void HeartbeatServer::init_cluster_id_or_die() {
 }
 
 void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMasterInfo& master_info) {
+    // set debug flag
+    ExecEnv::GetInstance()->get_heartbeat_monitor()->set_received_heartbeat();
     //print heartbeat in every minute
     LOG_EVERY_N(INFO, 12) << "get heartbeat from FE. host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id

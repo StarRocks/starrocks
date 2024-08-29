@@ -19,6 +19,7 @@
 #include <sanitizer/lsan_interface.h>
 #endif
 
+#include "agent/heartbeat_monitor.h"
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "block_cache/block_cache.h"
@@ -289,6 +290,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         exit(1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start heartbeat server successfully";
+    // debug
+    ExecEnv::GetInstance()->get_heartbeat_monitor()->set_heartbeat_server_started();
 
     LOG(INFO) << process_name << " started successfully";
 

@@ -1442,4 +1442,8 @@ CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 
+// heartbeat monitor check interval
+CONF_mInt32(heartbeat_monitor_check_interval_seconds, "10");
+CONF_mBool(enable_print_stacktrace_when_heartbeat_stuck, "true");
+
 } // namespace starrocks::config

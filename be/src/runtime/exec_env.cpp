@@ -39,6 +39,7 @@
 #include <thread>
 
 #include "agent/agent_server.h"
+#include "agent/heartbeat_monitor.h"
 #include "agent/master_info.h"
 #include "block_cache/block_cache.h"
 #include "column/column_pool.h"
@@ -576,6 +577,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
     PythonEnvManager::getInstance().start_background_cleanup_thread();
 
+    _heartbeat_monitor = new HeartbeatMonitor();
     return Status::OK();
 }
 
@@ -732,6 +734,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     _dictionary_cache_pool.reset();
+    SAFE_DELETE(_heartbeat_monitor);
     _automatic_partition_pool.reset();
     _metrics = nullptr;
 }

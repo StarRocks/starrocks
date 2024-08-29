@@ -57,6 +57,7 @@ class DataStreamMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
 class FragmentMgr;
+class HeartbeatMonitor;
 class LoadPathMgr;
 class LoadStreamMgr;
 class StreamContextMgr;
@@ -337,6 +338,8 @@ public:
 
     void try_release_resource_before_core_dump();
 
+    HeartbeatMonitor* get_heartbeat_monitor() { return _heartbeat_monitor; }
+
 private:
     void _wait_for_fragments_finish();
 
@@ -405,6 +408,9 @@ private:
     query_cache::CacheManagerRawPtr _cache_mgr;
     BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+
+    std::unique_ptr<ProfileWriter> _profile_writer;
+    HeartbeatMonitor* _heartbeat_monitor = nullptr;
 };
 
 template <>
