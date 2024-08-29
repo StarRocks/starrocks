@@ -23,6 +23,7 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "pipeline_executors_manager.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/priority_thread_pool.hpp"
@@ -133,6 +134,7 @@ public:
     int64_t version() const { return _version; }
     const std::string& name() const { return _name; }
     size_t cpu_weight() const { return _cpu_weight; }
+    size_t dedicated_cpu_cores() const { return _dedicated_cpu_cores; }
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
@@ -195,6 +197,15 @@ public:
     void incr_cpu_runtime_ns(int64_t delta_ns) { _cpu_runtime_ns += delta_ns; }
     int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
 
+    void set_executors(PipelineExecutors* executors) { _executors = executors; }
+    void set_dedicated_executors(std::unique_ptr<PipelineExecutors> executors) {
+        _dedicated_executors = std::move(executors);
+        _executors = _dedicated_executors.get();
+    }
+
+    PipelineExecutors* dedicated_executors() const { return _dedicated_executors.get(); }
+    PipelineExecutors* executors() const { return _executors; }
+
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_MV_WG_ID = 1;
     static constexpr int64 DEFAULT_VERSION = 0;
@@ -217,6 +228,7 @@ private:
 
     // Specified limitations
     size_t _cpu_weight = 1;
+    size_t _dedicated_cpu_cores = 0;
     double _memory_limit = ABSENT_MEMORY_LIMIT;
     int64_t _memory_limit_bytes = -1;
     size_t _concurrency_limit = ABSENT_CONCURRENCY_LIMIT;
@@ -247,29 +259,45 @@ private:
     /// The total CPU runtime cost in nanos unit, including driver execution time, and the cpu execution time of
     /// other threads including Source and Sink threads.
     std::atomic<int64_t> _cpu_runtime_ns = 0;
+
+    std::unique_ptr<PipelineExecutors> _dedicated_executors;
+    PipelineExecutors* _executors = nullptr;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
 // pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
-    DECLARE_SINGLETON(WorkGroupManager);
-
 public:
+    explicit WorkGroupManager(PipelineExecutorsConfig executors_manager_conf);
+
+    ~WorkGroupManager();
+
+    Status start();
+
     // add a new workgroup to WorkGroupManger
     WorkGroupPtr add_workgroup(const WorkGroupPtr& wg);
     // return reserved beforehand default workgroup for query is not bound to any workgroup
     WorkGroupPtr get_default_workgroup();
     // return reserved beforehand default mv workgroup for MV query is not bound to any workgroup
     WorkGroupPtr get_default_mv_workgroup();
+
+    void close();
     // destruct workgroups
     void destroy();
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
+
     using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
     void for_each_workgroup(const WorkGroupConsumer& consumer) const;
 
     void update_metrics();
+
+    bool should_yield(const WorkGroup* wg) const;
+    PipelineExecutors* common_executors() const { return _executors_manager.common_executors(); }
+    void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
+    void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
+    void change_enable_resource_group_cpu_borrowing(bool val);
 
 private:
     using MutexType = std::shared_mutex;
@@ -286,7 +314,13 @@ private:
     WorkGroupPtr get_default_workgroup_unlocked();
 
 private:
+    friend class ExecutorsManager;
+
     mutable std::shared_mutex _mutex;
+    // Place it before _workgroups to ensure the common executors is destructed after all the dedicated executors for
+    // workgroups, since _executors_manager owns the common executors, and WorkGroup owns the dedicated executors.
+    ExecutorsManager _executors_manager;
+
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;

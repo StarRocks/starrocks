@@ -198,6 +198,7 @@ private:
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+    std::condition_variable _cv_for_borrowed_cpus;
     bool _is_closed = false;
 
     // Contains the workgroups which include the tasks ready to be run.
