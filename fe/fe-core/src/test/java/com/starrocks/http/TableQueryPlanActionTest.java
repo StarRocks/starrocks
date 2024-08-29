@@ -96,6 +96,45 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
+    public void testQueryPlanActionForTempTable() throws Exception {
+        super.setUpWithCatalog();
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"session_id\" :  \"" + testSessionId +
+                        "\" , \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TEMP_TABLE_NAME + " \" }");
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api/" + DB_NAME + "/" + TEMP_TABLE_NAME + PATH_URI)
+                .build();
+
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            JSONObject jsonObject = new JSONObject(respStr);
+            System.out.println(respStr);
+            Assert.assertEquals(200, jsonObject.getInt("status"));
+
+            JSONObject partitionsObject = jsonObject.getJSONObject("partitions");
+            Assert.assertNotNull(partitionsObject);
+            for (String tabletKey : partitionsObject.keySet()) {
+                JSONObject tabletObject = partitionsObject.getJSONObject(tabletKey);
+                Assert.assertNotNull(tabletObject.getJSONArray("routings"));
+                Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
+                Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
+                Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
+
+            }
+            String queryPlan = jsonObject.getString("opaqued_query_plan");
+            Assert.assertNotNull(queryPlan);
+            byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
+            TDeserializer deserializer = new TDeserializer();
+            TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+            deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
+            Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+            expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
+        }
+    }
+
+    @Test
     public void testNoSqlFailure() throws IOException {
         RequestBody body = RequestBody
                 .create(JSON, "{}");
@@ -139,9 +178,31 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
+    public void testMalformedSessionId() throws IOException {
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"session_id\" :  \"MALFORMED\" , " +
+                        "\"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TEMP_TABLE_NAME + " \" }");
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api/" + DB_NAME + "/" + TEMP_TABLE_NAME + PATH_URI)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(400, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertTrue(exception.startsWith("malformed session id"));
+        }
+    }
+
+    @Test
     public void testNotOlapTableFailure() throws IOException {
         RequestBody body =
-                RequestBody.create(JSON, "{ \"sql\" :  \" select k1,k2 from " + DB_NAME + ".es_table" + " \" }");
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1,k2 from " + DB_NAME + ".es_table \" }");
         Request request = new Request.Builder()
                 .post(body)
                 .addHeader("Authorization", rootAuth)
@@ -157,6 +218,28 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             Assert.assertNotNull(exception);
             Assert.assertTrue(
                     exception.startsWith("Only support OlapTable, CloudNativeTable and MaterializedView currently"));
+        }
+    }
+
+    @Test
+    public void testUnknownTableFailure() throws IOException {
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"session_id\" :  \"" + testSessionId +
+                        "\" , \"sql\" :  \" select k1,k2 from " + DB_NAME + ".unknown_table \" }");
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api/" + DB_NAME + "/unknown_table" + PATH_URI)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(404, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertEquals("Table [unknown_table] does not exists", exception);
         }
     }
 
