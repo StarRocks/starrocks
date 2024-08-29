@@ -52,6 +52,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -61,6 +62,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
@@ -567,16 +569,28 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         // load from table
-        String hiveDbTableName = "";
-        Map<String, String> hiveTableProperties = Maps.newHashMap();
+        String externalDbTableName = "";
+        EtlJobConfig.SourceType sourceType = null;
+        Map<String, String> externalTableProperties = Maps.newHashMap();
         if (fileGroup.isLoadFromTable()) {
             long srcTableId = fileGroup.getSrcTableId();
-            HiveTable srcHiveTable = (HiveTable) db.getTable(srcTableId);
-            if (srcHiveTable == null) {
+            Table currentTable = db.getTable(srcTableId);
+            if (currentTable == null) {
                 throw new LoadException("table does not exist. id: " + srcTableId);
             }
-            hiveDbTableName = srcHiveTable.getHiveDbTable();
-            hiveTableProperties.putAll(srcHiveTable.getProperties());
+            if (currentTable instanceof HiveTable) {
+                HiveTable srcHiveTable = (HiveTable) currentTable;
+                externalDbTableName = srcHiveTable.getHiveDbTable();
+                externalTableProperties.putAll(srcHiveTable.getProperties());
+                sourceType = SourceType.HIVE;
+            } else if (currentTable instanceof HudiTable) {
+                HudiTable srcHudiTable = (HudiTable) currentTable;
+                externalDbTableName = srcHudiTable.getHudiDbTable();
+                externalTableProperties.putAll(srcHudiTable.getHudiProperties());
+                sourceType = SourceType.HUDI;
+            } else {
+                throw new LoadException("can't support the source table type [" + currentTable.getType() + "]");
+            }
         }
 
         // check hll and bitmap func
@@ -595,7 +609,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
         EtlFileGroup etlFileGroup = null;
         if (fileGroup.isLoadFromTable()) {
-            etlFileGroup = new EtlFileGroup(SourceType.HIVE, fileFieldNames, hiveDbTableName, hiveTableProperties,
+            etlFileGroup = new EtlFileGroup(sourceType, fileFieldNames, externalDbTableName, externalTableProperties,
                     fileGroup.isNegative(), columnMappings, where, partitionIds);
         } else {
             etlFileGroup = new EtlFileGroup(SourceType.FILE, fileGroup.getFilePaths(), fileFieldNames,
