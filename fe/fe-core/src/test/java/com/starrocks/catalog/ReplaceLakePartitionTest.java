@@ -28,6 +28,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -173,7 +174,8 @@ public class ReplaceLakePartitionTest {
             }
         };
 
-        ExceptionChecker.expectThrowsNoException(() -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
+        ExceptionChecker.expectThrowsNoException(()
+                            -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
     }
 
     @Test
