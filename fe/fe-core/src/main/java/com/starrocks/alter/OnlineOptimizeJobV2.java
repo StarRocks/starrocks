@@ -349,6 +349,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                     || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
                 progress += 100 / rewriteTasks.size();
+                if (this.progress < progress) {
+                    this.progress = progress;
+                }
                 continue;
             }
 
