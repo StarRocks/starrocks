@@ -72,6 +72,7 @@
                     "type": "category",
                     "label": "Shared-data deployment",
                     "items": [
+                        "deployment/deploy_shared_data",
                         "deployment/shared_data/s3",
                         "deployment/shared_data/gcs",
                         "deployment/shared_data/azure",
