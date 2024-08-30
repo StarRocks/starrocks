@@ -104,7 +104,10 @@ public:
 protected:
     void SetUp() override {}
 
-    void TearDown() override {}
+    void TearDown() override {
+        config::json_flat_sparsity_factor = 0.9;
+        config::json_flat_null_factor = 0.3;
+    }
 
     std::vector<ColumnPtr> test_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
                                      const std::vector<LogicalType>& types, bool has_remain) {
@@ -306,6 +309,7 @@ TEST_F(JsonFlattenerTest, testSortHitNums) {
     {
         config::json_flat_sparsity_factor = 0.3;
         JsonPathDeriver jf;
+        jf.set_generate_filter(true);
         jf.derived({json_input});
 
         auto& result = jf.flat_paths();
@@ -313,11 +317,15 @@ TEST_F(JsonFlattenerTest, testSortHitNums) {
                                           "k13", "k15", "k6",  "k7",  "k8",  "k9",  "z16"};
         EXPECT_EQ(true, jf.has_remain_json());
         EXPECT_EQ(paths, result);
+        ASSERT_TRUE(nullptr != jf.remain_fitler());
+        EXPECT_FALSE(jf.remain_fitler()->test_bytes("b20", 3));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("k5", 2));
     }
 
     {
         config::json_flat_sparsity_factor = 0.4;
         JsonPathDeriver jf;
+        jf.set_generate_filter(true);
         jf.derived({json_input});
 
         auto& result = jf.flat_paths();
@@ -325,29 +333,79 @@ TEST_F(JsonFlattenerTest, testSortHitNums) {
                                           "k11", "k13", "k15", "k8",  "k9",  "z16"};
         EXPECT_EQ(true, jf.has_remain_json());
         EXPECT_EQ(paths, result);
+        ASSERT_TRUE(nullptr != jf.remain_fitler());
+        EXPECT_FALSE(jf.remain_fitler()->test_bytes("b20", 3));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("k5", 2));
     }
 
     {
         config::json_flat_sparsity_factor = 0.8;
         JsonPathDeriver jf;
+        jf.set_generate_filter(true);
         jf.derived({json_input});
 
         auto& result = jf.flat_paths();
         std::vector<std::string> paths = {"a19", "b20", "c18", "e17", "z16"};
         EXPECT_EQ(true, jf.has_remain_json());
         EXPECT_EQ(paths, result);
+        ASSERT_TRUE(nullptr != jf.remain_fitler());
+        EXPECT_FALSE(jf.remain_fitler()->test_bytes("b20", 3));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("k9", 2));
     }
 
     {
         config::json_flat_sparsity_factor = 0;
         JsonPathDeriver jf;
+        jf.set_generate_filter(true);
         jf.derived({json_input});
 
         auto& result = jf.flat_paths();
         std::vector<std::string> paths = {"a10", "a19", "b20", "c18", "e17", "g14", "h12", "k1", "k11", "k13",
                                           "k15", "k2",  "k3",  "k4",  "k5",  "k6",  "k7",  "k8", "k9",  "z16"};
+        EXPECT_EQ(false, jf.has_remain_json());
+        EXPECT_EQ(paths, result);
+        ASSERT_FALSE(nullptr != jf.remain_fitler());
+    }
+}
+
+TEST_F(JsonFlattenerTest, testRemainFilter) {
+    // clang-format off
+    std::vector<std::string> jsons = {
+    R"({"K1": 123, "K2": "some", "K3": {"f1": "valu1", "n2": 456},              "K4": [true, "abc", 789],     "K5": {"nf": {"s1": "text", "subfield2": 123, "subfield3": ["a", "b", "c"]}}})",
+    R"({"K1": 456, "K2": "anor", "K3": {"f1": "valu3", "n4": 789},              "K4": [false, "def", 101112], "K6": {"nf": {"s1": 789, "subfield2": "text", "subfield3": [1, 2, 3]}}})",
+    R"({"K1": 789, "K2": "yete", "K3": {"f1": 1011122, "n6": "nested_value6"},  "K4": [true, "xyz", 131415],  "K7": {"nf": {"s1": "text", "subfield2": ["x", "y", "z"], "subfield3": 456}}})",
+    R"({"K1": 101, "K2": "onee", "K3": {"f1": "valu7", "n8": ["a", "b", "c"]},  "K4": [false, "uvw", 789],    "K8": {"nf": {"s1": 101112, "subfield2": "text", "subfield3": 123}}})",
+    R"({"K1": 131, "K2": "fine", "K3": {"f1": 7892342, "n1": "nested_value10"}, "K4": [true, "pqr", 456],     "K9": {"nf": {"s1": ["p", "q", "r"], "subfield2": 789, "subfield3": "text"}}})",
+    };
+    // clang-format on
+
+    ColumnPtr input = JsonColumn::create();
+    JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    for (const auto& json : jsons) {
+        ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
+        json_input->append(&json_value);
+    }
+
+    {
+        config::json_flat_sparsity_factor = 0.3;
+        JsonPathDeriver jf;
+        jf.set_generate_filter(true);
+        jf.derived({json_input});
+
+        auto& result = jf.flat_paths();
+        std::vector<std::string> paths = {"K1", "K2", "K3.f1", "K4"};
         EXPECT_EQ(true, jf.has_remain_json());
         EXPECT_EQ(paths, result);
+        ASSERT_TRUE(nullptr != jf.remain_fitler());
+        for (const auto& pp : paths) {
+            EXPECT_FALSE(jf.remain_fitler()->test_bytes(pp.data(), pp.size()));
+        }
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("K5", 2));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("n2", 2));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("K3", 2));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("K9", 2));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("K6", 2));
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes("subfield2", 9));
     }
 }
 

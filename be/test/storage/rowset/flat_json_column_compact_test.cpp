@@ -858,8 +858,8 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson) {
     writer_opts.need_flat = true;
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
-    EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(4, _meta->children_columns_size());
+    EXPECT_FALSE(_meta->json_meta().has_remain());
+    EXPECT_EQ(3, _meta->children_columns_size());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());

@@ -35,6 +35,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
@@ -42,6 +43,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
+#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/json.h"
@@ -199,6 +201,23 @@ inline uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
 
 } // namespace flat_json
 
+static const double FILTER_TEST_FPP[]{0.05, 0.1, 0.15, 0.2, 0.25, 0.3};
+
+double estimate_filter_fpp(uint64_t element_nums) {
+    uint32_t bytes[6];
+    int min_idx = 7;
+    double min = config::json_flat_remain_filter_max_bytes + 1;
+    for (int i = 0; i < 6; i++) {
+        bytes[i] = BloomFilter::estimate_bytes(element_nums, FILTER_TEST_FPP[i]);
+        double d = bytes[i] + FILTER_TEST_FPP[i];
+        if (d < min) {
+            min = d;
+            min_idx = i;
+        }
+    }
+    return min_idx < 6 ? FILTER_TEST_FPP[min_idx] : -1;
+}
+
 std::pair<std::string_view, std::string_view> JsonFlatPath::_split_path(const std::string_view& path) {
     size_t pos = 0;
     if (path.starts_with("\"")) {
@@ -354,7 +373,7 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
             _derived_maps[leaf].hits += reader->num_rows();
         }
     }
-    _json_sparsity_factory = 1; // only extract common schema
+    _min_json_sparsity_factory = 1; // only extract common schema
     _finalize();
 }
 
@@ -442,6 +461,8 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         }
         auto child = root->children[k].get();
         if (v.isObject()) {
+            child->remain = v.isEmptyObject();
+            _has_remain |= v.isEmptyObject();
             _visit_json_paths(v, child, mark_row);
         } else {
             auto desc = &_derived_maps[child];
@@ -472,6 +493,7 @@ void JsonPathDeriver::_finalize() {
     std::vector<std::pair<JsonFlatPath*, std::string>> hit_leaf;
 
     stack.emplace_back(_path_root.get(), "");
+    size_t limit = config::json_flat_column_max > 0 ? config::json_flat_column_max : std::numeric_limits<size_t>::max();
     while (!stack.empty()) {
         auto [node, path] = stack.back();
         stack.pop_back();
@@ -480,19 +502,20 @@ void JsonPathDeriver::_finalize() {
             // leaf node
             // check sparsity, same key may appear many times in json, so we need avoid duplicate compute hits
             auto desc = _derived_maps[node];
-            if (desc.multi_times <= 0 && desc.hits >= _total_rows * _json_sparsity_factory) {
+            if (desc.multi_times <= 0 && desc.hits >= _total_rows * _min_json_sparsity_factory) {
                 hit_leaf.emplace_back(node, path);
                 node->type = flat_json::JSON_BITS_TO_LOGICAL_TYPE.at(desc.type);
-                node->remain = false; // later update
+                node->remain = false;                // later update
+                limit += (desc.hits == _total_rows); // if all rows hit, must extract
             } else {
                 node->remain = true;
             }
-            _has_remain |= (desc.multi_times > 0 || desc.hits != _total_rows);
+            _has_remain |= node->remain;
             VLOG(8) << "flat json[" << path << "], hit[" << desc.hits << "], row[" << _total_rows << "]";
         } else {
             update_stack.push_back(node);
             for (auto& [key, child] : node->children) {
-                if (key.size() > 0) {
+                if (!key.empty()) {
                     // ignore empty key, it's invalid path in SQL
                     stack.emplace_back(child.get(), path + "." + std::string(key));
                 } else {
@@ -504,7 +527,6 @@ void JsonPathDeriver::_finalize() {
     }
 
     // sort by name, just for stable order
-    size_t limit = config::json_flat_column_max > 0 ? config::json_flat_column_max : std::numeric_limits<size_t>::max();
     std::sort(hit_leaf.begin(), hit_leaf.end(), [&](const auto& a, const auto& b) {
         auto desc_a = _derived_maps[a.first];
         auto desc_b = _derived_maps[b.first];
@@ -524,20 +546,48 @@ void JsonPathDeriver::_finalize() {
         _types.emplace_back(node->type);
     }
 
-    // remove & update remain json
-    while (!update_stack.empty()) {
-        auto* node = update_stack.back();
-        update_stack.pop_back();
+    if (_has_remain && _generate_filter) {
+        // remove & update remain json & generate remain-filter
+        std::set<std::string_view> remain_keys; // save remain keys and none leaf node
+        while (!update_stack.empty()) {
+            auto* node = update_stack.back();
+            update_stack.pop_back();
 
-        auto iter = node->children.begin();
-        while (iter != node->children.end()) {
-            node->remain |= iter->second->remain;
-            if (iter->second->remain && iter->second->children.empty()) {
-                iter = node->children.erase(iter);
-            } else {
-                ++iter;
+            auto iter = node->children.begin();
+            while (iter != node->children.end()) {
+                auto child = iter->second.get();
+                node->remain |= child->remain;
+
+                if (child->children.empty()) {
+                    if (child->remain) {
+                        remain_keys.insert(iter->first);
+                        iter = node->children.erase(iter);
+                    } else {
+                        ++iter;
+                    }
+                } else {
+                    if (child->remain) {
+                        remain_keys.insert(iter->first);
+                    }
+                    ++iter;
+                }
             }
         }
+
+        double fpp = estimate_filter_fpp(remain_keys.size());
+        if (fpp < 0) {
+            return;
+        }
+
+        std::unique_ptr<BloomFilter> bf;
+        Status st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
+        DCHECK(st.ok());
+        st = bf->init(remain_keys.size(), fpp, HASH_MURMUR3_X64_64);
+        DCHECK(st.ok());
+        for (const auto& key : remain_keys) {
+            bf->add_bytes(key.data(), key.size());
+        }
+        _remain_filter = std::move(bf);
     }
 }
 
@@ -580,7 +630,6 @@ JsonFlattener::JsonFlattener(const std::vector<std::string>& paths, const std::v
         _remain = down_cast<JsonColumn*>(_flat_columns.back().get());
     }
 }
-
 void JsonFlattener::flatten(const Column* json_column) {
     for (auto& col : _flat_columns) {
         DCHECK_EQ(col->size(), 0);
@@ -828,9 +877,9 @@ void JsonMerger::_merge_impl(size_t rows) {
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
                                          size_t index) {
-#ifndef NDEBUG
-    std::string json = remain->toJson();
-#endif
+    // #ifndef NDEBUG
+    //     std::string json = remain->toJson();
+    // #endif
     vpack::ObjectIterator it(*remain, false);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();

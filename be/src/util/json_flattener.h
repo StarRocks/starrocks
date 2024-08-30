@@ -34,6 +34,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "storage/rowset/block_split_bloom_filter.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/phmap/phmap.h"
@@ -42,6 +43,7 @@
 namespace starrocks {
 namespace vpack = arangodb::velocypack;
 class ColumnReader;
+class BloomFilter;
 
 #ifndef NDEBUG
 template <typename K, typename V>
@@ -113,6 +115,10 @@ public:
 
     bool has_remain_json() const { return _has_remain; }
 
+    void set_generate_filter(bool generate_filter) { _generate_filter = generate_filter; }
+
+    std::shared_ptr<BloomFilter>& remain_fitler() { return _remain_filter; }
+
     std::shared_ptr<JsonFlatPath>& flat_path_root() { return _path_root; }
 
     const std::vector<std::string>& flat_paths() const { return _paths; }
@@ -148,10 +154,13 @@ private:
     std::vector<std::string> _paths;
     std::vector<LogicalType> _types;
 
-    double _json_sparsity_factory = config::json_flat_sparsity_factor;
+    double _min_json_sparsity_factory = config::json_flat_sparsity_factor;
     size_t _total_rows;
     FlatJsonHashMap<JsonFlatPath*, JsonFlatDesc> _derived_maps;
     std::shared_ptr<JsonFlatPath> _path_root;
+
+    bool _generate_filter = false;
+    std::shared_ptr<BloomFilter> _remain_filter = nullptr;
 };
 
 // flattern JsonColumn to flat json A,B,C

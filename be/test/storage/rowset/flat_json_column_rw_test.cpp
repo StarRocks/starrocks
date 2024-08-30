@@ -54,7 +54,10 @@ public:
 protected:
     void SetUp() override { _meta.reset(new ColumnMetaPB()); }
 
-    void TearDown() override {}
+    void TearDown() override {
+        config::json_flat_sparsity_factor = 0.9;
+        config::json_flat_null_factor = 0.3;
+    }
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
         return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
