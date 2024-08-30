@@ -1890,6 +1890,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long statistic_collect_too_many_version_sleep = 600000; // 10min
+
+    @ConfField(mutable = true, comment = "Tolerate some percent of failure for a large table, it will not affect " +
+            "the job status but improve the robustness")
+    public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
+
     /**
      * Enable full statistics collection
      */
