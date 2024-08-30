@@ -121,7 +121,7 @@ public:
     const ChunkPtr& back() { return _chunks.back(); }
 
     bool is_full() const {
-        return _chunks.size() >= 4 || _tracker->consumption() > config::local_exchange_buffer_mem_limit_per_driver;
+        return _chunks.size() >= 4 || _tracker->consumption() > config::partition_hash_join_probe_limit_size;
     }
 
     size_t size() const { return _chunks.size(); }
@@ -465,8 +465,8 @@ private:
 
 AdaptivePartitionHashJoinBuilder::AdaptivePartitionHashJoinBuilder(HashJoiner& hash_joiner)
         : HashJoinBuilder(hash_joiner) {
-    const size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
-    const size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
+    static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
+    static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
     const auto& cache_sizes = CpuInfo::get_cache_sizes();
     _L2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
     _L3_cache_size = cache_sizes[CpuInfo::L3_CACHE];
@@ -524,6 +524,7 @@ size_t AdaptivePartitionHashJoinBuilder::_estimated_build_cost<CacheLevel::MEMOR
 }
 
 void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t build_row_size) {
+    build_row_size = std::max(build_row_size, 4UL);
     _fit_L2_cache_max_rows = _L2_cache_size / build_row_size;
     _fit_L3_cache_max_rows = _L3_cache_size / build_row_size;
 
@@ -574,7 +575,7 @@ void AdaptivePartitionHashJoinBuilder::create(const HashTableParam& param) {
 }
 
 void AdaptivePartitionHashJoinBuilder::close() {
-    for (auto& builder : _builders) {
+    for (const auto& builder : _builders) {
         builder->close();
     }
     _builders.clear();
@@ -770,7 +771,7 @@ void AdaptivePartitionHashJoinBuilder::clone_readable(HashJoinBuilder* builder) 
     other->_ready = _ready;
     for (size_t i = 0; i < _partition_num; ++i) {
         other->_builders.emplace_back(std::make_unique<SingleHashJoinBuilder>(_hash_joiner));
-        _builders[i].get()->clone_readable(other->_builders[i].get());
+        _builders[i]->clone_readable(other->_builders[i].get());
     }
 }
 
