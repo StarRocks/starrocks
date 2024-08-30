@@ -23,7 +23,10 @@
             },
             "items": [
                 "quick_start/shared-nothing",
-                "quick_start/shared-data"
+                "quick_start/shared-data",
+                "quick_start/deploy_with_docker",
+                "quick_start/Create_table",
+                "quick_start/Import_and_query"
             ]
         },
         {
