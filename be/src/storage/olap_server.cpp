@@ -58,6 +58,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "tablet_meta_manager.h"
+#include "util/dns_cache.h"
 #include "util/gc_helper.h"
 #include "util/thread.h"
 #include "util/time.h"
@@ -246,6 +247,9 @@ Status StorageEngine::start_bg_threads() {
     }
 
     start_schedule_apply_thread();
+
+    _dns_cache_refresh_thread = std::thread([this]() { _refresh_dns_cache_callback(nullptr); });
+    Thread::set_thread_name(_dns_cache_refresh_thread, "dns_cache_refresh_thread");
 
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
@@ -914,6 +918,25 @@ void* StorageEngine::_clear_expired_replication_snapshots_callback(void* arg) {
             LOG(WARNING) << "clear expired replication snapshots interval seconds config is illegal:" << interval
                          << "will be forced set to one hour";
             interval = 3600; // 1 hour
+        }
+        SLEEP_IN_BG_WORKER(interval);
+    }
+
+    return nullptr;
+}
+
+void* StorageEngine::_refresh_dns_cache_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        dns_cache()->refresh();
+        int32_t interval = config::dns_cache_refresh_interval_seconds;
+        if (interval <= 0) {
+            LOG(WARNING) << "dns cache refresh interval seconds config is illegal:" << interval
+                         << "will be forced set to one minute";
+            interval = 60; // 1 minute
         }
         SLEEP_IN_BG_WORKER(interval);
     }

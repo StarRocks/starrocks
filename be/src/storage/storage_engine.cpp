@@ -76,6 +76,7 @@
 #include "storage/update_manager.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
+#include "util/dns_cache.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -122,7 +123,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _compaction_manager(new CompactionManager()),
           _publish_version_manager(new PublishVersionManager()),
           _dictionary_cache_manager(new DictionaryCacheManager()),
-          _compaction_task_id(0) {
+          _compaction_task_id(0),
+          _dns_cache(new DNSCache()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -660,6 +662,7 @@ void StorageEngine::stop() {
     }
 
     JOIN_THREAD(_clear_expired_replcation_snapshots_thread)
+    JOIN_THREAD(_dns_cache_refresh_thread)
 #undef JOIN_THREADS
 #undef JOIN_THREAD
 

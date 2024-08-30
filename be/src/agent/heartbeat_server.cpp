@@ -51,6 +51,7 @@
 #include "service/backend_options.h"
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
+#include "util/dns_cache.h"
 #include "util/network_util.h"
 #include "util/thrift_server.h"
 
@@ -111,6 +112,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     } else {
         DCHECK_EQ(kUnchanged, *res);
         // nothing to do
+        LOG(INFO) << "Heartbeat reports master info unchanged";
     }
 
     if (master_info.__isset.disabled_disks) {
@@ -235,13 +237,14 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
             if (fe_saved_is_valid_ip) {
                 ip = master_info.backend_ip;
             } else {
-                Status status = hostname_to_ip(master_info.backend_ip, ip, BackendOptions::is_bind_ipv6());
-                if (!status.ok()) {
+                auto status_or = StorageEngine::instance()->dns_cache()->get(master_info.backend_ip);
+                if (!status_or.ok()) {
                     LOG(WARNING) << "Can not get ip from fqdn, fqdn is: " << master_info.backend_ip
                                  << ", binding ipv6: " << BackendOptions::is_bind_ipv6()
-                                 << ", status: " << status.to_string();
-                    return status;
+                                 << ", status: " << status_or.status();
+                    return status_or.status();
                 }
+                ip = status_or.value();
                 LOG(INFO) << "resolved from fqdn: " << master_info.backend_ip << " to ip: " << ip;
             }
 

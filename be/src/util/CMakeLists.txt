@@ -40,6 +40,7 @@ set(UTIL_FILES
   debug_util.cpp
   disk_info.cpp
   download_util.cpp
+  dns_cache.cpp
   errno.cpp
   hash_util.hpp
   json_util.cpp
