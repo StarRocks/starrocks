@@ -19,8 +19,10 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.proc.ReplicationsProcNode;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -165,6 +167,21 @@ public class ReplicationMgrTest {
         Assert.assertEquals(partition.getCommittedDataVersion(), srcPartition.getDataVersion());
 
         replicationMgr.replayReplicationJob(job);
+
+        Assert.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assert.assertFalse(replicationMgr.getCommittedJobs().isEmpty());
+
+        int old = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = -1;
+        Assert.assertTrue(job.isExpired());
+
+        replicationMgr.runAfterCatalogReady();
+        Assert.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
+
+        replicationMgr.replayReplicationJob(job);
+        Assert.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
+
+        Config.history_job_keep_max_second = old;
     }
 
     @Test
@@ -177,8 +194,8 @@ public class ReplicationMgrTest {
         replicationMgr.runAfterCatalogReady();
         Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
 
-        Assert.assertFalse(replicationMgr.hasRunningJobs());
-        Assert.assertTrue(replicationMgr.hasFailedJobs());
+        Assert.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assert.assertFalse(replicationMgr.getAbortedJobs().isEmpty());
 
         replicationMgr.clearFinishedJobs();
         replicationMgr.replayReplicationJob(null);
@@ -196,6 +213,21 @@ public class ReplicationMgrTest {
 
         replicationMgr.runAfterCatalogReady();
         Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+
+        Assert.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assert.assertFalse(replicationMgr.getAbortedJobs().isEmpty());
+
+        int old = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = -1;
+        Assert.assertTrue(job.isExpired());
+
+        replicationMgr.runAfterCatalogReady();
+        Assert.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
+
+        replicationMgr.replayReplicationJob(job);
+        Assert.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
+
+        Config.history_job_keep_max_second = old;
     }
 
     @Test
@@ -371,5 +403,15 @@ public class ReplicationMgrTest {
         tSnapshotInfo.setSnapshot_path(snapshotPath);
         tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
         return tSnapshotInfo;
+    }
+
+    @Test
+    public void testReplicationsProcNode() {
+        ReplicationsProcNode procNode = new ReplicationsProcNode();
+        try {
+            procNode.fetchResult();
+        } catch (Exception e) {
+            Assert.assertNull(e);
+        }
     }
 }
