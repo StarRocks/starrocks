@@ -1,0 +1,82 @@
+diff --git b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/hdfs/protocol/datatransfer/sasl/SaslDataTransferClient.java a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/hdfs/protocol/datatransfer/sasl/SaslDataTransferClient.java
+index 043439130d..58de4b8887 100644
+--- b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/hdfs/protocol/datatransfer/sasl/SaslDataTransferClient.java
++++ a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/hdfs/protocol/datatransfer/sasl/SaslDataTransferClient.java
+@@ -266,7 +266,7 @@ public class SaslDataTransferClient {
+           + "datanodeId = {}", addr, datanodeId);
+       return getEncryptedStreams(addr, underlyingOut, underlyingIn,
+           encryptionKey, accessToken, secretKey);
+-    } else if (!UserGroupInformation.isSecurityEnabled()) {
++    } else if (!UserGroupInformation.isSecurityEnabled(conf)) {
+       LOG.debug("SASL client skipping handshake in unsecured configuration for "
+           + "addr = {}, datanodeId = {}", addr, datanodeId);
+       return null;
+diff --git b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/Client.java a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/Client.java
+index 4ccb4254c7..6c8cc0c61d 100644
+--- b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/Client.java
++++ a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/Client.java
+@@ -451,7 +451,7 @@ public class Client implements AutoCloseable {
+       UserGroupInformation ticket = remoteId.getTicket();
+       // try SASL if security is enabled or if the ugi contains tokens.
+       // this causes a SIMPLE client with tokens to attempt SASL
+-      boolean trySasl = UserGroupInformation.isSecurityEnabled() ||
++      boolean trySasl = UserGroupInformation.isSecurityEnabled(remoteId.conf) ||
+                         (ticket != null && !ticket.getTokens().isEmpty());
+       this.authProtocol = trySasl ? AuthProtocol.SASL : AuthProtocol.NONE;
+       
+@@ -877,7 +877,7 @@ public class Client implements AutoCloseable {
+           LOG.trace("Disabling fallbackToSimpleAuth, target does not use SIMPLE authentication.");
+           fallbackToSimpleAuth.set(false);
+         }
+-      } else if (UserGroupInformation.isSecurityEnabled()) {
++      } else if (UserGroupInformation.isSecurityEnabled(remoteId.conf)) {
+         if (!fallbackAllowed) {
+           throw new AccessControlException("Server asks us to fall back to SIMPLE auth, but this "
+               + "client is configured to only allow secure connections.");
+diff --git b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/RPC.java a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/RPC.java
+index c7ca09c60b..78acfbd20c 100644
+--- b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/RPC.java
++++ a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/ipc/RPC.java
+@@ -579,7 +579,7 @@ public class RPC {
+   public static <T> ProtocolProxy<T> getProtocolProxy(Class<T> protocol,
+       long clientVersion, ConnectionId connId, Configuration conf,
+       SocketFactory factory, AlignmentContext alignmentContext) throws IOException {
+-    if (UserGroupInformation.isSecurityEnabled()) {
++    if (UserGroupInformation.isSecurityEnabled(conf)) {
+       SaslRpcServer.init(conf);
+     }
+     return getProtocolEngine(protocol, conf).getProxy(
+@@ -668,7 +668,7 @@ public class RPC {
+                                 RetryPolicy connectionRetryPolicy,
+                                 AtomicBoolean fallbackToSimpleAuth)
+        throws IOException {
+-    if (UserGroupInformation.isSecurityEnabled()) {
++    if (UserGroupInformation.isSecurityEnabled(conf)) {
+       SaslRpcServer.init(conf);
+     }
+     return getProtocolEngine(protocol, conf).getProxy(protocol, clientVersion,
+@@ -706,7 +706,7 @@ public class RPC {
+                                 AtomicBoolean fallbackToSimpleAuth,
+                                 AlignmentContext alignmentContext)
+        throws IOException {
+-    if (UserGroupInformation.isSecurityEnabled()) {
++    if (UserGroupInformation.isSecurityEnabled(conf)) {
+       SaslRpcServer.init(conf);
+     }
+     return getProtocolEngine(protocol, conf).getProxy(protocol, clientVersion,
+diff --git b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/security/UserGroupInformation.java a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/security/UserGroupInformation.java
+index 8a5a0ee234..5ee6474846 100644
+--- b/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/security/UserGroupInformation.java
++++ a/java-extensions/hadoop-ext/src/main/java/org/apache/hadoop/security/UserGroupInformation.java
+@@ -387,6 +387,11 @@ public class UserGroupInformation {
+   public static boolean isSecurityEnabled() {
+     return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
+   }
++
++  public static boolean isSecurityEnabled(Configuration conf) {
++    AuthenticationMethod method = SecurityUtil.getAuthenticationMethod(conf);
++    return !(method == AuthenticationMethod.SIMPLE);
++  }
+   
+   @InterfaceAudience.Private
+   @InterfaceStability.Evolving

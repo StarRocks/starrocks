@@ -59,27 +59,22 @@
     <build>
         <finalName>starrocks-hadoop-ext</finalName>
         <plugins>
-            <!-- Maven Shade Plugin -->
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.2.4</version>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.0.0</version>
                 <executions>
                     <execution>
-                        <phase>package</phase>
+                        <id>generate-sources</id>
+                        <phase>generate-sources</phase>
                         <goals>
-                            <goal>shade</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <artifactSet>
-                                <includes>
-                                    <include>net.bytebuddy:byte-buddy</include>
-                                </includes>
-                                <excludes>
-                                    <exclude>org.apache.hadoop:hadoop-common</exclude>
-                                    <exclude>org.apache.hadoop:hadoop-hdfs-client</exclude>
-                                </excludes>
-                            </artifactSet>
+                            <executable>${basedir}/scripts/generate-sources.sh</executable>
+                            <arguments>
+                                <argument>${hadoop.version}</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>

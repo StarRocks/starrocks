@@ -254,7 +254,7 @@
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
                     <includeTestSourceDirectory>true</includeTestSourceDirectory>
-                    <excludes>org/apache/hadoop/**</excludes>
+                    <excludes>**/org/apache/hadoop/**</excludes>
                 </configuration>
                 <executions>
                     <execution>

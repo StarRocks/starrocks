@@ -1,0 +1,5 @@
+src/main/java/org/apache/hadoop/hdfs/
+src/main/java/org/apache/hadoop/ipc/
+src/main/java/org/apache/hadoop/security/
+scripts/release-*
+scripts/src
