@@ -78,6 +78,10 @@ void ExecutorsManager::assign_cpuids_to_workgroup(WorkGroup* wg) {
 
 void ExecutorsManager::reclaim_cpuids_from_worgroup(WorkGroup* wg) {
     const auto& cpuids = get_cpuids_of_workgroup(wg);
+    if (cpuids.empty()) {
+        return;
+    }
+
     LOG(INFO) << "[WORKGROUP] reclaim cpuids from workgroup "
               << "[workgroup=" << wg->to_string() << "] "
               << "[cpuids=" << CpuUtil::to_string(cpuids) << "] ";
