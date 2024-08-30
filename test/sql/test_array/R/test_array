@@ -383,3 +383,21 @@ None
 [5,6,7,8]
 [2,3,4,5,6]
 -- !result
+CREATE TABLE IF NOT EXISTS flatten_one_layer_arr_test (COLA INT, COLB ARRAY<INT>) PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO flatten_one_layer_arr_test (COLA, COLB) VALUES (1, [1, 2, 3]);
+-- result:
+-- !result
+SELECT array_flatten(COLB) FROM flatten_one_layer_arr_test ORDER BY COLA;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 25. Detail message: The only one input of array_flatten should be an array of arrays, rather than array<int(11)>.')
+-- !result
+SELECT array_slice(array_flatten(COLB), 1, 2) FROM flatten_one_layer_arr_test ORDER BY COLA;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 19 to line 1, column 37. Detail message: The only one input of array_flatten should be an array of arrays, rather than array<int(11)>.')
+-- !result
+SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_one_layer_arr_test ORDER BY COLA;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 44. Detail message: The only one input of array_flatten should be an array of arrays, rather than array<int(11)>.')
+-- !result

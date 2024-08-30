@@ -180,3 +180,8 @@ INSERT INTO flatten_test (COLA, COLB) VALUES (1, [[1, 2], [1, 4]]), (2, NULL), (
 SELECT array_flatten(COLB) FROM flatten_test ORDER BY COLA;
 SELECT array_slice(array_flatten(COLB), 1, 2) FROM flatten_test ORDER BY COLA;
 SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_test ORDER BY COLA;
+CREATE TABLE IF NOT EXISTS flatten_one_layer_arr_test (COLA INT, COLB ARRAY<INT>) PROPERTIES ("replication_num"="1");
+INSERT INTO flatten_one_layer_arr_test (COLA, COLB) VALUES (1, [1, 2, 3]);
+SELECT array_flatten(COLB) FROM flatten_one_layer_arr_test ORDER BY COLA;
+SELECT array_slice(array_flatten(COLB), 1, 2) FROM flatten_one_layer_arr_test ORDER BY COLA;
+SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_one_layer_arr_test ORDER BY COLA;

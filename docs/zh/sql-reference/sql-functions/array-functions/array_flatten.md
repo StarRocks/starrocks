@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_flatten
@@ -16,7 +16,11 @@ array_flatten(param)
 
 ## 参数说明
 
-`param`：需要展平的嵌套数组，只支持嵌套数组，可以是多层嵌套数组。
+`param`：需要展平的嵌套数组，只支持嵌套数组，可以是多层嵌套数组，数组元素可以是StarRocks支持的所有数据类型。
+
+## 返回值说明
+
+返回值的数据类型为展平一层后的数组类型。
 
 ## 示例
 

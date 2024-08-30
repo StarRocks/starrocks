@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_flatten
@@ -16,7 +16,11 @@ array_flatten(param)
 
 ## Parameters
 
-`param`: a nested array that needs to be flattened. Only nested arrays are supported, and it can be a multi-level nested array.
+`param`: a nested array that needs to be flattened. Only nested arrays are supported, and it can be a multi-level nested array, the elements of the array can be any data type supported by StarRocks.
+
+## Return value
+
+The data type of the return value is an array type after flattening one layer.
 
 ## Examples
 

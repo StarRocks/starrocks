@@ -1740,6 +1740,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
         array_column = down_cast<ArrayColumn*>(src_column);
     }
 
+    DCHECK(array_column->elements_column()->is_array());
     auto [array_null, elements, offsets] = unpack_array_column(array_column->elements_column());
     ColumnPtr result_elements = elements->clone_empty();
     auto result_offsets = UInt32Column::create();
