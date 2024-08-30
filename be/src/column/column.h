@@ -24,6 +24,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 
 namespace starrocks {
@@ -162,6 +163,15 @@ public:
     virtual void append(const Column& src, size_t offset, size_t count) = 0;
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
+
+    Status append_and_check_mem_usage(const Column& src, size_t mem_limit) {
+        append(src, 0, src.size());
+        if (container_memory_usage() > mem_limit) {
+            return Status::InternalError(strings::Substitute(
+                    "MemUsage of single column exceed mem limit: column($0), limit($1)", src.get_name(), mem_limit));
+        }
+        return Status::OK();
+    }
 
     // replicate a column to align with an array's offset, used for captured columns in lambda functions
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)

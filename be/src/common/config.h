@@ -1286,5 +1286,6 @@ CONF_mBool(enable_core_file_size_optimization, "true");
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
+CONF_mInt64(single_column_mem_limit, "10000000000");
 
 } // namespace starrocks::config

@@ -777,7 +777,7 @@ public:
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
-    void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
+    Status append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
     // convert input column to spill schema order
     StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
 

@@ -538,7 +538,7 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
     return Status::OK();
 }
 
-void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns) {
+Status JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns) {
     Columns& columns = _table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
@@ -549,7 +549,7 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
             // upgrade to nullable column
             columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
         }
-        columns[i]->append(*column);
+        RETURN_IF_ERROR(columns[i]->append_and_check_mem_usage(*column, config::single_column_mem_limit));
     }
 
     for (size_t i = 0; i < _table_items->key_columns.size(); i++) {
@@ -562,7 +562,8 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
                 _table_items->key_columns[i] =
                         NullableColumn::create(_table_items->key_columns[i], NullColumn::create(row_count, 0));
             }
-            _table_items->key_columns[i]->append(*key_columns[i]);
+            RETURN_IF_ERROR(_table_items->key_columns[i]->append_and_check_mem_usage(*key_columns[i],
+                                                                                     config::single_column_mem_limit));
         }
     }
 
@@ -585,6 +586,8 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
     }
 
     _table_items->row_count += chunk->num_rows();
+
+    return Status::OK();
 }
 
 StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {

@@ -81,7 +81,7 @@ Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk)
     _hash_joiner.prepare_build_key_columns(&_key_columns, chunk);
     // copy chunk of right table
     SCOPED_TIMER(_hash_joiner.build_metrics().copy_right_table_chunk_timer);
-    TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.append_chunk(state, chunk, _key_columns)));
     return Status::OK();
 }
 
