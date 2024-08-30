@@ -939,8 +939,8 @@ void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
             auto time_point = std::chrono::steady_clock::now();
             while (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty() &&
                    _schedule_apply_tasks.top().first <= time_point) {
-                _schedule_apply_tasks.pop();
                 auto tablet_id = _schedule_apply_tasks.top().second;
+                _schedule_apply_tasks.pop();
                 auto tablet = _tablet_manager->get_tablet(tablet_id);
                 if (tablet == nullptr || tablet->updates() == nullptr) {
                     continue;
