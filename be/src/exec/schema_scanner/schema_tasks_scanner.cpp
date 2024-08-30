@@ -31,6 +31,7 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
         {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaTasksScanner::SchemaTasksScanner()
@@ -72,6 +73,7 @@ DatumArray SchemaTasksScanner::_build_row() {
             Slice(task.task_name),  create_time,           Slice(task.schedule),
             Slice(task.catalog),    Slice(task.warehouse), Slice(task.database),
             Slice(task.definition), expire_time,           Slice(task.properties),
+            Slice(task.creator)
     };
 }
 

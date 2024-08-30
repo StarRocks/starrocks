@@ -53,6 +53,7 @@ public class MaterializedViewsSystemTable {
                                 ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(1024))
                         .column("QUERY_REWRITE_STATUS", ScalarType.createVarcharType(64))
+                        .column("CREATOR", ScalarType.createVarchar(64))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 }
