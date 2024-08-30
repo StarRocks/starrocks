@@ -84,6 +84,8 @@
                         "id": "deployment/shared_data/shared_data"
                     },
                     "items": [
+                        "deployment/shared_data/hdfs",
+                        "deployment/shared_data/other",
                         "deployment/shared_data/s3",
                         "deployment/shared_data/gcs",
                         "deployment/shared_data/azure",
