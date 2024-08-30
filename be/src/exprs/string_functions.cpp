@@ -56,7 +56,7 @@ namespace starrocks {
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
-    if (UNLIKELY(col->capacity_limit_reached())) {                                   \
+    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                             \
         col->reset_column();                                                         \
         throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
