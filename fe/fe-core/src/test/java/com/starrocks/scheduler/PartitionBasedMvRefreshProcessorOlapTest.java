@@ -1940,8 +1940,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 starRocksAssert.refreshMV(String.format("REFRESH MATERIALIZED VIEW %s", mvName));
                                 String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
                                 Thread.sleep(new Random().nextInt(2000));
-                                Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
-                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
                                 long taskId = tm.getTask(mvTaskName).getId();
                                 while (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null) {
                                     Thread.sleep(100);
@@ -1951,6 +1949,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
                                 // specific db
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+                                Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
+                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
                                 Assert.assertEquals(1, taskNameJobStatusMap.size());
                                 List<TaskRunStatus> taskRunStatuses = taskNameJobStatusMap.get(mvTaskName);
                                 // task runs may be gc, skip to check if it's not expected
@@ -2109,13 +2109,15 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 // refresh materialized view(force)
                                 refreshMVRange(mvName, "2021-12-01", "2022-03-01", true);
 
+                                String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+                                long taskId = tm.getTask(mvTaskName).getId();
+                                while (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null) {
+                                    Thread.sleep(100);
+                                }
                                 // without db name
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
-
                                 // specific db
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
-
-                                String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
                                 Thread.sleep(new Random().nextInt(2000));
                                 Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
                                         tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
