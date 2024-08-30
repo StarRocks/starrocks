@@ -483,6 +483,15 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+<<<<<<< HEAD
+=======
+    if (this->query_ctx()->is_query_expired()) {
+        bool expected_has_log_cancelled = false;
+        if (_has_log_cancelled.compare_exchange_strong(expected_has_log_cancelled, true)) {
+            VLOG_ROW << "begin to cancel operators for " << to_readable_string();
+        }
+    }
+>>>>>>> 9126be988a ([Enhancement] Log cancel pipeline only once (#45103))
     for (auto& op : _operators) {
         _mark_operator_cancelled(op, runtime_state);
     }
