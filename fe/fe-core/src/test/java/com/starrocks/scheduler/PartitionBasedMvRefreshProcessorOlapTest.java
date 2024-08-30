@@ -76,7 +76,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.MV_ID;
+import static com.starrocks.scheduler.TaskRun.MV_ID;
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)

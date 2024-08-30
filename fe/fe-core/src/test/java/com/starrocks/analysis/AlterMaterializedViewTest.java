@@ -413,7 +413,7 @@ public class AlterMaterializedViewTest {
         }
 
         // foreground active
-        starRocksAssert.refreshMV("refresh materialized view " + mvName);
+        starRocksAssert.refreshMV("refresh materialized view " + mvName + " with sync mode");
         Assert.assertTrue(mv.isActive());
 
         // clear the grace period and active it again
