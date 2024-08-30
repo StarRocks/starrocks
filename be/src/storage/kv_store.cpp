@@ -346,7 +346,6 @@ Status KVStore::OptDeleteRange(ColumnFamilyIndex column_family_index, const std:
                          [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
                              if (key_cnt >= config::rocksdb_opt_delete_range_limit) {
                                  // fallback and use `DeleteRange` instead.
-                                 batch->Clear();
                                  RETURN_ERROR_IF_FALSE(batch->DeleteRange(handle, begin_key, end_key).ok());
                                  return false;
                              }
