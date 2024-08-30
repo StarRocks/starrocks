@@ -1420,7 +1420,7 @@ public class LeaderImpl {
                 LOG.info("failoverGroupHandshake as follower, forward it to master. failover_group_name: {}, master: {}",
                         request.getFailover_group_name(), addr.toString());
 
-                ThriftRPCRequestExecutor.call(
+                return ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         addr,
                         client -> client.failoverGroupHandshake(request));

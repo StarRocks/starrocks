@@ -6,6 +6,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -56,10 +57,12 @@ public class CreateReplicatedDatabaseJobTest {
                 database, true, true);
         dropJob.execute();
 
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getDb(database.getFullName()));
+
         CreateReplicatedDatabaseJob createJob = new CreateReplicatedDatabaseJob(failoverGroup, database,
                 null, true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getDb(database.getFullName()));
     }
 }

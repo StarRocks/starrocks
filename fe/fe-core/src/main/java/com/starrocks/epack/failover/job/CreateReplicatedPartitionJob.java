@@ -11,7 +11,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.util.Util;
@@ -82,26 +81,31 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
     }
 
     private static AddPartitionClause getAddPartitionClause(OlapTable table, Partition partition) {
-        PartitionDesc partitionDesc = getPartitionDesc(table, partition);
-        DistributionDesc distributionDesc = partition.getDistributionInfo().toDistributionDesc(table.getIdToColumn());
-        return new AddPartitionClause(partitionDesc, distributionDesc, null, false);
-    }
-
-    private static PartitionDesc getPartitionDesc(OlapTable table, Partition partition) {
-        PartitionInfo partitionInfo = table.getPartitionInfo();
-        switch (partitionInfo.getType()) {
+        PartitionDesc partitionDesc = null;
+        List<PartitionDesc> resolvedPartitionDescList = null;
+        switch (table.getPartitionInfo().getType()) {
             case UNPARTITIONED:
-                return null;
+                break;
             case LIST:
-                return getListPartitionDesc(table, partition);
+                ListPartitionDesc listPartitionDesc = getListPartitionDesc(table, partition);
+                partitionDesc = listPartitionDesc;
+                resolvedPartitionDescList = listPartitionDesc.getPartitionDescs();
+                break;
             case RANGE:
             case EXPR_RANGE:
             case EXPR_RANGE_V2:
-                return getRangePartitionDesc(table, partition);
+                RangePartitionDesc rangePartitionDesc = getRangePartitionDesc(table, partition);
+                partitionDesc = rangePartitionDesc;
+                resolvedPartitionDescList = Lists.newArrayList(rangePartitionDesc.getSingleRangePartitionDescs());
+                break;
             default:
-                LOG.warn("Invalid partition type {} of table {}", partitionInfo.getType(), table.getName());
-                return null;
+                LOG.warn("Invalid partition type {} of table {}", table.getPartitionInfo().getType(), table.getName());
+                break;
         }
+        DistributionDesc distributionDesc = partition.getDistributionInfo().toDistributionDesc(table.getIdToColumn());
+        AddPartitionClause clause = new AddPartitionClause(partitionDesc, distributionDesc, null, false);
+        clause.setResolvedPartitionDescList(resolvedPartitionDescList);
+        return clause;
     }
 
     private static RangePartitionDesc getRangePartitionDesc(OlapTable table, Partition partition) {

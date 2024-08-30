@@ -64,23 +64,25 @@ public class CreateReplicatedPartitionJobTest {
         ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
-        OlapTable table = DeepCopy.copyWithGson(tableMeta.getTable(), OlapTable.class);
+        OlapTable sourceTable = DeepCopy.copyWithGson(tableMeta.getTable(), OlapTable.class);
 
         DropReplicatedPartitionJob dropJob = new DropReplicatedPartitionJob(failoverGroup, null, null,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), "p1", false, true);
         dropJob.execute();
 
+        Assert.assertNull(tableMeta.getTable().getPartition("p1"));
+
         CreateReplicatedPartitionJob createJob = new CreateReplicatedPartitionJob(failoverGroup,
-                tableMeta.getDatabase(), table, table.getPartitions().iterator().next(), tableMeta.getDatabase(),
-                (OlapTable) tableMeta.getTable(), true);
+                        tableMeta.getDatabase(), sourceTable, sourceTable.getPartitions().iterator().next(),
+                        tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(tableMeta.getTable().getPartition("p1"));
     }
 
     @Test
-    public void testCreateRangePartitionedTable() throws Exception {
-        String sql = "create table testCreateRangePartitionedTable (key1 int not null, key2 varchar(10))\n" +
+    public void testCreateRangePartition() throws Exception {
+        String sql = "create table testCreateRangePartitionTable (key1 int not null, key2 varchar(10))\n" +
                 "partition by range(key1)(\n" +
                 "partition p1 values [(\"1\"), (\"2\")))\n" +
                 "distributed by hash(key1) buckets 1\n" +
@@ -91,7 +93,7 @@ public class CreateReplicatedPartitionJobTest {
 
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP testCreateRangePartitionedTableGroup " +
-                        "INCLUDE_TABLES = test.testCreateRangePartitionedTable " +
+                        "INCLUDE_TABLES = test.testCreateRangePartitionTable " +
                         "MEMBERS = " +
                                 "'az1:SELF'," +
                                 "'az2:192.168.0.1:9090'" +
@@ -101,15 +103,19 @@ public class CreateReplicatedPartitionJobTest {
         ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
 
         TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
+        OlapTable sourceTable = DeepCopy.copyWithGson(tableMeta.getTable(), OlapTable.class);
 
-        DropReplicatedTableJob dropJob = new DropReplicatedTableJob(failoverGroup, null, null,
-                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
+        DropReplicatedPartitionJob dropJob = new DropReplicatedPartitionJob(failoverGroup, null, null,
+                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), "p1", false, true);
         dropJob.execute();
 
-        CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
-                tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
+        Assert.assertNull(tableMeta.getTable().getPartition("p1"));
+
+        CreateReplicatedPartitionJob createJob = new CreateReplicatedPartitionJob(failoverGroup,
+                        tableMeta.getDatabase(), sourceTable, sourceTable.getPartitions().iterator().next(),
+                        tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(tableMeta.getTable().getPartition("p1"));
     }
 }

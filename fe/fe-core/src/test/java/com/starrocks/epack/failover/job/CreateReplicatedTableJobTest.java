@@ -66,11 +66,15 @@ public class CreateReplicatedTableJobTest {
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
+
         CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
     }
 
     @Test
@@ -100,11 +104,15 @@ public class CreateReplicatedTableJobTest {
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
+
         CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
     }
 
     @Test
@@ -135,11 +143,15 @@ public class CreateReplicatedTableJobTest {
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
+
         CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
     }
 
     @Test
@@ -169,11 +181,15 @@ public class CreateReplicatedTableJobTest {
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
+
         CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
     }
 
     @Test
@@ -203,10 +219,14 @@ public class CreateReplicatedTableJobTest {
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), true, true);
         dropJob.execute();
 
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
+
         CreateReplicatedTableJob createJob = new CreateReplicatedTableJob(failoverGroup,
                 tableMeta.getDatabase(), (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         createJob.execute();
 
-        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(tableMeta.getDatabase().getFullName(), tableMeta.getTable().getName()));
     }
 }

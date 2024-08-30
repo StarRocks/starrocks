@@ -10,6 +10,8 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
+
 public class DropReplicatedPartitionJob extends FailoverGroupJob {
     private static final Logger LOG = LogManager.getLogger(DropReplicatedPartitionJob.class);
 
@@ -41,6 +43,7 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
 
         DropPartitionClause dropPartitionClause = new DropPartitionClause(true, localPartitionName, false,
                 isDropForce);
+        dropPartitionClause.setResolvedPartitionNames(Collections.singletonList(localPartitionName));
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().dropPartition(localDatabase, localTable,
                     dropPartitionClause);
