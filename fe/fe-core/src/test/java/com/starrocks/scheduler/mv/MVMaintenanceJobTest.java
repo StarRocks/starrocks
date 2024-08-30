@@ -21,7 +21,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.qe.CoordinatorPreprocessor;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -126,7 +126,7 @@ public class MVMaintenanceJobTest extends PlanTestBase {
                 pair.first);
 
         String currentDb = connectContext.getDatabase();
-        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb).getId();
+        long dbId = MetadataMgr.getDb(currentDb).getId();
         MaterializedView view = new MaterializedView();
         view.setDbId(dbId);
         view.setId(1024);

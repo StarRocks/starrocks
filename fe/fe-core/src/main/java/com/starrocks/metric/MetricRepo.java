@@ -71,6 +71,7 @@ import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
@@ -827,7 +828,7 @@ public final class MetricRepo {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = MetadataMgr.getDb(dbName);
             if (null == db) {
                 continue;
             }
@@ -875,7 +876,7 @@ public final class MetricRepo {
                 "database_num", MetricUnit.OPERATIONS, "count of database");
         int dbNum = 0;
         for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = MetadataMgr.getDb(dbName);
             if (null == db) {
                 continue;
             }

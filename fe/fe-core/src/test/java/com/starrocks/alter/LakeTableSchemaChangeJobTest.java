@@ -32,6 +32,7 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -76,9 +77,8 @@ public class LakeTableSchemaChangeJobTest {
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
-        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), createTableStmt.getTableName());
+        Database db = MetadataMgr.getDb(createTableStmt.getDbName());
+        return (LakeTable) MetadataMgr.getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {

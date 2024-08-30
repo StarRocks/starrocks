@@ -52,6 +52,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import org.apache.commons.codec.binary.Hex;
@@ -197,7 +198,7 @@ public class SmallFileMgr implements Writable {
 
     public void createFile(CreateFileStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -207,7 +208,7 @@ public class SmallFileMgr implements Writable {
 
     public void dropFile(DropFileStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -496,7 +497,7 @@ public class SmallFileMgr implements Writable {
     }
 
     public List<List<String>> getInfo(String dbName) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }

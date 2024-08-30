@@ -64,6 +64,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
@@ -1283,7 +1284,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             return true;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             return true;
         }
@@ -1291,7 +1292,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db, LockType.READ);
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
+            Table table = MetadataMgr.getTable(db.getId(), tblId);
             if (table == null) {
                 return true;
             } else {

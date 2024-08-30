@@ -28,7 +28,7 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -88,7 +88,7 @@ public abstract class TableBaseAction extends RestBaseAction {
                 PrivilegeType.SELECT
         );
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (null == db || !Optional.ofNullable(db.getCatalogName())
                 .orElse(DEFAULT_INTERNAL_CATALOG_NAME).equalsIgnoreCase(catalogName)) {
             throw new StarRocksHttpException(
@@ -99,7 +99,7 @@ public abstract class TableBaseAction extends RestBaseAction {
         final Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = MetadataMgr.getTable(db.getFullName(), tableName);
             if (null == table) {
                 throw new StarRocksHttpException(
                         HttpResponseStatus.NOT_FOUND, ErrorCode.ERR_BAD_TABLE_ERROR.formatErrorMsg(tableName)

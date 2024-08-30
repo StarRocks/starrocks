@@ -13,30 +13,23 @@
 // limitations under the License.
 package com.starrocks.qe;
 
-import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
-import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.privilege.IdGenerator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.TemporaryTableMgr;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
-public class ShowTableMockMeta extends MetadataMgr {
-    private final LocalMetastore localMetastore;
+public class ShowTableMockMeta extends LocalMetastore {
     private final IdGenerator idGenerator;
 
     private final Map<String, Database> databaseSet;
@@ -45,9 +38,9 @@ public class ShowTableMockMeta extends MetadataMgr {
     private final Map<String, Table> tableMap;
     private final Map<String, Table> externalTbSet;
 
-    public ShowTableMockMeta(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
-        this.localMetastore = localMetastore;
+    public ShowTableMockMeta(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
+                             ColocateTableIndex colocateTableIndex) {
+        super(globalStateMgr, recycleBin, colocateTableIndex);
         idGenerator = new IdGenerator();
 
         this.databaseSet = new HashMap<>();
@@ -55,9 +48,7 @@ public class ShowTableMockMeta extends MetadataMgr {
 
         this.tableMap = new HashMap<>();
         this.externalTbSet = new HashMap<>();
-    }
 
-    public void init() throws DdlException {
         Database db = new Database(idGenerator.getNextId(), "testDb");
         databaseSet.put("testDb", db);
 
@@ -81,25 +72,15 @@ public class ShowTableMockMeta extends MetadataMgr {
         table.setId(idGenerator.getNextId());
         table.setName("hive_test");
         externalTbSet.put("hive_test", table);
-
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put("type", "hive");
-        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
-        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(
-                "hive", "hive_catalog", "", properties);
     }
 
     @Override
-    public Database getDb(String catalogName, String dbName) {
-        if (catalogName.equals("hive_catalog")) {
-            return externalDbSet.get("hive_db");
-        }
-
+    public Database getDb(String dbName) {
         return databaseSet.get(dbName);
     }
 
     @Override
-    public Database getDb(Long databaseId) {
+    public Database getDb(long databaseId) {
         for (Database database : databaseSet.values()) {
             if (database.getId() == databaseId) {
                 return database;
@@ -110,31 +91,23 @@ public class ShowTableMockMeta extends MetadataMgr {
     }
 
     @Override
-    public List<String> listDbNames(String catalogName) {
-        if (catalogName.equals("hive_catalog")) {
-            return new ArrayList<>(externalDbSet.keySet());
-        }
+    public List<String> listDbNames() {
         return new ArrayList<>(databaseSet.keySet());
     }
 
     @Override
-    public Optional<Table> getTable(TableName tableName) {
-        return Optional.ofNullable(tableMap.get(tableName.getTbl()));
-    }
-
-    @Override
-    public Table getTable(String catalogName, String dbName, String tblName) {
-        if (catalogName.equals("hive_catalog")) {
-            return externalTbSet.get(tblName);
-        }
+    public Table getTable(String dbName, String tblName) {
+        //if (catalogName.equals("hive_catalog")) {
+        //    return externalTbSet.get(tblName);
+        //}
         return tableMap.get(tblName);
     }
 
     @Override
-    public List<String> listTableNames(String catalogName, String dbName) {
-        if (catalogName.equals("hive_catalog")) {
-            return new ArrayList<>(externalTbSet.keySet());
-        }
+    public List<String> listTableNames(String dbName) {
+        //if (catalogName.equals("hive_catalog")) {
+        //    return new ArrayList<>(externalTbSet.keySet());
+        //}
         return new ArrayList<>(tableMap.keySet());
     }
 }

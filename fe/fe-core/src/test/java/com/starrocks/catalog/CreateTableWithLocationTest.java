@@ -40,6 +40,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.system.Backend;
 import org.junit.AfterClass;
@@ -109,9 +110,8 @@ public class CreateTableWithLocationTest {
                     ");";
         cluster.runSql("test", sql);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_backend_no_loc");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_backend_no_loc");
         Assert.assertNull(table.getLocation());
     }
 
@@ -188,9 +188,8 @@ public class CreateTableWithLocationTest {
                     ");";
         cluster.runSql("test", sql);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_no_loc_backend_with_loc");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_no_loc_backend_with_loc");
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
 
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
@@ -235,9 +234,8 @@ public class CreateTableWithLocationTest {
                     ");";
         System.out.println(sql);
         cluster.runSql("test", sql);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc1");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc1");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();
@@ -275,8 +273,7 @@ public class CreateTableWithLocationTest {
         cluster.runSql("test", sql);
         boolean hasReplicaOnRegionBackend = false;
         boolean hasReplicaOnRackBackend = false;
-        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc2");
+        table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc2");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         Assert.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
@@ -314,8 +311,7 @@ public class CreateTableWithLocationTest {
                     "    \"in_memory\" = \"false\"\n" +
                     ");";
         cluster.runSql("test", sql);
-        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc3");
+        table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc3");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         Assert.assertEquals(1, table.getLocation().keySet().size());
         partitions = new ArrayList<>(table.getAllPartitions());
@@ -349,8 +345,7 @@ public class CreateTableWithLocationTest {
                     "    \"in_memory\" = \"false\"\n" +
                     ");";
         cluster.runSql("test", sql);
-        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc4");
+        table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc4");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         Assert.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
@@ -389,8 +384,7 @@ public class CreateTableWithLocationTest {
                     "    \"in_memory\" = \"false\"\n" +
                     ");";
         cluster.runSql("test", sql);
-        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc5");
+        table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc5");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getBaseIndex().getTablets();
@@ -459,9 +453,9 @@ public class CreateTableWithLocationTest {
                     ");";
         System.out.println(sql);
         cluster.runSql("test", sql);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc_best_effort");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(),
+                "test_table_explicit_loc_backend_with_loc_best_effort");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();

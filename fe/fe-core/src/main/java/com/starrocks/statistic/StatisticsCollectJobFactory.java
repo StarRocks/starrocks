@@ -30,6 +30,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.commons.lang3.StringUtils;
@@ -59,7 +60,7 @@ public class StatisticsCollectJobFactory {
             List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
 
             for (Long dbId : dbIds) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
@@ -71,7 +72,7 @@ public class StatisticsCollectJobFactory {
         } else if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getTableId()
                 && StatsConstants.DEFAULT_ALL_ID != nativeAnalyzeJob.getDbId()) {
             // all table
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeJob.getDbId());
+            Database db = MetadataMgr.getDb(nativeAnalyzeJob.getDbId());
             if (null == db) {
                 return Collections.emptyList();
             }
@@ -81,7 +82,7 @@ public class StatisticsCollectJobFactory {
             }
         } else {
             // database or table is null mean database/table has been dropped
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeJob.getDbId());
+            Database db = MetadataMgr.getDb(nativeAnalyzeJob.getDbId());
             if (db == null) {
                 return Collections.emptyList();
             }
@@ -129,8 +130,7 @@ public class StatisticsCollectJobFactory {
             List<String> dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
                     listDbNames(externalAnalyzeJob.getCatalogName());
             for (String dbName : dbNames) {
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getDb(externalAnalyzeJob.getCatalogName(), dbName);
+                Database db = MetadataMgr.getDb(externalAnalyzeJob.getCatalogName(), dbName);
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
@@ -138,8 +138,7 @@ public class StatisticsCollectJobFactory {
                 List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
                         listTableNames(externalAnalyzeJob.getCatalogName(), dbName);
                 for (String tableName : tableNames) {
-                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                            getTable(externalAnalyzeJob.getCatalogName(), dbName, tableName);
+                    Table table = MetadataMgr.getTable(externalAnalyzeJob.getCatalogName(), dbName, tableName);
                     if (null == table) {
                         continue;
                     }
@@ -148,8 +147,7 @@ public class StatisticsCollectJobFactory {
                 }
             }
         } else if (externalAnalyzeJob.isAnalyzeAllTable()) {
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+            Database db = MetadataMgr.getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
             if (null == db) {
                 return Collections.emptyList();
             }
@@ -157,8 +155,8 @@ public class StatisticsCollectJobFactory {
             List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
                     listTableNames(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
             for (String tableName : tableNames) {
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getTable(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(), tableName);
+                Table table = MetadataMgr.getTable(externalAnalyzeJob.getCatalogName(),
+                        externalAnalyzeJob.getDbName(), tableName);
                 if (null == table) {
                     continue;
                 }
@@ -166,14 +164,12 @@ public class StatisticsCollectJobFactory {
                 createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, null, null);
             }
         } else {
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
+            Database db = MetadataMgr.getDb(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName());
             if (null == db) {
                 return Collections.emptyList();
             }
 
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getTable(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(),
+            Table table = MetadataMgr.getTable(externalAnalyzeJob.getCatalogName(), externalAnalyzeJob.getDbName(),
                             externalAnalyzeJob.getTableName());
             if (null == table) {
                 return Collections.emptyList();

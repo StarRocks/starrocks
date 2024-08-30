@@ -26,6 +26,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TTabletMetaType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -226,13 +227,12 @@ public class BinlogManager {
 
 
     public boolean isBinlogAvailable(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion().size() != 0;
                 }
@@ -247,13 +247,12 @@ public class BinlogManager {
     // the binlog is available
     // result : partitionId -> binlogAvailableVersion, null indicates the db or table is dropped
     public Map<Long, Long> getBinlogAvailableVersion(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion();
                 }
@@ -270,7 +269,7 @@ public class BinlogManager {
         HashMap<Long, BinlogConfig> allTablesWithBinlogConfigMap = new HashMap<>();
         List<Long> allDbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : allDbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);

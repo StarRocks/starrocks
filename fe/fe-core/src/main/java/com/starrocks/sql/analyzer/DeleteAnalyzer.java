@@ -40,7 +40,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LoadStmt;
@@ -198,8 +198,7 @@ public class DeleteAnalyzer {
         TableName tableName = deleteStatement.getTableName();
         tableName.normalization(session);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(tableName.getCatalog(), tableName.getDb());
+        Database db = MetadataMgr.getDb(tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }

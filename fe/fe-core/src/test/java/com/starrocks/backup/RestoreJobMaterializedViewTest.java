@@ -547,7 +547,7 @@ public class RestoreJobMaterializedViewTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
-                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+                return MetadataMgr.getTable(db.getFullName(), tblName);
             }
         };
         // gen BackupJobInfo
@@ -578,7 +578,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     private void assertMVActiveEquals(String mvName, boolean expect) {
-        Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+        Table mvTable = MetadataMgr.getTable(db.getFullName(), mvName);
         Assert.assertTrue(mvTable != null);
         Assert.assertTrue(mvTable.isMaterializedView());
         MaterializedView mv = (MaterializedView) mvTable;

@@ -51,6 +51,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -143,17 +144,15 @@ public class DeleteTest {
 
     public void setUpExpectation() {
         Backend backend = new Backend(backendId, "127.0.0.1", 1234);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
 
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore().getDb(anyString);
-                result = db;
-
-                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
-                result = db.getTable(tableId);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getOptionalMetadata(anyString);
+                result = localMetastore;
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
@@ -163,6 +162,16 @@ public class DeleteTest {
 
                 systemInfoService.getBackendOrComputeNode(anyLong);
                 result = backend;
+            }
+        };
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb(anyString);
+                result = db;
+
+                localMetastore.getTable(anyString, anyString);
+                result = db.getTable(tableId);
             }
         };
     }
@@ -321,21 +330,28 @@ public class DeleteTest {
     }
 
     public void setUpExpectationWithoutExec() {
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
 
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore().getDb(anyString);
-                result = db;
-
-                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
-                result = db.getTable(tableId);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getOptionalMetadata(anyString);
+                result = localMetastore;
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+            }
+        };
 
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb(anyString);
+                result = db;
+
+                localMetastore.getTable(anyString, anyString);
+                result = db.getTable(tableId);
             }
         };
     }

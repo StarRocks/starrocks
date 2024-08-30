@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -89,7 +90,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0_stats");
+                (OlapTable) MetadataMgr.getTable(database.getFullName(), "t0_stats");
         List<Long> partitionIdList =
                 table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 

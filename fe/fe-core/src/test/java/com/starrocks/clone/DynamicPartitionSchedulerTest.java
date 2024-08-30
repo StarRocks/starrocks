@@ -23,6 +23,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -78,8 +79,8 @@ public class DynamicPartitionSchedulerTest {
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
                     .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
         // Now the table does not actually support partition ttl,
         // so in order to simplify the test, it is directly set like this
         tbl.getTableProperty().getProperties().put("partition_ttl_number", "3");
@@ -156,9 +157,9 @@ public class DynamicPartitionSchedulerTest {
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
                     .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable tbl =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access");
+                    (OlapTable) MetadataMgr.getTable(db.getFullName(), "site_access");
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
@@ -201,9 +202,9 @@ public class DynamicPartitionSchedulerTest {
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
                     .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable tbl =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access");
+                    (OlapTable) MetadataMgr.getTable(db.getFullName(), "site_access");
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
@@ -247,9 +248,8 @@ public class DynamicPartitionSchedulerTest {
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
                     .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_random_bucket");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_random_bucket");
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
 
@@ -299,9 +299,8 @@ public class DynamicPartitionSchedulerTest {
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
                     .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_hour_partition2");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_hour_partition2");
         DynamicPartitionProperty dynamicPartitionProperty = tbl.getTableProperty().getDynamicPartitionProperty();
         dynamicPartitionProperty.setTimeUnit("HOUR");
         boolean result = dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), tbl.getId());

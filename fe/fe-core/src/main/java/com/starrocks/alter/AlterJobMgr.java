@@ -81,6 +81,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -133,7 +134,7 @@ public class AlterJobMgr {
     public void processDropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         // check db
         String dbName = stmt.getDbName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -271,8 +272,8 @@ public class AlterJobMgr {
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
         long dbId = log.getDbId();
         long mvId = log.getMvId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId);
+        Database db = MetadataMgr.getDb(dbId);
+        MaterializedView mv = (MaterializedView) MetadataMgr.getTable(db.getId(), mvId);
         if (mv == null) {
             return;
         }
@@ -292,9 +293,8 @@ public class AlterJobMgr {
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         long dbId = log.getDbId();
         long tableId = log.getTableId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), tableId);
+        Database db = MetadataMgr.getDb(dbId);
+        MaterializedView mv = (MaterializedView) MetadataMgr.getTable(db.getId(), tableId);
         if (mv == null) {
             return;
         }
@@ -315,9 +315,8 @@ public class AlterJobMgr {
         long dbId = log.getDbId();
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        MaterializedView oldMaterializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), materializedViewId);
+        Database db = MetadataMgr.getDb(dbId);
+        MaterializedView oldMaterializedView = (MaterializedView) MetadataMgr.getTable(db.getId(), materializedViewId);
         if (oldMaterializedView != null) {
             try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db,
                     Lists.newArrayList(oldMaterializedView.getId()), LockType.WRITE)) {
@@ -346,13 +345,12 @@ public class AlterJobMgr {
     public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
         long dbId = log.getDbId();
         long id = log.getId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             return;
         }
 
-        MaterializedView oldMaterializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), id);
+        MaterializedView oldMaterializedView = (MaterializedView) MetadataMgr.getTable(db.getId(), id);
         if (oldMaterializedView == null) {
             LOG.warn("Ignore change materialized view refresh scheme log because table:" + id + "is null");
             return;
@@ -396,9 +394,8 @@ public class AlterJobMgr {
         long tableId = log.getTableId();
         Map<String, String> properties = log.getProperties();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), tableId);
+        Database db = MetadataMgr.getDb(dbId);
+        MaterializedView mv = (MaterializedView) MetadataMgr.getTable(db.getId(), tableId);
         if (mv == null) {
             LOG.warn("Ignore change materialized view properties og because table:" + tableId + "is null");
             return;
@@ -432,9 +429,9 @@ public class AlterJobMgr {
         long dbId = log.getDbId();
         long origTblId = log.getOrigTblId();
         long newTblId = log.getNewTblId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        OlapTable origTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), origTblId);
-        OlapTable newTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), newTblId);
+        Database db = MetadataMgr.getDb(dbId);
+        OlapTable origTable = (OlapTable) MetadataMgr.getTable(db.getId(), origTblId);
+        OlapTable newTbl = (OlapTable) MetadataMgr.getTable(db.getId(), newTblId);
         LOG.debug("finish replay swap table {}-{} with table {}-{}", origTblId, origTable.getName(), newTblId,
                 newTbl.getName());
     }
@@ -448,9 +445,9 @@ public class AlterJobMgr {
         long dbId = log.getDbId();
         long origTblId = log.getOrigTblId();
         long newTblId = log.getNewTblId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        OlapTable origTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), origTblId);
-        OlapTable newTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), newTblId);
+        Database db = MetadataMgr.getDb(dbId);
+        OlapTable origTable = (OlapTable) MetadataMgr.getTable(db.getId(), origTblId);
+        OlapTable newTbl = (OlapTable) MetadataMgr.getTable(db.getId(), newTblId);
 
         String origTblName = origTable.getName();
         String newTblName = newTbl.getName();
@@ -483,8 +480,8 @@ public class AlterJobMgr {
         List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
         String comment = alterViewInfo.getComment();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Database db = MetadataMgr.getDb(dbId);
+        View view = (View) MetadataMgr.getTable(db.getId(), tableId);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(view.getId()), LockType.WRITE);
@@ -510,9 +507,8 @@ public class AlterJobMgr {
     }
 
     public void replayModifyPartition(ModifyPartitionInfo info) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getDbId());
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), info.getTableId());
+        Database db = MetadataMgr.getDb(info.getDbId());
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), info.getTableId());
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);

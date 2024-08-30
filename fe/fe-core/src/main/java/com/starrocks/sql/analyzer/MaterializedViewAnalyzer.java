@@ -60,7 +60,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -212,7 +212,7 @@ public class MaterializedViewAnalyzer {
 
     private static BaseTableInfo fromTableName(TableName name, Table table) {
         if (isInternalCatalog(name.getCatalog())) {
-            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
+            Database database = MetadataMgr.getDb(name.getCatalog(), name.getDb());
             return new BaseTableInfo(database.getId(), database.getFullName(), table.getName(), table.getId());
         } else {
             return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
@@ -1069,7 +1069,7 @@ public class MaterializedViewAnalyzer {
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
             TableName mvName = statement.getMvName();
             mvName.normalization(context);
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(statement.getMvName().getCatalog(),
+            Table table = MetadataMgr.getTable(statement.getMvName().getCatalog(),
                     statement.getMvName().getDb(), statement.getMvName().getTbl());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", mvName);
@@ -1092,8 +1092,7 @@ public class MaterializedViewAnalyzer {
             if (db == null) {
                 throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
             }
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getFullName(), mvName.getTbl());
+            OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }

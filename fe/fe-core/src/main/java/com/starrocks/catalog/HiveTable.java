@@ -57,6 +57,7 @@ import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -288,7 +289,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         fullSchemaTemp.addAll(updatedTable.fullSchema);
         dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }

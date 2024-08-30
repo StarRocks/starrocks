@@ -90,7 +90,7 @@ public class LocalMetaStoreTest {
     @Test
     public void testGetNewPartitionsFromPartitions() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Table table = MetadataMgr.getTable(db.getFullName(), "t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Partition sourcePartition = olapTable.getPartition("t1");
@@ -130,7 +130,7 @@ public class LocalMetaStoreTest {
                                 ")\n" +
                                 "as\n" +
                                 "select k1,k2 from test.t1;");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         new MockUp<PartitionInfo>() {
             @Mock
             public DataProperty getDataProperty(long partitionId) {
@@ -141,7 +141,7 @@ public class LocalMetaStoreTest {
             @Mock
             public void logModifyPartition(ModifyPartitionInfo info) {
                 Assert.assertNotNull(info);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId())
+                Assert.assertTrue(MetadataMgr.getTable(db.getId(), info.getTableId())
                             .isOlapTableOrMaterializedView());
                 Assert.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
                 Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
@@ -176,7 +176,7 @@ public class LocalMetaStoreTest {
     @Test
     public void testReplayAddSubPartition() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "t1");
         Partition p = table.getPartitions().stream().findFirst().get();
         int schemaHash = table.getSchemaHashByIndexId(p.getBaseIndex().getId());
         MaterializedIndex index = new MaterializedIndex();
@@ -193,7 +193,7 @@ public class LocalMetaStoreTest {
     @Test
     public void testReplayTruncateTable() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "t1");
         Partition p = table.getPartitions().stream().findFirst().get();
         TruncateTableInfo info = new TruncateTableInfo(db.getId(), table.getId(), Lists.newArrayList(p), false);
 
@@ -204,7 +204,7 @@ public class LocalMetaStoreTest {
     @Test
     public void testModifyAutomaticBucketSize() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "t1");
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
@@ -223,7 +223,7 @@ public class LocalMetaStoreTest {
     public void testCreateTableIfNotExists() throws Exception {
         // create table if not exists, if the table already exists, do nothing
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Table table = MetadataMgr.getTable(db.getFullName(), "t1");
         Assert.assertTrue(table instanceof OlapTable);
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
 
@@ -253,7 +253,7 @@ public class LocalMetaStoreTest {
     @Test
     public void testAlterTableProperties() throws Exception {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "t1");
 
         Map<String, String> properties = Maps.newHashMap();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "abcd");
@@ -278,7 +278,7 @@ public class LocalMetaStoreTest {
         }
 
         Database db = localMetastore.getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Table table = MetadataMgr.getTable(db.getFullName(), "t1");
         try {
             localMetastore.renameColumn(new Database(1, "_statistics_"), table, null);
             Assert.fail("should not happen");

@@ -39,6 +39,7 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
@@ -261,7 +262,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testUnionAllMvWithPartition() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "union_all_mv"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -288,7 +289,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testWithPartition() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -354,7 +355,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testMvWithoutPartition() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv_without_partition"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -423,7 +424,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @NotNull
     private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), materializedViewName));
         refreshMVRange(materializedView.getName(), start, end, false);
@@ -439,7 +440,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 taskRunCounter.incrementAndGet();
             }
         };
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv_without_partition"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -461,7 +462,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testMVClearQueryInfo() throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv_without_partition"));
         new MockUp<StmtExecutor>() {
@@ -495,7 +496,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         executeInsertSql(connectContext, insertSql);
 
         OlapTable tbl1 =
-                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+                ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tbl1"));
         initAndExecuteTaskRun(taskRun);
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
@@ -519,7 +520,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
     private void testRefreshWithFailure(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         OlapTable tbl1 =
-                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+                ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tbl1"));
         // insert new data into tbl1's p0 partition
         // update base table tbl1's p0 version to 3
         String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
@@ -556,13 +557,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (tableOptional.isEmpty() || !tableOptional.get().isOlapTable()) {
                         continue;
                     }
-                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+                    Database baseDb = MetadataMgr.getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
-                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+                    OlapTable olapTable = (OlapTable) MetadataMgr.getTable(baseDb.getId(), baseTableInfo.getTableId());
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -600,7 +600,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             throws Exception {
         // mv need refresh with base table partition p2, p2 replace with tp2 after collect and before insert overwrite
         OlapTable tbl1 =
-                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+                ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tbl1"));
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(
@@ -612,13 +612,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (!table.isOlapTable()) {
                         continue;
                     }
-                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+                    Database baseDb = MetadataMgr.getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
-                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+                    OlapTable olapTable = (OlapTable) MetadataMgr.getTable(baseDb.getId(), baseTableInfo.getTableId());
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -666,7 +665,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 =
-                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+                ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tbl1"));
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(MaterializedView materializedView) {
@@ -680,13 +679,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (!tableOptional.get().isOlapTable()) {
                         continue;
                     }
-                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+                    Database baseDb = MetadataMgr.getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
-                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+                    OlapTable olapTable = (OlapTable) MetadataMgr.getTable(baseDb.getId(), baseTableInfo.getTableId());
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -733,7 +731,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 =
-                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+                ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tbl1"));
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -774,7 +772,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             throws Exception {
         // mv need refresh with base table partition p4, drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 =
-                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+                ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tbl1"));
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             private Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(MaterializedView materializedView) {
@@ -785,13 +783,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (!table.isOlapTable()) {
                         continue;
                     }
-                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+                    Database baseDb = MetadataMgr.getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
-                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+                    OlapTable olapTable = (OlapTable) MetadataMgr.getTable(baseDb.getId(), baseTableInfo.getTableId());
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -829,7 +826,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             throws Exception {
         // drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 =
-                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+                ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tbl1"));
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -886,7 +883,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
 
         String mvName = "mv_with_test_refresh";
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         starRocksAssert.withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
                 "partition by k1\n" +
                 "distributed by hash(k2) buckets 10\n" +
@@ -922,7 +919,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         // PARTITION p3 values [('2022-03-01'),('2022-04-01'))
         // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
 
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         String mvName = "mv_reverse_refresh";
         starRocksAssert.withMaterializedView("create materialized view test.mv_reverse_refresh\n" +
                 "partition by k1\n" +
@@ -1014,7 +1011,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "'storage_medium' = 'SSD'" +
                 ")\n" +
                 "as select k1, k2 from tbl1;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv_config1"));
 
@@ -1062,7 +1059,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "'session.enable_spill' = 'false'" +
                 ")\n" +
                 "as select k1, k2 from tbl1;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv_config2"));
 
@@ -1088,7 +1085,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "properties('replication_num' = '1',\n" +
                 "'storage_medium' = 'SSD')\n" +
                 "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv_with_ssd"));
 
@@ -1107,7 +1104,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         "'storage_medium' = 'SSD',\n" +
                         "'storage_cooldown_time' = '2222-04-21 20:45:11')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv_use_ssd_and_cooldown"));
         refreshMVRange(materializedView.getName(), false);
@@ -1116,7 +1113,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testMVOnListPartitionTables1() throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
@@ -1202,7 +1199,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         ")\n" +
                         "AS SELECT t1.k1, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
                         "tbl5 t2 on t1.k1=t2.dt group by t1.k1");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "partition_prune_non_ref_tables1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1267,7 +1264,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         ")\n" +
                         "AS SELECT t1.k1 as k11, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
                         "tbl5 t2 on t1.k1=t2.dt group by t1.k1");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "partition_prune_non_ref_tables2"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1332,7 +1329,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         ")\n" +
                         "AS SELECT t1.k1, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
                         "tbl5 t2 on t1.k1=t2.dt where t1.k1>'2022-01-01' and t1.k2>0 group by t1.k1");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "partition_prune_non_ref_tables1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -1392,8 +1389,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "refresh async \n" +
                 "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
 
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table tbl1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1");
+        Database testDb = MetadataMgr.getDb("test");
+        Table tbl1 = MetadataMgr.getTable(testDb.getFullName(), "tbl1");
         MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "test_drop_partition_mv1"));
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
@@ -1481,7 +1478,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "PROPERTIES('partition_refresh_number' = '1')" +
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;");
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    Database testDb = MetadataMgr.getDb("test");
 
                     MaterializedView materializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1491,10 +1488,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     Map<String, String> testProperties = task.getProperties();
                     testProperties.put(TaskRun.IS_TEST, "true");
 
-                    OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), "tt1");
-                    OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), "tt2");
+                    OlapTable tbl1 = (OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tt1");
+                    OlapTable tbl2 = (OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tt2");
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                     taskRun.executeTaskRun();
@@ -1593,7 +1588,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;",
                             (name) -> {
                                 String mvName = (String) name;
-                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                                Database testDb = MetadataMgr.getDb("test");
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
@@ -1681,7 +1676,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "PROPERTIES('partition_refresh_number' = '1')" +
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;");
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    Database testDb = MetadataMgr.getDb("test");
 
                     MaterializedView materializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1689,10 +1684,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
                     TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
 
-                    OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), "tt1");
-                    OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), "tt2");
+                    OlapTable tbl1 = (OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tt1");
+                    OlapTable tbl2 = (OlapTable) MetadataMgr.getTable(testDb.getFullName(), "tt2");
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                     taskRun.executeTaskRun();
 
@@ -1790,7 +1783,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        MetadataMgr.getDb(TEST_DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), (String) mvName));
@@ -1893,7 +1886,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        MetadataMgr.getDb(TEST_DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), (String) mvName));
@@ -2003,7 +1996,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             () -> {
                                 String mvName = "mock_mv0";
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        MetadataMgr.getDb(TEST_DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
@@ -2092,7 +2085,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             () -> {
                                 String mvName = "mock_mv0";
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        MetadataMgr.getDb(TEST_DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
@@ -2183,7 +2176,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             () -> {
                                 String mvName = "mock_mv0";
                                 Database testDb =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                        MetadataMgr.getDb(TEST_DB_NAME);
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
@@ -2267,7 +2260,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;",
                             () -> {
-                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                                Database testDb = MetadataMgr.getDb("test");
 
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -2412,7 +2405,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;",
                             () -> {
-                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                                Database testDb = MetadataMgr.getDb("test");
 
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -2478,7 +2471,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         "as select k1, k2 from tbl1;",
                 () -> {
                     Config.enable_mv_refresh_query_rewrite = false;
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    Database testDb = MetadataMgr.getDb("test");
                     MaterializedView materializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "test_mv1"));

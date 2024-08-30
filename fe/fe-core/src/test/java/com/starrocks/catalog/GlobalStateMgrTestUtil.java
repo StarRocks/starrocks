@@ -43,6 +43,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -119,7 +120,7 @@ public class GlobalStateMgrTestUtil {
         Database slaveDb = slaveGlobalStateMgr.getLocalMetastore().getDb(testDb1);
         List<Table> tables = masterDb.getTables();
         for (Table table : tables) {
-            Table slaveTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(slaveDb.getId(), table.getId());
+            Table slaveTable = MetadataMgr.getTable(slaveDb.getId(), table.getId());
             if (slaveTable == null) {
                 return false;
             }

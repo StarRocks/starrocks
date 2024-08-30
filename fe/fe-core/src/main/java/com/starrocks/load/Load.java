@@ -74,6 +74,7 @@ import com.starrocks.load.loadv2.JobState;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -464,7 +465,7 @@ public class Load {
         if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 Database db = entry.getValue();
-                if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tbl.getId()) != null) {
+                if (MetadataMgr.getTable(db.getId(), tbl.getId()) != null) {
                     dbName = db.getFullName();
                 }
             }

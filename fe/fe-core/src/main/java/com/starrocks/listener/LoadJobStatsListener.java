@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -80,7 +81,7 @@ public class LoadJobStatsListener implements LoadJobListener {
             List<Table> tables = transactionState.getIdToTableCommitInfos().values().stream()
                     .map(x -> x.getTableId())
                     .distinct()
-                    .map(tableId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId))
+                    .map(tableId -> MetadataMgr.getTable(dbId, tableId))
                     .filter(Objects::nonNull)
                     .filter(t -> !t.isMaterializedView()) // skip mvs since its stats will be triggered after refresh
                     .collect(Collectors.toList());

@@ -21,7 +21,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -63,7 +63,7 @@ public class QueryDumper {
             }
 
             if (!StringUtils.isEmpty(dbName)) {
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+                Database db = MetadataMgr.getDb(catalogName, dbName);
                 if (db == null) {
                     return Pair.create(HttpResponseStatus.NOT_FOUND,
                             String.format("Database [%s.%s] does not exists", catalogName, dbName));

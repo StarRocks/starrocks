@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -64,8 +65,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         Database database = globalStateMgr.getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(database.getFullName(), "lineorder_flat_for_mv");
+        Table table = MetadataMgr.getTable(database.getFullName(), "lineorder_flat_for_mv");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
         Assert.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
@@ -75,8 +75,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
     public void testKeyColumnsMatch() throws Exception {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         Database database = globalStateMgr.getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(database.getFullName(), "lineorder_flat_for_mv");
+        Table table = MetadataMgr.getTable(database.getFullName(), "lineorder_flat_for_mv");
         OlapTable baseTable = (OlapTable) table;
 
         String sql = "select LO_ORDERDATE, sum(case when LO_ORDERKEY=0 then 0 else 1 end) as test, " +

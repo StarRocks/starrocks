@@ -27,6 +27,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -57,9 +58,8 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), createTableStmt.getTableName());
+        Database db = MetadataMgr.getDb(createTableStmt.getDbName());
+        LakeTable table = (LakeTable) MetadataMgr.getTable(db.getFullName(), createTableStmt.getTableName());
         table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
         return table;
     }
@@ -162,7 +162,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
     @Test
     public void testReplay() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        Database db = MetadataMgr.getDb(DB_NAME);
         LakeTable table = createTable(connectContext, "CREATE TABLE t3(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
                     "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
         SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();

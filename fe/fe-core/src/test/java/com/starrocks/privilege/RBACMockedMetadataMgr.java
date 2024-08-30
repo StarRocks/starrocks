@@ -13,39 +13,34 @@
 // limitations under the License.
 package com.starrocks.privilege;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
-import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.TemporaryTableMgr;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
-public class RBACMockedMetadataMgr extends MetadataMgr {
-    private final LocalMetastore localMetastore;
-    private final IdGenerator idGenerator;
+public class RBACMockedMetadataMgr extends LocalMetastore {
     private final Map<String, Database> databaseSet;
+    private final IdGenerator idGenerator;
     private final Map<String, Table> tableMap;
 
-    public RBACMockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
-        this.localMetastore = localMetastore;
+    public RBACMockedMetadataMgr(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
+                              ColocateTableIndex colocateTableIndex) {
+        super(globalStateMgr, recycleBin, colocateTableIndex);
+
         idGenerator = new IdGenerator();
         this.databaseSet = new HashMap<>();
         this.tableMap = new HashMap<>();
-    }
 
-    public void init() {
         Database db = new Database(idGenerator.getNextId(), "db");
         databaseSet.put("db", db);
 
@@ -87,12 +82,12 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public Database getDb(String catalogName, String dbName) {
+    public Database getDb(String dbName) {
         return databaseSet.get(dbName);
     }
 
     @Override
-    public Database getDb(Long databaseId) {
+    public Database getDb(long databaseId) {
         for (Database database : databaseSet.values()) {
             if (database.getId() == databaseId) {
                 return database;
@@ -103,22 +98,17 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public List<String> listDbNames(String catalogName) {
+    public List<String> listDbNames() {
         return new ArrayList<>(databaseSet.keySet());
     }
 
     @Override
-    public Optional<Table> getTable(TableName tableName) {
-        return Optional.ofNullable(tableMap.get(tableName.getTbl()));
-    }
-
-    @Override
-    public Table getTable(String catalogName, String dbName, String tblName) {
+    public Table getTable(String dbName, String tblName) {
         return tableMap.get(tblName);
     }
 
     @Override
-    public List<String> listTableNames(String catalogName, String dbName) {
+    public List<String> listTableNames(String dbName) {
         return new ArrayList<>(tableMap.keySet());
     }
 }

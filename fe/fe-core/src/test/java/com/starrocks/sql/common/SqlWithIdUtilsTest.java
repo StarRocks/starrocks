@@ -20,7 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -75,7 +75,7 @@ public class SqlWithIdUtilsTest {
 
     @Test
     public void testDecodeAndEncode() {
-        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database test = MetadataMgr.getDb("test");
         Table tbl1 = test.getTable("tbl1");
         Table tbl2 = test.getTable("tbl2");
         System.out.println(test.getId() + " " + tbl1.getId() + " " + tbl2.getId());
@@ -128,7 +128,7 @@ public class SqlWithIdUtilsTest {
     @Test
     public void testDecodeAndEncodeNoDataBase() throws Exception {
         String sql = "select tbl1.k1, tbl2.k2 from test.tbl1 join test.tbl2 on tbl1.k1 = tbl2.k1";
-        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database test = MetadataMgr.getDb("test");
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             String encode = SqlWithIdUtils.encode(statementBase, connectContext);
@@ -171,7 +171,7 @@ public class SqlWithIdUtilsTest {
     @Test
     public void testDecodeAndEncodeNoTable() throws Exception {
         String sql = "select tbl1.k1, tbl2.k2 from test.tbl1 join test.tbl2 on tbl1.k1 = tbl2.k1";
-        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database test = MetadataMgr.getDb("test");
         Table tbl1 = test.getTable("tbl1");
         Table tbl2 = test.getTable("tbl2");
         try {

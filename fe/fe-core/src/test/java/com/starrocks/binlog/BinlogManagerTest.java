@@ -19,6 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
@@ -55,9 +56,9 @@ public class BinlogManagerTest {
 
     @Test
     public void testTryEnableBinlog() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable table =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
+                (OlapTable) MetadataMgr.getTable(db.getFullName(), "binlog_test");
         boolean result = binlogManager.tryEnableBinlog(db, table.getId(), 200L, -1L);
         Assert.assertTrue(result);
         Assert.assertEquals(1, table.getBinlogVersion());
@@ -69,18 +70,18 @@ public class BinlogManagerTest {
 
     @Test
     public void testTryDisableBinlog() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable table =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
+                (OlapTable) MetadataMgr.getTable(db.getFullName(), "binlog_test");
         boolean result = binlogManager.tryDisableBinlog(db, table.getId());
         Assert.assertFalse(table.isBinlogEnabled());
     }
 
     @Test
     public void testCheckAndSetBinlogAvailableVersion() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable table =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
+                (OlapTable) MetadataMgr.getTable(db.getFullName(), "binlog_test");
         table.setBinlogTxnId(2);
         long totalNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001).size();
         binlogManager.checkAndSetBinlogAvailableVersion(db, table, 1, 10002);

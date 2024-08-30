@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -86,9 +87,9 @@ public class AdminStmtTest {
 
     @Test
     public void testAdminSetReplicaStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
         Assert.assertNotNull(tbl);
         // tablet id, backend id
         List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();

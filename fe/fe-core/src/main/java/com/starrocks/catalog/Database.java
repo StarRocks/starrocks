@@ -59,6 +59,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -613,7 +614,7 @@ public class Database extends MetaObject implements Writable {
 
     public static void replayCreateFunctionLog(Function function) {
         String dbName = function.getFunctionName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
@@ -649,7 +650,7 @@ public class Database extends MetaObject implements Writable {
 
     public static void replayDropFunctionLog(FunctionSearchDesc functionSearchDesc) {
         String dbName = functionSearchDesc.getName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }

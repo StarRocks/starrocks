@@ -26,7 +26,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
@@ -70,7 +70,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
         if (!analyzeJob.isAnalyzeAllDb()) {
             String dbName = analyzeJob.getDbName();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(analyzeJob.getCatalogName(), dbName);
+            Database db = MetadataMgr.getDb(analyzeJob.getCatalogName(), dbName);
 
             if (db == null) {
                 throw new MetaNotFoundException("No found database: " + dbName);
@@ -80,7 +80,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(analyzeJob.getCatalogName(),
+                Table table = MetadataMgr.getTable(analyzeJob.getCatalogName(),
                         dbName, tableName);
 
                 if (table == null) {

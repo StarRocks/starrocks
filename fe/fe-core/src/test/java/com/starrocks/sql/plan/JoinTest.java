@@ -19,6 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -1126,7 +1127,7 @@ public class JoinTest extends PlanTestBase {
     public void testJoinReorderTakeEffect() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Database db = globalStateMgr.getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "join2");
+        Table table = MetadataMgr.getTable(db.getFullName(), "join2");
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);

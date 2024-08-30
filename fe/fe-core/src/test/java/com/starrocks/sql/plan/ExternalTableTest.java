@@ -23,7 +23,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -236,8 +236,8 @@ public class ExternalTableTest extends PlanTestBase {
     @Test
     public void testJoinWithMysqlTable() throws Exception {
         // set data size and row count for the olap table
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "jointest");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "jointest");
         for (Partition partition : tbl.getPartitions()) {
             partition.updateVisibleVersion(2);
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {

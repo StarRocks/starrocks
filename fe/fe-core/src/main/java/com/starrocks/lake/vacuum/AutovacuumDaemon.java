@@ -32,6 +32,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
@@ -70,7 +71,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }

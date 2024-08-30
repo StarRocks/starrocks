@@ -70,6 +70,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
@@ -953,7 +954,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (node instanceof Backend) {
             AtomicLong atomicLong;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);

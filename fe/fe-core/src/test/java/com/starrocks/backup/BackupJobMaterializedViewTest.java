@@ -32,6 +32,7 @@ import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -375,9 +376,9 @@ public class BackupJobMaterializedViewTest {
                 Assert.assertNotNull(mv);
                 Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME));
                 List<String> names = Lists.newArrayList(mv.getPartitionNames());
-                Assert.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, names,
-                            true), mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+                Assert.assertEquals(((OlapTable) MetadataMgr.getTable(db.getId(), tblId + 1))
+                        .getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
+                        mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
             }
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());

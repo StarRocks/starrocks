@@ -54,6 +54,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
@@ -124,8 +125,7 @@ public class LakeRestoreJob extends RestoreJob {
         for (IdChain idChain : fileMapping.getMapping().keySet()) {
             LakeTablet tablet = null;
             try {
-                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), idChain.getTblId());
+                OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), idChain.getTblId());
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
@@ -155,8 +155,7 @@ public class LakeRestoreJob extends RestoreJob {
         }
         request.restoreInfos = Lists.newArrayList();
         for (SnapshotInfo info : beSnapshotInfos) {
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), info.getTblId());
+            OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), info.getTblId());
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "restored table "
                         + info.getTblId() + " does not exist");
@@ -291,8 +290,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void addRestoredPartitions(Database db, boolean modify) {
         for (Pair<String, Partition> entry : restoredPartitions) {
-            OlapTable localTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getFullName(), entry.first);
+            OlapTable localTbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), entry.first);
             Partition restorePart = entry.second;
             OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
             RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();

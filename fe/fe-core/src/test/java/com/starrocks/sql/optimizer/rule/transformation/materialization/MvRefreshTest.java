@@ -24,6 +24,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -72,7 +73,7 @@ public class MvRefreshTest extends MVRefreshTestBase {
                                 " as\n" +
                                 " select t1a, id_date, sum(t1c) as sum1 from table_with_partition group by t1a, id_date",
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = MetadataMgr.getDb("test");
                         MaterializedView materializedView =
                                     ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), "test_mv2"));
@@ -121,7 +122,7 @@ public class MvRefreshTest extends MVRefreshTestBase {
                                 " as\n" +
                                 " select t1a, id_date, sum(t1c) as sum1 from table_with_partition group by t1a, id_date",
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = MetadataMgr.getDb("test");
                         MaterializedView materializedView =
                                     ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), "test_mv2"));
@@ -161,7 +162,7 @@ public class MvRefreshTest extends MVRefreshTestBase {
                                 " as\n" +
                                 " select t1a, id_date, sum(t1c) as sum1 from table_with_partition group by t1a, id_date",
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = MetadataMgr.getDb("test");
                         MaterializedView materializedView =
                                     ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), "test_mv2"));

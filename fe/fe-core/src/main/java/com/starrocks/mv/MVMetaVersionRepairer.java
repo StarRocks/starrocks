@@ -27,6 +27,7 @@ import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,13 +58,12 @@ public class MVMetaVersionRepairer {
 
         Set<MvId> mvIds = table.getRelatedMaterializedViews();
         for (MvId mvId : mvIds) {
-            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+            Database mvDb = MetadataMgr.getDb(mvId.getDbId());
             if (mvDb == null) {
                 LOG.warn("mv db {} not found", mvId.getDbId());
                 continue;
             }
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(mvDb.getId(), mvId.getId());
+            MaterializedView mv = (MaterializedView) MetadataMgr.getTable(mvDb.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("mv {} not found", mvId.getId());
                 continue;

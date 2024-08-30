@@ -30,7 +30,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -242,7 +242,7 @@ public class MaterializedViewAnalyzerTest {
     public void testRefreshMaterializedView() throws Exception {
         analyzeSuccess("refresh materialized view mv");
         Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv");
+        Table table = MetadataMgr.getTable(testDb.getFullName(), "mv");
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;

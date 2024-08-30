@@ -51,6 +51,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -173,7 +174,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
         for (int i = 0; i < dbNames.size(); i++) {
             String dbName = dbNames.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = MetadataMgr.getDb(dbName);
 
             long totalSize = 0;
             List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());

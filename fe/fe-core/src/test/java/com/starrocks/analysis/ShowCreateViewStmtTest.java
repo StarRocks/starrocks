@@ -23,6 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -189,14 +190,14 @@ public class ShowCreateViewStmtTest {
             CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
-            List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+            List<Table> views = MetadataMgr.getDb(createViewStmt.getDbName()).getViews();
             List<String> res = Lists.newArrayList();
             AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                     null, null, false, false, false);
 
             Assert.assertEquals(testcase[2], res.get(0));
 
-            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
+            MetadataMgr.getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
         }
     }
 
@@ -208,7 +209,7 @@ public class ShowCreateViewStmtTest {
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
-        List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+        List<Table> views = MetadataMgr.getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false, false);
@@ -276,7 +277,7 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlComment() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+        List<Table> tables = MetadataMgr.getDb("test").getTables();
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("test", commentTest, res,
@@ -287,7 +288,7 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlStorageType() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+        List<Table> tables = MetadataMgr.getDb("test").getTables();
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,

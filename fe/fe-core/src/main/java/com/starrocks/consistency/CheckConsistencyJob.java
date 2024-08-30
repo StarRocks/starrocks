@@ -55,6 +55,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -128,13 +129,13 @@ public class CheckConsistencyJob {
             return false;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+        Database db = MetadataMgr.getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.debug("db[{}] does not exist", tabletMeta.getDbId());
             return false;
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+        Table table = MetadataMgr.getTable(db.getId(), tabletMeta.getTableId());
         if (table == null) {
             LOG.debug("table[{}] does not exist", tabletMeta.getTableId());
             return false;
@@ -254,13 +255,13 @@ public class CheckConsistencyJob {
             return -1;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+        Database db = MetadataMgr.getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.warn("db[{}] does not exist", tabletMeta.getDbId());
             return -1;
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+        Table table = MetadataMgr.getTable(db.getId(), tabletMeta.getTableId());
         if (table == null) {
             LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
             return -1;

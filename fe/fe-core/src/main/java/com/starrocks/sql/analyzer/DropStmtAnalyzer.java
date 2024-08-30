@@ -33,6 +33,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
@@ -71,7 +72,7 @@ public class DropStmtAnalyzer {
 
             String dbName = statement.getDbName();
             // check database
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            Database db = MetadataMgr.getDb(catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -127,7 +128,7 @@ public class DropStmtAnalyzer {
 
             String dbName = statement.getDbName();
             // check database
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            Database db = MetadataMgr.getDb(catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -166,7 +167,7 @@ public class DropStmtAnalyzer {
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), dbName);
             } else if (dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(SysDb.DATABASE_NAME.toLowerCase());
+                Database db = MetadataMgr.getDb(SysDb.DATABASE_NAME.toLowerCase());
                 if (db.getId() == SystemId.SYS_DB_ID) {
                     AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(),
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -197,7 +198,7 @@ public class DropStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                 }
             } else {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+                Database db = MetadataMgr.getDb(functionName.getDb());
                 if (db != null) {
                     func = db.getFunction(statement.getFunctionSearchDesc());
                     if (func == null) {

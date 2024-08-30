@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -84,24 +85,24 @@ public class ColumnRenameTest {
 
     @Test
     public void testReplayRenameColumn() throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1");
+        Database testDb = MetadataMgr.getDb("test");
+        Table table = MetadataMgr.getTable(testDb.getFullName(), "tbl1");
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
 
-        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl2");
+        table = MetadataMgr.getTable(testDb.getFullName(), "tbl2");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
-        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl3");
+        table = MetadataMgr.getTable(testDb.getFullName(), "tbl3");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
-        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl4");
+        table = MetadataMgr.getTable(testDb.getFullName(), "tbl4");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());

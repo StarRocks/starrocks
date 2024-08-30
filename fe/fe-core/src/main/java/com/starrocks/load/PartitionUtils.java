@@ -38,6 +38,7 @@ import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -66,7 +67,7 @@ public class PartitionUtils {
         boolean success = false;
         try {
             // should check whether targetTable exists
-            Table tmpTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), targetTable.getId());
+            Table tmpTable = MetadataMgr.getTable(db.getId(), targetTable.getId());
             if (tmpTable == null) {
                 throw new DdlException("create partition failed because target table does not exist");
             }

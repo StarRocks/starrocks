@@ -56,6 +56,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -143,9 +144,9 @@ public class ColocateTableBalancerTest {
     }
 
     private void addTabletsToScheduler(String dbName, String tableName, boolean setGroupId) {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database database = MetadataMgr.getDb(dbName);
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
+                    (OlapTable) MetadataMgr.getTable(database.getFullName(), tableName);
         // add its tablet to TabletScheduler
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
         for (Partition partition : table.getPartitions()) {
@@ -175,9 +176,9 @@ public class ColocateTableBalancerTest {
                                 "distributed by hash(`id`) buckets 3 " +
                                 "properties('replication_num' = '1', 'colocate_with' = 'group1');");
 
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database database = MetadataMgr.getDb("db1");
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tbl");
+                    (OlapTable) MetadataMgr.getTable(database.getFullName(), "tbl");
         addTabletsToScheduler("db1", "tbl", false);
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -209,9 +210,9 @@ public class ColocateTableBalancerTest {
                                 "distributed by hash(`id`) buckets 1 " +
                                 "properties('replication_num' = '1', 'colocate_with' = 'group3');");
 
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
+        Database database = MetadataMgr.getDb("db3");
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tbl3");
+                    (OlapTable) MetadataMgr.getTable(database.getFullName(), "tbl3");
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());

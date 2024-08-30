@@ -26,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ExecPlan;
@@ -114,7 +115,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
     }
 
     private void assertPlanWithoutPushdownBelowScan(String mvName) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), mvName));
         Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
@@ -196,7 +197,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
     }
 
     private void assertPlanWithPushdownBelowScan(String mvName) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), mvName));
         Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
@@ -322,7 +323,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                     "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                                     "as select k1, k2 from tbl6;");
                     String mvName = "mv_refresh_priority";
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                    Database testDb = MetadataMgr.getDb(TEST_DB_NAME);
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
@@ -388,7 +389,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             "refresh deferred manual\n" +
                             "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                             "as select k1, k2 from tbl6;");
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    Database testDb = MetadataMgr.getDb("test");
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(mv.getId())).getId();
@@ -444,7 +445,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             ")\n" +
                             "as select k1, k2 from tbl6;",
                             () -> {
-                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                                Database testDb = MetadataMgr.getDb("test");
                                 MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                                 executeInsertSql(connectContext,
                                         "insert into tbl6 partition(p1) values('2022-01-02',2,10);");

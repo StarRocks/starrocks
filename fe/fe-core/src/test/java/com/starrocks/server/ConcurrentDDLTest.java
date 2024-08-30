@@ -112,14 +112,13 @@ public class ConcurrentDDLTest {
         }
 
         Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_tbl_" + threadIds.get(0));
+        Table table = MetadataMgr.getTable(db.getFullName(), "test_tbl_" + threadIds.get(0));
 
         List<List<Long>> bucketSeq = GlobalStateMgr.getCurrentState().getColocateTableIndex().getBackendsPerBucketSeq(
                     GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
         // check all created colocate tables has same tablet distribution as the bucket seq in colocate group
         for (long threadId : threadIds) {
-            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_tbl_" + threadId);
+            table = MetadataMgr.getTable(db.getFullName(), "test_tbl_" + threadId);
             List<Long> tablets = table.getPartitions().stream().findFirst().get().getBaseIndex().getTabletIdsInOrder();
             List<Long> backendIdList = tablets.stream()
                         .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
@@ -162,7 +161,7 @@ public class ConcurrentDDLTest {
                         // sleep random time before dropping database
                         Thread.sleep(time);
                         System.out.println("dropping table and db");
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("concurrent_test_db");
+                        Database db = MetadataMgr.getDb("concurrent_test_db");
                         ShowTableStmt showTableStmt =
                                     (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
                                                 "show tables from concurrent_test_db", connectContext);

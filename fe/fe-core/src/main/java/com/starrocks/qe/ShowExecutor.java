@@ -301,7 +301,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
             String dbName = statement.getDb();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = MetadataMgr.getDb(dbName);
             MetaUtils.checkDbNullAndReport(db, dbName);
 
             List<MaterializedView> materializedViews = Lists.newArrayList();
@@ -463,7 +463,7 @@ public class ShowExecutor {
                 catalogName = context.getCurrentCatalog();
             }
             String dbName = statement.getDb();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            Database db = MetadataMgr.getDb(catalogName, dbName);
 
             PatternMatcher matcher = null;
             if (statement.getPattern() != null) {
@@ -535,7 +535,7 @@ public class ShowExecutor {
 
             String dbName = showTemporaryTableStmt.getDb();
             UUID sessionId = showTemporaryTableStmt.getSessionId();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            Database db = MetadataMgr.getDb(catalogName, dbName);
 
             PatternMatcher matcher = null;
             if (showTemporaryTableStmt.getPattern() != null) {
@@ -666,7 +666,7 @@ public class ShowExecutor {
             if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
                 db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
             } else {
-                db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+                db = MetadataMgr.getDb(catalogName, dbName);
             }
             MetaUtils.checkDbNullAndReport(db, statement.getDb());
 
@@ -697,7 +697,7 @@ public class ShowExecutor {
         }
 
         private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt, ConnectContext connectContext) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(showStmt.getDb());
+            Database db = MetadataMgr.getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
             Locker locker = new Locker();
@@ -978,7 +978,7 @@ public class ShowExecutor {
                 catalogName = context.getCurrentCatalog();
             }
             String dbName = statement.getDb();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            Database db = MetadataMgr.getDb(catalogName, dbName);
             MetaUtils.checkDbNullAndReport(db, statement.getDb());
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getTable(catalogName, dbName, statement.getTable());
@@ -1576,7 +1576,7 @@ public class ShowExecutor {
                     Locker locker = new Locker();
                     locker.lockDatabase(db, LockType.READ);
                     try {
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                        Table table = MetadataMgr.getTable(db.getId(), tableId);
                         if (!(table instanceof OlapTable)) {
                             isSync = false;
                             break;
@@ -1760,7 +1760,7 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBackupStatement(ShowBackupStmt statement, ConnectContext context) {
-            Database filterDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            Database filterDb = MetadataMgr.getDb(statement.getDbName());
             List<List<String>> infos = Lists.newArrayList();
             List<Database> dbs = Lists.newArrayList();
 
@@ -1806,7 +1806,7 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowRestoreStatement(ShowRestoreStmt statement, ConnectContext context) {
-            Database filterDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            Database filterDb = MetadataMgr.getDb(statement.getDbName());
             List<List<String>> infos = Lists.newArrayList();
             List<Database> dbs = Lists.newArrayList();
 

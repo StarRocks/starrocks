@@ -66,6 +66,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -154,7 +155,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void alterLoadJob(AlterLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
+        Database db = MetadataMgr.getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -237,7 +238,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
                                                int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
                                                Coordinator coordinator) throws UserException {
         // get db id
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
@@ -262,7 +263,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
+        Database db = MetadataMgr.getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -662,7 +663,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     private Database checkDb(String dbName) throws DdlException {
         // get db
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new DdlException("Database[" + dbName + "] does not exist");

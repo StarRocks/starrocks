@@ -22,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -97,9 +98,8 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
         // Partitioned base table
         {
             String mvName = "iceberg_mv2";
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(testDb.getFullName(), mvName));
+            Database testDb = MetadataMgr.getDb("test");
+            MaterializedView mv = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
             refreshMVRange(mvName, true);
             List<String> partitionNames = mv.getPartitions().stream().map(Partition::getName)
                         .sorted().collect(Collectors.toList());
@@ -112,9 +112,8 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
         // Non-Partitioned base table
         {
             String mvName = "iceberg_mv1";
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(testDb.getFullName(), mvName));
+            Database testDb = MetadataMgr.getDb("test");
+            MaterializedView mv = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
             refreshMVRange(mvName, true);
             List<String> partitionNames = mv.getPartitions().stream().map(Partition::getName)
                         .sorted().collect(Collectors.toList());
@@ -141,9 +140,9 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                                 ")\n" +
                                 "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
 
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView partitionedMaterializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), "iceberg_parttbl_mv1"));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), "iceberg_parttbl_mv1"));
         triggerRefreshMv(testDb, partitionedMaterializedView);
 
         Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
@@ -210,7 +209,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                                     ")\n" +
                                     "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
 
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Database testDb = MetadataMgr.getDb("test");
             MaterializedView partitionedMaterializedView =
                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "iceberg_year_mv1"));
@@ -257,7 +256,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                                     ")\n" +
                                     "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
 
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Database testDb = MetadataMgr.getDb("test");
             MaterializedView partitionedMaterializedView =
                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "iceberg_month_mv1"));
@@ -287,7 +286,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                                     ")\n" +
                                     "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_day` as a;");
 
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Database testDb = MetadataMgr.getDb("test");
             MaterializedView partitionedMaterializedView =
                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "iceberg_day_mv1"));
@@ -317,7 +316,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                                     ")\n" +
                                     "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_hour` as a;");
 
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Database testDb = MetadataMgr.getDb("test");
             MaterializedView partitionedMaterializedView =
                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "iceberg_hour_mv1"));

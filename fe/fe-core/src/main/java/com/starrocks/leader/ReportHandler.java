@@ -86,6 +86,7 @@ import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
@@ -1229,12 +1230,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 // 3. There are some limitations for primary table, details in migratableTablet()
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+                Database db = MetadataMgr.getDb(tabletMeta.getDbId());
                 if (db == null) {
                     continue;
                 }
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tabletMeta.getTableId());
+                OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tabletMeta.getTableId());
                 if (table == null) {
                     continue;
                 }
@@ -1293,7 +1293,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo(backendId);
         backendTabletsInfo.setBad(true);
         for (Long dbId : tabletRecoveryMap.keySet()) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -1309,8 +1309,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
                     long tabletId = tabletIds.get(i);
                     long tableId = tabletMeta.getTableId();
-                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                    OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                     if (olapTable == null) {
                         continue;
                     }
@@ -1390,13 +1389,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long partitionId =
                         tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
                 if (db == null) {
                     continue;
                 }
 
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }
@@ -1452,13 +1450,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
                 if (db == null) {
                     continue;
                 }
 
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }
@@ -1508,13 +1505,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
                 if (db == null) {
                     continue;
                 }
 
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }
@@ -1569,13 +1565,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long tableId = tabletMeta.getTableId();
                 long indexId = tabletMeta.getIndexId();
 
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
                 if (db == null) {
                     continue;
                 }
 
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }
@@ -1617,12 +1612,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             List<Long> tablets = cell.getValue();
             Long dbId = tableToDb.get(tableId);
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }
 
-            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             if (olapTable == null) {
                 continue;
             }
@@ -1688,14 +1683,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
                 if (db == null) {
                     continue;
                 }
 
                 boolean needToCheck = false;
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }

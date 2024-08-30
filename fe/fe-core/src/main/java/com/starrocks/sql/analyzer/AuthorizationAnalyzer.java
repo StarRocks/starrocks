@@ -33,6 +33,7 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
@@ -261,7 +262,7 @@ public class AuthorizationAnalyzer {
                         FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
                                 argsDef.getArgTypes(), argsDef.isVariadic());
 
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+                        Database db = MetadataMgr.getDb(functionName.getDb());
                         long databaseID = db.getId();
                         Function function = db.getFunction(searchDesc);
 

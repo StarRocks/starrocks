@@ -33,6 +33,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
@@ -397,14 +398,14 @@ public class BackupRestoreAnalyzer {
         tableName.setDb(dbName);
 
         PartitionNames partitionNames = tableRef.getPartitionNames();
-        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
+        Table tbl = MetadataMgr.getTable(db.getFullName(), tableName.getTbl());
         if (null == tbl) {
             throw new SemanticException(ErrorCode.ERR_WRONG_TABLE_NAME.formatErrorMsg(tableName.getTbl()));
         }
 
         String alias = tableRef.getAlias();
         if (!tableName.getTbl().equalsIgnoreCase(alias)) {
-            Table tblAlias = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), alias);
+            Table tblAlias = MetadataMgr.getTable(db.getFullName(), alias);
             if (tblAlias != null && tbl != tblAlias) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "table [" + alias + "] existed");

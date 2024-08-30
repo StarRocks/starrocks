@@ -98,6 +98,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
@@ -794,7 +795,7 @@ public class UtFrameUtils {
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+            OlapTable replayTable = (OlapTable) MetadataMgr.getDb("" + dbName)
                         .getTable(entry.getKey().split("\\.")[1]);
 
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
@@ -805,7 +806,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                     .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+            Table replayTable = MetadataMgr.getDb("" + dbName)
                         .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentState().getStatisticStorage()
@@ -1338,9 +1339,8 @@ public class UtFrameUtils {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(testDb.getFullName(), tableName.getTbl()));
+                    Database testDb = MetadataMgr.getDb("test");
+                    OlapTable tbl = ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), tableName.getTbl()));
                     if (tbl != null) {
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
@@ -1350,9 +1350,8 @@ public class UtFrameUtils {
                 } else if (stmt instanceof DeleteStmt) {
                     DeleteStmt delete = (DeleteStmt) stmt;
                     TableName tableName = delete.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(testDb.getFullName(), tableName.getTbl()));
+                    Database testDb = MetadataMgr.getDb("test");
+                    OlapTable tbl = ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), tableName.getTbl()));
                     tbl.setHasDelete();
                 }
             }

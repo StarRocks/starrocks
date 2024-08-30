@@ -1674,7 +1674,7 @@ public class PrivilegeCheckerTest {
                 "Access denied");
 
         // Test `use database` : check any privilege on any function in db
-        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db1 = MetadataMgr.getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -1860,8 +1860,8 @@ public class PrivilegeCheckerTest {
         // test show single tablet no priv
         List<Replica> replicas =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = MetadataMgr.getDb("db1");
+        Table table = MetadataMgr.getTable(db.getFullName(), "tbl1");
         ReplicasProcNode replicasProcNode = new ReplicasProcNode(db, (OlapTable) table, tabletId, replicas);
         try {
             replicasProcNode.fetchResult();
@@ -1882,7 +1882,7 @@ public class PrivilegeCheckerTest {
         result = tabletSchedCtx.checkPrivForCurrUser(null);
         Assert.assertTrue(result);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db = MetadataMgr.getDb("db1");
 
         // test table not exist
         tabletSchedCtx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
@@ -1892,7 +1892,7 @@ public class PrivilegeCheckerTest {
 
         // test user has `OPERATE` privilege
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Table table = MetadataMgr.getTable(db.getFullName(), "tbl1");
         tabletSchedCtx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
                 db.getId(), table.getId(), 3, 4, 1000, System.currentTimeMillis());
         result = tabletSchedCtx.checkPrivForCurrUser(testUser);
@@ -2787,7 +2787,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testFunc() throws Exception {
-        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db1 = MetadataMgr.getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -2900,7 +2900,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowFunc() throws Exception {
 
-        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db1 = MetadataMgr.getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {

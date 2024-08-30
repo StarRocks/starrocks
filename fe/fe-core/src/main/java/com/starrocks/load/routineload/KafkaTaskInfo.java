@@ -44,6 +44,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TKafkaLoadInfo;
@@ -171,12 +172,12 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setId(queryId);
         tRoutineLoadTask.setJob_id(routineLoadJob.getId());
         tRoutineLoadTask.setTxn_id(txnId);
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(routineLoadJob.getDbId());
+        Database database = MetadataMgr.getDb(routineLoadJob.getDbId());
         if (database == null) {
             throw new MetaNotFoundException("database " + routineLoadJob.getDbId() + " does not exist");
         }
         tRoutineLoadTask.setDb(database.getFullName());
-        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), routineLoadJob.getTableId());
+        Table tbl = MetadataMgr.getTable(database.getId(), routineLoadJob.getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }

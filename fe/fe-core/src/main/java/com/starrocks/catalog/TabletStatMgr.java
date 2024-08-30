@@ -51,6 +51,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -102,7 +103,7 @@ public class TabletStatMgr extends FrontendDaemon {
         long start = System.currentTimeMillis();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -199,7 +200,7 @@ public class TabletStatMgr extends FrontendDaemon {
 
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }

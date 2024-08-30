@@ -20,7 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Pair;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,7 +64,7 @@ public class UniqueConstraint {
         if (referencedTable != null) {
             targetTable = referencedTable;
         } else {
-            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            targetTable = MetadataMgr.getTable(catalogName, dbName, tableName);
             if (targetTable == null) {
                 throw new SemanticException("Table %s is not found", tableName);
             }
@@ -88,7 +88,7 @@ public class UniqueConstraint {
     // foreignKeys must be in lower case for case-insensitive
     public boolean isMatch(Table parentTable, Set<String> foreignKeys) {
         if (catalogName != null && dbName != null && tableName != null) {
-            Table uniqueTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            Table uniqueTable = MetadataMgr.getTable(catalogName, dbName, tableName);
             if (uniqueTable == null) {
                 LOG.warn("can not find unique constraint table: {}.{}.{}", catalogName, dbName, tableName);
                 return false;

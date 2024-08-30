@@ -69,6 +69,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TTransactionStatus;
@@ -1018,8 +1019,7 @@ public class DatabaseTransactionMgr {
                 Set<Long> droppedTableIds = Sets.newHashSet();
                 for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
                     long tableId = tableCommitInfo.getTableId();
-                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                    OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                     // table maybe dropped between commit and publish, ignore this error
                     if (table == null) {
                         droppedTableIds.add(tableId);
@@ -1685,8 +1685,7 @@ public class DatabaseTransactionMgr {
 
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), transactionStateBatch.getTableId());
+        Table table = MetadataMgr.getTable(db.getId(), transactionStateBatch.getTableId());
         if (table == null) {
             return true;
         }

@@ -56,7 +56,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -296,12 +296,12 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     private void checkMeta() throws LoadException {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId());
+        Database database = MetadataMgr.getDb(db.getId());
         if (database == null) {
             throw new LoadException(String.format("db: %s-%d has been dropped", db.getFullName(), db.getId()));
         }
 
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), table.getId()) == null) {
+        if (MetadataMgr.getTable(database.getId(), table.getId()) == null) {
             throw new LoadException(String.format("table: %s-%d has been dropped from db: %s-%d",
                     table.getName(), table.getId(), db.getFullName(), db.getId()));
         }

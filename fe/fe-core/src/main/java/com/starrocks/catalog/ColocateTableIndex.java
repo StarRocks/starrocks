@@ -61,6 +61,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
@@ -492,15 +493,14 @@ public class ColocateTableIndex implements Writable {
 
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(groupId.dbId);
+        Database db = MetadataMgr.getDb(groupId.dbId);
         int numOfTablets = 0;
         if (db != null && !allTableIds.isEmpty()) {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db, LockType.READ);
                 for (long tableId : allTableIds) {
-                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                    OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                     if (tbl != null) {
                         numOfTablets += tbl.getNumberOfPartitions();
                     }
@@ -609,9 +609,9 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        Database db = MetadataMgr.getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId());
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), info.getTableId());
         Preconditions.checkNotNull(tbl);
 
         writeLock();
@@ -662,11 +662,11 @@ public class ColocateTableIndex implements Writable {
 
     protected Optional<String> getTableName(long dbId, long tableId) {
 
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database database = MetadataMgr.getDb(dbId);
         if (database == null) {
             return Optional.empty();
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+        Table table = MetadataMgr.getTable(database.getId(), tableId);
 
         if (table == null) {
             return Optional.empty();
@@ -987,9 +987,9 @@ public class ColocateTableIndex implements Writable {
         long tableId = info.getTableId();
         Map<String, String> properties = info.getPropertyMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        Database db = MetadataMgr.getDb(info.getGroupId().dbId);
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tableId), LockType.WRITE)) {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
                     info.getGroupId());
         } catch (DdlException e) {

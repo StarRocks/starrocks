@@ -16,7 +16,7 @@ package com.starrocks.http;
 
 import com.starrocks.http.rest.QueryDumpAction;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.service.ExecuteEnv;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import okhttp3.HttpUrl;
@@ -38,7 +38,7 @@ public class QueryDumpActionTest extends StarRocksHttpTestCase {
     public void setUp() throws Exception {
         setUpWithCatalog();
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME) != null);
+                .until(() -> MetadataMgr.getDb("default_catalog", DB_NAME) != null);
     }
 
     @Override

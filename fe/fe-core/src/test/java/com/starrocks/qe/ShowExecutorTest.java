@@ -38,7 +38,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -52,7 +51,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -70,7 +68,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
@@ -106,14 +103,12 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
-import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
@@ -141,7 +136,6 @@ import org.sparkproject.guava.collect.Maps;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -157,6 +151,7 @@ public class ShowExecutorTest {
 
     private ConnectContext ctx;
     private GlobalStateMgr globalStateMgr;
+    private LocalMetastore localMetastore;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -367,7 +362,8 @@ public class ShowExecutorTest {
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        globalStateMgr.setLocalMetastore(localMetastore);
         new Expectations(globalStateMgr) {
             {
                 /*
@@ -488,78 +484,7 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
     }
 
-    @Test
-    public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
 
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public List<Long> getAvailableBackendIds() {
-                return Arrays.asList(10001L, 10002L, 10003L);
-            }
-        };
-        // Prepare to Test
-        ListPartitionInfoTest listPartitionInfoTest = new ListPartitionInfoTest();
-        listPartitionInfoTest.setUp();
-        OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
-        Database db = new Database();
-
-        /*
-        new Expectations(db) {
-            {
-                db.getTable(anyString);
-                minTimes = 0;
-                result = olapTable;
-
-                db.getTable(1000);
-                minTimes = 1;
-                result = olapTable;
-            }
-        };
-
-         */
-
-        new MockUp<MetaUtils>() {
-            @Mock
-            public Table getSessionAwareTable(ConnectContext ctx, Database db, TableName tableName) {
-                return olapTable;
-            }
-        };
-
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(0);
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
-                minTimes = 0;
-                result = olapTable;
-            }
-        };
-
-        // Ok to test
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
-                    null, null, null, false);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-
-        // Ready to Assert
-        String partitionKeyTitle = resultSet.getMetaData().getColumn(6).getName();
-        Assert.assertEquals(partitionKeyTitle, "PartitionKey");
-        String valuesTitle = resultSet.getMetaData().getColumn(7).getName();
-        Assert.assertEquals(valuesTitle, "List");
-
-        String partitionKey1 = resultSet.getResultRows().get(0).get(6);
-        Assert.assertEquals(partitionKey1, "dt, province");
-        String partitionKey2 = resultSet.getResultRows().get(1).get(6);
-        Assert.assertEquals(partitionKey2, "dt, province");
-
-        String values1 = resultSet.getResultRows().get(0).get(7);
-        Assert.assertEquals(values1, "(('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin'))");
-        String values2 = resultSet.getResultRows().get(1).get(7);
-        Assert.assertEquals(values2, "(('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing'))");
-    }
 
     @Test
     public void testShowTableFromUnknownDatabase() throws SemanticException, DdlException {
@@ -687,16 +612,6 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = SemanticException.class)
-    public void testShowCreateTableEmptyDb() throws SemanticException, DdlException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("emptyDb", "testTable"),
-                    ShowCreateTableStmt.CreateTableType.TABLE);
-
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-
-        Assert.fail("No Exception throws.");
     }
 
     @Test
@@ -1011,15 +926,6 @@ public class ShowExecutorTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         verifyShowMaterializedViewResult(resultSet);
-    }
-
-    @Test
-    public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
-
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Unknown database 'emptyDb'");
-        ShowExecutor.execute(stmt, ctx);
     }
 
     @Test

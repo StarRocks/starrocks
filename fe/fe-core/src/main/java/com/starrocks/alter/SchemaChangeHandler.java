@@ -92,6 +92,7 @@ import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
@@ -2057,8 +2058,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                 TTabletMetaType metaType)
             throws DdlException {
         List<Partition> partitions = Lists.newArrayList();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2135,7 +2135,7 @@ public class SchemaChangeHandler extends AlterHandler {
         boolean hasChanged = false;
         boolean isModifiedSuccess = true;
 
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (olapTable == null) {
             return false;
         }
@@ -2241,8 +2241,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                              String tableName,
                                              List<String> partitionNames,
                                              Map<String, String> properties) throws DdlException {
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
@@ -2285,8 +2284,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                                 TTabletMetaType metaType) throws DdlException {
         // be id -> Set<tablet id>
         Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2372,8 +2370,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                           TTabletMetaType metaType) throws DdlException {
         // be id -> <tablet id>
         Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), tableName);
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
@@ -2460,7 +2457,7 @@ public class SchemaChangeHandler extends AlterHandler {
         TableProperty tableProperty;
         OlapTable olapTable;
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = MetadataMgr.getTable(db.getFullName(), tableName);
             if (table == null) {
                 throw new DdlException(String.format("table:%s does not exist", tableName));
             }
@@ -2538,12 +2535,12 @@ public class SchemaChangeHandler extends AlterHandler {
         Preconditions.checkState(!Strings.isNullOrEmpty(dbName));
         Preconditions.checkState(!Strings.isNullOrEmpty(tableName));
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -2771,8 +2768,8 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Index> indexes = info.getIndexes();
         long jobId = info.getJobId();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Database db = MetadataMgr.getDb(dbId);
+        Table table = MetadataMgr.getTable(db.getId(), tableId);
         Preconditions.checkArgument(table instanceof OlapTable,
                 "Target of light schema change must be olap table");
         OlapTable olapTable = (OlapTable) table;

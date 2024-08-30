@@ -10,6 +10,7 @@ import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -531,7 +532,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         {
-            long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getId();
+            long dbId = MetadataMgr.getDb("db1").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
             TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
@@ -540,7 +541,7 @@ public class ResourceGroupStmtTest {
             Assert.assertEquals("rg5", wg.getName());
         }
         {
-            long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getId();
+            long dbId = MetadataMgr.getDb("db2").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
             TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
@@ -551,8 +552,8 @@ public class ResourceGroupStmtTest {
         }
         {
             Set<Long> dbIds = ImmutableSet.of(
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getId(),
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getId());
+                    MetadataMgr.getDb("db1").getId(),
+                    MetadataMgr.getDb("db2").getId());
             TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
@@ -773,7 +774,7 @@ public class ResourceGroupStmtTest {
 
         // Prefer the short query group regardless its classifier weight is the lowest.
         String qualifiedUser = "rt_rg_user";
-        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getId();
+        long dbId = MetadataMgr.getDb("db1").getId();
         Set<Long> dbs = ImmutableSet.of(dbId);
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));

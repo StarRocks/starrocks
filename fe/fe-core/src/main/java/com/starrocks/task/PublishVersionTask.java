@@ -42,6 +42,7 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
@@ -189,7 +190,7 @@ public class PublishVersionTask extends AgentTask {
             LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             LOG.warn("db not found dbid={}", dbId);
             return;

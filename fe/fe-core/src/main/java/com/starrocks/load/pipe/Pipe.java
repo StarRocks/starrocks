@@ -44,6 +44,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -133,7 +134,7 @@ public class Pipe implements GsonPostProcessable {
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
-        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(pipeName.getDbName()).getId();
+        long dbId = MetadataMgr.getDb(pipeName.getDbName()).getId();
         PipeId pipeId = new PipeId(dbId, id);
         Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());

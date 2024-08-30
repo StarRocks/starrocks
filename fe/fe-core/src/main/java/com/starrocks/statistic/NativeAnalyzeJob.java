@@ -26,6 +26,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
@@ -105,7 +106,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @Override
     public String getDbName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
@@ -114,11 +115,11 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @Override
     public String getTableName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = MetadataMgr.getTable(db.getId(), tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }

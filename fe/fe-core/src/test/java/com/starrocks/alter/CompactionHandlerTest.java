@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CompactionClause;
@@ -69,9 +70,8 @@ public class CompactionHandlerTest {
                     "DISTRIBUTED BY HASH(v1) BUCKETS 3\n" +
                     "PROPERTIES('replication_num' = '1');");
 
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
-        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
+        db = MetadataMgr.getDb(GlobalStateMgrTestUtil.testDb1);
+        olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
     }
 
     @After

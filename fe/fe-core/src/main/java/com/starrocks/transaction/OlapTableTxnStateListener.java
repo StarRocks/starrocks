@@ -30,6 +30,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -292,7 +293,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                           List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(txnState.getDbId());
+        Database db = MetadataMgr.getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
             locker.lockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);

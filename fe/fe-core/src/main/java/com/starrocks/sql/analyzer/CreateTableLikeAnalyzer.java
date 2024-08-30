@@ -21,7 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
@@ -41,7 +41,7 @@ public class CreateTableLikeAnalyzer {
         FeNameFormat.checkTableName(tableName);
 
         MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(existedDbTbl.getCatalog(),
+        Table table = MetadataMgr.getTable(existedDbTbl.getCatalog(),
                 existedDbTbl.getDb(), existedDbTbl.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);

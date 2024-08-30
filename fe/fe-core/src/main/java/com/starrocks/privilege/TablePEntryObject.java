@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
@@ -275,8 +276,7 @@ public class TablePEntryObject implements PEntryObject {
             } else {
                 String tblName = null;
                 if (CatalogMgr.isInternalCatalog(catalogId)) {
-                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(Long.parseLong(getDatabaseUUID()), Long.parseLong(getTableUUID()));
+                    Table table = MetadataMgr.getTable(Long.parseLong(getDatabaseUUID()), Long.parseLong(getTableUUID()));
                     if (table == null) {
                         throw new MetaNotFoundException("Cannot find table : " + tableUUID);
                     }

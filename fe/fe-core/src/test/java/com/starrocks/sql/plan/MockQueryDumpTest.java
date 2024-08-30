@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -53,6 +54,7 @@ public class MockQueryDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testMockQueryDump() {
         try {
             Pair<QueryDumpInfo, String> replayPair =

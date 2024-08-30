@@ -53,6 +53,7 @@ import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
@@ -235,8 +236,8 @@ public class StatisticUtils {
         }
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
+            Database db = MetadataMgr.getDb(dbName);
+            if (null != db && null != MetadataMgr.getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -248,7 +249,7 @@ public class StatisticUtils {
         if (FeConstants.runningUnitTest) {
             return true;
         }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = MetadataMgr.getDb(StatsConstants.STATISTICS_DB_NAME);
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
@@ -260,7 +261,7 @@ public class StatisticUtils {
 
         for (String tableName : tableNameList) {
             // check table
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = MetadataMgr.getTable(db.getFullName(), tableName);
             if (table == null) {
                 return false;
             }

@@ -55,6 +55,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.task.CheckConsistencyTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -421,8 +422,7 @@ public class ConsistencyChecker extends FrontendDaemon {
             LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
             return;
         }
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), info.getTableId());
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), info.getTableId());
         if (table == null) {
             LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
             return;

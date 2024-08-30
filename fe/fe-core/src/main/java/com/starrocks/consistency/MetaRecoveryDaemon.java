@@ -33,6 +33,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -186,7 +187,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
     public void recoverPartitionVersion(PartitionVersionRecoveryInfo recoveryInfo) {
         for (PartitionVersion version : recoveryInfo.getPartitionVersions()) {
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(version.getDbId());
+            Database database = MetadataMgr.getDb(version.getDbId());
             if (database == null) {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
@@ -194,8 +195,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(database, LockType.WRITE);
             try {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(database.getId(), version.getTableId());
+                Table table = MetadataMgr.getTable(database.getId(), version.getTableId());
                 if (table == null) {
                     LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);
                     continue;

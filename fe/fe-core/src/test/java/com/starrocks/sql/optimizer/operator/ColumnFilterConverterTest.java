@@ -40,7 +40,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -264,7 +264,7 @@ public class ColumnFilterConverterTest {
         argument.add(constantOperator);
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, argument);
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("bill_detail");
+        Table table = MetadataMgr.getDb("test").getTable("bill_detail");
         ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();
         ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo, table.getIdToColumn());
         Assert.assertEquals(2921712368984L, ((ConstantOperator) afterConvert.getChild(1)).getValue());

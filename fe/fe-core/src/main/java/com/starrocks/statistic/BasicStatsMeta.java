@@ -22,6 +22,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
@@ -123,8 +124,8 @@ public class BasicStatsMeta implements Writable {
     }
 
     public double getHealthy() {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+        Database database = MetadataMgr.getDb(dbId);
+        OlapTable table = (OlapTable) MetadataMgr.getTable(database.getId(), tableId);
         long totalPartitionCount = table.getPartitions().size();
 
         long tableRowCount = 1L;

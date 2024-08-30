@@ -22,6 +22,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -48,7 +49,7 @@ public class MaterializedViewAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 "create table test_table1 (k1 bigint, v0 int) DUPLICATE KEY (k1) DISTRIBUTED BY HASH(k1);");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+        Database db = MetadataMgr.getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
@@ -59,7 +60,7 @@ public class MaterializedViewAutoTabletTest {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
+            OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table1");
             if (table == null) {
                 return;
             }
@@ -67,7 +68,7 @@ public class MaterializedViewAutoTabletTest {
                 bucketNum1 += partition.getDistributionInfo().getBucketNum();
             }
 
-            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+            table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "mv1");
             if (table == null) {
                 return;
             }

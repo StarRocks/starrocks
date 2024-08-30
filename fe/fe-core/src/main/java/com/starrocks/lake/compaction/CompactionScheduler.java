@@ -36,6 +36,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.MetaUtils;
@@ -273,8 +274,7 @@ public class CompactionScheduler extends Daemon {
 
         try {
             // lake table or lake materialized view
-            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), partitionIdentifier.getTableId());
+            table = (OlapTable) MetadataMgr.getTable(db.getId(), partitionIdentifier.getTableId());
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
             if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {

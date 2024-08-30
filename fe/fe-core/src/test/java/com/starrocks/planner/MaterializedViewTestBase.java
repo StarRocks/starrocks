@@ -25,6 +25,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -288,8 +289,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected static Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+        Database db = MetadataMgr.getDb(dbName);
+        Table table = MetadataMgr.getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }

@@ -321,7 +321,7 @@ public class GrantsTo {
                     if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
                         List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                         for (String dbName : dbNames) {
-                            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+                            Database database = MetadataMgr.getDb(dbName);
                             if (database == null) {
                                 continue;
                             }
@@ -335,7 +335,7 @@ public class GrantsTo {
                             }
                         }
                     } else {
-                        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
+                        Database database = MetadataMgr.getDb(databaseId);
                         if (database == null) {
                             continue;
                         }

@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
@@ -107,8 +108,7 @@ public class ForeignKeyConstraint {
 
     private Table getParentTable() {
         if (parentTableInfo.isInternalCatalog()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
+            Table table = MetadataMgr.getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", parentTableInfo.getTableId());
             }
@@ -125,8 +125,7 @@ public class ForeignKeyConstraint {
 
     private Table getChildTable() {
         if (childTableInfo.isInternalCatalog()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
+            Table table = MetadataMgr.getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", childTableInfo.getTableId());
             }
@@ -239,12 +238,12 @@ public class ForeignKeyConstraint {
                     "BaseTableInfo table %s should be tableId for internal catalog", table);
             long dbId = Long.parseLong(db);
             long tableId = Long.parseLong(table);
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database database = MetadataMgr.getDb(dbId);
             if (database == null) {
                 throw new IllegalArgumentException(String.format("BaseInfo's db %s should not be null in the foreign key " +
                         "constraint, please drop foreign key constraints and retry", dbId));
             }
-            Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+            Table baseTable = MetadataMgr.getTable(database.getId(), tableId);
             if (baseTable == null) {
                 throw new IllegalArgumentException(String.format("BaseInfo' base table %s should not be null in the foreign kee" +
                                 " constraint, please drop foreign key constraints and retry",

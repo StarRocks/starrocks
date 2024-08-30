@@ -25,6 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.system.Backend;
 import org.junit.After;
@@ -148,9 +149,8 @@ public class LocationMismatchRepairTest {
                     ");";
         cluster.runSql("test", sql);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_backend_no_loc");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_backend_no_loc");
         Assert.assertNotNull(table.getLocation());
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
 
@@ -262,9 +262,8 @@ public class LocationMismatchRepairTest {
 
         // sleep to wait for redundant replicas cleaned
         Thread.sleep(5000);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "test_table_backend_no_loc");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_table_backend_no_loc");
         printTabletReplicaInfo(table);
         Set<Long> stayedBackendIds = getBackendIdsWithLocProp("rack", "r0");
         stayedBackendIds.addAll(getBackendIdsWithLocProp("rack", "r1"));
@@ -317,9 +316,9 @@ public class LocationMismatchRepairTest {
                     "AS SELECT test_base_table.k1 FROM test_base_table;";
         cluster.runSql("test", sql);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_mv01");
+                    (OlapTable) MetadataMgr.getTable(db.getFullName(), "test_mv01");
         Assert.assertNotNull(table.getLocation());
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
 

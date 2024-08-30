@@ -711,7 +711,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     public void replayAlterDatabaseQuota(DatabaseInfo dbInfo) {
         String dbName = dbInfo.getDbName();
         LOG.info("Begin to unprotect alter db info {}", dbName);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         AlterDatabaseQuotaStmt.QuotaType quotaType = dbInfo.getQuotaType();
         long quota = dbInfo.getQuota();
 
@@ -3094,7 +3094,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         String tableName = stmt.getBaseIndexName();
         // check db
         String dbName = stmt.getDBName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -3646,8 +3646,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
 
     public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
+            MaterializedView mv = (MaterializedView) MetadataMgr.getTable(db.getId(), mvId.getId());
             if (mv != null) {
                 LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
                 mv.setInactiveAndReason(reason);

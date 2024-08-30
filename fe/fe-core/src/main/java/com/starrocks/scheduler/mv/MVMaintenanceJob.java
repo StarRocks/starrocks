@@ -38,7 +38,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.BackendServiceClient;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
@@ -125,7 +125,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
     // TODO recover the entire job state, include execution plan
     public void restore() {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, viewId);
+        Table table = MetadataMgr.getTable(dbId, viewId);
         Preconditions.checkState(table != null && table.isMaterializedView());
         this.view = (MaterializedView) table;
         this.serializedState = JobState.INIT;
@@ -232,7 +232,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         // Build connection context
         this.connectContext = StatisticUtils.buildConnectContext();
         this.connectContext.setNeedQueued(false);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId());
+        Database db = MetadataMgr.getDb(view.getDbId());
         this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
         if (db != null) {
             this.connectContext.setDatabase(db.getFullName());
@@ -365,7 +365,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
                                            MVMaintenanceTask task) {
         // Request information
-        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId()).getFullName();
+        String dbName = MetadataMgr.getDb(view.getDbId()).getFullName();
 
         request.setDb_name(dbName);
         request.setMv_name(view.getName());

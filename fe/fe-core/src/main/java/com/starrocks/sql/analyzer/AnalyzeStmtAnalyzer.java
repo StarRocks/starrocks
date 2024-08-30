@@ -30,6 +30,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
@@ -178,7 +179,7 @@ public class AnalyzeStmtAnalyzer {
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+                    Database db = MetadataMgr.getDb(tbl.getCatalog(), tbl.getDb());
                     if (db == null) {
                         throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
                     }

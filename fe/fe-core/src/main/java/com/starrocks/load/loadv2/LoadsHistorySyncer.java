@@ -23,6 +23,7 @@ import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -88,7 +89,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(LOADS_HISTORY_DB_NAME) != null;
+        return MetadataMgr.getDb(LOADS_HISTORY_DB_NAME) != null;
     }
 
     public static void createTable() throws UserException {

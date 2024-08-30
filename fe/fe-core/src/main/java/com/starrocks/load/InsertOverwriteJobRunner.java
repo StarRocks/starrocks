@@ -39,6 +39,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -215,7 +216,7 @@ public class InsertOverwriteJobRunner {
         }
         job.setTmpPartitionIds(tmpPartitionIds);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -344,7 +345,7 @@ public class InsertOverwriteJobRunner {
 
     private void createTempPartitions() throws DdlException {
         long createPartitionStartTimestamp = System.currentTimeMillis();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -366,7 +367,7 @@ public class InsertOverwriteJobRunner {
     private void gc(boolean isReplay) {
         LOG.info("start to garbage collect");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -376,7 +377,7 @@ public class InsertOverwriteJobRunner {
         }
 
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = MetadataMgr.getTable(db.getId(), tableId);
             if (table == null) {
                 throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
             }
@@ -416,7 +417,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private void doCommit(boolean isReplay) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -487,7 +488,7 @@ public class InsertOverwriteJobRunner {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -522,7 +523,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private OlapTable checkAndGetTable(Database db, long tableId) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = MetadataMgr.getTable(db.getId(), tableId);
         if (table == null) {
             throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
         }

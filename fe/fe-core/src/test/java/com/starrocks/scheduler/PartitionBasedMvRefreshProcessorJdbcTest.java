@@ -25,6 +25,7 @@ import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
@@ -169,9 +170,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
 
     @NotNull
     private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), materializedViewName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), materializedViewName));
         refreshMVRange(materializedView.getName(), start, end, false);
         return materializedView;
     }
@@ -232,9 +232,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                     "\"partition_refresh_number\" = \"1\"" +
                     ") " +
                     "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl5;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), mvName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
 
         // full refresh
         {
@@ -296,9 +295,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                     "'partition_ttl_number'='2'" +
                     ") " +
                     "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), mvName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");
@@ -348,9 +346,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
         List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", TableVersionRange.empty());
         Assert.assertEquals(4, baseParNames.size());
 
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), "jdbc_parttbl_mv6"));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), "jdbc_parttbl_mv6"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
         // check corner case: the first partition of base table is 0000 to 20230801
         // p20230801 of mv should not be created
@@ -379,9 +376,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), mvName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");

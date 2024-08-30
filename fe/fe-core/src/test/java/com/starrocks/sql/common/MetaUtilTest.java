@@ -27,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -72,8 +73,8 @@ public class MetaUtilTest {
 
     @Test
     public void testIsPartitionExist() {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
+        Database database = MetadataMgr.getDb("test");
+        Table table = MetadataMgr.getTable(database.getFullName(), "t0");
         List<Partition> partitionList = new ArrayList<>(table.getPartitions());
         Assert.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 -1, -1, -1));

@@ -51,6 +51,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
@@ -918,7 +919,7 @@ public class TransactionState implements Writable {
 
     public boolean checkCanFinish() {
         // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             // consider txn finished if db is dropped
             return true;

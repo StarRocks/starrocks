@@ -13,9 +13,22 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.hive.HiveMetastoreOperations;
+import com.starrocks.connector.hive.HiveStatisticsProvider;
+import com.starrocks.privilege.IdGenerator;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -29,6 +42,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.Executor;
+
 public class ShowTablesTest {
     private static ConnectContext ctx;
 
@@ -38,9 +58,15 @@ public class ShowTablesTest {
         UtFrameUtils.setUpForPersistTest();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        ShowTableMockMeta metadataMgr =
-                new ShowTableMockMeta(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
-        metadataMgr.init();
+
+        HiveCacheUpdateProcessor hiveCacheUpdateProcessor = new HiveCacheUpdateProcessor("hive0", null,
+                null, null, true, false);
+        MockHiveCatalog hiveMetadata = new MockHiveCatalog("hive0", null, null, null, null,
+                Optional.of(hiveCacheUpdateProcessor), null, null);
+
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(new ShowTableMockMeta(globalStateMgr, null, null),
+                GlobalStateMgr.getCurrentState().getConnectorMgr());
+        metadataMgr.registerMockedMetadata("hive_catalog", hiveMetadata);
         globalStateMgr.setMetadataMgr(metadataMgr);
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -49,6 +75,59 @@ public class ShowTablesTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
+    }
+
+    static class MockHiveCatalog extends HiveMetadata {
+        private final IdGenerator idGenerator;
+        private final Map<String, Database> externalDbSet;
+        private final Map<String, Table> externalTbSet;
+
+        public MockHiveCatalog(String catalogName, HdfsEnvironment hdfsEnvironment,
+                               HiveMetastoreOperations hmsOps,
+                               RemoteFileOperations fileOperations,
+                               HiveStatisticsProvider statisticsProvider,
+                               Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor, Executor updateExecutor,
+                               Executor refreshOthersFeExecutor) throws DdlException {
+            super(catalogName, hdfsEnvironment, hmsOps, fileOperations, statisticsProvider, cacheUpdateProcessor, updateExecutor,
+                    refreshOthersFeExecutor);
+
+            idGenerator = new IdGenerator();
+            this.externalDbSet = new HashMap<>();
+            this.externalTbSet = new HashMap<>();
+
+            Database db3 = new Database(idGenerator.getNextId(), "hive_db");
+            externalDbSet.put("hive_db", db3);
+
+            HiveTable table = new HiveTable();
+            table.setId(idGenerator.getNextId());
+            table.setName("hive_test");
+            externalTbSet.put("hive_test", table);
+
+            Map<String, String> properties = Maps.newHashMap();
+            properties.put("type", "hive");
+            properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+            GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(
+                    "hive", "hive_catalog", "", properties);
+        }
+
+        public Database getDb(String dbName) {
+            return externalDbSet.get(dbName);
+        }
+
+        @Override
+        public List<String> listDbNames() {
+            return new ArrayList<>(externalDbSet.keySet());
+        }
+
+        @Override
+        public Table getTable(String dbName, String tblName) {
+            return externalTbSet.get(tblName);
+        }
+
+        @Override
+        public List<String> listTableNames(String dbName) {
+            return new ArrayList<>(externalTbSet.keySet());
+        }
     }
 
     @AfterClass
@@ -76,7 +155,8 @@ public class ShowTablesTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
+        ShowTableStmt stmt = new ShowTableStmt("testDb", true, null, null,
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assert.assertTrue(resultSet.next());

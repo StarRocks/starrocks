@@ -62,6 +62,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
@@ -508,7 +509,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 sortRoutineLoadJob(result);
             } else {
                 long dbId = 0L;
-                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+                Database database = MetadataMgr.getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }

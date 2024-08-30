@@ -19,7 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
@@ -60,9 +60,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), mvName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");
@@ -133,9 +132,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), mvName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('20230801') " +
@@ -173,9 +171,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), mvName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");
@@ -246,9 +243,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), mvName));
+        Database testDb = MetadataMgr.getDb("test");
+        MaterializedView materializedView = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('20230801') " +
@@ -291,7 +287,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     ") " +
                     " as select a, b, d, cnt" +
                     " from jdbc_table_view");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = MetadataMgr.getDb("test");
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " with sync mode");
 
         {

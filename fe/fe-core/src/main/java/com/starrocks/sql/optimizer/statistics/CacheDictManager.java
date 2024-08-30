@@ -27,6 +27,7 @@ import com.starrocks.common.Status;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TStatisticData;
@@ -164,8 +165,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
         Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
         for (Long id : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
-            if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
+            Database db = MetadataMgr.getDb(id);
+            if (db != null && MetadataMgr.getTable(db.getId(), tableId) != null) {
                 columnIdentifier.setDbId(db.getId());
                 break;
             }

@@ -42,6 +42,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -284,14 +285,14 @@ public class PseudoCluster {
     }
 
     public List<Long> listTablets(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             return null;
         }
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = MetadataMgr.getTable(db.getFullName(), tableName);
             if (table == null) {
                 return null;
             }

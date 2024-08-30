@@ -25,6 +25,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -156,7 +157,7 @@ public class PredicateReorderRuleTest {
 
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) MetadataMgr.getDb("test").getTable("t0");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 
@@ -230,8 +231,8 @@ public class PredicateReorderRuleTest {
     public void testHashJoinPredicateReorder() {
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
-        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t1");
+        OlapTable t0 = (OlapTable) MetadataMgr.getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) MetadataMgr.getDb("test").getTable("t1");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 

@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -208,8 +209,8 @@ public class AnalyzeStmtTest {
     public void testShow() throws MetaNotFoundException {
         String sql = "show analyze";
         ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "t0");
+        Database testDb = MetadataMgr.getDb("test");
+        Table table = MetadataMgr.getTable(testDb.getFullName(), "t0");
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
                 Lists.newArrayList(),
@@ -271,8 +272,8 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testStatisticsSqlBuilder() throws Exception {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
+        Database database = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(database.getFullName(), "t0");
         System.out.println(table.getPartitions());
         Partition partition = (new ArrayList<>(table.getPartitions())).get(0);
 
@@ -387,8 +388,8 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testAnalyzeStatus() throws MetaNotFoundException {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "t0");
+        Database testDb = MetadataMgr.getDb("test");
+        Table table = MetadataMgr.getTable(testDb.getFullName(), "t0");
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
@@ -417,9 +418,9 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testObjectColumns() {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        Database database = MetadataMgr.getDb("db");
         OlapTable table =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tb2");
+                (OlapTable) MetadataMgr.getTable(database.getFullName(), "tb2");
 
         Column kk1 = table.getColumn("kk1");
         Column kk2 = table.getColumn("kk2");

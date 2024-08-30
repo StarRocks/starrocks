@@ -45,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -92,9 +93,9 @@ public class BatchRollupJobTest {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db = MetadataMgr.getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
         Assert.assertNotNull(tbl);
 
         // 3 rollup jobs may be finished in the loop, so only check the final state at last.
@@ -138,9 +139,9 @@ public class BatchRollupJobTest {
         Assert.assertEquals(3, alterJobs.size());
         List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db = MetadataMgr.getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl2");
         Assert.assertNotNull(tbl);
         Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
 

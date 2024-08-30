@@ -59,6 +59,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.BackupRestoreAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BackupStmt;
@@ -218,8 +219,7 @@ public class BackupHandlerTest {
 
             @Mock
             public Status getSnapshotInfoFile(String label, String backupTimestamp, List<BackupJobInfo> infos) {
-                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
+                OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
                 List<Table> tbls = Lists.newArrayList();
                 tbls.add(tbl);
                 Map<Long, SnapshotInfo> snapshotInfos = Maps.newHashMap();

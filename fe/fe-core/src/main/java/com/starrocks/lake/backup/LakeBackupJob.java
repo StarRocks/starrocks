@@ -40,6 +40,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -82,7 +83,7 @@ public class LakeBackupJob extends BackupJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = MetadataMgr.getTable(db.getFullName(), tblName);
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;

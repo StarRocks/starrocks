@@ -54,6 +54,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
@@ -1254,14 +1255,14 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public OlapTable getTable() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             if (table == null) {
                 throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
             }

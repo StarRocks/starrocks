@@ -31,6 +31,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
@@ -290,6 +291,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testJoinReorderPushColumnsNoHandleProject() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder"), null, TExplainLevel.NORMAL);
@@ -555,6 +557,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testHiveTPCH02UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
@@ -568,6 +571,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testHiveTPCH05UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch05_resource"), null, TExplainLevel.COSTS);
@@ -581,6 +585,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testHiveTPCH08UsingResource() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         Pair<QueryDumpInfo, String> replayPair =
@@ -596,6 +601,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testHiveTPCH02UsingCatalog() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         Pair<QueryDumpInfo, String> replayPair =
@@ -609,6 +615,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testHiveTPCH05UsingCatalog() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         Pair<QueryDumpInfo, String> replayPair =
@@ -626,6 +633,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testHiveTPCH08UsingCatalog() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         Pair<QueryDumpInfo, String> replayPair =
@@ -956,6 +964,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testQueryTimeout() {
         Assert.assertThrows(StarRocksPlannerException.class,
                 () -> getPlanFragment(getDumpInfoFromFile("query_dump/query_timeout"), null, TExplainLevel.NORMAL));

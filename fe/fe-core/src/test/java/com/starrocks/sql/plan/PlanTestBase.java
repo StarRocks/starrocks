@@ -21,6 +21,7 @@ import com.starrocks.planner.TpchSQL;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.utframe.StarRocksAssert;
 import org.apache.commons.collections.CollectionUtils;
@@ -967,7 +968,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
     public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb);
+            Database testDb = MetadataMgr.getDb(currentDb);
             for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
                 if (startTime > 0 && mv.getCreateTime() > startTime) {
                     starRocksAssert.dropMaterializedView(mv.getName());

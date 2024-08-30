@@ -81,6 +81,7 @@ import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -221,7 +222,7 @@ public class StarRocksAssert {
     }
 
     public boolean databaseExist(String dbName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName);
+        Database db = MetadataMgr.getDb("" + dbName);
         return db != null;
     }
 
@@ -572,14 +573,14 @@ public class StarRocksAssert {
 
     public Table getTable(String dbName, String tableName) {
         return ctx.getGlobalStateMgr().getLocalMetastore().mayGetDb(dbName)
-                    .map(db -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName))
+                    .map(db -> MetadataMgr.getTable(db.getFullName(), tableName))
                     .orElse(null);
     }
 
     public MaterializedView getMv(String dbName, String tableName) {
         return (MaterializedView) ctx.getGlobalStateMgr().getLocalMetastore()
                     .mayGetDb(dbName)
-                    .map(db -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName))
+                    .map(db -> MetadataMgr.getTable(db.getFullName(), tableName))
                     .orElse(null);
     }
 
@@ -629,7 +630,7 @@ public class StarRocksAssert {
                     if (stmt instanceof InsertStmt) {
                         InsertStmt insertStmt = (InsertStmt) stmt;
                         TableName tableName = insertStmt.getTableName();
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
+                        Database testDb = MetadataMgr.getDb(stmt.getTableName().getDb());
                         OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), tableName.getTbl()));
                         for (Partition partition : tbl.getPartitions()) {
@@ -847,8 +848,8 @@ public class StarRocksAssert {
     }
 
     public void assertMVWithoutComplexExpression(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = MetadataMgr.getDb(dbName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         if (!(table instanceof OlapTable)) {
             return;
         }
@@ -906,8 +907,8 @@ public class StarRocksAssert {
             RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
 
             TableName mvName = refreshMaterializedViewStatement.getMvName();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvName.getDb());
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName.getTbl());
+            Database db = MetadataMgr.getDb(mvName.getDb());
+            Table table = MetadataMgr.getTable(db.getFullName(), mvName.getTbl());
             Assert.assertNotNull(table);
             Assert.assertTrue(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
@@ -961,8 +962,8 @@ public class StarRocksAssert {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
         TableName tableName = refreshMaterializedViewStatement.getMvName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
+        Database db = MetadataMgr.getDb(tableName.getDb());
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName.getTbl());
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         ctx.executeSql(sql);
@@ -973,8 +974,8 @@ public class StarRocksAssert {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
         TableName mvName = refreshMaterializedViewStatement.getMvName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvName.getDb());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName.getTbl());
+        Database db = MetadataMgr.getDb(mvName.getDb());
+        Table table = MetadataMgr.getTable(db.getFullName(), mvName.getTbl());
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
@@ -997,7 +998,7 @@ public class StarRocksAssert {
     }
 
     public void updateTablePartitionVersion(String dbName, String tableName, long version) {
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName).getTable(tableName);
+        OlapTable table = (OlapTable) MetadataMgr.getDb(dbName).getTable(tableName);
         for (PhysicalPartition partition : table.getPhysicalPartitions()) {
             partition.setVisibleVersion(version, System.currentTimeMillis());
             MaterializedIndex baseIndex = partition.getBaseIndex();
@@ -1085,9 +1086,9 @@ public class StarRocksAssert {
             if (alterJobV2.getJobState().isFinalState()) {
                 continue;
             }
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
+            Database database = MetadataMgr.getDb(alterJobV2.getDbId());
             Table table =
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
+                        MetadataMgr.getTable(database.getId(), alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;
             int retry = 0;

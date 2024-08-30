@@ -26,7 +26,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -102,13 +102,13 @@ public class MvUtilsTest {
                 BinaryType.EQ, columnRef1, columnRef2);
 
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Table table1 = MetadataMgr.getTable(db.getFullName(), "t0");
         LogicalScanOperator scanOperator1 = new LogicalOlapScanOperator(table1);
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
         scanOperator1.setPredicate(binaryPredicate2);
         OptExpression scanExpr = OptExpression.create(scanOperator1);
-        Table table2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Table table2 = MetadataMgr.getTable(db.getFullName(), "t1");
         LogicalScanOperator scanOperator2 = new LogicalOlapScanOperator(table2);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef2, ConstantOperator.createInt(1));

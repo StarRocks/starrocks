@@ -47,6 +47,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -1569,10 +1570,9 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
         if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            Database db = MetadataMgr.getDb(statement.getDbName());
             if (db != null) {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getFullName(), statement.getTableName());
+                Table table = MetadataMgr.getTable(db.getFullName(), statement.getTableName());
                 if (table == null || !table.isMaterializedView()) {
                     // ignore privilege check for old mv
                     return null;
@@ -2337,7 +2337,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         }
 
         // db function.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+        Database db = MetadataMgr.getDb(functionName.getDb());
         if (db != null) {
             Locker locker = new Locker();
             try {

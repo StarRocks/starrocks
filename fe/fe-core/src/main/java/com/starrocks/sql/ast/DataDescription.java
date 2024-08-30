@@ -40,7 +40,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -673,7 +673,7 @@ public class DataDescription implements ParseNode {
     }
 
     public void analyzeTable(String fullDbName) throws AnalysisException {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(fullDbName, tableName);
+        Table table = MetadataMgr.getTable(fullDbName, tableName);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
         }

@@ -56,6 +56,7 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
@@ -167,7 +168,7 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
+                MetadataMgr.getTable(database.getFullName(), tableName);
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -236,7 +237,7 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
+                MetadataMgr.getTable(database.getFullName(), tableName);
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -295,7 +296,7 @@ public class BrokerLoadJobTest {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), 1L);
+                MetadataMgr.getTable(database.getId(), 1L);
                 minTimes = 0;
                 result = table;
                 table.getName();

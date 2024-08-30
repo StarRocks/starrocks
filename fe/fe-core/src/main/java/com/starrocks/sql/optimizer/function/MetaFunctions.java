@@ -47,6 +47,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -84,7 +85,7 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 public class MetaFunctions {
 
     public static Table inspectExternalTable(TableName tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
+        Table table = MetadataMgr.getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
@@ -422,7 +423,7 @@ public class MetaFunctions {
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
-        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableNameValue);
+        Optional<Table> maybeTable = MetadataMgr.getTable(tableNameValue);
         maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
         if (!(maybeTable.get() instanceof OlapTable)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");

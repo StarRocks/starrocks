@@ -22,6 +22,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaNotFoundException;
 import org.apache.commons.collections4.ListUtils;
@@ -227,7 +228,7 @@ public class PipePEntryObject implements PEntryObject {
             sb.append("ALL ").append("DATABASES");
         } else {
             String dbName;
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(getDbUUID()));
+            Database database = MetadataMgr.getDb(Long.parseLong(getDbUUID()));
             if (database == null) {
                 throw new MetaNotFoundException("Cannot find database : " + getDbUUID());
             }

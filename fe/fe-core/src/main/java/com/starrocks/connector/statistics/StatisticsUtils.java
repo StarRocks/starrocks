@@ -16,7 +16,7 @@ package com.starrocks.connector.statistics;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Table;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 public class StatisticsUtils {
@@ -24,7 +24,7 @@ public class StatisticsUtils {
         String[] splits = tableUUID.split("\\.");
 
         Preconditions.checkState(splits.length == 4);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(splits[0], splits[1], splits[2]);
+        Table table = MetadataMgr.getTable(splits[0], splits[1], splits[2]);
         if (table == null) {
             throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
         }

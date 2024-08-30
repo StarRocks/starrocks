@@ -26,6 +26,7 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -83,8 +84,8 @@ public class InsertOverwriteJobRunnerTest {
 
     @Test
     public void testReplayInsertOverwrite() {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Database database = MetadataMgr.getDb("insert_overwrite_test");
+        Table table = MetadataMgr.getTable(database.getFullName(), "t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
@@ -123,8 +124,8 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 select * from t2";
         InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Database database = MetadataMgr.getDb("insert_overwrite_test");
+        Table table = MetadataMgr.getTable(database.getFullName(), "t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId(),

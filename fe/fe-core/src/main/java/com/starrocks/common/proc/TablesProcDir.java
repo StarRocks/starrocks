@@ -53,6 +53,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -96,9 +97,9 @@ public class TablesProcDir implements ProcDirInterface {
         locker.lockDatabase(db, LockType.READ);
         try {
             try {
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
+                table = MetadataMgr.getTable(db.getId(), Long.parseLong(tableIdOrName));
             } catch (NumberFormatException e) {
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableIdOrName);
+                table = MetadataMgr.getTable(db.getFullName(), tableIdOrName);
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);

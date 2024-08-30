@@ -57,6 +57,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -174,12 +175,12 @@ public class MvUtils {
         }
         Set<Table> newMvs = Sets.newHashSet();
         for (MvId mvId : newMvIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+            Database db = MetadataMgr.getDb(mvId.getDbId());
             if (db == null) {
                 logMVPrepare("Cannot find database from mvId:{}", mvId);
                 continue;
             }
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+            Table table = MetadataMgr.getTable(db.getId(), mvId.getId());
             if (table == null) {
                 logMVPrepare("Cannot find materialized view from mvId:{}", mvId);
                 continue;
@@ -1151,8 +1152,7 @@ public class MvUtils {
         }
         // inactive related asynchronous mvs
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
+            MaterializedView mv = (MaterializedView) MetadataMgr.getTable(db.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -1393,7 +1393,7 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
+        return MetadataMgr.getTable(baseTableInfo);
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {

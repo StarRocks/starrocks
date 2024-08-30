@@ -39,6 +39,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -97,8 +98,8 @@ public class DropPartitionTest {
 
     @Test
     public void testNormalDropPartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210201");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210201;";
@@ -119,8 +120,8 @@ public class DropPartitionTest {
 
     @Test
     public void testForceDropPartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210202");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210202 force;";
@@ -144,8 +145,8 @@ public class DropPartitionTest {
 
     @Test
     public void testDropPartitionAndReserveTablets() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210203");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
         table.dropPartitionAndReserveTablet("p20210203");
@@ -249,8 +250,8 @@ public class DropPartitionTest {
     }
 
     private void checkBeforeDrop(String dbName, String tableName, String partitionName, long tabletId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = MetadataMgr.getDb(dbName);
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Partition partition = table.getPartition(partitionName);
@@ -273,7 +274,7 @@ public class DropPartitionTest {
     }
 
     private Table getTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = MetadataMgr.getDb(dbName);
+        return (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
     }
 }

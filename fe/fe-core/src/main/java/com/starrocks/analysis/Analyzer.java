@@ -49,6 +49,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -233,7 +234,7 @@ public class Analyzer {
         if (db == null) {
             return null;
         }
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+        return MetadataMgr.getTable(db.getFullName(), tblName.getTbl());
     }
 
     public TupleDescriptor getTupleDesc(TupleId id) {

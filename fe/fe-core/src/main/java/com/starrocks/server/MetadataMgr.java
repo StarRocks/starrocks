@@ -159,7 +159,7 @@ public class MetadataMgr {
     }
 
     // get query id from thread local context if possible
-    private Optional<String> getOptionalQueryID() {
+    private static Optional<String> getOptionalQueryID() {
         if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
             return Optional.of(ConnectContext.get().getQueryId().toString());
         }
@@ -178,18 +178,20 @@ public class MetadataMgr {
      * @param catalogName catalog's name
      * @return ConnectorMetadata
      */
-    public Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
+    public static Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
         if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
-            return Optional.of(localMetastore);
+            return Optional.of(GlobalStateMgr.getCurrentState().getLocalMetastore());
         }
 
-        CatalogConnector connector = connectorMgr.getConnector(catalogName);
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         if (connector == null) {
             LOG.error("Failed to get {} catalog", catalogName);
             return Optional.empty();
         }
 
         if (queryId.isPresent()) { // use query-level cache if from query
+            LoadingCache<String, QueryMetadatas> metadataCacheByQueryId =
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getMetadataCacheByQueryId();
             QueryMetadatas queryMetadatas = metadataCacheByQueryId.getUnchecked(queryId.get());
             return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId.get()));
         }
@@ -200,6 +202,7 @@ public class MetadataMgr {
     public void removeQueryMetadata() {
         Optional<String> queryId = getOptionalQueryID();
         if (queryId.isPresent()) {
+
             QueryMetadatas queryMetadatas = metadataCacheByQueryId.getIfPresent(queryId.get());
             if (queryMetadatas != null) {
                 queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
@@ -207,6 +210,10 @@ public class MetadataMgr {
                 LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
             }
         }
+    }
+
+    public LoadingCache<String, QueryMetadatas> getMetadataCacheByQueryId() {
+        return metadataCacheByQueryId;
     }
 
     public List<String> listDbNames(String catalogName) {
@@ -242,8 +249,9 @@ public class MetadataMgr {
         }
     }
 
-    public Database getDb(String catalogName, String dbName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+    public static Database getDb(String catalogName, String dbName) {
+        Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getOptionalMetadata(catalogName);
         Database db = connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
         // set catalog name if external catalog
         if (db != null && CatalogMgr.isExternalCatalog(catalogName)) {
@@ -252,8 +260,12 @@ public class MetadataMgr {
         return db;
     }
 
-    public Database getDb(Long databaseId) {
-        return localMetastore.getDb(databaseId);
+    public static Database getDb(String dbName) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+    }
+
+    public static Database getDb(Long databaseId) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
     }
 
     public List<String> listTableNames(String catalogName, String dbName) {
@@ -495,16 +507,26 @@ public class MetadataMgr {
         temporaryTableMgr.removeTemporaryTables(sessionId);
     }
 
-    public Optional<Table> getTable(TableName tableName) {
+    public static Table getTable(String dbName, String tblName) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbName, tblName);
+    }
+
+    public static Table getTable(Long dbId, Long tableId) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+    }
+
+    public static Optional<Table> getTable(TableName tableName) {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
 
-    public Table getTable(String catalogName, String dbName, String tblName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+    public static Table getTable(String catalogName, String dbName, String tblName) {
+        Optional<ConnectorMetadata> connectorMetadata =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getOptionalMetadata(catalogName);
         Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
         if (connectorTable != null && !connectorTable.isMetadataTable()) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
-            connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
+            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                    setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
         }
 
         if (connectorTable != null && connectorTable.isMetadataTable()) {
@@ -537,9 +559,10 @@ public class MetadataMgr {
         }
     }
 
-    public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+    public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
-            return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+            return Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
         } else {
             return Optional.ofNullable(
                     getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));

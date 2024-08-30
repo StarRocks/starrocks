@@ -38,6 +38,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -182,7 +183,7 @@ public class ExportStmt extends StatementBase {
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+        Table table = MetadataMgr.getTable(db.getFullName(), tblName.getTbl());
         if (table == null) {
             throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
         }

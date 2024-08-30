@@ -37,6 +37,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
@@ -100,7 +101,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
@@ -124,10 +125,9 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetPrimaryIndexCacheExpireSec() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
@@ -150,10 +150,10 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleUpdateTableSchema() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         long dbId = db.getId();
         OlapTable olapTable =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "update_schema");
+                    (OlapTable) MetadataMgr.getTable(db.getFullName(), "update_schema");
 
         String stmt = "alter table update_schema add column add_v int default '1'";
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -186,10 +186,9 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletBinlogConfig() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "binlog_report_handler_test");
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), "binlog_report_handler_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
@@ -378,7 +377,7 @@ public class ReportHandlerTest {
         for (int i = 0; i < tabletMetaList.size(); i++) {
             long tabletId = tabletIds.get(i);
             TabletMeta tabletMeta = tabletMetaList.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Database db = MetadataMgr.getDb("test");
             if (db == null) {
                 continue;
             }
@@ -386,8 +385,7 @@ public class ReportHandlerTest {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tabletMeta.getTableId());
+                table = (OlapTable) MetadataMgr.getTable(db.getId(), tabletMeta.getTableId());
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }

@@ -43,6 +43,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -197,7 +198,7 @@ public class AlterJobV2Test {
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv2 =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("mv2");
+                        (MaterializedView) MetadataMgr.getDb("test").getTable("mv2");
             Assert.assertFalse(mv2.isActive());
         } catch (Exception e) {
             e.printStackTrace();
@@ -351,7 +352,7 @@ public class AlterJobV2Test {
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("mv1");
+                        (MaterializedView) MetadataMgr.getDb("test").getTable("mv1");
             Assert.assertTrue(mv.isActive());
         } catch (Exception e) {
             e.printStackTrace();

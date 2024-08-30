@@ -90,6 +90,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -1515,11 +1516,11 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+            Database db = MetadataMgr.getDb(tableName.getDb());
             if (db == null) {
                 throw new SemanticException("Database %s is not found", tableName.getDb());
             }
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
+            Table table = MetadataMgr.getTable(db.getFullName(), tableName.getTbl());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", tableName.getTbl());
             }
@@ -1715,7 +1716,7 @@ public class ExpressionAnalyzer {
                                             + "invalid parameter: " + params.get(params.size() - 1).toString());
             }
 
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+            Table table = MetadataMgr.getTable(
                                     dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());

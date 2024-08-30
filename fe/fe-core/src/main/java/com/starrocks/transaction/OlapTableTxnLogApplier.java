@@ -25,6 +25,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,7 +91,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         long tableId = table.getId();
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (table == null) {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;

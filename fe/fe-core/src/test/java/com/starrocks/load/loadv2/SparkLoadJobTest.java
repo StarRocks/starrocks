@@ -67,6 +67,7 @@ import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
@@ -161,7 +162,7 @@ public class SparkLoadJobTest {
                 result = db;
                 globalStateMgr.getResourceMgr();
                 result = resourceMgr;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                MetadataMgr.getTable(db.getFullName(), tableName);
                 result = olapTable;
                 db.getId();
                 result = dbId;
@@ -374,7 +375,7 @@ public class SparkLoadJobTest {
                 result = filePathToSize;
                 globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = db;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                MetadataMgr.getTable(db.getId(), tableId);
                 result = table;
                 table.getPartition(partitionId);
                 result = partition;
@@ -472,7 +473,7 @@ public class SparkLoadJobTest {
                 result = filePathToSize;
                 globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = db;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                MetadataMgr.getTable(db.getId(), tableId);
                 result = table;
                 table.getPartition(partitionId);
                 result = partition;

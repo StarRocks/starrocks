@@ -57,7 +57,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -127,7 +127,7 @@ public abstract class BulkLoadJob extends LoadJob {
     public static BulkLoadJob fromLoadStmt(LoadStmt stmt, ConnectContext context) throws DdlException {
         // get db id
         String dbName = stmt.getLabel().getDbName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -184,7 +184,7 @@ public abstract class BulkLoadJob extends LoadJob {
     }
 
     private AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database database = MetadataMgr.getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -194,7 +194,7 @@ public abstract class BulkLoadJob extends LoadJob {
     @Override
     public Set<String> getTableNamesForShow() {
         Set<String> result = Sets.newHashSet();
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database database = MetadataMgr.getDb(dbId);
         if (database == null) {
             for (long tableId : fileGroupAggInfo.getAllTableIds()) {
                 result.add(String.valueOf(tableId));
@@ -202,7 +202,7 @@ public abstract class BulkLoadJob extends LoadJob {
             return result;
         }
         for (long tableId : fileGroupAggInfo.getAllTableIds()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+            Table table = MetadataMgr.getTable(database.getId(), tableId);
             if (table == null) {
                 result.add(String.valueOf(tableId));
             } else {
@@ -215,7 +215,7 @@ public abstract class BulkLoadJob extends LoadJob {
     @Override
     public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
         Set<String> result = Sets.newHashSet();
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database database = MetadataMgr.getDb(dbId);
         if (database == null) {
             if (noThrow) {
                 return result;
@@ -226,7 +226,7 @@ public abstract class BulkLoadJob extends LoadJob {
         // The database will not be locked in here.
         // The getTable is a thread-safe method called without read lock of database
         for (long tableId : fileGroupAggInfo.getAllTableIds()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+            Table table = MetadataMgr.getTable(database.getId(), tableId);
             if (table == null) {
                 if (!noThrow) {
                     throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
@@ -287,7 +287,7 @@ public abstract class BulkLoadJob extends LoadJob {
             for (DataDescription dataDescription : stmt.getDataDescriptions()) {
                 dataDescription.analyzeWithoutCheckPriv();
             }
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 throw new DdlException("Database[" + dbId + "] does not exist");
             }

@@ -87,6 +87,7 @@ import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
@@ -473,13 +474,12 @@ public class LeaderImpl {
             long tableId = task.getTableId();
             long indexId = task.getIndexId();
             long backendId = task.getBackendId();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                    OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                     if (olapTable != null) {
                         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                         if (indexMeta != null) {
@@ -505,7 +505,7 @@ public class LeaderImpl {
         long backendId = pushTask.getBackendId();
         long signature = task.getSignature();
         long transactionId = ((PushTask) task).getTransactionId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             return;
@@ -540,7 +540,7 @@ public class LeaderImpl {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             if (olapTable == null) {
                 throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
             }
@@ -772,7 +772,7 @@ public class LeaderImpl {
             }
 
             long dbId = tabletMeta.getDbId();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 LOG.warn("db does not exist. db id: {}", dbId);
                 return;
@@ -893,7 +893,7 @@ public class LeaderImpl {
         }
 
         // checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -905,7 +905,7 @@ public class LeaderImpl {
         try {
             locker.lockDatabase(db, LockType.READ);
 
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = MetadataMgr.getTable(db.getFullName(), tableName);
             if (table == null) {
                 TStatus status = new TStatus(TStatusCode.NOT_FOUND);
                 status.setError_msgs(Lists.newArrayList("table " + tableName + " not exist"));

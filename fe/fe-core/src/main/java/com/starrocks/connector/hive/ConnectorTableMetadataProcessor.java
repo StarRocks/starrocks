@@ -184,7 +184,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MetadataMgr metadataMgr = gsm.getMetadataMgr();
         List<Database> databases = gsm.getLocalMetastore().getDbIds().stream()
-                .map(dbId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId))
+                .map(dbId -> MetadataMgr.getDb(dbId))
                 .filter(Objects::nonNull)
                 .filter(db -> !db.isSystemDatabase())
                 .collect(Collectors.toList());
@@ -199,7 +199,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                             "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getTableName());
                     // we didn't use db locks to prevent background tasks from affecting the query.
                     // So we need to check if the table to be refreshed exists.
-                    if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) != null) {
+                    if (MetadataMgr.getTable(db.getId(), table.getId()) != null) {
                         metadataMgr.refreshTable(table.getCatalogName(), db.getFullName(),
                                 table, Lists.newArrayList(), false);
                     }

@@ -24,6 +24,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperationParams.Body;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -68,7 +69,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         Body requestBody = txnOperationParams.getBody();
         LOG.info("Handle bypass write transaction, label: {}", label);
 
-        Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
+        Database db = Optional.ofNullable(MetadataMgr.getDb(dbName))
                 .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
 
         TransactionResult result;

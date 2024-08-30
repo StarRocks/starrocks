@@ -39,7 +39,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -102,9 +102,8 @@ public class DynamicPartitionTableTest {
                     "\"dynamic_partition.prefix\" = \"p\",\n" +
                     "\"dynamic_partition.buckets\" = \"1\"\n" +
                     ");");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "dynamic_partition_normal");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "dynamic_partition_normal");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(),
                     DynamicPartitionProperty.NOT_SET_REPLICATION_NUM);
     }
@@ -223,9 +222,8 @@ public class DynamicPartitionTableTest {
                     "\"dynamic_partition.time_unit\" = \"day\",\n" +
                     "\"dynamic_partition.prefix\" = \"p\"\n" +
                     ");");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "dynamic_partition_buckets");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "dynamic_partition_buckets");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getBuckets(), 0);
     }
 
@@ -405,8 +403,8 @@ public class DynamicPartitionTableTest {
                     "\"dynamic_partition.buckets\" = \"1\",\n" +
                     "\"dynamic_partition.replication_num\" = \"2\"\n" +
                     ");");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(), 2);
     }
 

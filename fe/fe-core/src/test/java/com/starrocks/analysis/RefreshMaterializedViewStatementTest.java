@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -91,9 +92,9 @@ public class RefreshMaterializedViewStatementTest {
                 " refresh manual" +
                 " as select c1, sum(c3) as total from table_name_tmp_1 group by c1");
         cluster.runSql("test", "insert into table_name_tmp_1 values(1, \"str1\", 100)");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "table_name_tmp_1");
+        Table table = MetadataMgr.getTable(db.getFullName(), "table_name_tmp_1");
         Assert.assertNotNull(table);
-        Table t2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+        Table t2 = MetadataMgr.getTable(db.getFullName(), "mv1");
         Assert.assertNotNull(t2);
         MaterializedView mv1 = (MaterializedView) t2;
         cluster.runSql("test", "refresh materialized view mv1 with sync mode");

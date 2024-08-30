@@ -22,6 +22,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -92,7 +93,7 @@ public class TableKeeper {
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
+        return MetadataMgr.getDb(databaseName) != null;
     }
 
     public void createTable() throws UserException {

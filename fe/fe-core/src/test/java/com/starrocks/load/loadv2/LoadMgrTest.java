@@ -43,6 +43,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -86,7 +87,7 @@ public class LoadMgrTest {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                MetadataMgr.getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -118,7 +119,7 @@ public class LoadMgrTest {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                MetadataMgr.getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -153,7 +154,7 @@ public class LoadMgrTest {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+                MetadataMgr.getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();

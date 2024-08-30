@@ -23,6 +23,7 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
@@ -199,7 +200,7 @@ public class DbPEntryObject implements PEntryObject {
             return "ALL DATABASES";
         } else {
             if (CatalogMgr.isInternalCatalog(catalogId)) {
-                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(uuid));
+                Database database = MetadataMgr.getDb(Long.parseLong(uuid));
                 if (database == null) {
                     throw new MetaNotFoundException("Can't find database : " + uuid);
                 }

@@ -28,6 +28,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.StreamSourceType;
 import com.starrocks.thrift.TBinlogOffset;
@@ -141,7 +142,7 @@ public class BinlogScanNode extends ScanNode {
                 if (dbId == -1) {
                     TabletMeta meta = invertedIndex.getTabletMeta(tablet.getId());
                     dbId = meta.getDbId();
-                    dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
+                    dbName = MetadataMgr.getDb(dbId).getFullName();
                 }
 
                 long tabletId = tablet.getId();

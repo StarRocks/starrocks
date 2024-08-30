@@ -27,6 +27,7 @@ import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -81,7 +82,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
 
         String alterSQL = "ALTER TABLE test_lake_partition ADD\n" +
                     "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
@@ -90,7 +91,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .addPartitions(Util.getOrCreateConnectContext(), db, "test_lake_partition", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+        Table table = MetadataMgr.getDb("test")
                     .getTable("test_lake_partition");
 
         Assert.assertNotNull(table.getPartition("p1"));
@@ -126,7 +127,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
 
         String alterSQL = "ALTER TABLE site_access \n" +
                     "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
@@ -136,7 +137,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+        Table table = MetadataMgr.getDb("test")
                     .getTable("site_access");
 
         Assert.assertNotNull(table.getPartition("p1"));
@@ -173,9 +174,9 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "new_table");
+                    (OlapTable) MetadataMgr.getTable(db.getFullName(), "new_table");
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
 
         long dbId = db.getId();

@@ -79,7 +79,7 @@ public class ExternalDbsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String name) {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, name);
+        Database db = MetadataMgr.getDb(catalogName, name);
         if (db == null) {
             throw new SemanticException("Database[" + name + "] does not exist.");
         }

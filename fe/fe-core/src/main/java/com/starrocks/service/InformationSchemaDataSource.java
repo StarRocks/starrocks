@@ -150,7 +150,7 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = MetadataMgr.getDb(dbName);
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
@@ -257,7 +257,7 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = MetadataMgr.getDb(dbName);
             if (db == null) {
                 continue;
             }
@@ -529,7 +529,7 @@ public class InformationSchemaDataSource {
                     for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
                         UUID sessionId = entry.getValue();
                         Long tableId = entry.getKey();
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                        Table table = MetadataMgr.getTable(db.getId(), tableId);
                         if (table != null) {
                             TTableInfo info = new TTableInfo();
 

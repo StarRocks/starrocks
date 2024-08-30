@@ -52,6 +52,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.OptimizeClause;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -140,7 +141,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     private OlapTable checkAndGetTable(Database db, long tableId) throws AlterCancelException {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = MetadataMgr.getTable(db.getId(), tableId);
         if (table == null) {
             throw new AlterCancelException("table: " + tableId + " does not exist in database: " + db.getFullName());
         }
@@ -158,7 +159,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
 
         LOG.info("begin to send create temp partitions. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
@@ -233,7 +234,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         List<Long> partitionLastVersion = Lists.newArrayList();
         List<String> tableColumnNames = Lists.newArrayList();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("database id: " + dbId + " does not exist");
         }
@@ -314,12 +315,12 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -545,7 +546,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Database db = null;
         Locker locker = new Locker();
         try {
-            db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 throw new AlterCancelException("database id:" + dbId + " does not exist");
             }
@@ -560,7 +561,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = MetadataMgr.getTable(db.getId(), tableId);
             if (table == null) {
                 throw new AlterCancelException("table:" + tableId + " does not exist in database:" + db.getFullName());
             }
@@ -605,12 +606,12 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Should replay all changes before this job's state transfer to PENDING.
      */
     private void replayPending(OptimizeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             // table may be dropped before replaying this log. just return
             return;
@@ -633,12 +634,12 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(OptimizeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             // table may be dropped before replaying this log. just return
             return;
@@ -691,9 +692,9 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(OptimizeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db != null) {
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             if (tbl != null) {
                 try (AutoCloseableLock ignore =
                             new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {

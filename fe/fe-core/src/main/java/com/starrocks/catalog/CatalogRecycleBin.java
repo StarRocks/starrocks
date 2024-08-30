@@ -60,6 +60,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -832,7 +833,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // we need to get olap table to get schema hash info
             // first find it in globalStateMgr. if not found, it should be in recycle bin
             OlapTable olapTable = null;
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 // just log. db should be in recycle bin
                 if (!idToDatabase.containsKey(dbId)) {
@@ -842,7 +843,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     continue;
                 }
             } else {
-                olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             }
 
             if (olapTable == null) {

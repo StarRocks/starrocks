@@ -33,6 +33,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -61,7 +62,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkDatabaseExist() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
+        return MetadataMgr.getDb(StatsConstants.STATISTICS_DB_NAME) != null;
     }
 
     private boolean createDatabase() {
@@ -78,9 +79,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkTableExist(String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = MetadataMgr.getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName) != null;
+        return MetadataMgr.getTable(db.getFullName(), tableName) != null;
     }
 
     private boolean checkReplicateNormal(String tableName) {
@@ -92,9 +93,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return true;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = MetadataMgr.getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), tableName);
         Preconditions.checkState(table != null);
         if (table.isCloudNativeTableOrMaterializedView()) {
             return true;

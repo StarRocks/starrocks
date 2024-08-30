@@ -34,7 +34,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -94,7 +94,7 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+                Database db = MetadataMgr.getDb(dbName);
                 if (db == null) {
                     throw new SemanticException("Database %s is not found", dbName);
                 }
@@ -103,7 +103,7 @@ public class ShowTabletStmtAnalyzer {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    table = MetadataMgr.getTable(db.getFullName(), tableName);
                     if (table == null) {
                         throw new SemanticException("Table %s is not found", tableName);
                     }

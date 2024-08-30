@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -4563,7 +4564,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     ");";
             starRocksAssert.withTable(table2);
 
-            OlapTable t4 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(MATERIALIZED_DB_NAME)
+            OlapTable t4 = (OlapTable) MetadataMgr.getDb(MATERIALIZED_DB_NAME)
                     .getTable("test_sr_table_join");
             setTableStatistics(t4, 150000);
 

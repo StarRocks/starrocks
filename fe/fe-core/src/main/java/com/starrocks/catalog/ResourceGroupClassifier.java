@@ -17,7 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -209,7 +209,7 @@ public class ResourceGroupClassifier {
         if (CollectionUtils.isNotEmpty(databaseIds)) {
             String str = databaseIds.stream()
                     .map(id ->
-                            Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id))
+                            Optional.ofNullable(MetadataMgr.getDb(id))
                                     .map(Database::getFullName)
                                     .orElse("unknown"))
                     .collect(Collectors.joining(","));

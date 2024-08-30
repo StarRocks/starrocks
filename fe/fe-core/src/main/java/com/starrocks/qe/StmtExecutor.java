@@ -121,6 +121,7 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PrepareStmtPlanner;
@@ -1254,7 +1255,7 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         TableName tableName = analyzeStmt.getTableName();
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        Database db = MetadataMgr.getDb(tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -1416,7 +1417,7 @@ public class StmtExecutor {
     private void handleDropStatsStmt() {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
         TableName tableName = dropStatsStmt.getTableName();
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        Table table = MetadataMgr.getTable(tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
@@ -1444,7 +1445,7 @@ public class StmtExecutor {
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
         TableName tableName = dropHistogramStmt.getTableName();
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        Table table = MetadataMgr.getTable(tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
@@ -1480,12 +1481,12 @@ public class StmtExecutor {
 
     private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
                                                      String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = MetadataMgr.getDb(catalogName, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = MetadataMgr.getTable(catalogName, dbName, tableName);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -1967,7 +1968,7 @@ public class StmtExecutor {
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
         TableName tableName = insertStmt.getTableName();
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        Database db = MetadataMgr.getDb(tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -2066,7 +2067,7 @@ public class StmtExecutor {
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database database = MetadataMgr.getDb(catalogName, dbName);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {

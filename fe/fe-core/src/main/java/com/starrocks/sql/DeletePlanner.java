@@ -30,7 +30,7 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -117,7 +117,7 @@ public class DeletePlanner {
             session.getSessionVariable().setUseComputeNodes(0);
             OlapTableSink olapTableSink = (OlapTableSink) dataSink;
             TableName catalogDbTable = deleteStatement.getTableName();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+            Database db = MetadataMgr.getDb(catalogDbTable.getCatalog(),
                     catalogDbTable.getDb());
             try {
                 olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(),

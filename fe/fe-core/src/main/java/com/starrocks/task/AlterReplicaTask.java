@@ -55,6 +55,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TAlterJobType;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
@@ -301,12 +302,12 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(getDbId());
+        Database db = MetadataMgr.getDb(getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), getTableId());
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
         }

@@ -61,6 +61,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -507,7 +508,7 @@ public class TabletChecker extends FrontendDaemon {
         while (iter.hasNext()) {
             Map.Entry<Long, Map<Long, Set<PrioPart>>> dbEntry = iter.next();
             long dbId = dbEntry.getKey();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 iter.remove();
                 continue;
@@ -518,7 +519,7 @@ public class TabletChecker extends FrontendDaemon {
             try {
                 for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
                     long tblId = tblEntry.getKey();
-                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
+                    OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tblId);
                     if (tbl == null) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
                         continue;
@@ -620,7 +621,7 @@ public class TabletChecker extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = MetadataMgr.getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }

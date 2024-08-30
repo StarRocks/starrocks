@@ -34,6 +34,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -100,7 +101,7 @@ public class Authorizer {
     public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, String db, String table,
                                         PrivilegeType privilegeType) throws AccessDeniedException {
         TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table);
-        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> tableObj = MetadataMgr.getTable(tableName);
         if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
             return;
         }
@@ -112,7 +113,7 @@ public class Authorizer {
     public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db,
                                         String table, PrivilegeType privilegeType) throws AccessDeniedException {
         TableName tableName = new TableName(catalog, db, table);
-        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> tableObj = MetadataMgr.getTable(tableName);
         if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
             return;
         }
@@ -122,7 +123,7 @@ public class Authorizer {
 
     public static void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                         PrivilegeType privilegeType) throws AccessDeniedException {
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> table = MetadataMgr.getTable(tableName);
         if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
             return;
         }
@@ -170,7 +171,7 @@ public class Authorizer {
 
     public static void checkActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                                     PrivilegeType privilegeType) throws AccessDeniedException {
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> table = MetadataMgr.getTable(tableName);
         if (table.isPresent()) {
             doCheckTableLikeObject(currentUser, roleIds, tableName.getDb(), table.get(), privilegeType);
         }
@@ -243,7 +244,7 @@ public class Authorizer {
                     userIdentity, currentRoleIds,
                     PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        Optional<Table> table = MetadataMgr.getTable(tableName);
         if (table.isPresent() && table.get().isTable()) {
             try {
                 Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,

@@ -28,7 +28,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -97,8 +97,8 @@ public class MVRefreshTestBase {
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+        Database db = MetadataMgr.getDb(dbName);
+        Table table = MetadataMgr.getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
@@ -106,8 +106,8 @@ public class MVRefreshTestBase {
     }
 
     protected Table getTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = MetadataMgr.getDb(dbName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         Assert.assertNotNull(table);
         return table;
     }

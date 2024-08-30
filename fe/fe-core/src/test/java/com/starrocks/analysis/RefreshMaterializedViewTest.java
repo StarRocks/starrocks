@@ -29,6 +29,7 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -460,9 +461,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), tableName.getTbl()));
+                    Database testDb = MetadataMgr.getDb(stmt.getTableName().getDb());
+                    OlapTable tbl = ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
                             long version = partition.getVisibleVersion() + 1;
@@ -564,9 +564,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), tableName.getTbl()));
+                    Database testDb = MetadataMgr.getDb(stmt.getTableName().getDb());
+                    OlapTable tbl = ((OlapTable) MetadataMgr.getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
                             long version = partition.getVisibleVersion() + 1;
@@ -627,9 +626,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
                 .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = MetadataMgr.getDb("test");
         OlapTable tbl =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv_with_partition");
+                (OlapTable) MetadataMgr.getTable(db.getFullName(), "mv_with_partition");
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runOnceForTest();
         starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW test.mv_with_partition \n" +
@@ -686,8 +685,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
 
         DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
                 .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv_ttl_mv1");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "mv_ttl_mv1");
         Set<LocalDate> addedPartitions = buildTimePartitions(tableName, tbl, 10);
 
         // Build expectations
@@ -977,9 +976,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                     "UNION ALL\n" +
                     "SELECT * FROM t2\n", () -> {
 
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                Database db = MetadataMgr.getDb("test");
                 MaterializedView mv =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+                        (MaterializedView) MetadataMgr.getTable(db.getFullName(), "mv1");
                 System.out.println(mv.getPartitionNames());
             });
         }
@@ -1028,9 +1027,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                     "SELECT * FROM t1\n" +
                     "UNION ALL\n" +
                     "SELECT * FROM t2\n", () -> {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                Database db = MetadataMgr.getDb("test");
                 MaterializedView mv =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+                        (MaterializedView) MetadataMgr.getTable(db.getFullName(), "mv1");
                 Assert.assertEquals(2, mv.getPartitionExprMaps().size());
                 System.out.println(mv.getPartitionNames());
             });
@@ -1078,9 +1077,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                     "REFRESH ASYNC\n" +
                     "AS \n" +
                     "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                Database db = MetadataMgr.getDb("test");
                 MaterializedView mv =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+                        (MaterializedView) MetadataMgr.getTable(db.getFullName(), "mv1");
                 System.out.println(mv.getPartitionExprMaps());
                 Assert.assertEquals(2, mv.getPartitionExprMaps().size());
                 System.out.println(mv.getPartitionNames());

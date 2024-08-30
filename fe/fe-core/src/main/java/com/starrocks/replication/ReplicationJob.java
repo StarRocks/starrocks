@@ -39,6 +39,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -572,7 +573,7 @@ public class ReplicationJob implements GsonPostProcessable {
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.database_id);
+        Database db = MetadataMgr.getDb(request.database_id);
         if (db == null) {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
@@ -580,7 +581,7 @@ public class ReplicationJob implements GsonPostProcessable {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), request.table_id);
+            Table table = MetadataMgr.getTable(db.getId(), request.table_id);
             if (table == null) {
                 throw new MetaNotFoundException(
                         "Table " + request.table_id + " in database " + db.getFullName() + " not found");
@@ -831,7 +832,7 @@ public class ReplicationJob implements GsonPostProcessable {
 
         if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
             Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseId);
-            if (db == null || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) == null) {
+            if (db == null || MetadataMgr.getTable(db.getId(), tableId) == null) {
                 abortTransaction("Table is deleted");
                 return true;
             }

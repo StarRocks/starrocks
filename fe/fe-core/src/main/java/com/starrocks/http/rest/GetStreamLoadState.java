@@ -42,6 +42,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
 public class GetStreamLoadState extends RestBaseAction {
@@ -76,7 +77,7 @@ public class GetStreamLoadState extends RestBaseAction {
         // FIXME(cmy)
         // checkReadPriv(authInfo.fullUserName, fullDbName);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("unknown database, database=" + dbName);
         }

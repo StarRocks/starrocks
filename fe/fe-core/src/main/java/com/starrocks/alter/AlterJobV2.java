@@ -51,6 +51,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import io.opentelemetry.api.trace.Span;
@@ -262,7 +263,7 @@ public abstract class AlterJobV2 implements Writable {
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }

@@ -22,7 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -123,16 +123,16 @@ public class UseMaterializedViewTest {
         try {
             Database database = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
             Assert.assertTrue(database != null);
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
+            Table table = MetadataMgr.getTable(database.getFullName(), "mv_to_drop");
             Assert.assertTrue(table != null);
             MaterializedView materializedView = (MaterializedView) table;
             long baseTableId = materializedView.getBaseTableInfos().iterator().next().getTableId();
-            OlapTable baseTable = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), baseTableId));
+            OlapTable baseTable = ((OlapTable) MetadataMgr.getTable(database.getId(), baseTableId));
             Assert.assertEquals(2, baseTable.getRelatedMaterializedViews().size());
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
-            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
+            table = MetadataMgr.getTable(database.getFullName(), "mv_to_drop");
             Assert.assertTrue(table == null);
             Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
         } catch (Exception e) {

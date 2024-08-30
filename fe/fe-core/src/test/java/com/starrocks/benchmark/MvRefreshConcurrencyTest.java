@@ -23,7 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import org.junit.Assert;
@@ -123,9 +123,9 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
                     System.out.println(sql);
                     starRocksAssert.withMaterializedView(sql);
 
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    Database db = MetadataMgr.getDb("test");
                     String mvName = buildMVName(i);
-                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+                    Table table = MetadataMgr.getTable(db.getFullName(), mvName);
                     Assert.assertTrue(table != null);
                     mvs.add((MaterializedView) table);
                     starRocksAssert.useDatabase("test");

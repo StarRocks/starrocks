@@ -24,7 +24,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -78,7 +78,7 @@ public class TriggerAction extends RestBaseAction {
             return;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             response.appendContent("Database[" + dbName + "] does not exist");
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -94,7 +94,7 @@ public class TriggerAction extends RestBaseAction {
             locker.lockDatabase(db, LockType.READ);
             try {
                 if (!Strings.isNullOrEmpty(tableName)) {
-                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    table = MetadataMgr.getTable(db.getFullName(), tableName);
                 }
 
                 if (table == null) {

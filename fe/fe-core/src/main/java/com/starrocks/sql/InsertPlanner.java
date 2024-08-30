@@ -58,7 +58,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -390,7 +390,7 @@ public class InsertPlanner {
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
                 TableName catalogDbTable = insertStmt.getTableName();
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                Database db = MetadataMgr.getDb(catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(),

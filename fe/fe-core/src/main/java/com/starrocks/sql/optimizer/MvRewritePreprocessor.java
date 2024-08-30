@@ -50,7 +50,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -657,7 +657,7 @@ public class MvRewritePreprocessor {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
                 String mvName = olapTable.getIndexNameById(indexId);
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = MetadataMgr.getDb(dbId);
 
                 // distribution info
                 DistributionInfo baseTableDistributionInfo = olapTable.getDefaultDistributionInfo();
@@ -783,7 +783,7 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    Optional<Table> baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(base);
+                    Optional<Table> baseTable = MetadataMgr.getTable(base);
                     if (!baseTable.isPresent() || baseTable.get().isView()) {
                         continue;
                     }
@@ -865,7 +865,7 @@ public class MvRewritePreprocessor {
 
         // Add mv info into dump info
         if (context.getDumpInfo() != null) {
-            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
+            String dbName = MetadataMgr.getDb(mv.getDbId()).getFullName();
             context.getDumpInfo().addTable(dbName, mv);
         }
 

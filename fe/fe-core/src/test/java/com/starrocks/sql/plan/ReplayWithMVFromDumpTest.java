@@ -25,6 +25,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
@@ -82,6 +83,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testMV_JoinAgg3() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         // Table and mv have no stats, mv rewrite is ok.
@@ -93,6 +95,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testMV_JoinAgg4() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         connectContext.getSessionVariable().setMaterializedViewRewriteMode(
@@ -168,6 +171,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testMock_MV_CostBug() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");

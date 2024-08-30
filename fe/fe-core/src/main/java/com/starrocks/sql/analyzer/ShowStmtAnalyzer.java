@@ -49,6 +49,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -332,7 +333,7 @@ public class ShowStmtAnalyzer {
         }
 
         private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(node.getDb());
+            Database db = MetadataMgr.getDb(node.getDb());
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
             }
@@ -535,7 +536,7 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = MetadataMgr.getDb(dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }

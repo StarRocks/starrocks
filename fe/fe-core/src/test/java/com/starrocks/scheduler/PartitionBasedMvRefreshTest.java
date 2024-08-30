@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -157,7 +158,7 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
         int mvRefreshTimes = t1PartitionNums.size();
         starRocksAssert.withMaterializedView(mvSql,
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = MetadataMgr.getDb("test");
                         MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "test_mv0"));
                         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
@@ -232,7 +233,7 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                     " select * from t1 union all select * from t2;";
         starRocksAssert.withMaterializedView(sql,
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = MetadataMgr.getDb("test");
                         MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "test_mv0"));
                         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
@@ -279,7 +280,7 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                     " select * from t2 union all select * from t1;";
         starRocksAssert.withMaterializedView(sql,
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = MetadataMgr.getDb("test");
                         MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "test_mv0"));
 

@@ -56,6 +56,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -96,7 +97,7 @@ public class RowCountAction extends RestBaseAction {
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException("Table[" + tableName + "] does not exist");
         }

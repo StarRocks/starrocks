@@ -64,8 +64,7 @@ public class InsertLoadJobTest {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                result = table;
+
                 table.getName();
                 result = tableName;
             }
@@ -86,8 +85,7 @@ public class InsertLoadJobTest {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                result = table;
+
                 table.getName();
                 result = "some_table";
             }

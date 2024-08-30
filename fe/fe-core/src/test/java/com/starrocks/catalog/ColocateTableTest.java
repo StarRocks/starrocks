@@ -40,6 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -110,8 +111,8 @@ public class ColocateTableTest {
                 ");");
 
         ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullDbName);
-        long tableId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName1).getId();
+        Database db = MetadataMgr.getDb(fullDbName);
+        long tableId = MetadataMgr.getTable(db.getFullName(), tableName1).getId();
 
         Assert.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(1, index.getAllGroupIds().size());
@@ -168,9 +169,9 @@ public class ColocateTableTest {
                 ");");
 
         ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullDbName);
-        long firstTblId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName1).getId();
-        long secondTblId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName2).getId();
+        Database db = MetadataMgr.getDb(fullDbName);
+        long firstTblId = MetadataMgr.getTable(db.getFullName(), tableName1).getId();
+        long secondTblId = MetadataMgr.getTable(db.getFullName(), tableName2).getId();
 
         Assert.assertEquals(2, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(1, index.getAllGroupIds().size());

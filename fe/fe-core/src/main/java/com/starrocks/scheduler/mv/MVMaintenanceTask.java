@@ -15,7 +15,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
@@ -59,7 +59,7 @@ public class MVMaintenanceTask {
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beRpcAddr,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
         MVMaintenanceTask task = new MVMaintenanceTask();
-        task.dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(job.getView().getDbId()).getFullName();
+        task.dbName = MetadataMgr.getDb(job.getView().getDbId()).getFullName();
         task.job = job;
         task.beRpcAddr = beRpcAddr;
         task.taskId = taskId;

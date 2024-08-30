@@ -23,7 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -136,7 +136,7 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
             String catalogName = cachedIcebergTable.getCatalogName();
             String dbName = cachedIcebergTable.getRemoteDbName();
             TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-            Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+            Table currentTable = MetadataMgr.getTable(tableName).orElse(null);
             if (currentTable == null) {
                 return null;
             }

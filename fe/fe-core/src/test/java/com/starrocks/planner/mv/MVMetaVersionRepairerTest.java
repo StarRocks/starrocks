@@ -21,7 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.mv.MVMetaVersionRepairer;
 import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.schema.MTable;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -102,7 +102,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(curPartition, 100L, currentTs);
 
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database db = MetadataMgr.getDb("test");
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 
@@ -156,7 +156,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(curPartition, 100L, currentTs);
 
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database db = MetadataMgr.getDb("test");
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 
@@ -215,7 +215,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(p2, 100L, currentTs);
 
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database db = MetadataMgr.getDb("test");
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 
@@ -282,7 +282,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(p1, 100L, currentTs);
 
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database db = MetadataMgr.getDb("test");
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 

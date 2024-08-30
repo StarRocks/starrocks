@@ -43,6 +43,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -73,7 +74,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String newMvName = clause.getNewTableName();
         String oldMvName = table.getName();
 
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newMvName) != null) {
+        if (MetadataMgr.getTable(db.getFullName(), newMvName) != null) {
             throw new SemanticException("Materialized view [" + newMvName + "] is already used");
         }
         table.setName(newMvName);
@@ -349,7 +350,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
             try {
                 // check
-                Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
+                Table mv = MetadataMgr.getTable(db.getId(), materializedView.getId());
                 if (mv == null) {
                     throw new DmlException(
                             "update meta failed. materialized view:" + materializedView.getName() + " not exist");

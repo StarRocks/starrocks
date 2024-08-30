@@ -87,6 +87,7 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.LoadStmt;
@@ -492,8 +493,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
                 for (Map.Entry<Long, Set<Long>> entry : tableToLoadPartitions.entrySet()) {
                     long tableId = entry.getKey();
-                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                    OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                     if (table == null) {
                         LOG.warn("table does not exist. id: {}", tableId);
                         continue;
@@ -822,7 +822,7 @@ public class SparkLoadJob extends BulkLoadJob {
     public void afterVisible(TransactionState txnState, boolean txnOperated) {
         super.afterVisible(txnState, txnOperated);
         // collect table-level metrics after spark load job finished
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (null == db) {
             return;
         }

@@ -16,7 +16,7 @@ package com.starrocks.common.proc;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 
 public class ProcUtils {
 
@@ -24,7 +24,7 @@ public class ProcUtils {
         try {
             return Long.parseLong(dbIdOrName);
         } catch (NumberFormatException e) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbIdOrName);
+            Database db = MetadataMgr.getDb(dbIdOrName);
             if (db == null) {
                 throw new AnalysisException("Unknown database id or name \"" + dbIdOrName + "\"");
             }

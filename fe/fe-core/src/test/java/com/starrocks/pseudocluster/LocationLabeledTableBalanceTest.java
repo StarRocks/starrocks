@@ -23,6 +23,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.system.Backend;
 import org.junit.AfterClass;
@@ -105,7 +106,7 @@ public class LocationLabeledTableBalanceTest {
                 ");";
         cluster.runSql("test", sql);
 
-        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database test = MetadataMgr.getDb("test");
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");
 
         // Add another backend without location property, with best-effort balance strategy,
@@ -177,7 +178,7 @@ public class LocationLabeledTableBalanceTest {
     @Test
     @Ignore
     public void test2LocationMatchedBalance() throws InterruptedException, SQLException {
-        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database test = MetadataMgr.getDb("test");
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");
 
         long start = System.currentTimeMillis();

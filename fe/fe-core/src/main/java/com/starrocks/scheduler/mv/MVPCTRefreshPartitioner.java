@@ -33,6 +33,7 @@ import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
@@ -259,7 +260,7 @@ public abstract class MVPCTRefreshPartitioner {
         }
         try {
             // check
-            Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
+            Table mv = MetadataMgr.getTable(db.getId(), materializedView.getId());
             if (mv == null) {
                 throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
             }

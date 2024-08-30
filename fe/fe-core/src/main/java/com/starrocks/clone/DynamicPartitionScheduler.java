@@ -70,6 +70,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -376,7 +377,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
             return true;
@@ -387,7 +388,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         String tableName;
         boolean skipAddPartition = false;
         OlapTable olapTable;
-        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        olapTable = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (olapTable == null) {
             LOG.warn("Automatically removes the schedule because table does not exist, " +
                         "tableId: {}", tableId);
@@ -488,13 +489,13 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             Pair<Long, Long> tableInfo = iterator.next();
             Long dbId = tableInfo.first;
             Long tableId = tableInfo.second;
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 iterator.remove();
                 LOG.warn("Could not get database={} info. remove it from scheduler", dbId);
                 continue;
             }
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = MetadataMgr.getTable(db.getId(), tableId);
             OlapTable olapTable;
             if (table instanceof OlapTable) {
                 olapTable = (OlapTable) table;
@@ -686,7 +687,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         Map<String, List<String>> ttlPartitionTables = new HashMap<>();
         long start = System.currentTimeMillis();
         for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }

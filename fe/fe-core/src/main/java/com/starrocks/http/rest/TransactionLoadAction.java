@@ -60,6 +60,7 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
@@ -263,7 +264,7 @@ public class TransactionLoadAction extends RestBaseAction {
 
         if (null == sourceType) {
             String dbName = params.getDbName();
-            Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
+            Database db = Optional.ofNullable(MetadataMgr.getDb(dbName))
                     .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
 
             TransactionState txnState = GlobalStateMgr.getCurrentState()

@@ -44,7 +44,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
@@ -716,11 +716,11 @@ public class SyncPartitionUtils {
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
 
-        Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+        Database baseDb = MetadataMgr.getDb(tableName.getDb());
         if (baseDb == null) {
             return;
         }
-        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(baseDb.getFullName(), tableName.getTbl());
+        Table baseTable = MetadataMgr.getTable(baseDb.getFullName(), tableName.getTbl());
         if (baseTable == null) {
             return;
         }
@@ -752,7 +752,7 @@ public class SyncPartitionUtils {
             return;
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
-        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        Table baseTable = MetadataMgr.getTable(tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
 
         if (baseTable == null) {

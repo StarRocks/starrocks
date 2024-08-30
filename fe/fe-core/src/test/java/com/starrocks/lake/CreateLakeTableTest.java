@@ -27,6 +27,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -67,14 +68,14 @@ public class CreateLakeTableTest {
     }
 
     private void checkLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = MetadataMgr.getDb(dbName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         Assert.assertTrue(table.isCloudNativeTable());
     }
 
     private LakeTable getLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = MetadataMgr.getDb(dbName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         Assert.assertTrue(table.isCloudNativeTable());
         return (LakeTable) table;
     }
@@ -120,7 +121,7 @@ public class CreateLakeTableTest {
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("lake_test");
+        Database db = MetadataMgr.getDb("lake_test");
         LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
         String defaultFullPath = getDefaultStorageVolumeFullPath();
         String defaultTableFullPath = String.format("%s/db%d/%d", defaultFullPath, db.getId(), table.getId());

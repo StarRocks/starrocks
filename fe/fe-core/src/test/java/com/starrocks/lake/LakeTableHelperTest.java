@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -56,7 +57,7 @@ public class LakeTableHelperTest {
     }
 
     private static Database testDb() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        return MetadataMgr.getDb(DB_NAME);
     }
 
     @Test

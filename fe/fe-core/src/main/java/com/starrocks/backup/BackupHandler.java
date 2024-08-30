@@ -68,6 +68,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BackupStmt.BackupType;
@@ -319,7 +320,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
                 String tblName = tblRef.getName().getTbl();
-                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+                Table tbl = MetadataMgr.getTable(db.getFullName(), tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;

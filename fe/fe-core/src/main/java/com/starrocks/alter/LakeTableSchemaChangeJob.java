@@ -60,6 +60,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
@@ -697,10 +698,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (modifiedColumns.isEmpty()) {
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
+            MaterializedView mv = (MaterializedView) MetadataMgr.getTable(db.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -1056,13 +1056,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @Nullable
     ReadLockedDatabase getReadLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         return db != null ? new ReadLockedDatabase(db) : null;
     }
 
     @Nullable
     WriteLockedDatabase getWriteLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         return db != null ? new WriteLockedDatabase(db) : null;
     }
 
@@ -1089,7 +1089,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         @Nullable
         OlapTable getTable(long tableId) {
-            return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            return (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         }
 
         @Override

@@ -65,6 +65,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartition;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -129,7 +130,7 @@ public class SparkLoadPendingTaskTest {
                 result = database;
                 sparkLoadJob.getHandle();
                 result = handle;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                MetadataMgr.getTable(database.getId(), tableId);
                 result = table;
                 table.getPartitions();
                 result = partitions;
@@ -212,7 +213,7 @@ public class SparkLoadPendingTaskTest {
             {
                 globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                MetadataMgr.getTable(database.getId(), tableId);
                 result = null;
             }
         };
@@ -288,7 +289,7 @@ public class SparkLoadPendingTaskTest {
             {
                 globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                MetadataMgr.getTable(database.getId(), tableId);
                 result = table;
                 table.getPartitions();
                 result = partitions;

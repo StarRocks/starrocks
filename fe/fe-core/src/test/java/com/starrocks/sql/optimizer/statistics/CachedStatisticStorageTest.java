@@ -32,6 +32,7 @@ import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -128,7 +129,7 @@ public class CachedStatisticStorageTest {
     @Test
     public void testGetColumnStatistic(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "t0");
 
         new Expectations() {
             {
@@ -161,7 +162,7 @@ public class CachedStatisticStorageTest {
     @Test
     public void testGetColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "t0");
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
@@ -368,7 +369,7 @@ public class CachedStatisticStorageTest {
     @Test
     public void testLoadCacheLoadEmpty(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Table table = MetadataMgr.getTable(db.getFullName(), "t0");
 
         new Expectations() {
             {
@@ -389,7 +390,7 @@ public class CachedStatisticStorageTest {
     @Test
     public void testConvert2ColumnStatistics() {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "t0");
         ColumnBasicStatsCacheLoader cachedStatisticStorage =
                 Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
 

@@ -33,6 +33,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
@@ -82,19 +83,19 @@ public class StatisticExecutor {
             if (dbId == null) {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
                 for (Long id : dbIds) {
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+                    Database db = MetadataMgr.getDb(id);
                     if (db == null) {
                         continue;
                     }
-                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                    table = MetadataMgr.getTable(db.getId(), tableId);
                     if (table == null) {
                         continue;
                     }
                     break;
                 }
             } else {
-                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                Database database = MetadataMgr.getDb(dbId);
+                table = MetadataMgr.getTable(database.getId(), tableId);
             }
 
             if (table == null) {
@@ -187,12 +188,12 @@ public class StatisticExecutor {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new SemanticException("Database %s is not found", dbId);
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = MetadataMgr.getTable(db.getId(), tableId);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableId);
         }

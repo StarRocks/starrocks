@@ -20,7 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
@@ -127,7 +127,7 @@ public class TableMetaSyncerTest {
         LeaderImpl leader = new LeaderImpl();
         TGetTableMetaResponse response = leader.getTableMeta(request);
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db").getTable("test_ext_table");
+        Table table = MetadataMgr.getDb("test_db").getTable("test_ext_table");
         ExternalOlapTable extTable = (ExternalOlapTable) table;
         // remove the thread local meta context
         MetaContext.remove();

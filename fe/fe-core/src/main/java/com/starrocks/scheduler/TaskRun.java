@@ -32,6 +32,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.warehouse.Warehouse;
@@ -171,13 +172,13 @@ public class TaskRun implements Comparable<TaskRun> {
         try {
             // NOTE: mvId is set in Task's properties when creating
             long mvId = Long.parseLong(properties.get(MV_ID));
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
+            Database database = MetadataMgr.getDb(ctx.getDatabase());
             if (database == null) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
                 return newProperties;
             }
 
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), mvId);
+            Table table = MetadataMgr.getTable(database.getId(), mvId);
             if (table == null) {
                 LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                         ctx.getDatabase());

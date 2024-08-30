@@ -18,6 +18,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -124,9 +125,8 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             waitForSchemaChangeAlterJobFinish();
 
             // check mv invalid
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-            MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), "test_cache_mv1"));
+            Database testDb = MetadataMgr.getDb("test");
+            MaterializedView mv1 = ((MaterializedView) MetadataMgr.getTable(testDb.getFullName(), "test_cache_mv1"));
             Assert.assertFalse(mv1.isActive());
             try {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");

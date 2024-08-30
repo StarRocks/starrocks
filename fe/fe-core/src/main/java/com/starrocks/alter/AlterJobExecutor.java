@@ -55,6 +55,7 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -135,8 +136,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         TableName tableName = statement.getTbl();
         this.tableName = tableName;
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
+        Database db = MetadataMgr.getDb(tableName.getDb());
+        Table table = MetadataMgr.getTable(tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -192,8 +193,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
         TableName tableName = statement.getTableName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
+        Database db = MetadataMgr.getDb(tableName.getDb());
+        Table table = MetadataMgr.getTable(tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -213,7 +214,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
         // check db
         final TableName mvName = stmt.getMvName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvName.getDb());
+        Database db = MetadataMgr.getDb(mvName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", mvName.getCatalogAndDb());
         }
@@ -224,7 +225,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         }
 
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvName.getDb(), mvName.getTbl());
+            Table table = MetadataMgr.getTable(mvName.getDb(), mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", mvName);
             }
@@ -299,7 +300,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             OlapTable origTable = (OlapTable) table;
             String origTblName = origTable.getName();
             String newTblName = clause.getTblName();
-            Table newTbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newTblName);
+            Table newTbl = MetadataMgr.getTable(db.getFullName(), newTblName);
             if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
                 throw new AlterJobException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
             }

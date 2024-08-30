@@ -29,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -127,8 +128,8 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testSampleStatisticsSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t0 = MetadataMgr.getDb("test").getTable("stat0");
+        Database db = MetadataMgr.getDb("test");
 
         List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
         List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING);
@@ -159,8 +160,8 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testFullStatisticsSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t0 = MetadataMgr.getDb("test").getTable("stat0");
+        Database db = MetadataMgr.getDb("test");
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = Lists.newArrayList("j1", "s1");
@@ -183,8 +184,8 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testFullStatisticsSQLWithStruct() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t0 = MetadataMgr.getDb("test").getTable("struct_a");
+        Database db = MetadataMgr.getDb("test");
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
@@ -207,8 +208,8 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testHistogramStatisticsSQLWithStruct() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t0 = MetadataMgr.getDb("test").getTable("struct_a");
+        Database db = MetadataMgr.getDb("test");
 
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
@@ -238,9 +239,9 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testHiveHistogramStatisticsSQLWithStruct() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0", "subfield_db",
+        Table t0 = MetadataMgr.getTable("hive0", "subfield_db",
                 "subfield");
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("hive0", "subfield_db");
+        Database db = MetadataMgr.getDb("hive0", "subfield_db");
 
         List<String> columnNames = Lists.newArrayList("col_struct.c0", "col_struct.c1.c11");
         ExternalHistogramStatisticsCollectJob hiveHistogramStatisticsCollectJob = new ExternalHistogramStatisticsCollectJob(
@@ -269,8 +270,8 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeFullSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t0 = MetadataMgr.getDb("test").getTable("escape0['abc']");
+        Database db = MetadataMgr.getDb("test");
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
@@ -293,8 +294,8 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeSampleSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t0 = MetadataMgr.getDb("test").getTable("escape0['abc']");
+        Database db = MetadataMgr.getDb("test");
 
         for (Column column : t0.getColumns()) {
             if (!column.getType().canStatistic()) {
@@ -414,7 +415,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testQuota() {
-        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("complex_table");
+        Table t0 = MetadataMgr.getDb("test").getTable("complex_table");
         assertContains(StatisticUtils.quoting(t0, "v2.a2.b2['+']"), "`v2.a2.b2['+']`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3"), "`struct_a.c3.d3`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_b"), "`struct_a.c3.d3`.`struct_b`");

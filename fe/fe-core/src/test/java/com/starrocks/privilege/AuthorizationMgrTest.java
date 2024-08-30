@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.ImageWriter;
@@ -48,6 +49,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -109,9 +111,11 @@ public class AuthorizationMgrTest {
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        RBACMockedMetadataMgr metadataMgr =
-                new RBACMockedMetadataMgr(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
-        metadataMgr.init();
+        LocalMetastore localMetastore = new RBACMockedMetadataMgr(globalStateMgr, globalStateMgr.getRecycleBin(), null);
+        globalStateMgr.setLocalMetastore(localMetastore);
+
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore,
+                new TemporaryTableMgr(), GlobalStateMgr.getCurrentState().getConnectorMgr(), new ConnectorTblMetaInfoMgr());
         globalStateMgr.setMetadataMgr(metadataMgr);
 
         globalStateMgr.setAuthenticationMgr(new AuthenticationMgr());
@@ -1668,12 +1672,12 @@ public class AuthorizationMgrTest {
         new MockUp<LocalMetastore>() {
             @Mock
             public Table getTable(String dbName, String tblName) {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+                return MetadataMgr.getTable(new TableName("db", "tbl1")).get();
             }
 
             @Mock
             public Table getTable(Long dbId, Long tableId) {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new TableName("db", "tbl1")).get();
+                return MetadataMgr.getTable(new TableName("db", "tbl1")).get();
             }
         };
 

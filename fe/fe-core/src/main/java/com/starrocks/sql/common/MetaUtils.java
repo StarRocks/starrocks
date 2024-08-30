@@ -37,6 +37,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -101,7 +102,7 @@ public class MetaUtils {
             if (Strings.isNullOrEmpty(tableName.getCatalog())) {
                 tableName.setCatalog(session.getCurrentCatalog());
             }
-            database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+            database = MetadataMgr.getDb(tableName.getCatalog(), tableName.getDb());
             if (database == null) {
                 throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
             }
@@ -219,7 +220,7 @@ public class MetaUtils {
     }
 
     public static Column getColumnByColumnName(long dbId, long tableId, String columnName) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        Table table = MetadataMgr.getTable(dbId, tableId);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableId);
         }
@@ -240,7 +241,7 @@ public class MetaUtils {
     }
 
     public static String getColumnNameByColumnId(long dbId, long tableId, ColumnId columnId) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        Table table = MetadataMgr.getTable(dbId, tableId);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableId);
         }

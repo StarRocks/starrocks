@@ -25,7 +25,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
@@ -84,7 +84,7 @@ public class ResourceGroupAnalyzer {
 
                     List<Long> databaseIds = new ArrayList<>();
                     for (String name : databases) {
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(name);
+                        Database db = MetadataMgr.getDb(name);
                         if (db == null) {
                             throw new SemanticException(String.format("Specified database not exists: %s", name));
                         }

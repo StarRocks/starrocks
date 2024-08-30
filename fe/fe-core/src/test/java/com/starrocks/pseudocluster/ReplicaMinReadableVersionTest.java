@@ -18,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -50,7 +51,7 @@ public class ReplicaMinReadableVersionTest {
 
     @Test
     public void testReplicaMinReadableVersionReported() throws Exception {
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(tableName);
+        OlapTable olapTable = (OlapTable) MetadataMgr.getDb("test").getTable(tableName);
         long tableId = olapTable.getId();
         PseudoBackend be = cluster.getBackend(10001);
         Tablet tablet = be.getTabletsByTable(tableId).get(0);

@@ -67,9 +67,6 @@ public class RenameMaterializedViewLogTest {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = db;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), anyLong);
-                result = table;
             }
         };
 

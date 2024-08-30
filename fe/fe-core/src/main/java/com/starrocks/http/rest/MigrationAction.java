@@ -56,6 +56,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections4.CollectionUtils;
@@ -96,7 +97,7 @@ public class MigrationAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name");
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -106,7 +107,7 @@ public class MigrationAction extends RestBaseAction {
         locker.lockDatabase(db, LockType.READ);
         try {
             if (!Strings.isNullOrEmpty(tableName)) {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                Table table = MetadataMgr.getTable(db.getFullName(), tableName);
                 if (table == null) {
                     throw new DdlException("Table[" + tableName + "] does not exist");
                 }

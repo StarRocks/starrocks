@@ -27,6 +27,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
@@ -50,7 +51,7 @@ public class ShowDbStmtTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
+                MetadataMgr.getTable(db.getFullName(), anyString);
                 minTimes = 0;
             }
         };

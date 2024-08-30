@@ -79,6 +79,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
@@ -207,7 +208,7 @@ public class AnalyzerUtils {
             dbName = context.getDatabase();
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             return null;
         }
@@ -1113,9 +1114,9 @@ public class AnalyzerUtils {
     public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
         Set<TableName> tableNames = Sets.newHashSet();
         if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db != null && !db.isSystemDatabase()) {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                Table table = MetadataMgr.getTable(db.getId(), tableId);
                 if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
@@ -1134,7 +1135,7 @@ public class AnalyzerUtils {
     }
 
     private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+        Database db = MetadataMgr.getDb(id);
         if (db != null && !db.isSystemDatabase()) {
             for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 if (table == null || !table.isOlapOrCloudNativeTable()) {

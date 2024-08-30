@@ -26,6 +26,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -75,7 +76,7 @@ public class LakeTableAlterMetaJobTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        db = MetadataMgr.getDb(DB_NAME);
 
         table = createTable(connectContext,
                     "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
@@ -97,9 +98,8 @@ public class LakeTableAlterMetaJobTest {
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
-        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), createTableStmt.getTableName());
+        Database db = MetadataMgr.getDb(createTableStmt.getDbName());
+        return (LakeTable) MetadataMgr.getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     @Test

@@ -74,6 +74,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -1084,7 +1085,7 @@ public class PropertyAnalyzer {
                 TableName tableName = parseResult.first;
                 List<String> columnNames = parseResult.second;
                 if (table.isMaterializedView()) {
-                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                    Table uniqueConstraintTable = MetadataMgr.getTable(
                             tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
                     if (uniqueConstraintTable == null) {
                         throw new SemanticException(String.format("table: %s does not exist", tableName));
@@ -1127,7 +1128,7 @@ public class PropertyAnalyzer {
         if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
             throw new SemanticException(String.format("catalog: %s do not exist", catalogName));
         }
-        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database parentDb = MetadataMgr.getDb(catalogName, dbName);
         if (parentDb == null) {
             throw new SemanticException(
                     String.format("catalog: %s, database: %s do not exist", catalogName, dbName));

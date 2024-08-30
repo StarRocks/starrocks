@@ -17,6 +17,7 @@ package com.starrocks.load.pipe.filelist;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,7 +61,7 @@ public class RepoCreator {
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
+        return MetadataMgr.getDb(FileListTableRepo.FILE_LIST_DB_NAME) != null;
     }
 
     public static void createTable() throws UserException {

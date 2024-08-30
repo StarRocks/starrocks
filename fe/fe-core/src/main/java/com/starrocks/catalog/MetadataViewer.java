@@ -46,6 +46,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -81,7 +82,7 @@ public class MetadataViewer {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = MetadataMgr.getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
@@ -210,7 +211,7 @@ public class MetadataViewer {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = MetadataMgr.getTable(db.getFullName(), tblName);
             if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
                 throw new DdlException("Table does not exist or is not native table: " + tblName);
             }

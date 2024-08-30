@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -50,7 +51,7 @@ public class AlterTableStatementAnalyzer {
 
         checkAlterOpConflict(alterClauseList);
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+        Database db = MetadataMgr.getDb(tbl.getCatalog(), tbl.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
         }

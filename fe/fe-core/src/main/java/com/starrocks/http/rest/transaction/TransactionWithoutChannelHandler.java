@@ -20,6 +20,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
@@ -64,7 +65,7 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         Long timeoutMillis = txnOperationParams.getTimeoutMillis();
         LOG.info("Handle transaction without channel info, label: {}", label);
 
-        Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
+        Database db = Optional.ofNullable(MetadataMgr.getDb(dbName))
                 .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
 
         TransactionResult result = null;

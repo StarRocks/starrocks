@@ -24,6 +24,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
@@ -94,13 +95,13 @@ public class LoadJobMVListener implements LoadJobListener {
     private void triggerToRefreshRelatedMVs(TransactionState transactionState, boolean isTriggerIfBaseTableIsMV) {
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             LOG.warn("failed to get Database when pending refresh, DBId: {}", dbId);
             return;
         }
         for (long tableId : transactionState.getTableIdList()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = MetadataMgr.getTable(db.getId(), tableId);
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
@@ -140,9 +141,8 @@ public class LoadJobMVListener implements LoadJobListener {
         Iterator<MvId> mvIdIterator = relatedMvs.iterator();
         while (mvIdIterator.hasNext()) {
             MvId mvId = mvIdIterator.next();
-            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-            MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(mvId.getDbId(), mvId.getId());
+            Database mvDb = MetadataMgr.getDb(mvId.getDbId());
+            MaterializedView materializedView = (MaterializedView) MetadataMgr.getTable(mvId.getDbId(), mvId.getId());
             if (materializedView == null) {
                 LOG.warn("materialized view {} does not exists.", mvId.getId());
                 mvIdIterator.remove();

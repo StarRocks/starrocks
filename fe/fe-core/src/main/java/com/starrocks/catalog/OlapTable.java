@@ -92,6 +92,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -1016,11 +1017,11 @@ public class OlapTable extends Table {
             if (localMvId == null) {
                 continue;
             }
-            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(localMvId.getDbId());
+            Database mvDb = MetadataMgr.getDb(localMvId.getDbId());
             if (mvDb == null) {
                 continue;
             }
-            Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvDb.getId(), localMvId.getId());
+            Table mvTable = MetadataMgr.getTable(mvDb.getId(), localMvId.getId());
             if (mvTable == null) {
                 continue;
             }

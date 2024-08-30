@@ -44,6 +44,7 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.ColumnDef;
@@ -86,15 +87,14 @@ public class CreateTableAnalyzer {
         final String tableName = tableNameObject.getTbl();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, tableNameObject.getDb());
+        Database db = MetadataMgr.getDb(catalogName, tableNameObject.getDb());
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableNameObject.getDb());
         }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, db, tableName);
         } else {
-            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getFullName(), tableName) != null && !statement.isSetIfNotExists()) {
+            if (MetadataMgr.getTable(db.getFullName(), tableName) != null && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }

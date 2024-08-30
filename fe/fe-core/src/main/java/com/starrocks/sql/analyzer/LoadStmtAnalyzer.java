@@ -30,6 +30,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
@@ -124,7 +125,7 @@ public class LoadStmtAnalyzer {
                 if (etlJobType == EtlJobType.SPARK && database != null) {
                     for (DataDescription dataDescription : dataDescriptions) {
                         String tableName = dataDescription.getTableName();
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(database);
+                        Database db = MetadataMgr.getDb(database);
                         if (db == null) {
                             continue;
                         }

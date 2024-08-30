@@ -53,6 +53,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -279,7 +280,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                MetadataMgr.getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = null;
             }
@@ -312,7 +313,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                MetadataMgr.getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = table;
                 database.getId();
@@ -392,7 +393,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                MetadataMgr.getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = table;
                 database.getId();
@@ -460,7 +461,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                MetadataMgr.getTable(database.getFullName(), tableNameString);
                 minTimes = 0;
                 result = table;
                 database.getId();

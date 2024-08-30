@@ -42,6 +42,7 @@ import com.starrocks.http.rest.v2.vo.MaterializedIndexMetaView;
 import com.starrocks.http.rest.v2.vo.PartitionInfoView;
 import com.starrocks.http.rest.v2.vo.TableSchemaView;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TStorageType;
@@ -75,7 +76,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
     @Override
     protected void doSetUp() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        Database db = MetadataMgr.getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(TB_GET_TABLE_SCHEMA_ID, TB_GET_TABLE_SCHEMA_NAME));
     }
 

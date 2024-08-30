@@ -26,6 +26,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
@@ -69,9 +70,8 @@ public class MetaRecoveryDaemonTest {
         // wait insert to finish
         Thread.sleep(2000L);
 
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(database.getFullName(), "tbl_recover");
+        Database database = MetadataMgr.getDb("test");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(database.getFullName(), "tbl_recover");
         Partition partition = table.getPartition("tbl_recover");
         MaterializedIndex index = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
         for (Tablet tablet : index.getTablets()) {

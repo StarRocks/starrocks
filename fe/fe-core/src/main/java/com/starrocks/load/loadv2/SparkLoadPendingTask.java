@@ -86,6 +86,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.common.MetaUtils;
@@ -156,7 +157,7 @@ public class SparkLoadPendingTask extends LoadTask {
     }
 
     private void createEtlJobConf() throws LoadException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new LoadException("db does not exist. id: " + dbId);
         }
@@ -173,7 +174,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 FileGroupAggKey aggKey = entry.getKey();
                 long tableId = aggKey.getTableId();
 
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
                 if (table == null) {
                     throw new LoadException("table does not exist. id: " + tableId);
                 }
@@ -224,7 +225,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 continue;
             }
 
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             if (table == null) {
                 throw new LoadException("table does not exist. id: " + tableId);
             }
@@ -571,8 +572,7 @@ public class SparkLoadPendingTask extends LoadTask {
         Map<String, String> hiveTableProperties = Maps.newHashMap();
         if (fileGroup.isLoadFromTable()) {
             long srcTableId = fileGroup.getSrcTableId();
-            HiveTable srcHiveTable = (HiveTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), srcTableId);
+            HiveTable srcHiveTable = (HiveTable) MetadataMgr.getTable(db.getId(), srcTableId);
             if (srcHiveTable == null) {
                 throw new LoadException("table does not exist. id: " + srcTableId);
             }

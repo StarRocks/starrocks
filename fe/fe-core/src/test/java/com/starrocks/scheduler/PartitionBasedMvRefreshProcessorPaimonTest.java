@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.After;
@@ -74,7 +75,7 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
                         ")\n" +
                         "AS SELECT pk, d  FROM `paimon0`.`pmn_db1`.`unpartitioned_table` as a;",
                 () -> {
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    Database testDb = MetadataMgr.getDb("test");
 
                     MaterializedView unpartitionedMaterializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -105,7 +106,7 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
                         ")\n" +
                         "AS SELECT pk, pt,d  FROM `paimon0`.`pmn_db1`.`partitioned_table` as a;",
                 () -> {
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    Database testDb = MetadataMgr.getDb("test");
                     MaterializedView partitionedMaterializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "paimon_parttbl_mv1"));

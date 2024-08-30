@@ -19,7 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
@@ -58,8 +58,8 @@ public class OlapTableSinkTest2 {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = MetadataMgr.getDb("db2");
+        OlapTable olapTable = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
 
         List<Long> partitionIds = olapTable.getAllPartitionIds();
 

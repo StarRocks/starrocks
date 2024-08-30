@@ -58,6 +58,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
@@ -134,7 +135,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public ExportJob getExportJob(String dbName, UUID queryId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();
         ExportJob matchedJob = null;
@@ -234,7 +235,7 @@ public class ExportMgr implements MemoryTrackable {
                 TableName tableName = job.getTableName();
                 if (tableName == null || tableName.getTbl().equals("DUMMY")) {
                     // forward compatibility, no table name is saved before
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                    Database db = MetadataMgr.getDb(dbId);
                     if (db == null) {
                         continue;
                     }

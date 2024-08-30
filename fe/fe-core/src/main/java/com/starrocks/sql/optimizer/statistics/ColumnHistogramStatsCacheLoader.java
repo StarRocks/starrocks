@@ -24,7 +24,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
@@ -118,9 +118,9 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
     }
 
     private Histogram convert2Histogram(TStatisticData statisticData) throws AnalysisException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statisticData.dbId);
+        Database db = MetadataMgr.getDb(statisticData.dbId);
         MetaUtils.checkDbNullAndReport(db, String.valueOf(statisticData.dbId));
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), statisticData.tableId);
+        Table table = MetadataMgr.getTable(db.getId(), statisticData.tableId);
         if (!(table instanceof OlapTable)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
         }

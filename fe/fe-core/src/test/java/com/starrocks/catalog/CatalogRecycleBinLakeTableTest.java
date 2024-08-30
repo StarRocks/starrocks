@@ -26,6 +26,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -57,8 +58,8 @@ public class CatalogRecycleBinLakeTableTest {
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), createTableStmt.getTableName());
+        Database db = MetadataMgr.getDb(createTableStmt.getDbName());
+        return MetadataMgr.getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void dropTable(ConnectContext connectContext, String sql) throws Exception {
@@ -215,7 +216,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         // Recover table2
         Assert.assertTrue(recycleBin.recoverTable(db, "t0"));
-        Assert.assertSame(table2, GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0"));
+        Assert.assertSame(table2, MetadataMgr.getTable(db.getFullName(), "t0"));
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
         checkTableTablet(table2, true);
 

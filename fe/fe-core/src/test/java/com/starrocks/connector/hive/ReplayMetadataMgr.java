@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
@@ -143,6 +142,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
         return replayTableMap.get(catalogName).get(dbName).get(tableName).partitionNames;
     }
 
+    /*
     @Override
     public Database getDb(String catalogName, String dbName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
@@ -162,6 +162,8 @@ public class ReplayMetadataMgr extends MetadataMgr {
         }
         return replayTableMap.get(catalogName).get(dbName).get(tblName).table;
     }
+
+     */
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session,

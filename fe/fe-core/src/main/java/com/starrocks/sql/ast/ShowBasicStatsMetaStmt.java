@@ -26,7 +26,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -65,12 +65,12 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         long tableId = basicStatsMeta.getTableId();
         List<String> columns = basicStatsMeta.getColumns();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
         row.set(0, db.getOriginName());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = MetadataMgr.getTable(db.getId(), tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -106,12 +106,12 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
 
         List<String> columns = basicStatsMeta.getColumns();
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Database db = MetadataMgr.getDb(catalogName, dbName);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
         }
         row.set(0, catalogName + "." + dbName);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table table = MetadataMgr.getTable(catalogName, dbName, tableName);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
         }

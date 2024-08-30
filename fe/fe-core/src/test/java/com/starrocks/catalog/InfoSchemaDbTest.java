@@ -107,7 +107,7 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
         db.write(null);
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "authors"));
+        Assert.assertNull(MetadataMgr.getTable(db.getFullName(), "authors"));
     }
 
     @Test
@@ -349,7 +349,7 @@ public class InfoSchemaDbTest {
         MetadataMgr metadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb((String) any, (String) any);
+                MetadataMgr.getDb((String) any, (String) any);
                 result = new com.starrocks.catalog.Database(0, "db");
                 minTimes = 0;
 

@@ -23,6 +23,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -57,7 +58,7 @@ public class CatalogUtils {
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -115,12 +116,12 @@ public class CatalogUtils {
 
     // Used to temporarily disable some command on lake table and remove later.
     public static void checkIsLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = MetadataMgr.getDb(dbName);
         if (db == null) {
             return;
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = MetadataMgr.getTable(db.getFullName(), tableName);
         if (table == null) {
             return;
         }

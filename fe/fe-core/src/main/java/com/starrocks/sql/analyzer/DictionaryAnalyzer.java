@@ -19,7 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
@@ -49,7 +49,7 @@ public class DictionaryAnalyzer {
             }
 
             String queryableObject = statement.getQueryableObject();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, context.getDatabase());
+            Database db = MetadataMgr.getDb(catalogName, context.getDatabase());
             if (db == null) {
                 throw new SemanticException("USE a Database before CREATE DICTIONARY");
             }

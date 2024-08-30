@@ -73,6 +73,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -1521,7 +1522,7 @@ public class TabletScheduler extends FrontendDaemon {
             long tabletId = schedCtx.getTabletId();
             long indexId = schedCtx.getIndexId();
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = MetadataMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -1530,7 +1531,7 @@ public class TabletScheduler extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                tbl = MetadataMgr.getTable(db.getId(), tableId);
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }

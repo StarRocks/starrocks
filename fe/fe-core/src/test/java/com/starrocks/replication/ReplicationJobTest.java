@@ -23,6 +23,7 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
@@ -73,7 +74,7 @@ public class ReplicationJobTest {
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
 
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        db = MetadataMgr.getDb("test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                     "distributed by hash(key1) buckets 1\n" +
@@ -81,8 +82,7 @@ public class ReplicationJobTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                     AnalyzeTestUtil.getConnectContext());
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "single_partition_duplicate_key");
+        table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "single_partition_duplicate_key");
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();

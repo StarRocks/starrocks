@@ -45,6 +45,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TInternalScanRange;
@@ -80,7 +81,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
         }
 
         long dbId = job.getDbId();
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        db = MetadataMgr.getDb(dbId);
         if (db == null) {
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "database does not exist");
             return;

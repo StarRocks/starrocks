@@ -18,7 +18,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatsConstants;
@@ -79,7 +79,7 @@ public class AnalyzeCreateAnalyzeJobTest {
 
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("db");
         Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl");
+        Table table = MetadataMgr.getTable(db.getFullName(), "tbl");
         Assert.assertEquals(table.getId(), analyzeStmt.getTableId());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
     }

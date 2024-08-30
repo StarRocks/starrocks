@@ -27,6 +27,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ranger.RangerAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
 
@@ -128,7 +129,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnAnyTable(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
             throws AccessDeniedException {
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog, db);
+        Database database = MetadataMgr.getDb(catalog, db);
         for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
             try {
                 hasPermission(
@@ -329,7 +330,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkActionInDb(UserIdentity userIdentity, Set<Long> roleIds, String db, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db);
+        Database database = MetadataMgr.getDb(db);
         for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
             if (table.isOlapView()) {
                 checkViewAction(userIdentity, roleIds, new TableName(database.getFullName(), table.getName()), privilegeType);

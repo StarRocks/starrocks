@@ -28,7 +28,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.connector.TableVersionRange;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -237,7 +237,7 @@ public class OptExpressionDuplicator {
                     String catalogName = cachedIcebergTable.getCatalogName();
                     String dbName = cachedIcebergTable.getRemoteDbName();
                     TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                    Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+                    Table currentTable = MetadataMgr.getTable(tableName).orElse(null);
                     if (currentTable == null) {
                         return null;
                     }

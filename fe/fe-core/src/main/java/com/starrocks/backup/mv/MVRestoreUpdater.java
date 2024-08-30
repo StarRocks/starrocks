@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -213,14 +214,13 @@ public class MVRestoreUpdater {
 
         String remoteDbName = baseTableInfo.getDbName();
         String remoteTableName = baseTableInfo.getTableName();
-        Database baseTableDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(remoteDbName);
+        Database baseTableDb = MetadataMgr.getDb(remoteDbName);
         if (baseTableDb == null) {
             LOG.warn(String.format("Materialized view %s can not find old base table's db name:%s.%s",
                     mv.getName(), remoteDbName, remoteTableName));
             return false;
         }
-        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(baseTableDb.getFullName(), remoteTableName);
+        Table baseTable = MetadataMgr.getTable(baseTableDb.getFullName(), remoteTableName);
         if (baseTable == null) {
             LOG.warn(String.format("Materialized view %s can not find old base table:%s.%s",
                     mv.getName(), remoteDbName, remoteTableName));
@@ -250,14 +250,14 @@ public class MVRestoreUpdater {
         }
 
         String localDbName = mvBaseTableBackupInfo.getLocalDbName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(localDbName);
+        Database db = MetadataMgr.getDb(localDbName);
         String localTableName = mvBaseTableBackupInfo.getLocalTableName();
         if (db == null) {
             LOG.warn("BaseTable(local) {}'s db {} is not found, remote db/table: {}/{}",
                     localTableName, localDbName, remoteDbName, remoteTableName);
             return Pair.create(false, Optional.empty());
         }
-        Table localTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), localTableName);
+        Table localTable = MetadataMgr.getTable(db.getFullName(), localTableName);
         remoteToLocalTableName.put(remoteDbTblName, new TableName(db.getFullName(), localTableName));
         if (localTable == null) {
             LOG.warn("Materialized view {} can not find the base table {}, old base table name:{}",

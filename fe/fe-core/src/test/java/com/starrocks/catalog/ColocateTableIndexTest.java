@@ -20,6 +20,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -95,7 +96,7 @@ public class ColocateTableIndexTest {
         // group1->table1To1
         Assert.assertEquals(1, infos.size());
         Map<String, List<String>> map = groupByName(infos);
-        Table table1To1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getTable("table1_1");
+        Table table1To1 = MetadataMgr.getDb("db1").getTable("table1_1");
         Assert.assertEquals(String.format("%d", table1To1.getId()), map.get("group1").get(2));
         LOG.info("after create db1.table1_1: {}", infos);
 
@@ -111,7 +112,7 @@ public class ColocateTableIndexTest {
         infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         Assert.assertEquals(1, infos.size());
         map = groupByName(infos);
-        Table table1To2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getTable("table1_2");
+        Table table1To2 = MetadataMgr.getDb("db1").getTable("table1_2");
         Assert.assertEquals(String.format("%d, %d", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
         LOG.info("after create db1.table1_2: {}", infos);
 
@@ -133,7 +134,7 @@ public class ColocateTableIndexTest {
         Assert.assertEquals(2, infos.size());
         map = groupByName(infos);
         Assert.assertEquals(String.format("%d, %d", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
-        Table table2To1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getTable("table2_1");
+        Table table2To1 = MetadataMgr.getDb("db2").getTable("table2_1");
         Assert.assertEquals(String.format("%d", table2To1.getId()), map.get("group2").get(2));
         LOG.info("after create db2.table2_1: {}", infos);
 
@@ -193,7 +194,7 @@ public class ColocateTableIndexTest {
                     "PROPERTIES(\"colocate_with\"=\"group3\", \"replication_num\" = \"1\");\n";
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        Table table2To3 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getTable("table2_3");
+        Table table2To3 = MetadataMgr.getDb("db2").getTable("table2_3");
         sql = "DROP DATABASE db2;";
         dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
@@ -219,7 +220,7 @@ public class ColocateTableIndexTest {
         // create goodDb
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database goodDb;", connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database goodDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("goodDb");
+        Database goodDb = MetadataMgr.getDb("goodDb");
         // create goodtable
         String sql = "CREATE TABLE " +
                     "goodDb.goodTable (k1 int, k2 int, k3 varchar(32))\n" +
@@ -230,7 +231,7 @@ public class ColocateTableIndexTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(goodDb.getFullName(), "goodTable");
+                    (OlapTable) MetadataMgr.getTable(goodDb.getFullName(), "goodTable");
         ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId());
 
         // create a bad db
@@ -320,7 +321,7 @@ public class ColocateTableIndexTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils
                     .parseStmtWithNewParser("create database db_image;", connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_image");
+        Database db = MetadataMgr.getDb("db_image");
         // create goodtable
         String sql = "CREATE TABLE " +
                     "db_image.tbl1 (k1 int, k2 int, k3 varchar(32))\n" +
@@ -330,7 +331,7 @@ public class ColocateTableIndexTest {
                     "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        OlapTable table = (OlapTable) MetadataMgr.getTable(db.getFullName(), "tbl1");
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         colocateTableIndex.saveColocateTableIndexV2(image.getImageWriter());

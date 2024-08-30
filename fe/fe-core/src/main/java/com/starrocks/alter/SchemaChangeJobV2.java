@@ -84,6 +84,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -293,7 +294,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected void runPendingJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
         LOG.info("begin to send create replica tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
@@ -314,7 +315,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
         createReplicaLatch = countDownLatch;
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -434,7 +435,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         // create all replicas success.
         // add all shadow indexes to globalStateMgr
-        tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -510,11 +511,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -702,12 +703,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -974,9 +975,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         // remove all shadow indexes, and set state to NORMAL
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db != null) {
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             if (tbl != null) {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
@@ -1019,13 +1020,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * These changes should be same as changes in SchemaChangeHandler.createJob()
      */
     private void replayPending(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             // table may be dropped before replaying this log. just return
             return;
@@ -1070,12 +1071,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
         if (tbl == null) {
             // table may be dropped before replaying this log. just return
             return;
@@ -1100,10 +1101,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = MetadataMgr.getDb(dbId);
         if (db != null) {
 
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), tableId);
             if (tbl != null) {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);

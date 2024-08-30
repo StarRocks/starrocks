@@ -47,6 +47,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.TestWithFeService;
 import org.apache.logging.log4j.LogManager;
@@ -127,9 +128,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             LOG.info("alter job {} is done. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), alterJobV2.getTableId());
+            Database db = MetadataMgr.getDb(alterJobV2.getDbId());
+            OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getId(), alterJobV2.getTableId());
             while (tbl.getState() != OlapTable.OlapTableState.NORMAL) {
                 Thread.sleep(1000);
             }
@@ -140,8 +140,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     public void testAggAddOrDropColumn() throws Exception {
         LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_agg");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "sc_agg");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -247,8 +247,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_uniq");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "sc_uniq");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -305,8 +305,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_dup");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "sc_dup");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -362,7 +362,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     public void testModifyTableAddOrDropColumns() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_dup2");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "sc_dup2");
         Map<Long, AlterJobV2> alterJobs = globalStateMgr.getSchemaChangeHandler().getAlterJobsV2();
 
         // origin columns
@@ -402,8 +402,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_pk");
+        Database db = MetadataMgr.getDb("test");
+        OlapTable tbl = (OlapTable) MetadataMgr.getTable(db.getFullName(), "sc_pk");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         try {

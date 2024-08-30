@@ -22,6 +22,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
@@ -129,7 +130,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     private void commitEpoch(MVEpoch epoch) {
         LOG.info("commitEpoch: {}", epoch);
         long dbId = mvMaintenanceJob.getView().getDbId();
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database database = MetadataMgr.getDb(dbId);
 
         try {
             epoch.onCommitting();

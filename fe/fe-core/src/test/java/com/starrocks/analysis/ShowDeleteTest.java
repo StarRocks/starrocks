@@ -21,6 +21,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -44,7 +45,7 @@ public class ShowDeleteTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
+                MetadataMgr.getTable(db.getFullName(), anyString);
                 minTimes = 0;
             }
         };
