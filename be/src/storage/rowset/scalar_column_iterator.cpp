@@ -53,7 +53,7 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
 
     IndexReadOptions index_opts;
     index_opts.use_page_cache = !opts.temporary_data &&
-                                 index_opts.kept_in_memory = config::enable_ordinal_index_memory_page_cache;	                                (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
+                                (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
     index_opts.kept_in_memory = !opts.temporary_data && config::enable_ordinal_index_memory_page_cache;
     index_opts.lake_io_opts = opts.lake_io_opts;
     index_opts.read_file = _opts.read_file;
@@ -383,7 +383,7 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
 
         IndexReadOptions opts;
         opts.use_page_cache = !_opts.temporary_data &&
-                               opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;	                              (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
+                              (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
         opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
         opts.read_file = _opts.read_file;
