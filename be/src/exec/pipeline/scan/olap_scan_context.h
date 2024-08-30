@@ -19,8 +19,10 @@
 #include <mutex>
 
 #include "column/column_access_path.h"
+#include "common/status.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/pipeline_observer.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/rowset/rowset.h"
@@ -124,6 +126,14 @@ public:
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
 
+    Status set_finished() override {
+        auto st = ContextWithDependency::set_finished();
+        _publisher.notify();
+        return st;
+    }
+
+    PipelinePublisher* publisher() { return &_publisher; }
+
 private:
     OlapScanNode* _scan_node;
     int64_t _scan_table_id;
@@ -153,6 +163,8 @@ private:
     std::vector<TabletSharedPtr> _tablets;
     MultiRowsetReleaseGuard _rowset_release_guard;
     ConcurrentJitRewriter& _jit_rewriter;
+
+    PipelinePublisher _publisher;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.

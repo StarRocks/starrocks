@@ -39,6 +39,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exec/pipeline/pipeline_observer.h"
 #include "exec/sorting/merge_path.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
@@ -90,6 +91,7 @@ class DataStreamRecvr {
 public:
     ~DataStreamRecvr();
     void bind_profile(int32_t driver_sequence, const std::shared_ptr<RuntimeProfile>& profile);
+    void attach(pipeline::PipelineObserverPtr observer) { _publisher.attach(observer); }
 
     Status get_chunk(std::unique_ptr<Chunk>* chunk);
     Status get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence);
@@ -201,6 +203,9 @@ private:
     std::shared_ptr<RuntimeProfile> _instance_profile;
     std::shared_ptr<MemTracker> _query_mem_tracker;
     std::shared_ptr<MemTracker> _instance_mem_tracker;
+
+    pipeline::PipelinePublisher _publisher;
+    std::string _name;
 
     struct Metrics {
         std::shared_ptr<RuntimeProfile> runtime_profile;

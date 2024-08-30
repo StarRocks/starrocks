@@ -36,6 +36,7 @@
 
 #include <util/time.h>
 
+#include <cmath>
 #include <condition_variable>
 #include <deque>
 #include <utility>
@@ -239,7 +240,10 @@ bool DataStreamRecvr::is_data_ready() {
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _publisher.notify();
+    });
 
     auto& metrics = get_metrics_round_robin();
     SCOPED_TIMER(metrics.process_total_timer);
@@ -258,12 +262,14 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
 void DataStreamRecvr::remove_sender(int sender_id, int be_number) {
     int use_sender_id = _is_merging ? sender_id : 0;
     _sender_queues[use_sender_id]->decrement_senders(be_number);
+    _publisher.notify();
 }
 
 void DataStreamRecvr::cancel_stream() {
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->cancel();
     }
+    _publisher.notify();
 }
 
 void DataStreamRecvr::close() {
@@ -281,6 +287,7 @@ void DataStreamRecvr::close() {
     _chunks_merger.reset();
     _cascade_merger.reset();
     _closed = true;
+    _publisher.notify();
 }
 
 DataStreamRecvr::~DataStreamRecvr() {
@@ -296,6 +303,7 @@ Status DataStreamRecvr::get_chunk(std::unique_ptr<Chunk>* chunk) {
     Chunk* tmp_chunk = nullptr;
     Status status = _sender_queues[0]->get_chunk(&tmp_chunk);
     chunk->reset(tmp_chunk);
+    _publisher.notify();
     return status;
 }
 
@@ -305,6 +313,7 @@ Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, co
     Chunk* tmp_chunk = nullptr;
     Status status = _sender_queues[0]->get_chunk(&tmp_chunk, driver_sequence);
     chunk->reset(tmp_chunk);
+    _publisher.notify();
     return status;
 }
 

@@ -33,6 +33,9 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
                                 _aggregator->limit() != -1 &&                 // has limit
                                 _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
                                 _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+
+    auto observer = pipeline::PipelineObserver::create([this]() { notify(); });
+    _aggregator->attch_observer(observer);
     return Status::OK();
 }
 
@@ -50,6 +53,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
         COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
         _aggregator->sink_complete();
         _is_finished = true;
+        notify();
     });
 
     // skip processing if cancelled

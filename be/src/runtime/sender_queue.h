@@ -58,6 +58,8 @@ public:
 
     virtual void close() = 0;
 
+    virtual bool is_finished() const { return false; }
+
 protected:
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
@@ -174,7 +176,7 @@ public:
 
     bool has_output(const int32_t driver_sequence);
 
-    bool is_finished() const;
+    bool is_finished() const override;
 
 private:
     struct ChunkItem {

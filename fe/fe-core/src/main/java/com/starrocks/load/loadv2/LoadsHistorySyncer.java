@@ -154,7 +154,6 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         }
         try {
             checkMeta();
-            syncData();
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
         }

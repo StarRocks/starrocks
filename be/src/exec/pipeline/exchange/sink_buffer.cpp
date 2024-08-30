@@ -105,7 +105,10 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         }
 
         auto& instance_id = request.fragment_instance_id;
-        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
+        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() {
+            _buffers[instance_id.lo].push(request);
+            _publisher.notify();
+        }));
     }
 
     return Status::OK();
@@ -277,7 +280,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
 
-    DeferOp decrease_defer([this]() { --_num_sending_rpc; });
+    DeferOp decrease_defer([this]() {
+        --_num_sending_rpc;
+        _publisher.notify();
+    });
     ++_num_sending_rpc;
 
     for (;;) {
@@ -372,7 +378,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         closure->addFailedHandler([this](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
-            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
+            auto defer = DeferOp([this]() {
+                --_total_in_flight_rpc;
+                _publisher.notify();
+            });
             _is_finishing = true;
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -390,7 +399,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
             // when _total_in_flight_rpc desc to 0, _fragment_ctx may be destructed
-            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
+            auto defer = DeferOp([this]() {
+                --_total_in_flight_rpc;
+                _publisher.notify();
+            });
             Status status(result.status());
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -473,6 +485,8 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
     }
+
+    _publisher.notify();
     return Status::OK();
 }
 

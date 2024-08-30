@@ -32,6 +32,8 @@ public:
 
     ~AggregateBlockingSourceOperator() override = default;
 
+    Status prepare(RuntimeState* state) override;
+
     bool has_output() const override;
     bool is_finished() const override;
 

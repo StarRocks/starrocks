@@ -21,6 +21,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+#include "util/defer_op.h"
 namespace starrocks::pipeline {
 
 Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
@@ -40,6 +41,7 @@ void AggregateStreamingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
+    DeferOp op{[this]() { notify(); }};
     _is_finished = true;
 
     // skip processing if cancelled

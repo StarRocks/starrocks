@@ -95,6 +95,9 @@ bool OlapScanOperator::is_finished() const {
 Status OlapScanOperator::do_prepare(RuntimeState*) {
     bool shared_scan = _ctx->is_shared_scan();
     _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
+
+    auto observer = PipelineObserver::create([&] { notify(); });
+    _ctx->publisher()->attach(observer);
     return Status::OK();
 }
 
@@ -129,6 +132,9 @@ size_t OlapScanOperator::num_buffered_chunks() const {
 ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
     ChunkPtr chunk = nullptr;
     if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
+        if (num_buffered_chunks() == 0) {
+            notify();
+        }
         return chunk;
     }
     return nullptr;

@@ -35,6 +35,7 @@
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+#include "util/defer_op.h"
 #include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks::pipeline {
@@ -392,6 +393,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     _buffer->incr_sinker(state);
+    _buffer->attach(pipeline::PipelineObserver::create([&] { notify(); }));
 
     _be_number = state->be_number();
     if (state->query_options().__isset.transmission_encode_level) {
@@ -635,6 +637,7 @@ void ExchangeSinkOperator::update_metrics(RuntimeState* state) {
 }
 
 Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
+    DeferOp op = DeferOp([this]() { notify(); });
     _is_finished = true;
 
     if (_chunk_request != nullptr) {

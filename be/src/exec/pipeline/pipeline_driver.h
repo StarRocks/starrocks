@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -25,6 +26,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
@@ -455,6 +457,16 @@ public:
         return source_operator()->is_epoch_finishing() || sink_operator()->is_epoch_finishing();
     }
 
+    void observe_operator(const std::function<void(PipelineDriver*)>& call_fn) {
+        auto observer = std::make_shared<PipelineObserver>([this, call_fn]() { call_fn(this); });
+        if (nullptr != source_operator()) {
+            source_operator()->attach(observer);
+        }
+        if (nullptr != sink_operator()) {
+            sink_operator()->attach(observer);
+        }
+    }
+
 protected:
     PipelineDriver()
             : _operators(),
@@ -526,8 +538,10 @@ protected:
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
 
-    // metrics
-    RuntimeProfile::Counter* _total_timer = nullptr;
+    PipelineObserverPtr _observer = nullptr;
+
+            // metrics
+            RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
     RuntimeProfile::Counter* _overhead_timer = nullptr;
     RuntimeProfile::Counter* _schedule_timer = nullptr;

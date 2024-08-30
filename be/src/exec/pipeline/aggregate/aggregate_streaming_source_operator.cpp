@@ -20,6 +20,13 @@
 
 namespace starrocks::pipeline {
 
+Status AggregateStreamingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    auto observer = PipelineObserver::create([&] { notify(); });
+    _aggregator->attch_observer(observer);
+    return Status::OK();
+}
+
 bool AggregateStreamingSourceOperator::has_output() const {
     if (!_aggregator->is_chunk_buffer_empty()) {
         // There are two cases where chunk buffer is not empty
@@ -53,7 +60,9 @@ bool AggregateStreamingSourceOperator::is_finished() const {
 }
 
 Status AggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
-    return _aggregator->set_finished();
+    auto st = _aggregator->set_finished();
+    notify();
+    return st;
 }
 
 void AggregateStreamingSourceOperator::close(RuntimeState* state) {
