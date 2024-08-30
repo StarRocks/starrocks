@@ -291,7 +291,6 @@ public:
         return _data_column->has_large_column();
     }
 
-    // bool append_strings(const Buffer<Slice>& strs) override;
     bool append_strings(const Slice* data, size_t size) override;
 
     bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
