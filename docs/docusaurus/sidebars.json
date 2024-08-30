@@ -88,6 +88,7 @@
                         "deployment/shared_data/gcs",
                         "deployment/shared_data/azure",
                         "deployment/shared_data/minio",
+                        "deployment/shared_data/hdfs",
                         "deployment/shared_data/feature-support-shared-data"
                     ]
                 },
