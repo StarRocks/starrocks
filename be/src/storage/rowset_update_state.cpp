@@ -702,11 +702,15 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                                 uint32_t rowset_id, uint32_t segment_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index, std::unique_ptr<Column>& delete_pks,
                                 int64_t* append_column_size) {
+    LOG(ERROR) << "RowsetUpdateState::apply_1: " << tablet->tablet_id();
     CHECK_MEM_LIMIT("RowsetUpdateState::apply");
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+    LOG(ERROR) << "RowsetUpdateState::apply_1_1: " << tablet->tablet_id() << ", " << rowset_meta_pb.has_txn_meta()
+            << ", " << rowset->num_segments();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
+    LOG(ERROR) << "RowsetUpdateState::apply_2: " << tablet->tablet_id();
 
     // The apply is performed segment by segment, so the tablet schema may change during the apply process
     // So, we use the tablet schema from the first segment when applying the entire process. Because apply
@@ -750,6 +754,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
         }
     }
 
+    LOG(ERROR) << "RowsetUpdateState::apply_3: " << tablet->tablet_id();
+
     if (txn_meta.has_auto_increment_partial_update_column_id()) {
         uint32_t id = 0;
         for (int i = 0; i < _tablet_schema->num_columns(); ++i) {
@@ -762,6 +768,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
         RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(
                 tablet, rowset, segment_id, latest_applied_version, column_id, _tablet_schema));
     }
+
+    LOG(ERROR) << "RowsetUpdateState::apply_4: " << tablet->tablet_id();
 
     // segment maybe keep redundant column data. For example
     // 1. when we do data ingestion, the table schema is k1,v1,v2,v3 and partial segment write k1,v1
@@ -779,6 +787,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     // so encryption meta support in segment file rewrite is not supported here
     if (txn_meta.has_auto_increment_partial_update_column_id() &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
+        LOG(ERROR) << "RowsetUpdateState::apply_5" << tablet->tablet_id();
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment(
                 src_path, dest_path, _tablet_schema, _auto_increment_partial_update_states[segment_id], read_column_ids,
                 _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr));
@@ -799,6 +808,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     // the subsequent apply process. And the segment will be treated as a full segment, so we must reload
     // segment[segment_id] of partial rowset
     if (FileSystem::Default()->path_exists(dest_path).ok()) {
+        RETURN_IF_ERROR(FileSystem::Default()->rename_file(src_path, src_path + ".lxh"));
         RETURN_IF_ERROR(FileSystem::Default()->rename_file(dest_path, src_path));
         RETURN_IF_ERROR(rowset->reload_segment_with_schema(segment_id, _tablet_schema));
     }

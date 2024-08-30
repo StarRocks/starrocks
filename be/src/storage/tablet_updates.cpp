@@ -912,6 +912,7 @@ DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 
 void TabletUpdates::do_apply() {
+    LOG(ERROR) << "do apply";
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(config::enable_pk_strict_memcheck);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
             config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
@@ -1184,6 +1185,7 @@ Status TabletUpdates::primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMulti
 }
 
 Status TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
+    LOG(ERROR) << "apply rowset commit: " << _tablet.tablet_id();
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet.tablet_id());
     Status st;
     uint32_t rowset_id = version_info.deltas[0];

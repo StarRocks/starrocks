@@ -120,6 +120,9 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     page_opts.use_page_cache = opts.use_page_cache;
     page_opts.kept_in_memory = opts.kept_in_memory;
 
+    LOG(ERROR) << "LOAD ORDINAL INDEX: " << opts.read_file->filename() << ", " << page_opts.page_pointer.offset <<
+            ", " << page_opts.page_pointer.size << ", " << page_opts.use_page_cache;
+
     // read index page
     PageHandle page_handle;
     Slice body;

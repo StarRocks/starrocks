@@ -171,7 +171,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
         // if load only has delete, we can skip the partial update logic
+        LOG(ERROR) << "ROWSET 1";
         if (_context.is_partial_update && _flush_chunk_state != FlushChunkState::DELETE) {
+            LOG(ERROR) << "ROWSET 2";
             DCHECK(_context.referenced_column_ids.size() == _context.tablet_schema->columns().size());
             RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
                       Status::InternalError(fmt::format("segment number {} not equal to partial_rowset_footers size {}",
@@ -203,9 +205,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             _rowset_txn_meta_pb->set_partial_update_mode(_context.partial_update_mode);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         } else if (!_context.merge_condition.empty()) {
+            LOG(ERROR) << "ROWSET 3";
             _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         } else if (_context.miss_auto_increment_column) {
+            LOG(ERROR) << "ROWSET 4";
             for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                 auto col = _context.tablet_schema->column(i);
                 if (col.is_auto_increment()) {
@@ -215,6 +219,8 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 }
             }
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
+        } else {
+            LOG(ERROR) << "ROWSET 5";
         }
     } else {
         if (_num_segment <= 1) {

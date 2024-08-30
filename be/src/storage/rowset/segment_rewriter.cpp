@@ -92,6 +92,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                                std::vector<uint32_t>& column_ids,
                                                std::vector<std::unique_ptr<Column>>* columns) {
+    LOG(ERROR) << "START REWRITE AUTO INCREMENT";
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -160,6 +161,8 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
             read_columns_index++;
         }
     }
+
+    LOG(ERROR) << "REWRITE: " << src_path << ", " << dest_path;
 
     SegmentWriterOptions opts;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);

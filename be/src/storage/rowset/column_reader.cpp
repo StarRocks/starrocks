@@ -427,6 +427,7 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     if (_ordinal_index == nullptr || _ordinal_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _ordinal_index_meta.get();
+    LOG(ERROR) << "load ordinal index: " << _name;
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),

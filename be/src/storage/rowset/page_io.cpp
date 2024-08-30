@@ -140,6 +140,8 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
 
     auto cache = StoragePageCache::instance();
     PageCacheHandle cache_handle;
+    //LOG(ERROR) << "READ_AND_DECOMPRES: " << opts.read_file->filename() << ", " << opts.page_pointer.offset <<
+    //        ", " << opts.page_pointer.size;
     StoragePageCache::CacheKey cache_key(opts.read_file->filename(), opts.page_pointer.offset);
     if (opts.use_page_cache && cache->lookup(cache_key, &cache_handle)) {
         // we find page in cache, use it
@@ -157,6 +159,9 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
         return Status::OK();
     }
+
+    //LOG(ERROR) << "READ_AND_DECOMPRES_FROM_FILE: " << opts.read_file->filename() << ", " << opts.page_pointer.offset <<
+    //           ", " << opts.page_pointer.size << ", " << opts.use_page_cache;
 
     // every page contains 4 bytes footer length and 4 bytes checksum
     const uint32_t page_size = opts.page_pointer.size;
@@ -236,6 +241,8 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
 
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
     if (opts.use_page_cache) {
+        //LOG(ERROR) << "INSERT_TO_CACHE: " << opts.read_file->filename() << ", " << opts.page_pointer.offset <<
+        //           ", " << opts.page_pointer.size;
         // insert this page into cache and return the cache handle
         cache->insert(cache_key, page_slice, &cache_handle, opts.kept_in_memory);
         *handle = PageHandle(std::move(cache_handle));
