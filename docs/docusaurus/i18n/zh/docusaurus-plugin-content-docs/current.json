@@ -540,7 +540,7 @@
     "description": "The label for category Utility in sidebar docs"
   },
   "sidebar.docs.category.Data types": {
-    "message": "Data types",
+    "message": "数据类型",
     "description": "The label for category Data types in sidebar docs"
   },
   "sidebar.docs.category.SQL statements": {
@@ -556,7 +556,7 @@
     "description": "The label for category Query Data Lakes in sidebar docs"
   },
   "sidebar.docs.category.Index": {
-    "message": "Index",
+    "message": "索引",
     "description": "The label for category Index in sidebar docs"
   }
 }
