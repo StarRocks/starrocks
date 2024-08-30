@@ -538,6 +538,14 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+<<<<<<< HEAD
+=======
+    if (this->query_ctx()->is_query_expired()) {
+        if (_has_log_cancelled.exchange(true) == false) {
+            VLOG_ROW << "begin to cancel operators for " << to_readable_string();
+        }
+    }
+>>>>>>> 492fcb2009 ([Enhancement] Log only finish operator non-cancel error by cancelling (#50454))
     for (auto& op : _operators) {
         _mark_operator_cancelled(op, runtime_state);
     }
@@ -767,10 +775,18 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
 
 Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
     Status res = _mark_operator_finished(op, state);
+<<<<<<< HEAD
     if (!res.ok()) {
         LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
                                     res.get_error_msg());
+=======
+    if (!res.ok() && !res.is_cancelled()) {
+        LOG(WARNING) << fmt::format(
+                "[Driver] failed to finish operator called by cancelling operator [fragment_id={}] [driver={}] "
+                "[operator={}] [error={}]",
+                print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(), res.message());
+>>>>>>> 492fcb2009 ([Enhancement] Log only finish operator non-cancel error by cancelling (#50454))
     }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {
