@@ -211,6 +211,28 @@ public class ShowMaterializedViewStatus {
         public void setTaskOwner(String taskOwner) {
             this.taskOwner = taskOwner;
         }
+
+        @Override
+        public String toString() {
+            return "RefreshJobStatus{" +
+                    "taskId=" + taskId +
+                    ", taskName='" + taskName + '\'' +
+                    ", taskOwner='" + taskOwner + '\'' +
+                    ", refreshState=" + refreshState +
+                    ", mvRefreshStartTime=" + mvRefreshStartTime +
+                    ", mvRefreshEndTime=" + mvRefreshEndTime +
+                    ", totalProcessDuration=" + totalProcessDuration +
+                    ", isForce=" + isForce +
+                    ", refreshedPartitionStarts=" + refreshedPartitionStarts +
+                    ", refreshedPartitionEnds=" + refreshedPartitionEnds +
+                    ", refreshedBasePartitionsToRefreshMaps=" + refreshedBasePartitionsToRefreshMaps +
+                    ", refreshedMvPartitionsToRefreshs=" + refreshedMvPartitionsToRefreshs +
+                    ", errorCode='" + errorCode + '\'' +
+                    ", errorMsg='" + errorMsg + '\'' +
+                    ", isRefreshFinished=" + isRefreshFinished +
+                    ", extraMessage=" + extraMessage +
+                    '}';
+        }
     }
 
     /**
