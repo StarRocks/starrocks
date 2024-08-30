@@ -129,6 +129,7 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 [COMMENT ""]
+-- 必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
 -- distribution_desc
 [DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
 -- refresh_desc
