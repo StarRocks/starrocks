@@ -343,7 +343,7 @@ Status KVStore::OptDeleteRange(ColumnFamilyIndex column_family_index, const std:
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     return iterate_range(column_family_index, begin_key, end_key,
                          [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
-                             batch->Delete(handle, key);
+                             RETURN_ERROR_IF_FALSE(batch->Delete(handle, key).ok());
                              return true;
                          });
 }
