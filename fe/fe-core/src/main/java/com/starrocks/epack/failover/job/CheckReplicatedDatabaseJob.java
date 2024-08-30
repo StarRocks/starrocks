@@ -35,7 +35,7 @@ public class CheckReplicatedDatabaseJob extends FailoverGroupJob {
 
     @Override
     public void execute() {
-        Database localDatabase = GlobalStateMgr.getServingState().getDb(remoteDatabase.getFullName());
+        Database localDatabase = GlobalStateMgr.getServingState().getLocalMetastore().getDb(remoteDatabase.getFullName());
         if (localDatabase == null) {
             CreateReplicatedDatabaseJob job = new CreateReplicatedDatabaseJob(failoverGroup,
                     remoteDatabase, remoteTables, isIncludeObject);

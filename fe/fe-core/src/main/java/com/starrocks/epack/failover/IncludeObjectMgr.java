@@ -220,7 +220,7 @@ public class IncludeObjectMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, databaseName.getCatalog());
             }
 
-            Database database = GlobalStateMgr.getServingState().getDb(databaseName.getDatabase());
+            Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseName.getDatabase());
             if (database == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, databaseName.getDatabase());
             }
@@ -238,7 +238,7 @@ public class IncludeObjectMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, databaseName.getCatalog());
             }
 
-            Database database = GlobalStateMgr.getServingState().getDb(databaseName.getDatabase());
+            Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseName.getDatabase());
             if (database == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, databaseName.getDatabase());
             }
@@ -256,7 +256,7 @@ public class IncludeObjectMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, tableName.getCatalog());
             }
 
-            Database database = GlobalStateMgr.getServingState().getDb(tableName.getDb());
+            Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(tableName.getDb());
             if (database == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb());
             }
@@ -280,7 +280,7 @@ public class IncludeObjectMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, tableName.getCatalog());
             }
 
-            Database database = GlobalStateMgr.getServingState().getDb(tableName.getDb());
+            Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(tableName.getDb());
             if (database == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb());
             }
@@ -354,7 +354,7 @@ public class IncludeObjectMgr {
         List<Long> toRemovedDbs = Lists.newArrayList();
         for (IncludeDatabase includeDatabase : includeDatabases.values()) {
             Preconditions.checkState(CatalogMgr.isInternalCatalog(includeDatabase.getCatalogId()));
-            Database database = GlobalStateMgr.getCurrentState().getDb(includeDatabase.getDatabaseId());
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(includeDatabase.getDatabaseId());
             if (database == null) {
                 LOG.warn("Database id = {} is not found, remove it from failover group",
                         includeDatabase.getDatabaseId());
@@ -374,7 +374,7 @@ public class IncludeObjectMgr {
         List<Long> toRemovedTables = Lists.newArrayList();
         for (IncludeTable includeTable : includeTables.values()) {
             Preconditions.checkState(CatalogMgr.isInternalCatalog(includeTable.getCatalogId()));
-            Database database = GlobalStateMgr.getCurrentState().getDb(includeTable.getDatabaseId());
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(includeTable.getDatabaseId());
             if (database == null) {
                 LOG.warn("Table id = {} is not found, remove it from failover group", includeTable.getTableId());
                 toRemovedTables.add(includeTable.getTableId());

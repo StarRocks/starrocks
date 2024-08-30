@@ -77,8 +77,12 @@ public class ConsistencyCheckerTest {
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTables(dbId);
+                result = database.getTables();
                 minTimes = 0;
             }
         };

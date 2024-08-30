@@ -92,9 +92,9 @@ public class BatchRollupJobTest {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable("tbl1");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         Assert.assertNotNull(tbl);
 
         // 3 rollup jobs may be finished in the loop, so only check the final state at last.
@@ -138,9 +138,9 @@ public class BatchRollupJobTest {
         Assert.assertEquals(3, alterJobs.size());
         List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable("tbl2");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
         Assert.assertNotNull(tbl);
         Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
 

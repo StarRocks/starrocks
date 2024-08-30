@@ -90,7 +90,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         long tableId = table.getId();
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;

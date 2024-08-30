@@ -261,7 +261,7 @@ public class UtilsTest {
     public void unknownStats1() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v1",
                 new ColumnStatistic(1, 1, 0, 1, 1));
@@ -289,7 +289,7 @@ public class UtilsTest {
     @Test
     public void unknownStats2() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         OptExpression opt =
                 new OptExpression(
                         new LogicalOlapScanOperator(t1, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));

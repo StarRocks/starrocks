@@ -427,7 +427,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
             try {
@@ -482,7 +482,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         // version -> shadowTablets
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 // table has been dropped
                 return true;
@@ -655,7 +655,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
         if (db == null) {
             LOG.info("the database of transaction batch {} has been deleted", txnStateBatch);
@@ -768,7 +768,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);

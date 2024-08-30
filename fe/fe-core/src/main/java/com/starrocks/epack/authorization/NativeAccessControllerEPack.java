@@ -17,6 +17,7 @@ import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstRewriter;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.MetaUtils;
@@ -127,7 +128,11 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
         PolicyAppliedContext tableAppliedPolicyInfo = policyManager.getTableAppliedPolicyInfo(tableUID);
 
         Expr rewriteExpr = null;
-        Table table = MetaUtils.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
         for (RowAccessPolicyContext rowAccessPolicyInfo : tableAppliedPolicyInfo.getRowAccessPolicyApply()) {
             Policy rowAccessPolicy = policyManager.getPolicyById(rowAccessPolicyInfo.getPolicyId());
             Expr policyExpr = SqlParser.parseSqlToExpr(rowAccessPolicy.getPolicyExpressionSQL(),

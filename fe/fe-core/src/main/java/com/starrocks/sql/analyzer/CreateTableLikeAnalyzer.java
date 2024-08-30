@@ -16,12 +16,12 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
@@ -35,14 +35,17 @@ public class CreateTableLikeAnalyzer {
 
     public static void analyze(CreateTableLikeStmt stmt, ConnectContext context) {
         TableName existedDbTbl = stmt.getExistedDbTbl();
-        MetaUtils.normalizationTableName(context, stmt.getDbTbl());
-        MetaUtils.normalizationTableName(context, existedDbTbl);
+        stmt.getDbTbl().normalization(context);
+        existedDbTbl.normalization(context);
         String tableName = stmt.getTableName();
         FeNameFormat.checkTableName(tableName);
 
         MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
-        Database db = MetaUtils.getDatabase(context, existedDbTbl);
-        Table table = MetaUtils.getTable(existedDbTbl);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(existedDbTbl.getCatalog(),
+                existedDbTbl.getDb(), existedDbTbl.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         List<String> createTableStmt = Lists.newArrayList();
 

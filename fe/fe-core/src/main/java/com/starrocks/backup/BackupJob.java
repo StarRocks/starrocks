@@ -395,7 +395,7 @@ public class BackupJob extends AbstractJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
-            Table tbl = db.getTable(tblName);
+            Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
                 status = new Status(ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
@@ -452,7 +452,7 @@ public class BackupJob extends AbstractJob {
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
         WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouseId(), 1L);
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
             return;
@@ -476,7 +476,8 @@ public class BackupJob extends AbstractJob {
             // create snapshot tasks
             for (TableRef tblRef : tableRefs) {
                 String tblName = tblRef.getName().getTbl();
-                OlapTable tbl = (OlapTable) db.getTable(tblName);
+                OlapTable tbl = (OlapTable) globalStateMgr.getLocalMetastore()
+                            .getTable(db.getFullName(), tblName);
                 List<Partition> partitions = Lists.newArrayList();
                 if (tblRef.getPartitionNames() == null) {
                     partitions.addAll(tbl.getPartitions());
@@ -511,7 +512,8 @@ public class BackupJob extends AbstractJob {
             List<Table> copiedTables = Lists.newArrayList();
             for (TableRef tableRef : tableRefs) {
                 String tblName = tableRef.getName().getTbl();
-                OlapTable tbl = (OlapTable) db.getTable(tblName);
+                OlapTable tbl = (OlapTable) globalStateMgr.getLocalMetastore()
+                            .getTable(db.getFullName(), tblName);
                 // only copy visible indexes
                 List<String> reservedPartitions = tableRef.getPartitionNames() == null ? null
                         : tableRef.getPartitionNames().getPartitionNames();

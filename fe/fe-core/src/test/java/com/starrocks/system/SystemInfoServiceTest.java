@@ -315,7 +315,7 @@ public class SystemInfoServiceTest {
 
         Assert.assertEquals(10L, version.get());
     }
-    
+
     @Test
     public void testGetHostAndPort() {
         String ipv4 = "192.168.1.2:9050";

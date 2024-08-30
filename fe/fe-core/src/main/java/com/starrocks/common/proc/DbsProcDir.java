@@ -83,9 +83,9 @@ public class DbsProcDir implements ProcDirInterface {
 
         Database db;
         try {
-            db = globalStateMgr.getDb(Long.parseLong(dbIdOrName));
+            db = globalStateMgr.getLocalMetastore().getDb(Long.parseLong(dbIdOrName));
         } catch (NumberFormatException e) {
-            db = globalStateMgr.getDb(dbIdOrName);
+            db = globalStateMgr.getLocalMetastore().getDb(dbIdOrName);
         }
 
         if (db == null) {
@@ -110,7 +110,7 @@ public class DbsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> dbInfos = new ArrayList<List<Comparable>>();
         for (String dbName : dbNames) {
-            Database db = globalStateMgr.getDb(dbName);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
             if (db == null) {
                 continue;
             }
@@ -118,7 +118,7 @@ public class DbsProcDir implements ProcDirInterface {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                int tableNum = db.getTables().size();
+                int tableNum = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).size();
                 dbInfo.add(db.getId());
                 dbInfo.add(dbName);
                 dbInfo.add(tableNum);

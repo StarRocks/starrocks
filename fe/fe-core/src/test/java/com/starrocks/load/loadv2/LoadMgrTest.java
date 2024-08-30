@@ -84,10 +84,10 @@ public class LoadMgrTest {
                                         @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -116,10 +116,10 @@ public class LoadMgrTest {
                                                 @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -151,10 +151,10 @@ public class LoadMgrTest {
                                                   @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -208,7 +208,7 @@ public class LoadMgrTest {
                                      @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = db;
             }
         };
@@ -322,7 +322,7 @@ public class LoadMgrTest {
                                   @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = db;
             }
         };

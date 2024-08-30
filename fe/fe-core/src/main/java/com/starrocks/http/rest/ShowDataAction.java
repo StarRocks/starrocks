@@ -69,7 +69,7 @@ public class ShowDataAction extends RestBaseAction {
         locker.lockDatabase(db, LockType.READ);
         try {
             // sort by table name
-            List<Table> tables = db.getTables();
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table table : tables) {
                 if (!table.isNativeTableOrMaterializedView()) {
                     continue;

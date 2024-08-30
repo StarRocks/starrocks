@@ -288,23 +288,15 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb(db.getId());
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
 
-                globalStateMgr.getDb("emptyDb");
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -324,13 +316,13 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(localMetastore) {
             {
-                localMetastore.listDbNames();
+                localMetastore.getDb("testDb");
                 minTimes = 0;
-                result = Lists.newArrayList("testDb");
+                result = db;
 
-                localMetastore.getFullNameToDb();
+                localMetastore.getDb(TEST_DB_ID);
                 minTimes = 0;
-                result = nameToDb;
+                result = db;
             }
         };
 
@@ -356,25 +348,9 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb(db.getId());
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
-
-                globalStateMgr.getDb("emptyDb");
-                minTimes = 0;
-                result = null;
-
-                globalStateMgr.getDb(anyString);
-                minTimes = 0;
-                result = new Database();
 
                 globalStateMgr.getLoadInstance();
                 minTimes = 0;
@@ -387,6 +363,10 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
                 result = metadataMgr;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
             }
         };
 
@@ -405,7 +385,18 @@ public abstract class StarRocksHttpTestCase {
                 result = newEmptyTable;
             }
         };
-        ;
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                localMetastore.getDb(TEST_DB_ID);
+                minTimes = 0;
+                result = db;
+            }
+        };
 
         return globalStateMgr;
     }

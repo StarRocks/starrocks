@@ -90,7 +90,7 @@ public class GetDdlStmtAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name and Table name");
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -102,7 +102,7 @@ public class GetDdlStmtAction extends RestBaseAction {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 throw new DdlException("Table[" + tableName + "] does not exist");
             }

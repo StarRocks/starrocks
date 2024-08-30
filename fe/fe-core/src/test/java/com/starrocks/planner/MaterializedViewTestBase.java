@@ -288,8 +288,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected static Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }

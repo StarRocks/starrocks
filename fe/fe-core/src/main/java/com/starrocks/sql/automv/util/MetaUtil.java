@@ -136,7 +136,7 @@ public class MetaUtil {
     public static <T> T checkTable(TableName tableName, T defaultValue, BiFunction<Database, Table, T> checker) {
         return MetaUtil.getDatabase(tableName)
                 .unwrap()
-                .map(db -> db.tryGetTable(tableName.getTbl())
+                .map(db -> GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(db.getFullName(), tableName.getTbl())
                         .map(tbl -> checker.apply(db, tbl))
                         .orElse(defaultValue))
                 .orElse(defaultValue);

@@ -226,12 +226,13 @@ public class BinlogManager {
 
 
     public boolean isBinlogAvailable(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion().size() != 0;
                 }
@@ -246,12 +247,13 @@ public class BinlogManager {
     // the binlog is available
     // result : partitionId -> binlogAvailableVersion, null indicates the db or table is dropped
     public Map<Long, Long> getBinlogAvailableVersion(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion();
                 }
@@ -268,12 +270,12 @@ public class BinlogManager {
         HashMap<Long, BinlogConfig> allTablesWithBinlogConfigMap = new HashMap<>();
         List<Long> allDbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : allDbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    List<Table> tables = db.getTables();
+                    List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : tables) {
                         if (table.isOlapTable() && ((OlapTable) table).isBinlogEnabled()) {
                             allTablesWithBinlogConfigMap.put(table.getId(), ((OlapTable) table).getCurBinlogConfig());

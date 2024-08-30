@@ -139,8 +139,8 @@ public class PredicateReorderRuleTest {
 
         GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        OlapTable t0 = (OlapTable) catalog.getDb("test").getTable("t0");
-        OlapTable t1 = (OlapTable) catalog.getDb("test").getTable("t1");
+        OlapTable t0 = (OlapTable) catalog.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) catalog.getLocalMetastore().getDb("test").getTable("t1");
         cachedStatisticStorage.addColumnStatistic(t0, v1.getName(), statistics.getColumnStatistic(v1));
         cachedStatisticStorage.addColumnStatistic(t0, v2.getName(), statistics.getColumnStatistic(v2));
         cachedStatisticStorage.addColumnStatistic(t1, v1.getName(), statistics.getColumnStatistic(v1));
@@ -156,7 +156,7 @@ public class PredicateReorderRuleTest {
 
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 
@@ -230,8 +230,8 @@ public class PredicateReorderRuleTest {
     public void testHashJoinPredicateReorder() {
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
-        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t1");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t1");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 

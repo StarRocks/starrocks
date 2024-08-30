@@ -1515,11 +1515,11 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
             if (db == null) {
                 throw new SemanticException("Database %s is not found", tableName.getDb());
             }
-            Table table = db.getTable(tableName.getTbl());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", tableName.getTbl());
             }

@@ -68,14 +68,15 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         Body requestBody = txnOperationParams.getBody();
         LOG.info("Handle bypass write transaction, label: {}", label);
 
-        Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(dbName))
+        Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
                 .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
 
         TransactionResult result;
         switch (txnOperation) {
             case TXN_BEGIN:
-                Table table = Optional.ofNullable(db.getTable(tableName))
-                        .orElseThrow(() -> new UserException(
+                Table table = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getFullName(), tableName))
+                            .orElseThrow(() -> new UserException(
                                 String.format("Table[%s.%s] does not exist.", dbName, tableName)));
                 result = handleBeginTransaction(db, table, label, sourceType, timeoutMillis);
                 break;

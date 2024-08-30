@@ -75,7 +75,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
     @Override
     protected void doSetUp() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
         db.registerTableUnlocked(newOlapTable(TB_GET_TABLE_SCHEMA_ID, TB_GET_TABLE_SCHEMA_NAME));
     }
 

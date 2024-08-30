@@ -247,7 +247,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 FileGroupAggKey aggKey = entry.getKey();
                 List<BrokerFileGroup> brokerFileGroups = entry.getValue();
                 long tableId = aggKey.getTableId();
-                OlapTable table = (OlapTable) db.getTable(tableId);
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 if (table == null) {
                     LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                             .add("database_id", dbId)

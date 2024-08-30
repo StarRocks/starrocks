@@ -576,7 +576,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getDb("db1");
+                globalStateMgr.getLocalMetastore().getDb("db1");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -626,7 +626,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getDb("db1");
+                globalStateMgr.getLocalMetastore().getDb("db1");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -666,7 +666,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.isFinal();
                 minTimes = 0;
                 result = true;
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -720,7 +720,7 @@ public class RoutineLoadManagerTest {
                 pauseRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -771,7 +771,7 @@ public class RoutineLoadManagerTest {
                 resumeRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -808,7 +808,7 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -954,7 +954,7 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
+                globalStateMgr.getLocalMetastore().getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();

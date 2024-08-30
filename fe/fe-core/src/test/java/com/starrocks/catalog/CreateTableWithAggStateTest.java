@@ -65,7 +65,8 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
@@ -100,7 +101,8 @@ public class CreateTableWithAggStateTest {
                 "PARTITION BY (k1) \n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
@@ -131,7 +133,8 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (dt) \n" +
                         "DISTRIBUTED BY HASH(dt) BUCKETS 4;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`dt` varchar(10) NULL COMMENT \"\", " +
@@ -162,7 +165,8 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
@@ -198,7 +202,8 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
@@ -234,7 +239,8 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
@@ -263,7 +269,8 @@ public class CreateTableWithAggStateTest {
                     "AGGREGATE KEY(k1)\n" +
                     "PARTITION BY (k1) \n" +
                     "DISTRIBUTED BY HASH(k1) BUCKETS 3;");
-            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    .getDb(connectContext.getDatabase())
                     .getTable("test_agg_tbl1");
             Assert.assertEquals(null, table);
         } catch (Exception e) {
@@ -284,7 +291,8 @@ public class CreateTableWithAggStateTest {
                     "AGGREGATE KEY(k1)\n" +
                     "PARTITION BY (k1) \n" +
                     "DISTRIBUTED BY HASH(k1) BUCKETS 3;");
-            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    .getDb(connectContext.getDatabase())
                     .getTable("test_agg_tbl1");
             Assert.assertEquals(null, table);
         } catch (Exception e) {

@@ -806,7 +806,7 @@ public class PlanTestNoneDBBase {
 
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        return globalStateMgr.getDb("test").getTable(t);
+        return globalStateMgr.getLocalMetastore().getDb("test").getTable(t);
     }
 
     public OlapTable getOlapTable(String t) {

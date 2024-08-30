@@ -415,7 +415,11 @@ public class SecurityPolicyMgr {
                                           WithColumnMaskingPolicy withColumnMaskingPolicy) {
         TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
 
-        Table table = MetaUtils.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         ColumnId columnId = table.getColumn(columnName).getColumnId();
 
@@ -466,7 +470,10 @@ public class SecurityPolicyMgr {
 
     public void revokeMaskingPolicyContext(ConnectContext ctx, String catalog, String dbName, String tblName, String columnName) {
         TableUID tableUID = TableUID.generate(ctx, catalog, dbName, tblName);
-        Table table = MetaUtils.getTable(catalog, dbName, tblName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalog, dbName, tblName);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tblName);
+        }
         ColumnId columnId = table.getColumn(columnName).getColumnId();
         doRevokeMaskingPolicyContext(tableUID, columnId);
         GlobalStateMgr.getCurrentState().getEditLog().logRevokeMaskingPolicy(
@@ -486,7 +493,11 @@ public class SecurityPolicyMgr {
 
     public void applyRowAccessPolicyContext(ConnectContext ctx, TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
         TableUID tableUID = TableUID.generate(ctx, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
-        Table table = MetaUtils.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         RowAccessPolicyContext rowAccessPolicyContext =
                 new RowAccessPolicyContext(withRowAccessPolicy.getPolicyId(),

@@ -178,11 +178,11 @@ public class ExportStmt extends StatementBase {
     }
 
     public void checkTable(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDb(tblName.getDb());
+        Database db = globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
-        Table table = db.getTable(tblName.getTbl());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
         if (table == null) {
             throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
         }

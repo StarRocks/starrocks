@@ -112,7 +112,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -137,6 +137,14 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
+            }
+        };
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb(anyLong);
+                minTimes = 0;
+                result = db;
             }
         };
 

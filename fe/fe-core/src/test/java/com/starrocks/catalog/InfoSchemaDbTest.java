@@ -108,7 +108,7 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
         db.write(null);
-        Assert.assertNull(db.getTable("authors"));
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "authors"));
     }
 
     @Test

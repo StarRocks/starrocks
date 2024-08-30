@@ -54,14 +54,17 @@ public class TunespaceAnalyzer {
     private static final class TunespaceAnalyzeVisitor implements AstVisitorEPack<Void, ConnectContext> {
         private static void analyzeAndCheckFullQualifiedTableName(TableName tableName, ConnectContext context,
                                                                   Function<Optional<Table>, Optional<SemanticException>> check) {
-            MetaUtils.normalizationTableName(context, tableName);
+            tableName.normalization(context);
 
             final String simpleTblName = tableName.getTbl();
             FeNameFormat.checkTableName(simpleTblName);
 
             final String catalogName = tableName.getCatalog();
             MetaUtils.checkCatalogExistAndReport(catalogName);
-            Database db = MetaUtils.getDatabase(catalogName, tableName.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
@@ -149,7 +152,7 @@ public class TunespaceAnalyzer {
             if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbSimpleName);
             } else {
-                return MetaUtils.getDatabase(catalogName, dbSimpleName);
+                return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbSimpleName);
             }
         }
 

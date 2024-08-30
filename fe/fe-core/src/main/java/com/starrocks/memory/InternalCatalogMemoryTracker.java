@@ -34,7 +34,7 @@ public class InternalCatalogMemoryTracker implements MemoryTrackable {
         long estimateSize = 0L;
         List<Database> databases = new ArrayList<>(GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values());
         for (Database database : databases) {
-            List<Table> tables = database.getTables();
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId());
             for (Table table : tables) {
                 Collection<Partition> partitions = table.getPartitions();
                 Iterator<Partition> iterator = partitions.iterator();
@@ -51,7 +51,7 @@ public class InternalCatalogMemoryTracker implements MemoryTrackable {
         long estimateCount = 0;
         List<Database> databases = new ArrayList<>(GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values());
         for (Database database : databases) {
-            List<Table> tables = database.getTables();
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId());
             for (Table table : tables) {
                 Collection<Partition> partitions = table.getPartitions();
                 estimateCount += partitions.size();

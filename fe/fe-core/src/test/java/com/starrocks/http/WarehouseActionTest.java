@@ -507,7 +507,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     }
 
     private StreamLoadTask genStreamLoadJob(Long whId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
         Table table = db.getTable(TEST_TABLE_ID);
         return new StreamLoadTask(NEXT_INDEX.getAndIncrement(),
                 db,

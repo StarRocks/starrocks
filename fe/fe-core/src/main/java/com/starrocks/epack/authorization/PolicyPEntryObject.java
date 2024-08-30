@@ -240,7 +240,7 @@ public class PolicyPEntryObject implements PEntryObject {
             String dbName;
             Database database;
             if (CatalogMgr.isInternalCatalog(catalogId)) {
-                database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(databaseUUID));
+                database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(databaseUUID));
                 if (database == null) {
                     throw new MetaNotFoundException("Cannot find database : " + databaseUUID);
                 }

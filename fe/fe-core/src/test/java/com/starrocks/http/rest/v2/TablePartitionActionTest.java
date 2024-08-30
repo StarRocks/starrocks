@@ -106,7 +106,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testOlapTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -153,7 +153,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testLakeTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
         db.registerTableUnlocked(newLakeTable(
                 TB_LAKE_TABLE_ID, TB_LAKE_TABLE_NAME, PARTITION_SIZE));
 
@@ -200,7 +200,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testPages() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 

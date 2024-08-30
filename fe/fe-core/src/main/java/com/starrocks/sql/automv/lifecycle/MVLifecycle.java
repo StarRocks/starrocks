@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.util.MetaUtil;
@@ -55,7 +56,8 @@ public class MVLifecycle {
     public static boolean whenMVPresentThen(MVLifecycle mvLifecycle, MVLifecyclePredicate predicate) {
         return mvLifecycle.getMVPlus().map(mvPlus -> MetaUtil.getDatabase(mvPlus.getFqName())
                         .unwrap()
-                        .map(db -> db.tryGetTable(mvPlus.getMv().getId())
+                        .map(db -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .mayGetTable(db.getId(), mvPlus.getMv().getId())
                                 .map(tbl -> predicate.test(mvLifecycle, db, mvPlus.getMv()))
                                 .orElse(false))
                         .orElse(false))

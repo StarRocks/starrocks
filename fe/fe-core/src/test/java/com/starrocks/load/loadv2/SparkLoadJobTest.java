@@ -160,11 +160,11 @@ public class SparkLoadJobTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(dbName);
+                globalStateMgr.getLocalMetastore().getDb(dbName);
                 result = db;
                 globalStateMgr.getResourceMgr();
                 result = resourceMgr;
-                db.getTable(tableName);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 result = olapTable;
                 db.getId();
                 result = dbId;
@@ -390,9 +390,9 @@ public class SparkLoadJobTest {
                 result = status;
                 handler.getEtlFilePaths(etlOutputPath, (BrokerDesc) any);
                 result = filePathToSize;
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = db;
-                db.getTable(tableId);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 result = table;
                 table.getPartition(partitionId);
                 result = partition;
@@ -488,9 +488,9 @@ public class SparkLoadJobTest {
                 result = status;
                 handler.getEtlFilePaths(etlOutputPath, (BrokerDesc) any);
                 result = filePathToSize;
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = db;
-                db.getTable(tableId);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 result = table;
                 table.getPartition(partitionId);
                 result = partition;
@@ -546,7 +546,7 @@ public class SparkLoadJobTest {
                                                  @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = db;
             }
         };
@@ -637,7 +637,7 @@ public class SparkLoadJobTest {
                                              @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = db;
             }
         };

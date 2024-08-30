@@ -24,9 +24,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.automv.pieces.FQTable;
-import com.starrocks.sql.common.MetaUtils;
 
 import java.util.Map;
 
@@ -44,7 +44,10 @@ public final class FQTableCollector implements AopAstHandler {
         }
         TableName tableName = tableRel.getName();
         Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(tableName.getCatalog());
-        Database database = MetaUtils.getDatabase(tableName.getCatalog(), tableName.getDb());
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        if (database == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
         Table table = tableRel.getTable();
         Preconditions.checkArgument(CatalogMgr.isInternalCatalog(tableName.getCatalog()) || catalog != null);
         FQTable fqTable = FQTable.of(catalog, database, table, tableName);

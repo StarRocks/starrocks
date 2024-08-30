@@ -41,7 +41,8 @@ import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
-        MetaUtils.normalizationTableName(context, tbl);
+        tbl.normalization(context);
+
         List<AlterClause> alterClauseList = statement.getAlterClauseList();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
@@ -49,7 +50,11 @@ public class AlterTableStatementAnalyzer {
 
         checkAlterOpConflict(alterClauseList);
 
-        Database db = MetaUtils.getDatabase(context, tbl);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+        }
+
         if (alterClauseList.stream().map(AlterClause::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
             try {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();

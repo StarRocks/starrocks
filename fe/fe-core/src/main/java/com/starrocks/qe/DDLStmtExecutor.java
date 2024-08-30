@@ -243,7 +243,7 @@ public class DDLStmtExecutor {
                             .getGlobalFunctionMgr()
                             .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
                 } else {
-                    Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                    Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
@@ -260,7 +260,7 @@ public class DDLStmtExecutor {
                 if (name.isGlobalFunction()) {
                     context.getGlobalStateMgr().getGlobalFunctionMgr().userDropFunction(stmt.getFunctionSearchDesc());
                 } else {
-                    Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                    Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }

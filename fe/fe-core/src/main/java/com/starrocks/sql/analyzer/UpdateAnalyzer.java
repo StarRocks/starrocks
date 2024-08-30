@@ -23,11 +23,13 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -69,8 +71,12 @@ public class UpdateAnalyzer {
         analyzeProperties(updateStmt, session);
 
         TableName tableName = updateStmt.getTableName();
-        MetaUtils.normalizationTableName(session, tableName);
-        MetaUtils.getDatabase(session, tableName);
+        tableName.normalization(session);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof MaterializedView) {

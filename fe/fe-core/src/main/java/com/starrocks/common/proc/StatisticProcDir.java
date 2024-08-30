@@ -125,7 +125,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 // skip information_schema database
                 continue;
             }
-            Database db = globalStateMgr.getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -141,7 +141,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbTabletNum = 0;
                 int dbReplicaNum = 0;
 
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
@@ -259,7 +259,7 @@ public class StatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
-        if (globalStateMgr.getDb(dbId) == null) {
+        if (globalStateMgr.getLocalMetastore().getDb(dbId) == null) {
             throw new AnalysisException("Invalid db id: " + dbIdStr);
         }
 

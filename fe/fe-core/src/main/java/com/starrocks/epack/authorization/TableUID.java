@@ -40,7 +40,7 @@ public class TableUID {
 
     public TableName toTableName() {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(this.databaseUUID));
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return null;
             }

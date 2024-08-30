@@ -301,12 +301,12 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
 
-        OlapTable tbl = (OlapTable) db.getTable(getTableId());
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
         }

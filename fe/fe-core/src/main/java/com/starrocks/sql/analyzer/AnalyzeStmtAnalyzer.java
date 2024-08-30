@@ -100,7 +100,7 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
-            MetaUtils.normalizationTableName(session, statement.getTableName());
+            statement.getTableName().normalization(session);
             Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
 
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -178,7 +178,10 @@ public class AnalyzeStmtAnalyzer {
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    Database db = MetaUtils.getDatabase(session, tbl);
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+                    }
 
                     if (statement.isNative() &&
                             StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -187,8 +190,12 @@ public class AnalyzeStmtAnalyzer {
 
                     statement.setDbId(db.getId());
                 } else if (null != statement.getTableName().getTbl()) {
-                    MetaUtils.normalizationTableName(session, statement.getTableName());
-                    Database db = MetaUtils.getDatabase(session, statement.getTableName());
+                    statement.getTableName().normalization(session);
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getDb(statement.getTableName().getCatalog(), statement.getTableName().getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", statement.getTableName().getCatalogAndDb());
+                    }
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, statement.getTableName());
 
                     if (analyzeTable.isTemporaryTable()) {
@@ -339,7 +346,7 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
-            MetaUtils.normalizationTableName(session, statement.getTableName());
+            statement.getTableName().normalization(session);
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 statement.setExternal(true);
             }
@@ -348,7 +355,7 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
-            MetaUtils.normalizationTableName(session, statement.getTableName());
+            statement.getTableName().normalization(session);
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 statement.setExternal(true);
             }

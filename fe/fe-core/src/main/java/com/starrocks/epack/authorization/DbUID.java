@@ -61,7 +61,7 @@ public class DbUID {
 
     public DbName toDbName() {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(this.uuid));
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(this.uuid));
             if (db == null) {
                 return null;
             }

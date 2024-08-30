@@ -158,7 +158,7 @@ public class FunctionPEntryObject implements PEntryObject {
             if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
                 return "ALL FUNCTIONS IN ALL DATABASES";
             } else {
-                Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
                 if (database == null) {
                     throw new MetaNotFoundException("Can't find database : " + databaseId);
                 }
