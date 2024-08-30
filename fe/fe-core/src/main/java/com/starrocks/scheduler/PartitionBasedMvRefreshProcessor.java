@@ -582,7 +582,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // change `query_timeout` to 1 hour by default for better user experience.
         if (!mvProperty.getProperties().containsKey(MV_SESSION_TIMEOUT)) {
-            mvSessionVariable.setQueryTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
+            mvSessionVariable.setInsertTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
         }
 
         // set insert_max_filter_ratio by default

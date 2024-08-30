@@ -534,7 +534,7 @@ public class StatementPlanner {
                     Lists.newArrayList(tbl.getSourceTableId()),
                     label,
                     sourceType,
-                    session.getSessionVariable().getQueryTimeoutS(),
+                    session.getExecTimeout(),
                     tbl.getSourceTableHost(),
                     tbl.getSourceTablePort(),
                     authenticateParams);
@@ -551,7 +551,7 @@ public class StatementPlanner {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    session.getSessionVariable().getQueryTimeoutS(),
+                    session.getExecTimeout(),
                     warehouseId);
 
             // add table indexes to transaction state
