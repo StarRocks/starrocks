@@ -67,6 +67,8 @@ public class OptimizeJobV2BuilderTest {
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getId()).thenReturn(123L);
         Mockito.when(table.getName()).thenReturn("myTable");
+        Mockito.when(table.getStorageType()).thenReturn(null);
+        Mockito.when(table.enableReplicatedStorage()).thenReturn(true);
 
         // Create an instance of OptimizeJobV2Builder without an optimize clause
         OptimizeJobV2Builder builder = new OptimizeJobV2Builder(table);
