@@ -27,9 +27,9 @@ The deployment of a shared-data StarRocks cluster is similar to that of a shared
 
 Before starting FEs, add the following configuration items in the FE configuration file **fe.conf**.
 
-### Example FE configurations for MinIO
+### Example FE configurations for HDFS
 
-These are example shared-data additions for your `fe.conf` file on each of your FE nodes. The parameters use the prefix `aws_s3`.
+These are example shared-data additions for your `fe.conf` file on each of your FE nodes.
 
 ```Properties
 run_mode = shared_data
