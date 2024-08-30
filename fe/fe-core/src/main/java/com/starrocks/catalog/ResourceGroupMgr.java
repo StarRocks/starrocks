@@ -61,6 +61,9 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME;
+import static com.starrocks.catalog.ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
@@ -76,6 +79,11 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    {
+        resourceGroupMap.put(DEFAULT_RESOURCE_GROUP_NAME, ResourceGroup.DEFAULT_WG);
+        resourceGroupMap.put(DEFAULT_MV_RESOURCE_GROUP_NAME, ResourceGroup.DEFAULT_MV_WG);
+    }
 
     private void readLock() {
         lock.readLock().lock();
@@ -97,6 +105,9 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             ResourceGroup wg = stmt.getResourceGroup();
+            if (ResourceGroup.isDefault(wg.getName())) {
+                throw new DdlException(String.format("Can't create resource group named %s, as it's default.", wg.getName()));
+            }
             if (resourceGroupMap.containsKey(wg.getName())) {
                 // create resource_group or replace <name> ...
                 if (stmt.isReplaceIfExists()) {
@@ -272,11 +283,7 @@ public class ResourceGroupMgr implements Writable {
     public ResourceGroup getResourceGroup(String name) {
         readLock();
         try {
-            if (resourceGroupMap.containsKey(name)) {
-                return resourceGroupMap.get(name);
-            } else {
-                return null;
-            }
+            return resourceGroupMap.getOrDefault(name, null);
         } finally {
             readUnlock();
         }
@@ -312,6 +319,9 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             String name = stmt.getName();
+            if (ResourceGroup.isDefault(name)) {
+                throw new DdlException(String.format("Default resource group %s does not support change.", name));
+            }
             if (!resourceGroupMap.containsKey(name)) {
                 throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
             }
@@ -407,6 +417,9 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             String name = stmt.getName();
+            if (ResourceGroup.isDefault(name)) {
+                throw new DdlException(String.format("Default resource group %s does not support drop.", name));
+            }
             if (!resourceGroupMap.containsKey(name)) {
                 throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
             }
@@ -462,8 +475,10 @@ public class ResourceGroupMgr implements Writable {
     private void addResourceGroupInternal(ResourceGroup wg) {
         resourceGroupMap.put(wg.getName(), wg);
         id2ResourceGroupMap.put(wg.getId(), wg);
-        for (ResourceGroupClassifier classifier : wg.classifiers) {
-            classifierMap.put(classifier.getId(), classifier);
+        if (wg.classifiers != null) {
+            for (ResourceGroupClassifier classifier : wg.classifiers) {
+                classifierMap.put(classifier.getId(), classifier);
+            }
         }
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
@@ -507,6 +522,7 @@ public class ResourceGroupMgr implements Writable {
                 if (workgroup.getVersion() < minVersion) {
                     minVersion = workgroup.getVersion();
                 }
+                ResourceGroup.fillDefaultConfig(workgroup);
             }
             activeResourceGroupsPerBe.put(beId, workGroupOnBe);
             minVersionPerBe.put(beId, minVersion == Long.MAX_VALUE ? Long.MIN_VALUE : minVersion);
