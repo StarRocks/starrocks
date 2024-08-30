@@ -152,27 +152,37 @@ public class ResourceGroupAnalyzer {
     }
 
     // Property format:
-    // ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
-    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties) throws SemanticException {
+    // ('cpu_weight'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
+    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties)
+            throws SemanticException {
+        final int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
-            if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT)) {
-                int cpuCoreLimit = Integer.parseInt(value);
-                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
-                if (cpuCoreLimit <= 0 || cpuCoreLimit > avgCoreNum) {
-                    throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
+            if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT) || key.equalsIgnoreCase(ResourceGroup.CPU_WEIGHT)) {
+                int cpuWeight = Integer.parseInt(value);
+                if (cpuWeight > avgCoreNum) {
+                    throw new SemanticException(
+                            String.format("%s should range from 0 to %d", ResourceGroup.CPU_WEIGHT, avgCoreNum));
                 }
-                resourceGroup.setCpuCoreLimit(Integer.parseInt(value));
+                resourceGroup.setCpuWeight(cpuWeight);
+                continue;
+            }
+            if (key.equalsIgnoreCase(ResourceGroup.DEDICATED_CPU_CORES)) {
+                int dedicatedCpuCores = Integer.parseInt(value);
+                if (dedicatedCpuCores >= avgCoreNum) {
+                    throw new SemanticException(
+                            String.format("%s should range from 0 to %d", ResourceGroup.DEDICATED_CPU_CORES, avgCoreNum - 1));
+                }
+                resourceGroup.setDedicatedCpuCores(dedicatedCpuCores);
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
                 int maxCpuCores = Integer.parseInt(value);
-                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
                 if (maxCpuCores > avgCoreNum) {
                     throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
                 }
-                resourceGroup.setMaxCpuCores(Integer.parseInt(value));
+                resourceGroup.setMaxCpuCores(maxCpuCores);
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {
