@@ -1375,6 +1375,7 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
+<<<<<<< HEAD
 CONF_mBool(enable_pk_strict_memcheck, "false");
 
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
@@ -1383,6 +1384,18 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 // we will fallback and using `DeleteRange` in rocksdb.
 CONF_mInt32(rocksdb_opt_delete_range_limit, "500");
 
+=======
+// python envs config
+// create time worker timeout
+CONF_mInt32(create_child_worker_timeout_ms, "1000");
+// config ENV PYTHONPATH
+CONF_Strings(python_envs, "");
+// report python worker STDERR to client
+CONF_Bool(report_python_worker_error, "true");
+CONF_Bool(python_worker_reuse, "true");
+CONF_Int32(python_worker_expire_time_sec, "300");
+CONF_mBool(enable_pk_strict_memcheck, "true");
+>>>>>>> 776c16db6f ([BugFix] Fix opt deleterange (#50446))
 CONF_mBool(skip_lake_pk_preload, "false");
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "false");
