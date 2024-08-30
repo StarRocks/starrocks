@@ -198,11 +198,11 @@ public:
         _slices_cache = false;
     }
 
-    bool append_strings(const Buffer<Slice>& strs) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
-    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
 
-    bool append_continuous_strings(const Buffer<Slice>& strs) override;
+    bool append_continuous_strings(const Slice* data, size_t size) override;
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
@@ -220,7 +220,7 @@ public:
         _slices_cache = false;
     }
 
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
