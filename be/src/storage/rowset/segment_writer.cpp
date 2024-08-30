@@ -86,6 +86,8 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // However, LZ4 doesn't support compressing multiple slices. In order to use LZ4, one solution is to
     // copy the contents of the slice `nullmap` into the slice `encoded values`, but the cost of copying is still not small.
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
+    LOG(ERROR) << "COLUMN_META: " << column.name() << ":" << _tablet_schema->compression_type() << ", " <<
+            _tablet_schema->compression_level();
     meta->set_compression(_tablet_schema->compression_type());
     meta->set_compression_level(_tablet_schema->compression_level());
     meta->set_is_nullable(column.is_nullable());
@@ -297,9 +299,11 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         auto& column_writer = _column_writers[i];
         RETURN_IF_ERROR(column_writer->finish());
         // write data
+        LOG(ERROR) << "FINAL_DATA_1: " << _tablet_schema->column(column_index).name() << ", " << _wfile->size();
         RETURN_IF_ERROR(column_writer->write_data());
         // write index
         uint64_t index_offset = _wfile->size();
+        LOG(ERROR) << "FINAL_DATA_2: " << _tablet_schema->column(column_index).name() << ", " << index_offset;
         RETURN_IF_ERROR(column_writer->write_ordinal_index());
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
@@ -309,6 +313,8 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         uint64_t standalone_index_size = 0;
         RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
         *index_size += _wfile->size() - index_offset + standalone_index_size;
+
+        LOG(ERROR) << "FINAL_INDEX: " << _tablet_schema->column(column_index).name() << ", " << _wfile->size();
 
         // check global dict valid
         const auto& column = _tablet_schema->column(column_index);
@@ -388,6 +394,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_columns = chunk.num_columns();
     for (size_t i = 0; i < chunk_num_columns; ++i) {
         const Column* col = chunk.get_column_by_index(i).get();
+        LOG(ERROR) << "APPEND_CHUNK: " << _tablet_schema->column(i).name() << "," << col->size();
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
 

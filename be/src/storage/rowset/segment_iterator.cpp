@@ -1190,7 +1190,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_adapt_global_dict_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
-    uint16_t chunk_start = chunk->num_rows();
+    uint32_t chunk_start = chunk->num_rows();
 
     while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));

@@ -359,6 +359,8 @@ ScalarColumnWriter::ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfo
     DCHECK(opts.meta->has_compression());
     DCHECK(opts.meta->has_is_nullable());
     DCHECK(wfile != nullptr);
+    LOG(ERROR) << "Scalar: " << opts.meta->name() << ", " << opts.meta->compression() << ", " <<
+        opts.meta->encoding() << ", " << _curr_page_format;
 }
 
 ScalarColumnWriter::~ScalarColumnWriter() {

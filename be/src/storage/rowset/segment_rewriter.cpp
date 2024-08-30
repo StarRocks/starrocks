@@ -131,6 +131,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     seg_options.stats = &stats;
     seg_options.chunk_size = num_rows;
 
+    LOG(ERROR) << "READ_SCHEMA: " << src_schema.field_names();
     auto res = rowset->segments()[segment_id]->new_iterator(src_schema, seg_options);
     auto& itr = res.value();
 
