@@ -455,6 +455,7 @@ public class StatisticExecutor {
      * If the second step failed before finish, the statistics cleanup procedure will handle it.
      */
     public static void overwritePartitionStatistics(ConnectContext context,
+                                                    long dbId,
                                                     long tableId,
                                                     long sourcePartition,
                                                     long targetPartition) {
@@ -467,6 +468,9 @@ public class StatisticExecutor {
 
         // delete
         executeDML(context, sqlList.get(1));
+
+        // NOTE: why don't we refresh the statistics cache ?
+        //
     }
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {

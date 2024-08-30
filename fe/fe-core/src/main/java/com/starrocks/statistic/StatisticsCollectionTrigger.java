@@ -149,7 +149,7 @@ public class StatisticsCollectionTrigger {
                     long sourcePartitionId = overwriteJobStats.getSourcePartitionIds().get(i);
                     long targetPartitionId = overwriteJobStats.getTargetPartitionIds().get(i);
                     StatisticExecutor.overwritePartitionStatistics(
-                            statsConnectCtx, table.getId(), sourcePartitionId, targetPartitionId);
+                            statsConnectCtx, db.getId(), table.getId(), sourcePartitionId, targetPartitionId);
                 }
             }
         } else if (analyzeType != null) {
