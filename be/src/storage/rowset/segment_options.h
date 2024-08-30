@@ -73,6 +73,7 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
+    bool temporary_data = false;
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     ReaderType reader_type = READER_QUERY;

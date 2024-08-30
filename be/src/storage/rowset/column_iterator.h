@@ -62,6 +62,8 @@ struct ColumnIteratorOptions {
     bool use_page_cache = false;
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
+    bool temporary_data = false;
+
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
 
