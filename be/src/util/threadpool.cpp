@@ -519,13 +519,31 @@ static void _bind_cpus_inlock(Thread* thread, const size_t thread_index, const C
         return;
     }
 
+    // Assign the thread to all cpuids (including cpuids and borrowed_cpuids) in a round-robin manner
+    // based on thread_index.
+
+    size_t num_total_cpuids = cpuids.size();
+    for (const auto& cur_borrowed_cpuids : borrowed_cpuids) {
+        num_total_cpuids += cur_borrowed_cpuids.size();
+    }
+
+    if (num_total_cpuids == 0) {
+        CpuUtil::bind_cpus(thread, cpuids);
+        return;
+    }
+
+    const size_t normalized_thread_index = thread_index % num_total_cpuids;
+    if (normalized_thread_index < cpuids.size()) {
+        CpuUtil::bind_cpus(thread, cpuids);
+        return;
+    }
     size_t num_threads = cpuids.size();
     for (const auto& cur_borrowed_cpuids : borrowed_cpuids) {
-        if (thread_index < num_threads + cur_borrowed_cpuids.size()) {
-            CpuUtil::bind_cpus(thread, cur_borrowed_cpuids);
-            break;
-        }
         num_threads += cur_borrowed_cpuids.size();
+        if (normalized_thread_index < num_threads) {
+            CpuUtil::bind_cpus(thread, cur_borrowed_cpuids);
+            return;
+        }
     }
 }
 
