@@ -112,6 +112,7 @@ The following table shows the correspondence between the aggregate function in t
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 [COMMENT ""]
+-- You must specify either `distribution_desc` or `refresh_scheme`, or both.
 -- distribution_desc
 DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
 -- refresh_scheme
