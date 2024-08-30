@@ -1484,7 +1484,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         } else {
             Table table = null;
             try {
-                table = MetaUtils.getTable(context, statement.getTbl());
+                table = MetaUtils.getSessionAwareTable(context, null, statement.getTbl());
                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         statement.getTbl(), PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
