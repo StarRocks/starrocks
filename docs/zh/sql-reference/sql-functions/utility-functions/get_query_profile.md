@@ -24,7 +24,7 @@ get_query_profile(x)
 
 ## 返回值说明
 
-Query Profile 一般包含以下字段，详情可参见 [查看分析 Query Profile](../../../administration/query_profile.md)。
+Query Profile 一般包含以下字段，详情可参见 [查看分析 Query Profile](../../../administration/query_profile_overview.md)。
 
 ```SQL
 Query:
