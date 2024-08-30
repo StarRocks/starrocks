@@ -552,7 +552,7 @@
     "description": "The label for category 系统元数据库 in sidebar docs"
   },
   "sidebar.docs.category.Query Data Lakes": {
-    "message": "Query Data Lakes",
+    "message": "查询数据湖",
     "description": "The label for category Query Data Lakes in sidebar docs"
   },
   "sidebar.docs.category.Index": {
