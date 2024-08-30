@@ -1314,8 +1314,8 @@ alterResourceGroupStatement
     ;
 
 showResourceGroupStatement
-    : SHOW RESOURCE GROUP identifier
-    | SHOW RESOURCE GROUPS ALL?
+    : SHOW VERBOSE? RESOURCE GROUP identifier
+    | SHOW VERBOSE? RESOURCE GROUPS ALL?
     ;
 
 showResourceGroupUsageStatement
