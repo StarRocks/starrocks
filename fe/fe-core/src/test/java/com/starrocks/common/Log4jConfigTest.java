@@ -109,7 +109,7 @@ public class Log4jConfigTest {
         Log4jConfig.initLogging();
 
         // validate log message
-        String logMsg = byteOs.toString(Charset.defaultCharset()).trim();
+        String logMsg = new String(byteOs.toByteArray(), Charset.defaultCharset()).trim();
         System.out.println("logMsg: " + logMsg);
 
         Reader reader = new InputStreamReader(new ByteArrayInputStream(byteOs.toByteArray()));
