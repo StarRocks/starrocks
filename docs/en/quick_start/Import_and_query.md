@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+unlisted: true
 ---
 
 # Load and query data
