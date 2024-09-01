@@ -225,7 +225,7 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     echo -e "\nsys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
 else
     # redirect all subsequent commands' stdout/stderr into $LOG_FILE
-    exec &>> $LOG_FILE
+    exec >> $LOG_FILE 2>&1
 fi
 
 echo "using java version $JAVA_VERSION"
