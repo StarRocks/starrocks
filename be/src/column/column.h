@@ -246,7 +246,9 @@ public:
         return append_continuous_strings(strs.data(), strs.size());
     }
 
-    [[nodiscard]] virtual bool append_continuous_strings(const Slice* data, size_t size) { return false; }
+    [[nodiscard]] virtual bool append_continuous_strings(const Slice* data, size_t size) {
+        return append_strings(data, size);
+    }
 
     [[nodiscard]] virtual bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
         return false;
