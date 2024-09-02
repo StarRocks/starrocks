@@ -1241,6 +1241,11 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
+                case OperationType.OP_DELETE_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
                 case OperationTypeEPack.OP_CREATE_FAILOVER_GROUP: {
                     CreateFailoverGroupLog createFailoverGroupLog = (CreateFailoverGroupLog) journal.getData();
                     globalStateMgr.getFailoverGroupMgr().replayCreateFailoverGroup(createFailoverGroupLog.getFailoverGroup());
@@ -2115,6 +2120,11 @@ public class EditLog {
     public void logReplicationJob(ReplicationJob replicationJob) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
         logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+    }
+
+    public void logDeleteReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
     }
 
     // failover group
