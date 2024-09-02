@@ -93,6 +93,7 @@ private:
                 _reserved_bytes = prev_reserved;
                 _cache_size -= size;
                 _allocated_cache_size -= size;
+                _total_consumed_bytes -= size;
                 _try_consume_mem_size = size;
             };
             if (_cache_size >= BATCH_SIZE) {
@@ -132,6 +133,7 @@ private:
                 } else {
                     _cache_size -= size;
                     _allocated_cache_size -= size;
+                    _total_consumed_bytes -= size;
                     _try_consume_mem_size = size;
                     tls_exceed_mem_tracker = limit_tracker;
                     return false;
@@ -162,6 +164,7 @@ private:
         void release(int64_t size) {
             _cache_size -= size;
             _deallocated_cache_size += size;
+            _total_consumed_bytes -= size;
             if (_cache_size <= -BATCH_SIZE) {
                 commit(false);
             }
