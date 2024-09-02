@@ -339,7 +339,7 @@ public:
         return ss.str();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override;
+    Status capacity_limit_reached() const override;
 
 private:
     void _build_slices() const;

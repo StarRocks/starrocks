@@ -171,7 +171,7 @@ public:
 
     void reset_column() override;
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override;
+    Status capacity_limit_reached() const override;
 
     void check_or_die() const override;
 

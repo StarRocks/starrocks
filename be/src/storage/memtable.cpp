@@ -324,10 +324,9 @@ Status MemTable::flush(SegmentPB* seg_info) {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
-    std::string msg;
-    if (_result_chunk->capacity_limit_reached(&msg)) {
-        return Status::InternalError(
-                fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
+    if (auto st = _result_chunk->capacity_limit_reached(); !st.ok()) {
+        return Status::InternalError(fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}",
+                                                 _tablet_id, st.message()));
     }
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet_id);
     int64_t duration_ns = 0;
