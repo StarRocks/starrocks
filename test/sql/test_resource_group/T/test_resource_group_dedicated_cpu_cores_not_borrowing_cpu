@@ -1,4 +1,4 @@
--- name: test_resource_group_dedicated_cpu_cores_not_borrowing_cpu @sequential
+-- name: test_resource_group_exclusive_cpu_cores_not_borrowing_cpu @sequential
 -- Prepare data.
 
 CREATE TABLE __row_util_base (
@@ -30,11 +30,11 @@ insert into t1 select row_number() over() as idx from __row_util_base;
 -- Prepare resource groups.
 CREATE RESOURCE GROUP rgd1_${uuid0} 
     TO ( user='user_${uuid0}' ) 
-    WITH ( 'dedicated_cpu_cores' = '2', 'mem_limit' = '0.99' );
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
 
 CREATE RESOURCE GROUP rgd2_${uuid0} 
     TO ( user='user_${uuid0}' ) 
-    WITH ( 'dedicated_cpu_cores' = '2', 'mem_limit' = '0.99' );
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
 
 CREATE RESOURCE GROUP rgn1_${uuid0} 
     TO ( user='user_${uuid0}' ) 

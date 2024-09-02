@@ -830,13 +830,13 @@ void ExecEnv::try_release_resource_before_core_dump() {
 }
 
 pipeline::DriverExecutor* ExecEnv::wg_driver_executor() {
-    return _workgroup_manager->common_executors()->driver_executor();
+    return _workgroup_manager->shared_executors()->driver_executor();
 }
 workgroup::ScanExecutor* ExecEnv::scan_executor() {
-    return _workgroup_manager->common_executors()->scan_executor();
+    return _workgroup_manager->shared_executors()->scan_executor();
 }
 workgroup::ScanExecutor* ExecEnv::connector_scan_executor() {
-    return _workgroup_manager->common_executors()->connector_scan_executor();
+    return _workgroup_manager->shared_executors()->connector_scan_executor();
 }
 
 } // namespace starrocks

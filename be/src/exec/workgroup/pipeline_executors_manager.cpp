@@ -30,13 +30,13 @@ void ExecutorsManager::close() const {
     for_each_executors([](auto& executors) { executors.close(); });
 }
 
-Status ExecutorsManager::start_common_executors() {
-    _common_executors =
+Status ExecutorsManager::start_shared_executors() {
+    _shared_executors =
             std::make_unique<PipelineExecutors>(_conf, "com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{});
-    return _common_executors->start();
+    return _shared_executors->start();
 }
 
-void ExecutorsManager::update_common_executors() const {
+void ExecutorsManager::update_shared_executors() const {
     std::vector<CpuUtil::CpuIds> borrowed_cpuids;
     if (_conf.enable_cpu_borrowing) {
         for (const auto& [wg, cpuids] : _wg_to_cpuids) {
@@ -45,11 +45,11 @@ void ExecutorsManager::update_common_executors() const {
             }
         }
     }
-    _common_executors->change_cpus(get_cpuids_of_workgroup(COMMON_WORKGROUP), borrowed_cpuids);
+    _shared_executors->change_cpus(get_cpuids_of_workgroup(COMMON_WORKGROUP), borrowed_cpuids);
 }
 
 void ExecutorsManager::assign_cpuids_to_workgroup(WorkGroup* wg) {
-    if (wg->dedicated_cpu_cores() <= 0 || _wg_to_cpuids.contains(wg)) {
+    if (wg->exclusive_cpu_cores() <= 0 || _wg_to_cpuids.contains(wg)) {
         return;
     }
 
@@ -60,7 +60,7 @@ void ExecutorsManager::assign_cpuids_to_workgroup(WorkGroup* wg) {
 
     CpuUtil::CpuIds cpuids;
     CpuUtil::CpuIds new_common_cpuids;
-    const size_t n = std::min<size_t>({wg->dedicated_cpu_cores(), common_cpuids.size() - 1, _conf.num_total_cores - 1});
+    const size_t n = std::min<size_t>({wg->exclusive_cpu_cores(), common_cpuids.size() - 1, _conf.num_total_cores - 1});
     std::copy_n(common_cpuids.begin(), n, std::back_inserter(cpuids));
     std::copy(common_cpuids.begin() + n, common_cpuids.end(), std::back_inserter(new_common_cpuids));
 
@@ -107,11 +107,11 @@ const CpuUtil::CpuIds& ExecutorsManager::get_cpuids_of_workgroup(WorkGroup* wg) 
 }
 
 PipelineExecutors* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) const {
-    if (wg->dedicated_cpu_cores() == 0) {
+    if (wg->exclusive_cpu_cores() == 0) {
         LOG(INFO) << "[WORKGROUP] assign common executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
-        wg->set_executors(_common_executors.get());
-        return _common_executors.get();
+        wg->set_executors(_shared_executors.get());
+        return _shared_executors.get();
     }
 
     auto executors = std::make_unique<PipelineExecutors>(_conf, std::to_string(wg->id()), get_cpuids_of_workgroup(wg),
@@ -125,8 +125,8 @@ PipelineExecutors* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) 
         LOG(INFO) << "[WORKGROUP] assign common executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
         executors->close();
-        wg->set_executors(_common_executors.get());
-        return _common_executors.get();
+        wg->set_executors(_shared_executors.get());
+        return _shared_executors.get();
     }
 
     LOG(INFO) << "[WORKGROUP] assign dedicated executors to workgroup "
@@ -151,7 +151,7 @@ void ExecutorsManager::change_enable_resource_group_cpu_borrowing(bool val) {
     }
     _conf.enable_cpu_borrowing = val;
 
-    update_common_executors();
+    update_shared_executors();
 }
 
 void ExecutorsManager::for_each_executors(const ExecutorsConsumer& consumer) const {
@@ -160,8 +160,8 @@ void ExecutorsManager::for_each_executors(const ExecutorsConsumer& consumer) con
             consumer(*wg->dedicated_executors());
         }
     }
-    if (_common_executors) {
-        consumer(*_common_executors);
+    if (_shared_executors) {
+        consumer(*_shared_executors);
     }
 }
 

@@ -118,8 +118,8 @@ WorkGroup::WorkGroup(const TWorkGroup& twg)
         _cpu_weight = twg.cpu_core_limit;
     }
 
-    if (twg.__isset.dedicated_cpu_cores) {
-        _dedicated_cpu_cores = twg.dedicated_cpu_cores;
+    if (twg.__isset.exclusive_cpu_cores) {
+        _exclusive_cpu_cores = twg.exclusive_cpu_cores;
     }
 
     if (twg.__isset.mem_limit) {
@@ -202,11 +202,11 @@ void WorkGroup::init() {
 std::string WorkGroup::to_string() const {
     return fmt::format(
             "(id:{}, name:{}, version:{}, "
-            "cpu_weight:{}, dedicated_cpu_cores:{}, mem_limit:{}, concurrency_limit:{}, "
+            "cpu_weight:{}, exclusive_cpu_cores:{}, mem_limit:{}, concurrency_limit:{}, "
             "bigquery: (cpu_second_limit:{}, mem_limit:{}, scan_rows_limit:{}), "
             "spill_mem_limit_threshold:{}"
             ")",
-            _id, _name, _version, _cpu_weight, _dedicated_cpu_cores, _memory_limit_bytes, _concurrency_limit,
+            _id, _name, _version, _cpu_weight, _exclusive_cpu_cores, _memory_limit_bytes, _concurrency_limit,
             big_query_cpu_second_limit(), _big_query_mem_limit, _big_query_scan_rows_limit, _spill_mem_limit_threshold);
 }
 
@@ -565,7 +565,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
 
     _executors_manager.assign_cpuids_to_workgroup(wg.get());
     _executors_manager.create_and_assign_executors(wg.get());
-    _executors_manager.update_common_executors();
+    _executors_manager.update_shared_executors();
 
     // Update metrics
     add_metrics_unlocked(wg, unique_lock);
@@ -597,7 +597,7 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
         const auto& old_wg = wg_it->second;
         _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
         old_wg->mark_del();
-        _executors_manager.update_common_executors();
+        _executors_manager.update_shared_executors();
         _workgroup_expired_versions.push_back(unique_id);
         LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
     }
@@ -624,7 +624,7 @@ void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) con
 
 Status WorkGroupManager::start() {
     std::unique_lock write_lock(_mutex);
-    return _executors_manager.start_common_executors();
+    return _executors_manager.start_shared_executors();
 }
 
 void WorkGroupManager::close() {

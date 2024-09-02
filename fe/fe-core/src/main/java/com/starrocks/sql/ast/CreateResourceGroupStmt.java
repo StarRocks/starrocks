@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG;
+import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG;
 
 // ReesourceGroup create statement format
 // create resource group [if not exists] [or replace] <name>
@@ -91,11 +91,11 @@ public class CreateResourceGroupStmt extends DdlStmt {
         }
 
         if (resourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
-                (resourceGroup.getDedicatedCpuCores() != null && resourceGroup.getDedicatedCpuCores() > 0)) {
-            throw new SemanticException(SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG);
+                (resourceGroup.getExclusiveCpuCores() != null && resourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
         }
 
-        ResourceGroup.validateCpuParameters(resourceGroup.getCpuWeight(), resourceGroup.getDedicatedCpuCores());
+        ResourceGroup.validateCpuParameters(resourceGroup.getCpuWeight(), resourceGroup.getExclusiveCpuCores());
 
         if (resourceGroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");

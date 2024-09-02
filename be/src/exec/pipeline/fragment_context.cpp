@@ -193,7 +193,7 @@ void FragmentContext::set_final_status(const Status& status) {
 
             const auto* executors = _workgroup != nullptr
                                             ? _workgroup->executors()
-                                            : _runtime_state->exec_env()->workgroup_manager()->common_executors();
+                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
             auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }

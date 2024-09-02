@@ -134,7 +134,7 @@ public:
     int64_t version() const { return _version; }
     const std::string& name() const { return _name; }
     size_t cpu_weight() const { return _cpu_weight; }
-    size_t dedicated_cpu_cores() const { return _dedicated_cpu_cores; }
+    size_t exclusive_cpu_cores() const { return _exclusive_cpu_cores; }
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
@@ -228,7 +228,7 @@ private:
 
     // Specified limitations
     size_t _cpu_weight = 1;
-    size_t _dedicated_cpu_cores = 0;
+    size_t _exclusive_cpu_cores = 0;
     double _memory_limit = ABSENT_MEMORY_LIMIT;
     int64_t _memory_limit_bytes = -1;
     size_t _concurrency_limit = ABSENT_CONCURRENCY_LIMIT;
@@ -294,7 +294,7 @@ public:
     void update_metrics();
 
     bool should_yield(const WorkGroup* wg) const;
-    PipelineExecutors* common_executors() const { return _executors_manager.common_executors(); }
+    PipelineExecutors* shared_executors() const { return _executors_manager.shared_executors(); }
     void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);

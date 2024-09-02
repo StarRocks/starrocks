@@ -25,17 +25,17 @@ namespace starrocks::workgroup {
 /// Manage all PipelineExecutors and CPU resource allocation.
 ///
 /// There are two types of PipelineExecutors:
-/// - dedicated_executors: PipelineExecutors dedicated to a workgroup (workgroup with dedicated_cpu_cores > 0).
-/// - common_executors: PipelineExecutors shared by other workgroups (workgroup with dedicated_cpu_cores <= 0).
+/// - exclusive_executors: PipelineExecutors dedicated to a workgroup (workgroup with exclusive_cpu_cores > 0).
+/// - shared_executors: PipelineExecutors shared by other workgroups (workgroup with exclusive_cpu_cores <= 0).
 /// PipelineExecutors owner:
 /// - dedicated_executors: owned by workgroup.
-/// - common_executors: owned by WorkGroupManager.
+/// - shared_executors: owned by WorkGroupManager.
 /// The timing of creating and starting PipelineExecutors:
 /// - dedicated_executors: when creating or updating workgroup.
-/// - common_executors: when starting BE process.
+/// - shared_executors: when starting BE process.
 /// The timing of stopping PipelineExecutors:
 /// - dedicated_executors: when workgroup destructs.
-/// - common_executors: when closing BE process.
+/// - shared_executors: when closing BE process.
 ///
 /// ExecutorsManager is owned by WorkGroupManager.
 /// All the methods need to be protected by the `WorkGroupManager::_mutex` outside by callers.
@@ -45,9 +45,9 @@ public:
 
     void close() const;
 
-    Status start_common_executors();
-    void update_common_executors() const;
-    PipelineExecutors* common_executors() const { return _common_executors.get(); }
+    Status start_shared_executors();
+    void update_shared_executors() const;
+    PipelineExecutors* shared_executors() const { return _shared_executors.get(); }
 
     void assign_cpuids_to_workgroup(WorkGroup* wg);
     void reclaim_cpuids_from_worgroup(WorkGroup* wg);
@@ -71,7 +71,7 @@ private:
     WorkGroupManager* const _parent;
     PipelineExecutorsConfig _conf;
     std::unordered_map<WorkGroup*, CpuUtil::CpuIds> _wg_to_cpuids;
-    std::unique_ptr<PipelineExecutors> _common_executors;
+    std::unique_ptr<PipelineExecutors> _shared_executors;
 
     struct CpuOwnerContext {
         std::shared_ptr<WorkGroup> wg;

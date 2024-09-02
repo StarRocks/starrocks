@@ -2,10 +2,10 @@
 
 CREATE RESOURCE GROUP rgd1_${uuid0} 
     TO ( user='user_${uuid0}' ) 
-    WITH ( 'dedicated_cpu_cores' = '3', 'mem_limit' = '0.99' );
+    WITH ( 'exclusive_cpu_cores' = '3', 'mem_limit' = '0.99' );
 CREATE RESOURCE GROUP rgd2_${uuid0} 
     TO ( user='user_${uuid0}' ) 
-    WITH ( 'dedicated_cpu_cores' = '2', 'mem_limit' = '0.99' );
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
 CREATE RESOURCE GROUP rgn1_${uuid0} 
     TO ( user='user_${uuid0}' ) 
     WITH ( 'cpu_weight' = '4', 'mem_limit' = '0.99' );
@@ -101,10 +101,10 @@ insert into t1 select row_number() over() as idx from __row_util_base;
 
 CREATE RESOURCE GROUP rgd1_${uuid0} 
     TO ( user='user_${uuid0}' ) 
-    WITH ( 'dedicated_cpu_cores' = '3', 'mem_limit' = '0.99' );
+    WITH ( 'exclusive_cpu_cores' = '3', 'mem_limit' = '0.99' );
 CREATE RESOURCE GROUP rgd2_${uuid0} 
     TO ( user='user_${uuid0}' ) 
-    WITH ( 'dedicated_cpu_cores' = '2', 'mem_limit' = '0.99' );
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
 CREATE RESOURCE GROUP rgn1_${uuid0} 
     TO ( user='user_${uuid0}' ) 
     WITH ( 'cpu_weight' = '4', 'mem_limit' = '0.99' );
