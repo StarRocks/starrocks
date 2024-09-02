@@ -1097,6 +1097,11 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
+                case OperationType.OP_DELETE_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
                 case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
@@ -2119,8 +2124,30 @@ public class EditLog {
         logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
     }
 
+<<<<<<< HEAD
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+=======
+    public void logDeleteReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
+    }
+
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    }
+
+    public void logCreateDictionary(Dictionary info) {
+        logEdit(OperationType.OP_CREATE_DICTIONARY, info);
+    }
+
+    public void logDropDictionary(DropDictionaryInfo info) {
+        logEdit(OperationType.OP_DROP_DICTIONARY, info);
+    }
+
+    public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
+        logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+>>>>>>> a88d3e4a29 ([Enhancement] Support show proc replications (#50483))
     }
 
     public void logDecommissionDisk(DecommissionDiskInfo info) {
