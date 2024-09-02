@@ -328,9 +328,7 @@ std::string ObjectColumn<BitmapValue>::debug_item(size_t idx) const {
 
 template <typename T>
 StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
-    if (capacity_limit_reached()) {
-        return Status::InternalError("Size of ObjectColumn exceed the limit");
-    }
+    RETURN_IF_ERROR(capacity_limit_reached());
     return nullptr;
 }
 

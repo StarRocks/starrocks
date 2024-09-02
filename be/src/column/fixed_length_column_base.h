@@ -21,6 +21,7 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
@@ -236,15 +237,13 @@ public:
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use index of uint32_t to
     // access the item, so we should use 2^32 as the limit
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+    Status capacity_limit_reached() const override {
         if (_data.size() > Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("row count of fixed length column exceend the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("row count of fixed length column exceend the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         }
-        return false;
+        return Status::OK();
     }
 
     void check_or_die() const override {}

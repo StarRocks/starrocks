@@ -29,11 +29,8 @@ namespace starrocks {
 
 template <typename T>
 StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
-    if (capacity_limit_reached()) {
-        return Status::InternalError("Size of FixedLengthColumn exceed the limit");
-    } else {
-        return nullptr;
-    }
+    RETURN_IF_ERROR(capacity_limit_reached());
+    return nullptr;
 }
 
 template <typename T>

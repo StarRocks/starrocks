@@ -24,6 +24,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
+#include "gutil/strings/substitute.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/raw_container.h"
@@ -738,45 +739,37 @@ bool BinaryColumnBase<T>::has_large_column() const {
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::capacity_limit_reached(std::string* msg) const {
+Status BinaryColumnBase<T>::capacity_limit_reached() const {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
     if constexpr (std::is_same_v<T, uint32_t>) {
         // The size limit of a single element is 2^32 - 1.
         // The size limit of all elements is 2^32 - 1.
         // The number limit of elements is 2^32 - 1.
         if (_bytes.size() >= Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total byte size of binary column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total byte size of binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         } else if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total row count of binary column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total row count of binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         } else {
-            return false;
+            return Status::OK();
         }
     } else {
         // The size limit of a single element is 2^32 - 1.
         // The size limit of all elements is 2^64 - 1.
         // The number limit of elements is 2^32 - 1.
         if (_bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total byte size of large binary column exceed the limit: " +
-                            std::to_string(Column::MAX_LARGE_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total byte size of large binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_LARGE_CAPACITY_LIMIT)));
         } else if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Total row count of large binary column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("Total row count of large binary column exceed the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         } else {
-            return false;
+            return Status::OK();
         }
     }
 }

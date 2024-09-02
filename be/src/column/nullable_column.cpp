@@ -430,9 +430,7 @@ void NullableColumn::check_or_die() const {
 }
 
 StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
-    if (_null_column->capacity_limit_reached()) {
-        return Status::InternalError("Size of NullableColumn exceed the limit");
-    }
+    RETURN_IF_ERROR(_null_column->capacity_limit_reached());
 
     return upgrade_helper_func(&_data_column);
 }

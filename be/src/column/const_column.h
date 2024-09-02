@@ -18,6 +18,7 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "gutil/strings/substitute.h"
 
 namespace starrocks {
 
@@ -251,15 +252,13 @@ public:
         return ss.str();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
-        RETURN_IF_UNLIKELY(_data->capacity_limit_reached(msg), true);
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_data->capacity_limit_reached());
         if (_size > Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Row count of const column reach limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(strings::Substitute("Row count of const column reach limit: $0",
+                                                                   std::to_string(Column::MAX_CAPACITY_LIMIT)));
         }
-        return false;
+        return Status::OK();
     }
 
     void check_or_die() const override;

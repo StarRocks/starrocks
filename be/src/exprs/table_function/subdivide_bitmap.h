@@ -105,17 +105,16 @@ public:
                             &compact_offset);
             }
         }
-        std::string err_msg;
-        auto ret = dst_bitmap_col->capacity_limit_reached(&err_msg);
-        if (ret) {
+        Status st = dst_bitmap_col->capacity_limit_reached();
+        if (!st.ok()) {
             state->set_status(Status::InternalError(
-                    fmt::format("Bitmap column generate by subdivide_bitmap reach limit, {}", err_msg)));
+                    fmt::format("Bitmap column generate by subdivide_bitmap reach limit, {}", st.message())));
             return {};
         }
-        ret = dst_offset_col->capacity_limit_reached(&err_msg);
-        if (ret) {
+        st = dst_offset_col->capacity_limit_reached();
+        if (!st.ok()) {
             state->set_status(Status::InternalError(
-                    fmt::format("Offset column generate by subdivide_bitmap reach limit, {}", err_msg)));
+                    fmt::format("Offset column generate by subdivide_bitmap reach limit, {}", st.message())));
             return {};
         }
         dst_columns.emplace_back(std::move(dst_bitmap_col));

@@ -193,7 +193,7 @@ Status HeapChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* ro
     StorageEngine* storage_engine = StorageEngine::instance();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
     while (!_heap.empty() && !bg_worker_stopped) {
-        if (tmp_chunk->capacity_limit_reached() || nread >= config::vector_chunk_size) {
+        if (!tmp_chunk->capacity_limit_reached().ok() || nread >= config::vector_chunk_size) {
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
             } else {
