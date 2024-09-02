@@ -1478,11 +1478,7 @@ public class QueryAnalyzer {
                 if (item.getAlias() == null) {
                     continue;
                 }
-                // Ignore c1 as c1
-                if (item.getExpr() instanceof SlotRef &&
-                        alias.equalsIgnoreCase(((SlotRef) item.getExpr()).getColumnName())) {
-                    continue;
-                }
+
                 // Alias is case-insensitive
                 Expr lastAssociatedExpr = aliases.putIfAbsent(alias.toLowerCase(), item.getExpr());
                 if (lastAssociatedExpr != null) {
