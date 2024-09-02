@@ -97,7 +97,7 @@ public class InsertOverwriteJobRunnerTest {
                 Lists.newArrayList(olapTable.getPartition("t1").getId()));
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
-                Lists.newArrayList(2000L), Lists.newArrayList(2001L));
+                Lists.newArrayList(2000L), null, Lists.newArrayList(2001L));
         Assert.assertEquals(100L, stateChangeInfo.getJobId());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, stateChangeInfo.getFromState());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, stateChangeInfo.getToState());
