@@ -19,22 +19,49 @@ import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 
 The deployment of a shared-data StarRocks cluster is similar to that of a shared-nothing StarRocks cluster. The only difference is that you need to deploy CNs instead of BEs in a shared-data cluster. This section only lists the extra FE and CN configuration items you need to add in the configuration files of FE and CN **fe.conf** and **cn.conf** when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../../deployment/deploy_manually.md).
 
-### Configure FE nodes for shared-data StarRocks
+> **NOTE**
+>
+> Do not start the cluster until after it is configured for shared-storage in the next section of this document.
+
+## Configure FE nodes for shared-data StarRocks
 
 Before starting FEs, add the following configuration items in the FE configuration file **fe.conf**.
+
+### Example FE configurations for MinIO
+
+These are example shared-data additions for your `fe.conf` file on each of your FE nodes. The parameters use the prefix `aws_s3`.
+
+```Properties
+run_mode = shared_data
+cloud_native_meta_port = <meta_port>
+cloud_native_storage_type = S3
+
+# Example: testbucket/subpath
+aws_s3_path = <s3_path>
+
+# Example: us-east1
+aws_s3_region = <region>
+
+# Example: http://172.26.xx.xxx:39000
+aws_s3_endpoint = <endpoint_url>
+
+aws_s3_access_key = <minio_access_key>
+aws_s3_secret_key = <minio_secret_key>
+```
+
+### All FE parameters related to shared-storage with MinIO
 
 #### run_mode
 
 The running mode of the StarRocks cluster. Valid values:
 
 - `shared_data`
-- `shared_nothing` (Default).
+- `shared_nothing` (Default)
 
-> **Note**
+> **NOTE**
 >
-> You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.
->
-> Do not change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a shared-nothing cluster to a shared-data cluster or vice versa is not supported.
+> - You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.
+> - Do not change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a shared-nothing cluster to a shared-data cluster or vice versa is not supported.
 
 #### cloud_native_meta_port
 
@@ -60,13 +87,14 @@ Supported from v3.1.0.
 The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value:
 
 - `S3` (Default)
-- `AZBLOB`.
+- `AZBLOB`
+- `HDFS`
 
-> Note
+> **NOTE**
 >
-> If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`.
->
-> If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.
+> - If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`.
+> - If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.
+> - If you specify this parameter as `HDFS`, you must add the parameter `cloud_native_hdfs_url`.
 
 #### aws_s3_path
 
@@ -85,14 +113,14 @@ The region in which your S3 bucket resides, for example, `us-west-2`.
 Whether to use the [AWS SDK default credentials provider chain](https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/auth/DefaultAWSCredentialsProviderChain.html). Valid values:
 
 - `true`
-- `false` (Default).
+- `false` (Default)
 
 #### aws_s3_use_instance_profile
 
 Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values:
 
 - `true`
-- `false` (Default).
+- `false` (Default)
 
 If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`.
 
@@ -118,7 +146,7 @@ The ARN of the IAM role that has privileges on your S3 bucket in which your data
 
 The external ID of the AWS account that is used for cross-account access to your S3 bucket.
 
-> **Note**
+> **NOTE**
 >
 > Only credential-related configuration items can be modified after your shared-data StarRocks cluster is created. If you changed the original storage path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.
 
