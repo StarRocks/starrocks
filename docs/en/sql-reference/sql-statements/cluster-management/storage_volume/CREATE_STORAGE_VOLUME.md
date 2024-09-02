@@ -18,7 +18,7 @@ A storage volume consists of the properties and credential information of the re
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | AZBLOB }
+TYPE = { S3 | HDFS | AZBLOB }
 LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
@@ -30,8 +30,8 @@ PROPERTIES
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | The name of the storage volume. Please note that you cannot create a storage volume named `builtin_storage_volume` because it is used to create the builtin storage volume. For the naming conventions, see [System limits](../../../System_limit.md).|
-| TYPE                | The type of the remote storage system. Valid values: `S3` and `AZBLOB`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage (supported from v3.1.1 onwards). |
-| LOCATIONS           | The storage locations. The format is as follows:<ul><li>For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`. Note that if you want to enable the [Partitioned Prefix](#partitioned-prefix) feature for the storage volume, you can only specify the bucket name, and specifying a sub-path is not allowed.</li><li>For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.</li></ul> |
+| TYPE                | The type of the remote storage system. Valid values: `S3`, `HDFS` and `AZBLOB`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage (supported from v3.1.1 onwards). `HDFS` indicates an HDFS cluster.  |
+| LOCATIONS           | The storage locations. The format is as follows:<ul><li>For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`. Note that if you want to enable the [Partitioned Prefix](#partitioned-prefix) feature for the storage volume, you can only specify the bucket name, and specifying a sub-path is not allowed.</li><li>For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.</li><li>For HDFS: `hdfs://<host>:<port>/<hdfs_path>`. `<hdfs_path>` must be an absolute path, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks`.</li><li>For WebHDFS: `webhdfs://<host>:<http_port>/<hdfs_path>`, where `<http_port>` is the HTTP port of the NameNode. `<hdfs_path>` must be an absolute path, for example, `webhdfs://127.0.0.1:50070/user/xxx/starrocks`.</li><li>For ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`, where `<ViewFS_cluster>` is the ViewFS cluster name. `<viewfs_path>` must be an absolute path, for example, `viewfs://myviewfscluster/user/xxx/starrocks`.</li></ul> |
 | COMMENT             | The comment on the storage volume.                           |
 | PROPERTIES          | Parameters in the `"key" = "value"` pairs used to specify the properties and credential information to access the remote storage system. For detailed information, see [PROPERTIES](#properties). |
 
@@ -50,9 +50,17 @@ The table below lists all available properties of storage volumes. Following the
 | aws.s3.secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws.s3.iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws.s3.external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
-| azure.blob.endpoint   | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
-| azure.blob.shared_key | The Shared Key used to authorize requests for your Azure Blob Storage. |
-| azure.blob.sas_token  | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage. |
+| azure.blob.endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
+| azure.blob.shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage. |
+| azure.blob.sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage. |
+| hadoop.security.authentication      | The authentication method. Valid values: `simple`(Default) and `kerberos`. `simple` indicates simple authentication, that is, username. `kerberos` indicates Kerberos authentication. |
+| username                            | Username used to access the NameNode in the HDFS cluster.                      |
+| hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache.                   |
+| dfs.nameservices                    | Name of the HDFS cluster                                        |
+| dfs.ha.namenodes.`<ha_cluster_name\>`                   | Name of the NameNode. Multiple names must be separated by commas (,). No space is allowed in the double quotes. `<ha_cluster_name>` is the name of the HDFS service specified in `dfs.nameservices`. |
+| dfs.namenode.rpc-address.`<ha_cluster_name\>`.`<NameNode\>` | The RPC address information of the NameNode. `<NameNode>` is the name of the NameNode specified in `dfs.ha.namenodes.<ha_cluster_name>`. |
+| dfs.client.failover.proxy.provider                    | The provider of the NameNode for client connection. The default value is `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
+| fs.viewfs.mounttable.`<ViewFS_cluster\>`.link./`<viewfs_path\>` | The path to the ViewFS cluster to be mounted. Multiple paths must be separated by commas (,). `<ViewFS_cluster>` is the ViewFS cluster name specified in `LOCATIONS`. |
 | aws.s3.enable_partitioned_prefix    | Whether to enable the Partitioned Prefix feature for the storage volume. Default: `false`. For more information about this feature, see [Partitioned Prefix](#partitioned-prefix). |
 | aws.s3.num_partitioned_prefix       | The number of prefixes to be created for the storage volume. Default: `256`. Valid range: [4, 1024].|
 
@@ -172,6 +180,67 @@ Creating a storage volume on Azure Blob Storage is supported from v3.1.1 onwards
 The hierarchical namespace must be disabled when you create the Azure Blob Storage Account.
 :::
 
+##### HDFS
+
+- If you do not use authentication to access HDFS, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }"
+  ```
+
+- If you are using simple authentication (supported from v3.2) to access HDFS, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "hadoop.security.authentication" = "simple",
+  "username" = "<hdfs_username>"
+  ```
+
+- If you are using Kerberos Ticket Cache authentication (supported since v3.2) to access HDFS, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "hadoop.security.authentication" = "kerberos",
+  "hadoop.security.kerberos.ticket.cache.path" = "<ticket_cache_path>"
+  ```
+
+  > **CAUTION**
+  >
+  > - This setting only forces the system to use KeyTab to access HDFS via Kerberos. Make sure that each BE or CN node has access to the KeyTab files. Also make sure that the **/etc/krb5.conf** file is set up correctly.
+  > - The Ticket cache is generated by an external kinit tool. Make sure you have a crontab or similar periodic task to refresh the tickets.
+
+- If your HDFS cluster is enabled for NameNode HA configuration (supported since v3.2), additionally set the following properties:
+
+  ```SQL
+  "dfs.nameservices" = "<ha_cluster_name>",
+  "dfs.ha.namenodes.<ha_cluster_name>" = "<NameNode1>,<NameNode2> [, ...]",
+  "dfs.namenode.rpc-address.<ha_cluster_name>.<NameNode1>" = "<hdfs_host>:<hdfs_port>",
+  "dfs.namenode.rpc-address.<ha_cluster_name>.<NameNode2>" = "<hdfs_host>:<hdfs_port>",
+  [...]
+  "dfs.client.failover.proxy.provider.<ha_cluster_name>" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+  ```
+
+  For more information, see [HDFS HA Documentation](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithNFS.html).
+
+  - If you are using WebHDFS (supported since v3.2), set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }"
+  ```
+
+  For more information, see [WebHDFS Documentation](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/WebHDFS.html).
+
+- If you are using Hadoop ViewFS (supported since v3.2), set the following properties:
+
+  ```SQL
+  -- Replace <ViewFS_cluster> with the name of the ViewFS cluster.
+  "fs.viewfs.mounttable.<ViewFS_cluster>.link./<viewfs_path_1>" = "hdfs://<hdfs_host_1>:<hdfs_port_1>/<hdfs_path_1>",
+  "fs.viewfs.mounttable.<ViewFS_cluster>.link./<viewfs_path_2>" = "hdfs://<hdfs_host_2>:<hdfs_port_2>/<hdfs_path_2>",
+  [, ...]
+  ```
+
+  For more information, see [ViewFS Documentation](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/ViewFs.html).
+
 #### Features
 
 ##### Partitioned Prefix
@@ -208,6 +277,81 @@ PROPERTIES
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.access_key" = "xxxxxxxxxx",
     "aws.s3.secret_key" = "yyyyyyyyyy"
+);
+```
+
+Example 2: Create a storage volume `my_hdfs_volume` for HDFS and enable it.
+
+```SQL
+CREATE STORAGE VOLUME my_hdfs_volume
+TYPE = HDFS
+LOCATIONS = ("hdfs://127.0.0.1:9000/sr/test/")
+PROPERTIES
+(
+    "enabled" = "true"
+);
+```
+
+Example 3: Create a storage volume `hdfsvolumehadoop` for HDFS using simple authentication.
+
+```sql
+CREATE STORAGE VOLUME hdfsvolumehadoop
+TYPE = HDFS
+LOCATIONS = ("hdfs://127.0.0.1:9000/sr/test/")
+PROPERTIES(
+    "hadoop.security.authentication" = "simple",
+    "username" = "starrocks"
+);
+```
+
+Example 4: Use Kerberos Ticket Cache authentication to access HDFS and create storage volume `hdfsvolkerberos`.
+
+```sql
+CREATE STORAGE VOLUME hdfsvolkerberos
+TYPE = HDFS
+LOCATIONS = ("hdfs://127.0.0.1:9000/sr/test/")
+PROPERTIES(
+    "hadoop.security.authentication" = "kerberos",
+    "hadoop.security.kerberos.ticket.cache.path" = "/path/to/ticket/cache/path"
+);
+```
+
+Example 5: Create storage volume `hdfsvolha` for an HDFS cluster with NameNode HA configuration enabled.
+
+```sql
+CREATE STORAGE VOLUME hdfsvolha
+TYPE = HDFS
+LOCATIONS = ("hdfs://myhacluster/data/sr")
+PROPERTIES(
+    "dfs.nameservices" = "myhacluster",
+    "dfs.ha.namenodes.myhacluster" = "nn1,nn2,nn3",
+    "dfs.namenode.rpc-address.myhacluster.nn1" = "machine1.example.com:8020",
+    "dfs.namenode.rpc-address.myhacluster.nn2" = "machine2.example.com:8020",
+    "dfs.namenode.rpc-address.myhacluster.nn3" = "machine3.example.com:8020",
+    "dfs.namenode.http-address.myhacluster.nn1" = "machine1.example.com:9870",
+    "dfs.namenode.http-address.myhacluster.nn2" = "machine2.example.com:9870",
+    "dfs.namenode.http-address.myhacluster.nn3" = "machine3.example.com:9870",
+    "dfs.client.failover.proxy.provider.myhacluster" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+);
+```
+
+Example 6: Create a storage volume `webhdfsvol` for WebHDFS.
+
+```sql
+CREATE STORAGE VOLUME webhdfsvol
+TYPE = HDFS
+LOCATIONS = ("webhdfs://namenode:9870/data/sr");
+```
+
+Example 7: Create a storage volume `viewfsvol` using Hadoop ViewFS.
+
+```sql
+CREATE STORAGE VOLUME viewfsvol
+TYPE = HDFS
+LOCATIONS = ("viewfs://clusterX/data/sr")
+PROPERTIES(
+    "fs.viewfs.mounttable.clusterX.link./data" = "hdfs://nn1-clusterx.example.com:8020/data",
+    "fs.viewfs.mounttable.clusterX.link./project" = "hdfs://nn2-clusterx.example.com:8020/project"
 );
 ```
 
