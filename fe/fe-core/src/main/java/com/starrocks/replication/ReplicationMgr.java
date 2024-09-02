@@ -192,10 +192,6 @@ public class ReplicationMgr extends FrontendDaemon {
         return replicatingDataSize;
     }
 
-<<<<<<< HEAD
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.REPLICATION_MGR, 1);
-=======
     private void runRunningJobs() {
         List<ReplicationJob> toRemovedJobs = Lists.newArrayList();
         for (ReplicationJob job : runningJobs.values()) {
@@ -238,9 +234,8 @@ public class ReplicationMgr extends FrontendDaemon {
         }
     }
 
-    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.REPLICATION_MGR, 1);
->>>>>>> a88d3e4a29 ([Enhancement] Support show proc replications (#50483))
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.REPLICATION_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }
