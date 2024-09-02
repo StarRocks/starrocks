@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
@@ -24,13 +25,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 
 import java.util.List;
+import java.util.Set;
 
 /*
  * collect all complex expressions, such as: MAP_KEYS, MAP_VALUES, map['key'], struct.a.b.c ...
  */
 public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Void> {
     private final List<ScalarOperator> complexExpressions = Lists.newArrayList();
-
+    private Set<String> checkFunctions;
     private final boolean enableJsonCollect;
 
     public List<ScalarOperator> getComplexExpressions() {
@@ -43,6 +45,19 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
 
     public SubfieldExpressionCollector(boolean enableJsonCollect) {
         this.enableJsonCollect = enableJsonCollect;
+        this.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PRUNE_FUNCTIONS);
+    }
+
+    public static SubfieldExpressionCollector buildPruneCollector() {
+        SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+        collector.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PRUNE_FUNCTIONS);
+        return collector;
+    }
+
+    public static SubfieldExpressionCollector buildPushdownCollector() {
+        SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+        collector.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PUSHDOWN_FUNCTIONS);
+        return collector;
     }
 
     @Override
@@ -85,7 +100,7 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
             return null;
         }
 
-        if (!PruneSubfieldRule.SUPPORT_FUNCTIONS.contains(call.getFnName())) {
+        if (!checkFunctions.contains(call.getFnName())) {
             return visit(call, context);
         }
 
