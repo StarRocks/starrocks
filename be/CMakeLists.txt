@@ -786,6 +786,8 @@ endif()
 
 set(WL_START_GROUP "-Wl,--start-group")
 set(WL_END_GROUP "-Wl,--end-group")
+set(WL_LINK_STATIC "-Wl,-Bstatic")
+set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
@@ -965,7 +967,12 @@ else()
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
+<<<<<<< HEAD
     -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+=======
+    ${WL_LINK_STATIC} -lbfd
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+>>>>>>> 11bf3082e6 ([Enhancement][Build] Static link libbfd library (#50515))
 )
 
 # link gcov if WITH_GCOV is on
