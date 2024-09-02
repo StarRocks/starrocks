@@ -881,14 +881,8 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
-<<<<<<< HEAD
             Database db = GlobalStateMgr.getServingState().getDb(databaseId);
             if (db == null || db.getTable(tableId) == null) {
-=======
-            Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseId);
-            if (db == null
-                    || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) == null) {
->>>>>>> a88d3e4a29 ([Enhancement] Support show proc replications (#50483))
                 abortTransaction("Table is deleted");
                 return true;
             }
