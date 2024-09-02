@@ -1526,7 +1526,8 @@ public class AnalyzerUtils {
         } else if (type.isStructType()) {
             ArrayList<StructField> newFields = Lists.newArrayList();
             for (StructField sf : ((StructType) type).getFields()) {
-                newFields.add(new StructField(sf.getName(), sf.getFieldId(), replaceNullType2Boolean(sf.getType()), sf.getComment()));
+                newFields.add(new StructField(sf.getName(), sf.getFieldId(),
+                        replaceNullType2Boolean(sf.getType()), sf.getComment()));
             }
             return new StructType(newFields);
         }
