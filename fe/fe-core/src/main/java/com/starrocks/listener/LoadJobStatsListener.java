@@ -51,7 +51,7 @@ public class LoadJobStatsListener implements LoadJobListener {
 
     @Override
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
-        StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true);
+        StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
     }
 
     @Override
@@ -85,7 +85,8 @@ public class LoadJobStatsListener implements LoadJobListener {
                     .filter(t -> !t.isMaterializedView()) // skip mvs since its stats will be triggered after refresh
                     .collect(Collectors.toList());
             for (Table table : tables) {
-                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync);
+                // stream load and broker load do not need lock
+                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync, false);
             }
         } catch (Exception t) {
             LOG.warn("refresh mv after publish version failed:", DebugUtil.getStackTrace(t));

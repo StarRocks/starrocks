@@ -46,6 +46,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
@@ -141,7 +143,8 @@ public class StatisticUtils {
         return StatsConstants.AnalyzeType.FULL;
     }
 
-    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
+    public static void triggerCollectionOnFirstLoad(
+            TransactionState txnState, Database db, Table table, boolean sync, boolean useLock) {
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
@@ -159,15 +162,25 @@ public class StatisticUtils {
         }
         // collectPartitionIds contains partition that is first loaded.
         Set<Long> collectPartitionIds = Sets.newHashSet();
-        for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            // partition commit info id is physical partition id.
-            // statistic collect granularity is logic partition.
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition != null) {
-                Partition partition = table.getPartition(physicalPartition.getParentId());
-                if (partition != null && partition.isFirstLoad()) {
-                    collectPartitionIds.add(partition.getId());
+        Locker locker = new Locker();
+        if (useLock) {
+            locker.lockDatabase(db, LockType.READ);
+        }
+        try {
+            for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+                // partition commit info id is physical partition id.
+                // statistic collect granularity is logic partition.
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition != null) {
+                    Partition partition = table.getPartition(physicalPartition.getParentId());
+                    if (partition != null && partition.isFirstLoad()) {
+                        collectPartitionIds.add(partition.getId());
+                    }
                 }
+            }
+        } finally {
+            if (useLock) {
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         if (collectPartitionIds.isEmpty()) {
