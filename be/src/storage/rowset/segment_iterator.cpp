@@ -549,6 +549,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
@@ -1768,6 +1769,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
 
 Status SegmentIterator::_init_bitmap_index_iterators() {
     RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
+<<<<<<< HEAD
     DCHECK_EQ(_predicate_columns, _cid_to_predicates.size());
     SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
     _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
@@ -1785,20 +1787,50 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
                 // find segment from delta column group failed, using main segment
                 segment_ptr = _segment;
             }
+=======
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
 
-            IndexReadOptions opts;
-            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            opts.lake_io_opts = _opts.lake_io_opts;
-            opts.read_file = _column_files[cid].get();
-            opts.stats = _opts.stats;
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
 
+        std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+        for (auto& field : _schema.fields()) {
+            cid_2_ucid[field->id()] = field->uid();
+        }
+
+        RETURN_IF_ERROR(
+                _bitmap_index_evaluator.init([&cid_2_ucid, this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+                    const ColumnUID ucid = cid_2_ucid[cid];
+                    // the column's index in this segment file
+                    ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+                    if (segment_ptr == nullptr) {
+                        // find segment from delta column group failed, using main segment
+                        segment_ptr = _segment;
+                    }
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
+
+                    IndexReadOptions opts;
+                    opts.use_page_cache = !_opts.temporary_data && (config::enable_bitmap_index_memory_page_cache ||
+                                                                    !config::disable_storage_page_cache);
+                    opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
+                    opts.lake_io_opts = _opts.lake_io_opts;
+                    opts.read_file = _column_files[cid].get();
+                    opts.stats = _opts.stats;
+
+<<<<<<< HEAD
             RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &_bitmap_index_iterators[cid]));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
     return Status::OK();
 }
+=======
+                    BitmapIndexIterator* bitmap_iter = nullptr;
+                    RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+                    return bitmap_iter;
+                }));
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
 
 // filter rows by evaluating column predicates using bitmap indexes.
 // upon return, predicates that have been evaluated by bitmap indexes will be removed.
