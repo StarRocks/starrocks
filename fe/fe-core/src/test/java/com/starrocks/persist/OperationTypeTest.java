@@ -202,6 +202,7 @@ public class OperationTypeTest {
                 OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_CATALOG));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REPLICATION_JOB));
+        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_REPLICATION_JOB));
     }
 
     @Test
