@@ -338,7 +338,8 @@
                             ]
                         },
                         "using_starrocks/mv_ref",
-                        "using_starrocks/troubleshooting_asynchronous_materialized_views"
+                        "using_starrocks/troubleshooting_asynchronous_materialized_views",
+                        "using_starrocks/feature-support-asynchronous-materialized-views"
                     ]
                 },
                 "using_starrocks/Colocate_join",
