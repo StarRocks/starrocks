@@ -29,6 +29,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -68,14 +69,14 @@ public class ReplaceLakePartitionTest {
     private StarOSAgent starOSAgent;
 
     @Mocked
-    private WarehouseManager warehouseManager;
+    private WarehouseManagerEPack warehouseManager;
 
     @Mocked
     private EditLog editLog;
 
     public ReplaceLakePartitionTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
-        warehouseManager = new WarehouseManager();
+        warehouseManager = new WarehouseManagerEPack();
         warehouseManager.initDefaultWarehouse();
     }
 
@@ -167,7 +168,7 @@ public class ReplaceLakePartitionTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public Warehouse getBackgroundWarehouse() {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
