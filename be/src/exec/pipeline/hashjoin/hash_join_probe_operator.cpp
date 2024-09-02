@@ -87,7 +87,7 @@ StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
-    RETURN_IF_ERROR(_join_prober->probe_input_finished());
+    RETURN_IF_ERROR(_join_prober->probe_input_finished(state));
     _join_prober->enter_post_probe_phase();
     return Status::OK();
 }
