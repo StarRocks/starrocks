@@ -4416,6 +4416,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。
 - 引入版本：v3.1.0
 
+##### enable_colocate_restore
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Colocate 表启用备份恢复。`true` 表示启用 Colocate 表备份恢复，`false` 表示禁用。
+- 引入版本：v3.2.10、v3.3.3
+
 <!--
 ##### enable_persistent_index_by_default
 
