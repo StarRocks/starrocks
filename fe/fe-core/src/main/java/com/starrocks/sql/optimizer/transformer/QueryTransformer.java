@@ -13,6 +13,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -89,10 +90,10 @@ public class QueryTransformer {
                         Iterables.concat(queryBlock.getOutputExpr(),
                                 queryBlock.getOrderSourceExpressions(),
                                 queryBlock.getOrderByAnalytic()),
-                        queryBlock.getOutputExprInOrderByScope(),
+                        queryBlock,
                         outputNames,
                         builder.getFieldMappings(),
-                        queryBlock.getOrderScope(), true);
+                        true);
 
             } else {
                 // requires both output and source fields to be visible if there is no aggregation or distinct
@@ -100,10 +101,10 @@ public class QueryTransformer {
                 // in the outputExpression.
                 builder = projectForOrder(builder,
                         Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
-                        queryBlock.getOutputExprInOrderByScope(),
+                        queryBlock,
                         queryBlock.getColumnOutputNames(),
                         builder.getFieldMappings(),
-                        queryBlock.getOrderScope(), queryBlock.isDistinct());
+                        queryBlock.isDistinct());
             }
         }
 
@@ -146,10 +147,12 @@ public class QueryTransformer {
 
     private OptExprBuilder projectForOrder(OptExprBuilder subOpt,
                                            Iterable<Expr> outputExpression,
-                                           List<Integer> outputExprInOrderByScope,
+                                           SelectRelation queryBlock,
                                            List<String> outputNames,
-                                           List<ColumnRefOperator> sourceExpression, Scope scope,
+                                           List<ColumnRefOperator> sourceExpression,
                                            boolean withAggregation) {
+        List<Integer> outputExprInOrderByScope = queryBlock.getOutputExprInOrderByScope();
+        Scope scope = queryBlock.getOrderScope();
         ExpressionMapping outputTranslations = new ExpressionMapping(scope);
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
 
@@ -167,10 +170,31 @@ public class QueryTransformer {
             projections.put(columnRefOperator, scalarOperator);
 
             if (outputExprInOrderByScope.contains(outputExprIdx)) {
-                outputTranslations.putWithSymbol(expression,
-                        new SlotRef(null, outputNames.get(outputExprIdx)), columnRefOperator);
+                outputTranslations.put(expression, columnRefOperator);
+                TableName resolveTableName = queryBlock.getResolveTableName();
+                if (expression instanceof SlotRef) {
+                    resolveTableName = queryBlock.getRelation().getResolveTableName();
+                }
+                SlotRef alias = new SlotRef(resolveTableName, outputNames.get(outputExprIdx));
+                // order by expr may reference the alias. We need put the alias into the fieldMappings or the
+                // expressionToColumns.
+                // if the alias not be used in the order by expr like:
+                // select v1 cc, v2 cc from tbl order by v3. We just add the slotRef(cc) to columnRefOperator in the
+                // expressionToColumns to ensure this projection can output v1 with alias cc, v2 with alias cc and v3.
+                // We don't need to ensure the uniqueness of the alias in the fieldMappings.
+                // if the alias used in the order by expr like:
+                // select v1 v3, v2 cc from (select abs(v1) v1, abs(v2) v2, v3 from t0) t1 order by t1.v3.
+                // order by expr t1.v3 referenced the v1 with alias v3, we need set the fieldMappings to ensure order by
+                // expr can be resolved.
+                if (scope.getRelationFields().resolveFields(alias).size() > 1) {
+                    outputTranslations.getExpressionToColumns()
+                            .put(new SlotRef(resolveTableName, outputNames.get(outputExprIdx)), columnRefOperator);
+                } else {
+                    outputTranslations.put(alias, columnRefOperator);
+                }
+
             } else {
-                outputTranslations.putWithSymbol(expression, expression, columnRefOperator);
+                outputTranslations.put(expression, columnRefOperator);
             }
             outputExprIdx++;
         }
