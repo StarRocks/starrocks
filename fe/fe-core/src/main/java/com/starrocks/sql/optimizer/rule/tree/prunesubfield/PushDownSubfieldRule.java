@@ -222,7 +222,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             ColumnRefSet allUsedColumns = new ColumnRefSet();
             context.pushDownExprUseColumns.values().forEach(allUsedColumns::union);
 
-            SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+            SubfieldExpressionCollector collector = SubfieldExpressionCollector.buildPushdownCollector();
             for (ScalarOperator value : lpo.getColumnRefMap().values()) {
                 // check repeat put complex column, like that
                 //      project( columnB: structA.b.c.d )
