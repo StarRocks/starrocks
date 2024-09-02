@@ -656,6 +656,21 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
     _table_items->row_count += chunk->num_rows();
 }
 
+void JoinHashTable::merge_ht(const JoinHashTable& ht) {
+    _table_items->row_count += ht._table_items->row_count;
+
+    Columns& columns = _table_items->build_chunk->columns();
+    Columns& other_columns = ht._table_items->build_chunk->columns();
+
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        if (!columns[i]->is_nullable() && other_columns[i]->is_nullable()) {
+            // upgrade to nullable column
+            columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
+        }
+        columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
+    }
+}
+
 ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
     DCHECK(chunk != nullptr && chunk->num_rows() > 0);
     ChunkPtr output = std::make_shared<Chunk>();

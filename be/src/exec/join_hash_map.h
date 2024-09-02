@@ -280,6 +280,7 @@ struct HashTableProbeState {
 struct HashTableParam {
     bool with_other_conjunct = false;
     bool enable_late_materialization = false;
+    bool enable_partition_hash_join = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
@@ -833,6 +834,7 @@ public:
     Status lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
     void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
+    void merge_ht(const JoinHashTable& ht);
     // convert input column to spill schema order
     ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const;
 

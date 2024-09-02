@@ -670,6 +670,7 @@ struct THashJoinNode {
   // used in pipeline engine
   55: optional bool interpolate_passthrough = false
   56: optional bool late_materialization = false
+  57: optional bool enable_partition_hash_join = false
 }
 
 struct TMergeJoinNode {

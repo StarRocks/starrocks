@@ -44,6 +44,7 @@ void HashJoinProbeMetrics::prepare(RuntimeProfile* runtime_profile) {
     other_join_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "OtherJoinConjunctEvaluateTime");
     where_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "WhereConjunctEvaluateTime");
     probe_counter = ADD_COUNTER(runtime_profile, "probeCount", TUnit::UNIT);
+    partition_probe_overhead = ADD_TIMER(runtime_profile, "PartitionProbeOverhead");
 }
 
 void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
@@ -55,8 +56,8 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
     build_keys_per_bucket = ADD_COUNTER(runtime_profile, "BuildKeysPerBucket%", TUnit::UNIT);
     hash_table_memory_usage = ADD_COUNTER(runtime_profile, "HashTableMemoryUsage", TUnit::BYTES);
-
     partial_runtime_bloom_filter_bytes = ADD_COUNTER(runtime_profile, "PartialRuntimeBloomFilterBytes", TUnit::BYTES);
+    partition_nums = ADD_COUNTER(runtime_profile, "PartitionNums", TUnit::UNIT);
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -87,7 +88,11 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     if (param._hash_join_node.__isset.build_runtime_filters_from_planner) {
         _build_runtime_filters_from_planner = param._hash_join_node.build_runtime_filters_from_planner;
     }
-    _hash_join_builder = _pool->add(new SingleHashJoinBuilder(*this));
+
+    HashJoinBuildOptions build_options;
+    build_options.enable_partitioned_hash_join = param._enable_partition_hash_join;
+
+    _hash_join_builder = HashJoinBuilderFactory::create(_pool, build_options, *this);
     _hash_join_prober = _pool->add(new HashJoinProber(*this));
     _build_metrics = _pool->add(new HashJoinBuildMetrics());
     _probe_metrics = _pool->add(new HashJoinProbeMetrics());
@@ -247,8 +252,8 @@ Status HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     return _hash_join_prober->push_probe_chunk(state, std::move(chunk));
 }
 
-Status HashJoiner::probe_input_finished() {
-    return Status::OK();
+Status HashJoiner::probe_input_finished(RuntimeState* state) {
+    return _hash_join_prober->on_input_finished(state);
 }
 
 StatusOr<ChunkPtr> HashJoiner::pull_chunk(RuntimeState* state) {
@@ -365,9 +370,7 @@ Status HashJoiner::reset_probe(starrocks::RuntimeState* state) {
         return Status::OK();
     }
 
-    _hash_join_prober->reset();
-
-    _hash_join_builder->reset_probe(state);
+    _hash_join_prober->reset(state);
 
     return Status::OK();
 }
