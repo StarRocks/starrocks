@@ -226,6 +226,8 @@ static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, 
 /*
 try to infer struct type from group node.
 
+parquet does not have struct type, there is no struct definition in parquet.
+try to infer like this.
 group <name> {
     type field0;
     type field1;
