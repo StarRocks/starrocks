@@ -690,6 +690,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
 
+    public static final String ENABLE_PUSHDOWN_JOIN_PROJECTION = "enable_pushdown_join_projection";
+
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
@@ -1227,6 +1229,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxScanKeyNum = -1;
     @VariableMgr.VarAttr(name = MAX_PUSHDOWN_CONDITIONS_PER_COLUMN)
     private int maxPushdownConditionsPerColumn = -1;
+
+    @VariableMgr.VarAttr(name = ENABLE_PUSHDOWN_JOIN_PROJECTION)
+    private boolean enablePushDownJoinProjection = true;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_PUSH_DOWN_RIGHT_TABLE)
     private boolean hashJoinPushDownRightTable = true;
@@ -2833,6 +2838,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isHashJoinPushDownRightTable() {
         return this.hashJoinPushDownRightTable;
+    }
+
+    public boolean isEnablePushDownJoinProjection() {
+        return enablePushDownJoinProjection;
+    }
+
+    public void setEnablePushDownJoinProjection(boolean enablePushDownJoinProjection) {
+        this.enablePushDownJoinProjection = enablePushDownJoinProjection;
     }
 
     public String getStreamingPreaggregationMode() {

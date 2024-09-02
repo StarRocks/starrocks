@@ -56,6 +56,12 @@ public final class LogicalProjectOperator extends LogicalOperator {
         return columnRefMap;
     }
 
+    public ColumnRefSet getUsedColumns() {
+        ColumnRefSet columns = new ColumnRefSet();
+        columnRefMap.values().forEach(x -> columns.union(x.getUsedColumns()));
+        return columns;
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         ColumnRefSet columns = new ColumnRefSet();

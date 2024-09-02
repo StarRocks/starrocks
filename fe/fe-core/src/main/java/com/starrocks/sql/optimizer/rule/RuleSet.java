@@ -141,6 +141,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
@@ -384,6 +385,7 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
+                PushDownProjectToJoinRule.getInstance(),
                 new PruneProjectRule(),
                 new PruneProjectEmptyRule(),
                 new MergeTwoProjectRule(),
