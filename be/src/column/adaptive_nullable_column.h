@@ -276,9 +276,7 @@ public:
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override {
         materialized_nullable();
-        if (_null_column->capacity_limit_reached()) {
-            return Status::InternalError("Size of NullableColumn exceed the limit");
-        }
+        RETURN_IF_ERROR(_null_column->capacity_limit_reached());
 
         return upgrade_helper_func(&_data_column);
     }
@@ -556,9 +554,9 @@ public:
         return NullableColumn::debug_string();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+    Status capacity_limit_reached() const override {
         materialized_nullable();
-        return NullableColumn::capacity_limit_reached(msg);
+        return NullableColumn::capacity_limit_reached();
     }
 
     void check_or_die() const override {

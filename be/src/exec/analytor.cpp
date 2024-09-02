@@ -586,13 +586,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
-        auto check_if_overflow = [](Column* column) {
-            std::string msg;
-            if (column->capacity_limit_reached(&msg)) {
-                return Status::InternalError(msg);
-            }
-            return Status::OK();
-        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
@@ -601,20 +594,20 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 // When chunk's column is const, maybe need to unpack it.
                 TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
 
-                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
+                RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
-            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
+            RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
-            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
+            RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
     }
 

@@ -192,11 +192,7 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     }
     RETURN_IF_ERROR(result);
     if (_fn_desc->check_overflow) {
-        std::string err_msg;
-        if (UNLIKELY(result.value()->capacity_limit_reached(&err_msg))) {
-            return Status::InternalError(
-                    fmt::format("Result column of function {} exceed limit: {}", _fn_desc->name, err_msg));
-        }
+        RETURN_IF_ERROR(result.value()->capacity_limit_reached());
     }
 
     // For no args function call (pi, e)
