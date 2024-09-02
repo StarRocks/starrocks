@@ -264,7 +264,7 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
             // This thread can only run on the borrowed CPU. At this time, the owner of the borrowed CPU has a task
             // coming, so give up the CPU.
             // And wake up the threads running on its own CPU to continue processing the task.
-            _cv.notify_all();
+            _cv.notify_one();
             _cv_for_borrowed_cpus.wait_for(lock, std::chrono::milliseconds(50));
         }
     }
