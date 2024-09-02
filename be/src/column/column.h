@@ -201,9 +201,9 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
-    template <typename Container, typename T = Container::value_type>
-    typename std::enable_if<std::is_same<T, uint32_t>::value, void>::type append_selective(const Column& src,
-                                                                                           const Container& indexes) {
+    template <typename Container, typename T = typename Container::value_type>
+    void append_selective(const Column& src, const Container& indexes) {
+        static_assert(std::is_same<T, uint32_t>::value, "The type of indexes must be uint32_t");
         return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
 
@@ -215,7 +215,7 @@ public:
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
     virtual bool append_nulls(size_t count) = 0;
 
-    template <typename Container, typename T = Container::value_type>
+    template <typename Container, typename T = typename Container::value_type>
     bool append_strings(const Container& strs) {
         static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
         return append_strings(strs.data(), strs.size());
@@ -227,7 +227,7 @@ public:
     // Like append_strings. To achieve higher performance, this function will read 16 bytes out of
     // bounds. So the caller must make sure that no invalid address access exception occurs for
     // out-of-bounds reads
-    template <typename Container, typename T = Container::value_type>
+    template <typename Container, typename T = typename Container::value_type>
     bool append_strings_overflow(const Container& strs, size_t max_length) {
         static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
         return append_strings_overflow(strs.data(), strs.size(), max_length);
@@ -240,7 +240,7 @@ public:
     // Like `append_strings` but the corresponding storage of each slice is adjacent to the
     // next one's, the implementation can take advantage of this feature, e.g, copy the whole
     // memory at once.
-    template <typename Container, typename T = Container::value_type>
+    template <typename Container, typename T = typename Container::value_type>
     [[nodiscard]] bool append_continuous_strings(const Container& strs) {
         static_assert(std::is_same<T, Slice>::value, "Container::value_type must be Slice");
         return append_continuous_strings(strs.data(), strs.size());

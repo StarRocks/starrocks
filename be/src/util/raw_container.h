@@ -156,7 +156,7 @@ using RawVector = std::vector<T, RawAllocator<T, 0>>;
 template <class T>
 using RawVectorPad16 = std::vector<T, RawAllocator<T, 16>>;
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline typename std::enable_if<
         std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
         void>::type
@@ -172,7 +172,7 @@ inline void make_room(std::string* s, size_t n) {
     s->swap(reinterpret_cast<std::string&>(rs));
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline typename std::enable_if<
         std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
         void>::type

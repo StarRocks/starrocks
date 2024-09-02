@@ -364,7 +364,6 @@ struct AggHashMapWithOneStringKeyWithNullable
     using Base = AggHashMapWithKey<HashMap, Self>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    // using ResultVector = typename std::vector<Slice>;
     using ResultVector = Buffer<Slice>;
 
     template <class... Args>
@@ -590,7 +589,6 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     using Base = AggHashMapWithKey<HashMap, AggHashMapWithSerializedKey<HashMap>>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    // using ResultVector = typename std::vector<Slice>;
     using ResultVector = Buffer<Slice>;
 
     template <class... Args>

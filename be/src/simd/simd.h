@@ -94,14 +94,14 @@ count_zero(const T* data, size_t size) {
     return count;
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline size_t count_zero(const Container& nums) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
                   "only 8-bit or 32-bit integral types are supported");
     return count_zero(nums.data(), nums.size());
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline size_t count_zero(const Container& nums, size_t size) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
                   "only 8-bit or 32-bit integral types are supported");
@@ -115,7 +115,7 @@ inline size_t count_nonzero(const T* data, size_t size) {
     return size - count_zero(data, size);
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline size_t count_nonzero(const Container& nums) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
                   "only 8-bit or 32-bit integral types are supported");
@@ -123,7 +123,7 @@ inline size_t count_nonzero(const Container& nums) {
 }
 
 // NOTE: memchr is much faster than a plain SIMD implementation
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline static size_t find_byte(const Container& list, size_t start, size_t count, T byte) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
@@ -139,7 +139,7 @@ inline static size_t find_byte(const Container& list, size_t start, size_t count
     return (T*)p - list.data();
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline static size_t find_byte(const Container& list, size_t start, T byte) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
@@ -155,56 +155,56 @@ inline static size_t find_byte(const Container& list, size_t start, T byte) {
 }
 
 // Find position for zero byte, return size of list if not found
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline size_t find_zero(const Container& list, size_t start) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
     return find_byte(list, start, static_cast<T>(0));
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline size_t find_zero(const Container& list, size_t start, size_t count) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
     return find_byte(list, start, count, static_cast<T>(0));
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline size_t find_nonzero(const Container& list, size_t start) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
     return find_byte(list, start, static_cast<T>(1));
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline size_t find_nonzero(const Container& list, size_t start, size_t count) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
     return find_byte(list, start, count, static_cast<T>(1));
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline bool contain_zero(const Container& list) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
     return find_zero(list, 0) < list.size();
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline bool contain_nonzero(const Container& list) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
     return find_nonzero(list, 0) < list.size();
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline bool contain_nonzero(const Container& list, size_t start) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
     return find_nonzero(list, start) < list.size();
 }
 
-template <typename Container, typename T = Container::value_type>
+template <typename Container, typename T = typename Container::value_type>
 inline bool contain_nonzero(const Container& list, size_t start, size_t count) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
