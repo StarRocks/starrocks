@@ -1219,6 +1219,10 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
             return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
         }
     }));
+    // check `calc_upt_memory_usage_per_row`
+    for (int i = 10; i < 20; i++) {
+        ASSERT_TRUE(RowsetColumnUpdateState::calc_upt_memory_usage_per_row(rowsets[i].get()) > 0);
+    }
     config::vector_chunk_size = old_vector_chunk_size;
     config::partial_update_memory_limit_per_worker = old_partial_update_memory_limit_per_worker;
     final_check(tablet, rowsets);
