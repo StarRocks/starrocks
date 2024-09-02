@@ -683,11 +683,11 @@ class StarrocksSQLApiLib(object):
     )
     def conn_execute_sql(self, conn, sql):
         try:
-            with conn.cursor() as cursor:
-                if sql.endswith(";"):
-                    sql = sql[:-1]
-                cursor.execute(sql)
-                result = cursor.fetchall()
+            cursor = conn.cursor()
+            if sql.endswith(";"):
+                sql = sql[:-1]
+            cursor.execute(sql)
+            result = cursor.fetchall()
 
             for i in range(len(result)):
                 row = [str(item) for item in result[i]]
