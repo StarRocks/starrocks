@@ -67,6 +67,9 @@ public class PushDownProjectToJoinRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnablePushDownJoinProjection()) {
+            return false;
+        }
         LogicalProjectOperator projectOp = input.getOp().cast();
         for (var entry : projectOp.getColumnRefMap().entrySet()) {
             ScalarOperator expr = entry.getValue();
