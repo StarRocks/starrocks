@@ -109,7 +109,7 @@ const CpuUtil::CpuIds& ExecutorsManager::get_cpuids_of_workgroup(WorkGroup* wg) 
 PipelineExecutors* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) const {
     const auto& cpuids = get_cpuids_of_workgroup(wg);
     if (wg->exclusive_cpu_cores() == 0 || cpuids.empty()) {
-        LOG(INFO) << "[WORKGROUP] assign common executors to workgroup "
+        LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
         wg->set_executors(_shared_executors.get());
         return _shared_executors.get();
@@ -123,7 +123,7 @@ PipelineExecutors* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) 
                      << "[conf=" << _conf.to_string() << "] "
                      << "[cpuids=" << CpuUtil::to_string(cpuids) << "] "
                      << "[status=" << status << "]";
-        LOG(INFO) << "[WORKGROUP] assign common executors to workgroup "
+        LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
         executors->close();
         wg->set_executors(_shared_executors.get());

@@ -317,8 +317,8 @@ private:
     friend class ExecutorsManager;
 
     mutable std::shared_mutex _mutex;
-    // Place it before _workgroups to ensure the common executors is destructed after all the dedicated executors for
-    // workgroups, since _executors_manager owns the common executors, and WorkGroup owns the dedicated executors.
+    // Place it before _workgroups to ensure the shared executors is destructed after all the dedicated executors for
+    // workgroups, since _executors_manager owns the shared executors, and WorkGroup owns the dedicated executors.
     ExecutorsManager _executors_manager;
 
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
