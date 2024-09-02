@@ -373,7 +373,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     }
 
     // Save new metadata
-    RETURN_IF_ERROR(log_applier->finish());
+    if (log_applier != nullptr) {
+        RETURN_IF_ERROR(log_applier->finish());
+    }
 
     delete_files_async(std::move(files_to_delete));
 
