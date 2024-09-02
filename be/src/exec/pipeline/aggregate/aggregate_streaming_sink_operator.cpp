@@ -62,11 +62,14 @@ StatusOr<ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(RuntimeState* stat
 void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
         _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
+        if (_aggregator->hash_map_memory_usage() > config::streaming_agg_limited_memory_size) {
+            _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
+        } else {
+            _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
+        }
     }
-    if (_aggregator->hash_map_memory_usage() > config::streaming_agg_limited_memory_size) {
-        _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
-    } else {
-        _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
+    if (_limited_mem_state.has_limited(*_aggregator) && !_aggregator->ht_need_consume()) {
+        _aggregator->set_ht_need_consume(true);
     }
 }
 
@@ -303,7 +306,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
 Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size) {
     if (_limited_mem_state.has_limited(*_aggregator)) {
         RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
-        _aggregator->set_streaming_all_states(true);
+        _aggregator->set_ht_need_consume(true);
     } else {
         RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk_size));
     }

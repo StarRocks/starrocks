@@ -34,10 +34,6 @@ bool AggregateStreamingSourceOperator::has_output() const {
         return true;
     }
 
-    if (_aggregator->is_streaming_all_states()) {
-        return true;
-    }
-
     // There are four cases where chunk buffer is empty
     // case1: streaming mode is 'FORCE_STREAMING'
     // case2: streaming mode is 'AUTO'
@@ -105,7 +101,6 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
         if (!_aggregator->is_sink_complete()) {
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
         }
-        _aggregator->set_streaming_all_states(false);
         _aggregator->set_ht_need_consume(false);
     }
 
