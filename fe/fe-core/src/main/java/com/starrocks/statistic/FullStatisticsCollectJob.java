@@ -101,6 +101,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         // dop should be adjusted appropriately to use enough cpu cores
         long finishedSQLNum = 0;
         long failedNum = 0;
+        Exception lastFailure = null;
         for (List<String> sqlUnion : collectSQLList) {
             if (sqlUnion.size() < parallelism) {
                 context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
@@ -128,12 +129,20 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                     LOG.warn(message, e);
                     throw new RuntimeException(message, e);
                 } else {
+                    lastFailure = e;
                     continue;
                 }
             }
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        }
+
+        if (lastFailure != null) {
+            String message = String.format("collect statistic job partially failed but tolerated %d/%d, " +
+                    "last error is %s", failedNum, collectSQLList.size(), lastFailure);
+            analyzeStatus.setReason(message);
+            LOG.warn(message);
         }
 
         flushInsertStatisticsData(context, true);
