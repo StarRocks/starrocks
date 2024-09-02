@@ -72,6 +72,8 @@ public:
 
     bool use_page_cache = false;
     bool fill_data_cache = true;
+    // temporary data does not allow caching
+    bool temporary_data = false;
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;

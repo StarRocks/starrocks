@@ -50,8 +50,8 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
 
     IndexReadOptions index_opts;
-    index_opts.use_page_cache = !config::disable_storage_page_cache;
-    index_opts.kept_in_memory = false;
+    index_opts.use_page_cache = !opts.temporary_data && !config::disable_storage_page_cache;
+    index_opts.kept_in_memory = !opts.temporary_data;
     index_opts.skip_fill_data_cache = _skip_fill_data_cache();
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
@@ -309,8 +309,8 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
         IndexReadOptions opts;
-        opts.use_page_cache = !config::disable_storage_page_cache;
-        opts.kept_in_memory = false;
+        opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache;
+        opts.kept_in_memory = !_opts.temporary_data;
         opts.skip_fill_data_cache = _skip_fill_data_cache();
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
@@ -332,7 +332,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     RETURN_IF(!support, Status::OK());
 
     IndexReadOptions opts;
-    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache;
     opts.kept_in_memory = false;
     opts.skip_fill_data_cache = _skip_fill_data_cache();
     opts.read_file = _opts.read_file;
