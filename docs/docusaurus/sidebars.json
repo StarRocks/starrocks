@@ -279,8 +279,14 @@
                                 "using_starrocks/create_partitioned_materialized_view"
                             ]
                         },
+<<<<<<< HEAD
                                 "using_starrocks/troubleshooting_asynchronous_materialized_views",
                                 "using_starrocks/feature-support-asynchronous-materialized-views"
+=======
+                        "using_starrocks/mv_ref",
+                        "using_starrocks/troubleshooting_asynchronous_materialized_views",
+                        "using_starrocks/feature-support-asynchronous-materialized-views"
+>>>>>>> a9652a28e4 ([Doc] add mv feature support (#50589))
                     ]
                 },
                 "using_starrocks/Colocate_join",
