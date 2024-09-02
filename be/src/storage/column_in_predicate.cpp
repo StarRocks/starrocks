@@ -15,6 +15,7 @@
 #include <type_traits>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
@@ -385,14 +386,7 @@ public:
 
     template <LogicOp Op>
     inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
-        const Int32Column* dict_code_column;
-        if (column->is_nullable()) {
-            // This is NullableColumn, get its data_column
-            dict_code_column =
-                    down_cast<const Int32Column*>(down_cast<const NullableColumn*>(column)->data_column().get());
-        } else {
-            dict_code_column = down_cast<const Int32Column*>(column);
-        }
+        const Int32Column* dict_code_column = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
         std::vector<int32_t> data = dict_code_column->get_data();
         Filter filter(to - from, 1);
 
@@ -400,13 +394,13 @@ public:
             const NullColumn* null_column = down_cast<const NullableColumn*>(column)->null_column().get();
             auto null_data = null_column->get_data();
             for (auto i = from; i < to; i++) {
-                filter[i - from] = !null_data[i];
+                auto index = data[i] >= _bit_mask.size() ? 0 : data[i];
+                filter[i - from] = (!null_data[i]) & _bit_mask[index];
             }
-        }
-
-        for (auto i = from; i < to; i++) {
-            auto index = data[i] >= _bit_mask.size() ? 0 : data[i];
-            filter[i - from] &= _bit_mask[index];
+        } else {
+            for (auto i = from; i < to; i++) {
+                filter[i - from] = _bit_mask[data[i]];
+            }
         }
 
         for (auto i = from; i < to; i++) {
