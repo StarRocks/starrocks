@@ -4270,7 +4270,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### get_txn_status_internal_sec
 
-- Default: 30
+- Default: 10
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
