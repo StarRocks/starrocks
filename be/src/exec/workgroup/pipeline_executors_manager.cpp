@@ -54,10 +54,13 @@ void ExecutorsManager::assign_cpuids_to_workgroup(WorkGroup* wg) {
     }
 
     const auto& common_cpuids = get_cpuids_of_workgroup(COMMON_WORKGROUP);
+    if (common_cpuids.size() <= 1) {
+        return;
+    }
 
     CpuUtil::CpuIds cpuids;
     CpuUtil::CpuIds new_common_cpuids;
-    const size_t n = std::min<size_t>({wg->dedicated_cpu_cores(), common_cpuids.size(), _conf.num_total_cores - 1});
+    const size_t n = std::min<size_t>({wg->dedicated_cpu_cores(), common_cpuids.size() - 1, _conf.num_total_cores - 1});
     std::copy_n(common_cpuids.begin(), n, std::back_inserter(cpuids));
     std::copy(common_cpuids.begin() + n, common_cpuids.end(), std::back_inserter(new_common_cpuids));
 
