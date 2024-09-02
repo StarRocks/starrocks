@@ -1171,7 +1171,7 @@ public:
         if constexpr (HasNull) {
             elements_nulls = elements_null_col->get_data().data();
         }
-        const auto& elements_data = GetContainer<ElementType>().get_data(elements);
+        const auto& elements_data = GetContainer<ElementType>::get_data(elements);
 
         auto* offsets_ptr = offsets->get_data().data();
         auto* null_ptr = null_cols->get_data().data();
