@@ -91,8 +91,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
-    // insert duplicate should return error
-    // ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), 0).ok());
+    ASSERT_TRUE(index->memory_usage() > 0);
 
     // test get
     vector<IndexValue> get_values(keys.size());
@@ -233,6 +232,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         // generate sst files.
         index->minor_compact();
     }
+    ASSERT_TRUE(index->memory_usage() > 0);
 
     Tablet tablet(_tablet_mgr.get(), tablet_id);
     auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
