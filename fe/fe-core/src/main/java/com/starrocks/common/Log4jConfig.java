@@ -197,8 +197,8 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] dumpModules;
     private static String[] bigQueryModules;
     private static String[] internalModules;
-	private static boolean compressSysLog;
-	private static boolean compressAuditLog;
+    private static boolean compressSysLog;
+    private static boolean compressAuditLog;
 
     @VisibleForTesting
     static String generateActiveLog4jXmlConfig() throws IOException {
@@ -214,8 +214,8 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("sys_log_delete_age", String.valueOf(Config.sys_log_delete_age));
         properties.put("sys_log_level", sysLogLevel);
         properties.put("sys_file_pattern", getIntervalPattern("sys_log_roll_interval", Config.sys_log_roll_interval));
-		properties.put("sys_file_postfix", compressSysLog ? ".gz" : "");
-		properties.put("audit_file_postfix", compressAuditLog ? ".gz" : "");
+        properties.put("sys_file_postfix", compressSysLog ? ".gz" : "");
+        properties.put("audit_file_postfix", compressAuditLog ? ".gz" : "");
 
         // audit log config
         properties.put("audit_log_dir", Config.audit_log_dir);
