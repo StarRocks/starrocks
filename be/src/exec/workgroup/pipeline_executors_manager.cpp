@@ -107,20 +107,21 @@ const CpuUtil::CpuIds& ExecutorsManager::get_cpuids_of_workgroup(WorkGroup* wg) 
 }
 
 PipelineExecutors* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) const {
-    if (wg->exclusive_cpu_cores() == 0) {
+    const auto& cpuids = get_cpuids_of_workgroup(wg);
+    if (wg->exclusive_cpu_cores() == 0 || cpuids.empty()) {
         LOG(INFO) << "[WORKGROUP] assign common executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
         wg->set_executors(_shared_executors.get());
         return _shared_executors.get();
     }
 
-    auto executors = std::make_unique<PipelineExecutors>(_conf, std::to_string(wg->id()), get_cpuids_of_workgroup(wg),
+    auto executors = std::make_unique<PipelineExecutors>(_conf, std::to_string(wg->id()), cpuids,
                                                          std::vector<CpuUtil::CpuIds>{});
     if (const Status status = executors->start(); !status.ok()) {
         LOG(WARNING) << "[WORKGROUP] failed to start executors for workgroup "
                      << "[workgroup=" << wg->to_string() << "] "
                      << "[conf=" << _conf.to_string() << "] "
-                     << "[cpuids=" << CpuUtil::to_string(get_cpuids_of_workgroup(wg)) << "] "
+                     << "[cpuids=" << CpuUtil::to_string(cpuids) << "] "
                      << "[status=" << status << "]";
         LOG(INFO) << "[WORKGROUP] assign common executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
