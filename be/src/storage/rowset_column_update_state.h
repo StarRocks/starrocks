@@ -169,6 +169,8 @@ public:
     // For UT test now
     const std::vector<BatchPKsPtr>& upserts() const { return _upserts; }
 
+    static int64_t calc_upt_memory_usage_per_row(Rowset* rowset);
+
 private:
     Status _load_upserts(Rowset* rowset, MemTracker* update_mem_tracker, uint32_t start_idx, uint32_t* end_idx);
 
