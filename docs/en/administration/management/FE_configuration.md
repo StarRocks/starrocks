@@ -4577,6 +4577,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number.
 - Introduced in: v3.1.0
 
+##### enable_colocate_restore
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
+- Introduced in: v3.2.10, v3.3.3
+
 <!--
 ##### enable_persistent_index_by_default
 
