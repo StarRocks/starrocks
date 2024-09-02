@@ -54,7 +54,13 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
+<<<<<<< HEAD
     bool fill_data_cache = true;
+=======
+    // temporary data does not allow caching
+    bool temporary_data = false;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;

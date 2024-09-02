@@ -538,6 +538,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.fill_data_cache = _opts.fill_data_cache;
@@ -1611,6 +1612,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status SegmentIterator::_init_bitmap_index_iterators() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
@@ -1645,6 +1647,60 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
     }
     return Status::OK();
 }
+=======
+static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
+                                             const std::unordered_set<const ColumnPredicate*>& erased_preds) {
+    PredicateAndNode new_root;
+    PredicateAndNode useless_root;
+    pred_tree.release_root().partition_move(
+            [&](const auto& node_var) {
+                return node_var.visit(overloaded{
+                        [&](const PredicateColumnNode& node) { return !erased_preds.contains(node.col_pred()); },
+                        [&](const auto&) { return true; },
+                });
+            },
+            &new_root, &useless_root);
+    pred_tree = PredicateTree::create(std::move(new_root));
+}
+
+// filter rows by evaluating column predicates using bitmap indexes.
+// upon return, predicates that have been evaluated by bitmap indexes will be removed.
+Status SegmentIterator::_apply_bitmap_index() {
+    RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
+
+        std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+        for (auto& field : _schema.fields()) {
+            cid_2_ucid[field->id()] = field->uid();
+        }
+
+        RETURN_IF_ERROR(
+                _bitmap_index_evaluator.init([&cid_2_ucid, this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+                    const ColumnUID ucid = cid_2_ucid[cid];
+                    // the column's index in this segment file
+                    ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+                    if (segment_ptr == nullptr) {
+                        // find segment from delta column group failed, using main segment
+                        segment_ptr = _segment;
+                    }
+
+                    IndexReadOptions opts;
+                    opts.use_page_cache = !_opts.temporary_data && (config::enable_bitmap_index_memory_page_cache ||
+                                                                    !config::disable_storage_page_cache);
+                    opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
+                    opts.lake_io_opts = _opts.lake_io_opts;
+                    opts.read_file = _column_files[cid].get();
+                    opts.stats = _opts.stats;
+
+                    BitmapIndexIterator* bitmap_iter = nullptr;
+                    RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+                    return bitmap_iter;
+                }));
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
 
 // filter rows by evaluating column predicates using bitmap indexes.
 // upon return, predicates that have been evaluated by bitmap indexes will be removed.
