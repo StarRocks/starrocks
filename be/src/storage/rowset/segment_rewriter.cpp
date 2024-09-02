@@ -114,6 +114,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     seg_options.fs = fs;
     seg_options.stats = &stats;
     seg_options.chunk_size = num_rows;
+    seg_options.temporary_data = true;
 
     auto res = rowset->segments()[segment_id]->new_iterator(src_schema, seg_options);
     auto& itr = res.value();
@@ -211,6 +212,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     seg_options.fs = fs;
     seg_options.stats = &stats;
     seg_options.chunk_size = num_rows;
+    seg_options.temporary_data = true;
 
     auto res = segment->new_iterator(src_schema, seg_options);
     auto& itr = res.value();
