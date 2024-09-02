@@ -134,7 +134,8 @@ public class StatisticUtils {
         return StatsConstants.AnalyzeType.FULL;
     }
 
-    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
+    public static void triggerCollectionOnFirstLoad(
+            TransactionState txnState, Database db, Table table, boolean sync, boolean useLock) {
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
@@ -152,15 +153,24 @@ public class StatisticUtils {
         }
         // collectPartitionIds contains partition that is first loaded.
         Set<Long> collectPartitionIds = Sets.newHashSet();
-        for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            // partition commit info id is physical partition id.
-            // statistic collect granularity is logic partition.
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition != null) {
-                Partition partition = table.getPartition(physicalPartition.getParentId());
-                if (partition != null && partition.isFirstLoad()) {
-                    collectPartitionIds.add(partition.getId());
+        if (useLock) {
+            db.readLock();
+        }
+        try {
+            for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+                // partition commit info id is physical partition id.
+                // statistic collect granularity is logic partition.
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition != null) {
+                    Partition partition = table.getPartition(physicalPartition.getParentId());
+                    if (partition != null && partition.isFirstLoad()) {
+                        collectPartitionIds.add(partition.getId());
+                    }
                 }
+            }
+        } finally {
+            if (useLock) {
+                db.readUnlock();
             }
         }
         if (collectPartitionIds.isEmpty()) {
