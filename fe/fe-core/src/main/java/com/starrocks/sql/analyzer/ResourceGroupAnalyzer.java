@@ -169,10 +169,12 @@ public class ResourceGroupAnalyzer {
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.DEDICATED_CPU_CORES)) {
-                int dedicatedCpuCores = Integer.parseInt(value);
-                if (dedicatedCpuCores >= avgCoreNum) {
-                    throw new SemanticException(
-                            String.format("%s should range from 0 to %d", ResourceGroup.DEDICATED_CPU_CORES, avgCoreNum - 1));
+                final int dedicatedCpuCores = Integer.parseInt(value);
+                final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
+                if (dedicatedCpuCores >= minCoreNum) {
+                    throw new SemanticException(String.format(
+                                    "%s cannot exceed the minimum number of CPU cores available on the backends minus one [%d]",
+                                    ResourceGroup.DEDICATED_CPU_CORES, minCoreNum - 1));
                 }
                 resourceGroup.setDedicatedCpuCores(dedicatedCpuCores);
                 continue;

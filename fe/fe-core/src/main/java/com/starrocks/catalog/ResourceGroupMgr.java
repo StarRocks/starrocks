@@ -69,7 +69,8 @@ public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
 
     private static final String EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG =
-            "the sum of %s of all the resource groups cannot exceed %d";
+            "the sum of %s across all resource groups cannot exceed the minimum number of CPU cores " +
+                    "available on the backends minus one [%d]";
     public static final String SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG =
             "'short_query' ResourceGroup cannot set 'dedicated_cpu_cores', " +
                     "since it use 'cpu_weight' as 'dedicated_cpu_cores'";
@@ -136,11 +137,11 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("This type Resource Group need define classifiers.");
             }
 
-            if (wg.getNormalizedDedicatedCpuCores() > 0 && sumDedicatedCpuCores + wg.getNormalizedDedicatedCpuCores() >=
-                    BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
+            final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
+            if (wg.getNormalizedDedicatedCpuCores() > 0 &&
+                    sumDedicatedCpuCores + wg.getNormalizedDedicatedCpuCores() >= minCoreNum) {
                 throw new DdlException(String.format(EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG,
-                        ResourceGroup.DEDICATED_CPU_CORES,
-                        BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
+                        ResourceGroup.DEDICATED_CPU_CORES, minCoreNum - 1));
             }
 
             if (needReplace) {
