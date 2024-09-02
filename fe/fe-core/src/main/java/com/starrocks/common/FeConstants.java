@@ -100,6 +100,9 @@ public class FeConstants {
 
     public static final int DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM = 16;
 
+    public static final String YES = "YES";
+    public static final String NO = "NO";
+
     public static final String DOCUMENT_SHOW_ALTER =
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER";
     public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =

@@ -41,6 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -62,7 +63,7 @@ public class MysqlProto {
     // randomString: data send by server in plug-in data field
     // user_name#HIGH@cluster_name
     private static boolean authenticate(ConnectContext context, byte[] scramble, byte[] randomString, String user) {
-        String usePasswd = scramble.length == 0 ? "NO" : "YES";
+        String usePasswd = scramble.length == 0 ? FeConstants.NO : FeConstants.YES;
 
         if (user == null || user.isEmpty()) {
             ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
