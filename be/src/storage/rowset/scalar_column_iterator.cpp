@@ -50,16 +50,9 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
 
     IndexReadOptions index_opts;
-<<<<<<< HEAD
-    index_opts.use_page_cache = !config::disable_storage_page_cache;
-    index_opts.kept_in_memory = false;
+    index_opts.use_page_cache = !opts.temporary_data && !config::disable_storage_page_cache;
+    index_opts.kept_in_memory = !opts.temporary_data;
     index_opts.skip_fill_data_cache = _skip_fill_data_cache();
-=======
-    index_opts.use_page_cache = !opts.temporary_data &&
-                                (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
-    index_opts.kept_in_memory = !opts.temporary_data && config::enable_ordinal_index_memory_page_cache;
-    index_opts.lake_io_opts = opts.lake_io_opts;
->>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
@@ -316,16 +309,9 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
         IndexReadOptions opts;
-<<<<<<< HEAD
-        opts.use_page_cache = !config::disable_storage_page_cache;
-        opts.kept_in_memory = false;
+        opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache;
+        opts.kept_in_memory = !_opts.temporary_data;
         opts.skip_fill_data_cache = _skip_fill_data_cache();
-=======
-        opts.use_page_cache = !_opts.temporary_data &&
-                              (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
-        opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
-        opts.lake_io_opts = _opts.lake_io_opts;
->>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,

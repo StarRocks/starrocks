@@ -71,13 +71,9 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
-<<<<<<< HEAD
     bool fill_data_cache = true;
-=======
     // temporary data does not allow caching
     bool temporary_data = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
->>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
