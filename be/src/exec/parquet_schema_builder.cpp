@@ -23,6 +23,7 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
+static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 
 Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
     if (node->is_group()) {
@@ -121,6 +122,11 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
         return get_parquet_type_from_map(node, type_desc);
     }
 
+    auto st = try_to_infer_struct_type(node, type_desc);
+    if (st.ok()) {
+        return Status::OK();
+    }
+
     // Treat unsupported types as VARCHAR.
     *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     return Status::OK();
@@ -213,6 +219,46 @@ static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, 
     RETURN_IF_ERROR(get_parquet_type(value_node, &value_type_desc));
 
     *type_desc = TypeDescriptor::create_map_type(key_type_desc, value_type_desc);
+
+    return Status::OK();
+}
+
+/*
+try to infer struct type from group node.
+
+parquet does not have struct type, there is no struct definition in parquet.
+try to infer like this.
+group <name> {
+    type field0;
+    type field1;
+    ...
+}
+*/
+static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
+    // 1st level.
+    // group name
+    DCHECK(node->is_group());
+
+    auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    int field_count = group_node->field_count();
+    if (field_count == 0) {
+        return Status::Unknown("unknown type");
+    }
+
+    // 2nd level.
+    // field
+    std::vector<std::string> field_names;
+    std::vector<TypeDescriptor> field_types;
+    field_names.reserve(field_count);
+    field_types.reserve(field_count);
+    for (auto i = 0; i < group_node->field_count(); ++i) {
+        const auto& field = group_node->field(i);
+        field_names.emplace_back(field->name());
+        auto& field_type_desc = field_types.emplace_back();
+        RETURN_IF_ERROR(get_parquet_type(field, &field_type_desc));
+    }
+
+    *type_desc = TypeDescriptor::create_struct_type(field_names, field_types);
 
     return Status::OK();
 }
