@@ -37,7 +37,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * <p>
  * Project                                  Join
  * |                                     /    \
  * Join               --->        LEFT_CHILD   Project
@@ -46,7 +45,9 @@ import java.util.stream.Collectors;
  * <p>
  * Conditionally push down Project under Join operator:
  * 1. For profitable expression: input is complex type, output is short primitive type
- * </p>
+ *
+ * TODO: in theory it should be determined by cost and cover more cases
+ *
  */
 public class PushDownProjectToJoinRule extends TransformationRule {
 

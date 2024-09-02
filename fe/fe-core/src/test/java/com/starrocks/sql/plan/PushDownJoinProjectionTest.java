@@ -45,6 +45,14 @@ public class PushDownJoinProjectionTest extends PlanTestBase {
                         "  |  <slot 9> : 1 + CAST(array_contains(6: v3, 123) AS SMALLINT)\n" +
                         "  |  \n" +
                         "  0:OlapScanNode");
+        starRocksAssert.query("select t0.v1, t0.v2, array_map(tarray.v3, x -> x + 1) " +
+                        "from t0 join tarray on(t0.v1 = tarray.v1) ")
+                .explainContains("  4:Project\n" +
+                        "  |  <slot 1> : 1: v1\n" +
+                        "  |  <slot 2> : 2: v2\n" +
+                        "  |  <slot 8> : array_map(<slot 7> -> <slot 7> + 1, 6: v3)\n" +
+                        "  |  \n" +
+                        "  3:HASH JOIN");
 
         // multiple table join
         starRocksAssert.query("select t0.v1, t0.v2, " +
