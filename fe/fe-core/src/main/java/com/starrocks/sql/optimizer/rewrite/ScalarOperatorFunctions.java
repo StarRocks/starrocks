@@ -1248,6 +1248,16 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
     }
 
+    @ConstantFunction(name = "lower", argTypes = {VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator lower(ConstantOperator str) {
+        return ConstantOperator.createVarchar(StringUtils.lowerCase(str.getVarchar()));
+    }
+
+    @ConstantFunction(name = "upper", argTypes = {VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator upper(ConstantOperator str) {
+        return ConstantOperator.createVarchar(StringUtils.upperCase(str.getVarchar()));
+    }
+
     @ConstantFunction(name = "replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator replace(ConstantOperator value, ConstantOperator target,
                                            ConstantOperator replacement) {
