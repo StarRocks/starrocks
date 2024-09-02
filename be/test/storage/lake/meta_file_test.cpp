@@ -340,16 +340,22 @@ TEST_F(MetaFileTest, test_dcg) {
         EXPECT_TRUE(pdcgs.size() == 1);
         auto idx = pdcgs[0]->get_column_idx(3);
         EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first));
         idx = pdcgs[0]->get_column_idx(4);
         EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first));
         idx = pdcgs[0]->get_column_idx(5);
         EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first));
         idx = pdcgs[0]->get_column_idx(6);
         EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first));
         idx = pdcgs[0]->get_column_idx(7);
         EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_file_by_idx("tmp", idx.first));
         idx = pdcgs[0]->get_column_idx(8);
         EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp", idx.first));
     }
     // 4. compact (conflict)
     {

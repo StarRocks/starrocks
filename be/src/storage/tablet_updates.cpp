@@ -5109,7 +5109,7 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
     for (const auto& dcg : ctx.dcgs) {
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first >= 0) {
-            std::string column_file = dcg->column_files(parent_name(ctx.segment->file_name()))[idx.first];
+            std::string column_file = dcg->column_file_by_idx(parent_name(ctx.segment->file_name(), idx.first));
             if (ctx.dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema));
                 ctx.dcg_segments[column_file] = dcg_segment;

@@ -67,6 +67,14 @@ public:
         return column_files;
     }
 
+    StatusOr<std::string> column_file_by_idx(const std::string& dir_path, uint32_t idx) const {
+        if (idx >= _column_files.size()) {
+            return Status::InvalidArgument(fmt::format("column_file_by_idx fail, path: {} column file cnt: {} idx: {}",
+                                                       dir_path, _column_files.size(), idx));
+        }
+        return dir_path + "/" + _column_files[idx];
+    }
+
     // TODO: rename
     std::vector<std::vector<ColumnUID>>& column_ids() { return _column_uids; }
     // TODO: rename
