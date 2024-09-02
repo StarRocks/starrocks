@@ -57,12 +57,12 @@ public class CreateReplicatedDatabaseJobTest {
                 database, true, true);
         dropJob.execute();
 
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getDb(database.getFullName()));
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(database.getFullName()));
 
         CreateReplicatedDatabaseJob createJob = new CreateReplicatedDatabaseJob(failoverGroup, database,
                 null, true);
         createJob.execute();
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getDb(database.getFullName()));
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(database.getFullName()));
     }
 }
