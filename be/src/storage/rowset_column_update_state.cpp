@@ -300,25 +300,23 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
     return Status::OK();
 }
 
-static int64_t calc_upt_memory_usage_per_row_column(Rowset* rowset) {
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
-    const int64_t total_update_col_cnt = txn_meta.partial_update_column_ids_size();
-    // `num_rows_upt` and `total_update_row_size` could be zero when upgrade from old version,
+int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(Rowset* rowset) {
+    // `num_rows_upt` could be zero after upgrade from old version,
     // then we will return zero and no limit.
-    if ((rowset->num_rows_upt() * total_update_col_cnt) <= 0) return 0;
-    return rowset->total_update_row_size() / (rowset->num_rows_upt() * total_update_col_cnt);
+    if ((rowset->num_rows_upt()) <= 0) return 0;
+    return rowset->total_update_row_size() / rowset->num_rows_upt();
 }
 
 // Read chunk from source segment file and call `update_func` to update it.
 // `update_func` accept ChunkUniquePtr and [start_rowid, end_rowid) range of this chunk.
-static Status read_from_source_segment_and_update(Rowset* rowset, const Schema& schema, Tablet* tablet,
-                                                  OlapReaderStatistics* stats, int64_t version,
-                                                  RowsetSegmentId rowset_seg_id, const std::string& path,
-                                                  const std::function<Status(StreamChunkContainer)>& update_func) {
+static Status read_from_source_segment_and_update(
+        Rowset* rowset, const Schema& schema, Tablet* tablet, OlapReaderStatistics* stats, int64_t version,
+        RowsetSegmentId rowset_seg_id, const std::string& path,
+        const std::function<Status(StreamChunkContainer, bool, int64_t)>& update_func) {
     CHECK_MEM_LIMIT("RowsetColumnUpdateState::read_from_source_segment");
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     // We need to estimate each update rows size before it has been actually updated.
-    const int64_t upt_memory_usage_per_row_column = calc_upt_memory_usage_per_row_column(rowset);
+    const int64_t upt_memory_usage_per_row = RowsetColumnUpdateState::calc_upt_memory_usage_per_row(rowset);
     auto segment = Segment::open(fs, FileInfo{path}, rowset_seg_id.segment_id, rowset->schema());
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
@@ -354,13 +352,16 @@ static Status read_from_source_segment_and_update(Rowset* rowset, const Schema& 
             source_chunk_ptr->append(*tmp_chunk_ptr);
             // Avoid too many memory usage and Column overflow, we will limit source chunk's size.
             if (source_chunk_ptr->num_rows() >= INT32_MAX ||
-                (int64_t)source_chunk_ptr->num_rows() * upt_memory_usage_per_row_column * (int64_t)schema.num_fields() >
+                (int64_t)source_chunk_ptr->num_rows() * upt_memory_usage_per_row >
                         config::partial_update_memory_limit_per_worker) {
+                // Because we will handle columns group by group (define by config::vertical_compaction_max_columns_per_group),
+                // so use `upt_memory_usage_per_row` to estimate source chunk future memory cost will be overvalued.
+                // But it's better to be overvalued than undervalued.
                 StreamChunkContainer container = {
                         .chunk_ptr = source_chunk_ptr.get(),
                         .start_rowid = start_rowid,
                         .end_rowid = start_rowid + static_cast<uint32_t>(source_chunk_ptr->num_rows())};
-                RETURN_IF_ERROR(update_func(container));
+                RETURN_IF_ERROR(update_func(container, true /*print log*/, upt_memory_usage_per_row));
                 start_rowid += static_cast<uint32_t>(source_chunk_ptr->num_rows());
                 source_chunk_ptr->reset();
             }
@@ -371,7 +372,7 @@ static Status read_from_source_segment_and_update(Rowset* rowset, const Schema& 
                 .chunk_ptr = source_chunk_ptr.get(),
                 .start_rowid = start_rowid,
                 .end_rowid = start_rowid + static_cast<uint32_t>(source_chunk_ptr->num_rows())};
-        RETURN_IF_ERROR(update_func(container));
+        RETURN_IF_ERROR(update_func(container, false /*print log*/, upt_memory_usage_per_row));
         start_rowid += static_cast<uint32_t>(source_chunk_ptr->num_rows());
         source_chunk_ptr->reset();
     }
@@ -759,10 +760,15 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
                     rowset->rowset_path(), rowsetid_segid.unique_rowset_id, rowsetid_segid.segment_id);
             RETURN_IF_ERROR(read_from_source_segment_and_update(
                     rowset, partial_schema, tablet, &stats, latest_applied_version.major_number(), rowsetid_segid,
-                    seg_path, [&](StreamChunkContainer container) {
-                        VLOG(2) << "RowsetColumnUpdateState read from source segment: [byte usage: "
-                                << container.chunk_ptr->bytes_usage() << " row cnt: " << container.chunk_ptr->num_rows()
-                                << "] row range : [" << container.start_rowid << ", " << container.end_rowid << ")";
+                    seg_path, [&](StreamChunkContainer container, bool print_log, int64_t upt_memory_usage_per_row) {
+                        if (print_log) {
+                            LOG(INFO) << "RowsetColumnUpdateState read from source segment: tablet id:"
+                                      << tablet->tablet_id() << " [byte usage: " << container.chunk_ptr->bytes_usage()
+                                      << " row cnt: " << container.chunk_ptr->num_rows() << "] row range : ["
+                                      << container.start_rowid << ", " << container.end_rowid
+                                      << ") upt_memory_usage_per_row : " << upt_memory_usage_per_row
+                                      << " update column cnt : " << update_column_ids.size();
+                        }
                         const size_t source_chunk_size = container.chunk_ptr->memory_usage();
                         tracker->consume(source_chunk_size);
                         DeferOp tracker_defer([&]() { tracker->release(source_chunk_size); });
