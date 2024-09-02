@@ -48,7 +48,19 @@ ScalarColumnIterator::~ScalarColumnIterator() = default;
 
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
+<<<<<<< HEAD
     RETURN_IF_ERROR(_reader->load_ordinal_index(_skip_fill_local_cache()));
+=======
+
+    IndexReadOptions index_opts;
+    index_opts.use_page_cache = !opts.temporary_data &&
+                                (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
+    index_opts.kept_in_memory = !opts.temporary_data && config::enable_ordinal_index_memory_page_cache;
+    index_opts.lake_io_opts = opts.lake_io_opts;
+    index_opts.read_file = _opts.read_file;
+    index_opts.stats = _opts.stats;
+    RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
@@ -301,8 +313,24 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
                                                         const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
+<<<<<<< HEAD
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
                                                  row_ranges, _skip_fill_local_cache()));
+=======
+        if (!_delete_partial_satisfied_pages.has_value()) {
+            _delete_partial_satisfied_pages.emplace();
+        }
+
+        IndexReadOptions opts;
+        opts.use_page_cache = !_opts.temporary_data &&
+                              (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
+        opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
+        opts.lake_io_opts = _opts.lake_io_opts;
+        opts.read_file = _opts.read_file;
+        opts.stats = _opts.stats;
+        RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages.value(),
+                                                 row_ranges, opts, pred_relation));
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }
@@ -312,9 +340,39 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                             SparseRange* row_ranges) {
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
+<<<<<<< HEAD
     bool support = false;
     for (const auto* pred : predicates) {
         support = support | pred->support_bloom_filter();
+=======
+
+    bool support_original_bloom_filter = false;
+    bool support_ngram_bloom_filter = false;
+    // bloom filter index can only be either original bloom filter or ngram bloom filter
+    if (_reader->has_original_bloom_filter_index()) {
+        support_original_bloom_filter =
+                std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_original_bloom_filter(); });
+    } else if (_reader->has_ngram_bloom_filter_index()) {
+        support_ngram_bloom_filter =
+                std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_ngram_bloom_filter(); });
+    }
+
+    if (!support_original_bloom_filter && !support_ngram_bloom_filter) {
+        return Status::OK();
+    }
+
+    IndexReadOptions opts;
+    opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache;
+    opts.kept_in_memory = false;
+    opts.lake_io_opts = _opts.lake_io_opts;
+    opts.read_file = _opts.read_file;
+    opts.stats = _opts.stats;
+    // filter data using bloom filter or ngram bloom filter
+    if (support_original_bloom_filter) {
+        RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, row_ranges, opts));
+    } else {
+        RETURN_IF_ERROR(_reader->ngram_bloom_filter(predicates, row_ranges, opts));
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
     }
     RETURN_IF(!support, Status::OK());
     RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, _skip_fill_local_cache()));

@@ -406,6 +406,120 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
             _opts.stats->raw_rows_read);
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
+    // iterate dcg from new ver to old ver
+    for (const auto& dcg : _dcgs) {
+        // cols file index -> column index in corresponding file
+        std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
+        if (idx.first >= 0) {
+            auto column_file = dcg->column_files(parent_name(_segment->file_name()))[idx.first];
+            if (_dcg_segments.count(column_file) == 0) {
+                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
+                _dcg_segments[column_file] = dcg_segment;
+            }
+            return _dcg_segments[column_file];
+        }
+    }
+    // the column not exist in delta column group
+    return nullptr;
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(const TabletColumn& column,
+                                                                                    std::string* filename,
+                                                                                    ColumnAccessPath* path) {
+    // build column iter from delta column group
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
+    if (dcg_segment != nullptr) {
+        if (filename != nullptr) {
+            *filename = dcg_segment->file_name();
+        }
+        return dcg_segment->new_column_iterator(column, path);
+    }
+    return nullptr;
+}
+
+void SegmentIterator::_init_column_access_paths() {
+    if (_opts.column_access_paths == nullptr || _opts.column_access_paths->empty()) {
+        return;
+    }
+
+    for (auto& column_access_path : *_opts.column_access_paths) {
+        auto* path = column_access_path.get();
+
+        if (path->is_from_predicate()) {
+            _predicate_column_access_paths[path->index()] = path;
+        } else {
+            _column_access_paths[path->index()] = path;
+        }
+    }
+}
+
+Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
+    ColumnIteratorOptions iter_opts;
+    iter_opts.stats = _opts.stats;
+    iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
+    iter_opts.check_dict_encoding = check_dict_enc;
+    iter_opts.reader_type = _opts.reader_type;
+    iter_opts.lake_io_opts = _opts.lake_io_opts;
+    iter_opts.has_preaggregation = _opts.has_preaggregation;
+
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                 .buffer_size = _opts.lake_io_opts.buffer_size};
+
+    ColumnAccessPath* access_path = nullptr;
+    if (_column_access_paths.find(cid) != _column_access_paths.end()) {
+        access_path = _column_access_paths[cid];
+    }
+
+    std::string dcg_filename;
+    if (ucid < 0) {
+        LOG(ERROR) << "invalid unique columnid in segment iterator, ucid: " << ucid
+                   << ", segment: " << _segment->file_name();
+    }
+    auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
+    const auto& col = tablet_schema->column(cid);
+    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, access_path));
+    if (col_iter == nullptr) {
+        // not found in delta column group, create normal column iterator
+        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
+        const auto encryption_info = _segment->encryption_info();
+        if (encryption_info) {
+            opts.encryption_info = *encryption_info;
+        }
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
+        if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
+            _segment->lake_tablet_manager() != nullptr) {
+            ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
+            auto shared_buffered_input_stream =
+                    std::make_unique<io::SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
+            auto options = io::SharedBufferedInputStream::CoalesceOptions{
+                    .max_dist_size = config::io_coalesce_read_max_distance_size,
+                    .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+            shared_buffered_input_stream->set_coalesce_options(options);
+            iter_opts.read_file = shared_buffered_input_stream.get();
+            iter_opts.is_io_coalesce = true;
+            _column_files[cid] = std::move(shared_buffered_input_stream);
+            _io_coalesce_column_index.emplace_back(cid);
+        } else {
+            iter_opts.read_file = rfile.get();
+            _column_files[cid] = std::move(rfile);
+        }
+    } else {
+        // create delta column iterator
+        // TODO io_coalesce
+        _column_iterators[cid] = std::move(col_iter);
+        ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
+        iter_opts.read_file = dcg_file.get();
+        _column_files[cid] = std::move(dcg_file);
+    }
+    RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
+    return Status::OK();
+}
+
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
@@ -1471,6 +1585,7 @@ Status SegmentIterator::_apply_bitmap_index() {
         if (bitmap_iter == nullptr) {
             continue;
         }
+<<<<<<< HEAD
         size_t cardinality = bitmap_iter->bitmap_nums();
         SparseRange selected(0, cardinality);
         bool has_is_null = false;
@@ -1497,6 +1612,33 @@ Status SegmentIterator::_apply_bitmap_index() {
             mul_selected *= selected.span_size();
             mul_cardinality *= cardinality;
         }
+=======
+
+        RETURN_IF_ERROR(
+                _bitmap_index_evaluator.init([&cid_2_ucid, this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+                    const ColumnUID ucid = cid_2_ucid[cid];
+                    // the column's index in this segment file
+                    ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+                    if (segment_ptr == nullptr) {
+                        // find segment from delta column group failed, using main segment
+                        segment_ptr = _segment;
+                    }
+
+                    IndexReadOptions opts;
+                    opts.use_page_cache = !_opts.temporary_data && (config::enable_bitmap_index_memory_page_cache ||
+                                                                    !config::disable_storage_page_cache);
+                    opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
+                    opts.lake_io_opts = _opts.lake_io_opts;
+                    opts.read_file = _column_files[cid].get();
+                    opts.stats = _opts.stats;
+
+                    BitmapIndexIterator* bitmap_iter = nullptr;
+                    RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+                    return bitmap_iter;
+                }));
+
+        RETURN_IF(!_bitmap_index_evaluator.has_bitmap_index(), Status::OK());
+>>>>>>> 1e10d20cf9 ([BugFix] Rewrite repair (#50330))
     }
 
     // ---------------------------------------------------------
