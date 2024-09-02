@@ -15,6 +15,8 @@
 #pragma once
 
 #include "common/status.h"
+#include "common/statusor.h"
+#include "fmt/format.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "storage/olap_common.h"

@@ -215,17 +215,17 @@ TEST(TestDeltaColumnGroup, testDeltaColumnGroupVerPBLoad) {
     ASSERT_TRUE(idx.first == 0);
     ASSERT_TRUE(idx.second == 1);
     ASSERT_TRUE("tmp/aaa.cols" == dcg.column_files("tmp")[idx.first]);
-    ASSERT_TRUE("tmp/aaa.cols" == dcg.column_file_by_idx("tmp", idx.first));
+    ASSERT_TRUE("tmp/aaa.cols" == dcg.column_file_by_idx("tmp", idx.first).value());
     idx = dcg.get_column_idx(5);
     ASSERT_TRUE(idx.first == 1);
     ASSERT_TRUE(idx.second == 0);
     ASSERT_TRUE("tmp/bbb.cols" == dcg.column_files("tmp")[idx.first]);
-    ASSERT_TRUE("tmp/bbb.cols" == dcg.column_file_by_idx("tmp", idx.first));
+    ASSERT_TRUE("tmp/bbb.cols" == dcg.column_file_by_idx("tmp", idx.first).value());
     idx = dcg.get_column_idx(8);
     ASSERT_TRUE(idx.first == 2);
     ASSERT_TRUE(idx.second == 1);
     ASSERT_TRUE("tmp/ccc.cols" == dcg.column_files("tmp")[idx.first]);
-    ASSERT_TRUE("tmp/ccc.cols" == dcg.column_file_by_idx("tmp", idx.first));
+    ASSERT_TRUE("tmp/ccc.cols" == dcg.column_file_by_idx("tmp", idx.first).value());
 
     // overflow
     ASSERT_FALSE(dcg.column_file_by_idx("tmp", 100).ok());
