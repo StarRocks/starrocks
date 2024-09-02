@@ -118,12 +118,6 @@ public class ReplicationMgr extends FrontendDaemon {
         return abortedJobs.values();
     }
 
-    public void clearFinishedJobs() {
-        committedJobs.clear();
-        abortedJobs.clear();
-        GlobalStateMgr.getServingState().getEditLog().logReplicationJob(null);
-    }
-
     public void cancelRunningJobs() {
         List<ReplicationJob> toRemovedJobs = Lists.newArrayList();
         for (ReplicationJob job : runningJobs.values()) {
@@ -161,28 +155,24 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void replayReplicationJob(ReplicationJob replicationJob) {
-        if (replicationJob == null) {
-            committedJobs.clear();
-            abortedJobs.clear();
-            return;
-        }
-
         if (replicationJob.getState().equals(ReplicationJobState.COMMITTED)) {
-            if (replicationJob.isExpired()) {
-                committedJobs.remove(replicationJob.getTableId());
-            } else {
-                committedJobs.put(replicationJob.getTableId(), replicationJob);
-                runningJobs.remove(replicationJob.getTableId());
-            }
+            committedJobs.put(replicationJob.getTableId(), replicationJob);
+            runningJobs.remove(replicationJob.getTableId());
         } else if (replicationJob.getState().equals(ReplicationJobState.ABORTED)) {
-            if (replicationJob.isExpired()) {
-                abortedJobs.remove(replicationJob.getTableId());
-            } else {
-                abortedJobs.put(replicationJob.getTableId(), replicationJob);
-                runningJobs.remove(replicationJob.getTableId());
-            }
+            abortedJobs.put(replicationJob.getTableId(), replicationJob);
+            runningJobs.remove(replicationJob.getTableId());
         } else {
             runningJobs.put(replicationJob.getTableId(), replicationJob);
+        }
+    }
+
+    public void replayDeleteReplicationJob(ReplicationJob replicationJob) {
+        if (replicationJob.getState().equals(ReplicationJobState.COMMITTED)) {
+            committedJobs.remove(replicationJob.getTableId());
+        } else if (replicationJob.getState().equals(ReplicationJobState.ABORTED)) {
+            abortedJobs.remove(replicationJob.getTableId());
+        } else {
+            runningJobs.remove(replicationJob.getTableId());
         }
     }
 
@@ -229,7 +219,7 @@ public class ReplicationMgr extends FrontendDaemon {
                 continue;
             }
 
-            GlobalStateMgr.getServingState().getEditLog().logReplicationJob(job);
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job);
             it.remove();
         }
 
@@ -239,7 +229,7 @@ public class ReplicationMgr extends FrontendDaemon {
                 continue;
             }
 
-            GlobalStateMgr.getServingState().getEditLog().logReplicationJob(job);
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job);
             it.remove();
         }
     }

@@ -178,7 +178,7 @@ public class ReplicationMgrTest {
         replicationMgr.runAfterCatalogReady();
         Assert.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
 
-        replicationMgr.replayReplicationJob(job);
+        replicationMgr.replayDeleteReplicationJob(job);
         Assert.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
 
         Config.history_job_keep_max_second = old;
@@ -196,9 +196,6 @@ public class ReplicationMgrTest {
 
         Assert.assertTrue(replicationMgr.getRunningJobs().isEmpty());
         Assert.assertFalse(replicationMgr.getAbortedJobs().isEmpty());
-
-        replicationMgr.clearFinishedJobs();
-        replicationMgr.replayReplicationJob(null);
     }
 
     @Test
@@ -224,7 +221,7 @@ public class ReplicationMgrTest {
         replicationMgr.runAfterCatalogReady();
         Assert.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
 
-        replicationMgr.replayReplicationJob(job);
+        replicationMgr.replayDeleteReplicationJob(job);
         Assert.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
 
         Config.history_job_keep_max_second = old;
