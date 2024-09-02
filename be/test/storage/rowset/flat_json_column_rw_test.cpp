@@ -100,7 +100,6 @@ protected:
             // close the file
             ASSERT_TRUE(wfile->close().ok());
         }
-        LOG(INFO) << "Finish writing";
 
         auto res = ColumnReader::create(_meta.get(), segment.get(), nullptr);
         ASSERT_TRUE(res.ok());

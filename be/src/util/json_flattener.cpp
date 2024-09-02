@@ -218,12 +218,8 @@ double estimate_filter_fpp(uint64_t element_nums) {
     return min_idx < 6 ? FILTER_TEST_FPP[min_idx] : -1;
 }
 
-std::pair<std::string_view, std::string_view> JsonFlatPath::_split_path(const std::string_view& path) {
+std::pair<std::string_view, std::string_view> JsonFlatPath::split_path(const std::string_view& path) {
     size_t pos = 0;
-    if (path.starts_with("\"")) {
-        pos = path.find('\"', 1);
-        DCHECK(pos != std::string::npos);
-    }
     pos = path.find('.', pos);
     std::string_view key;
     std::string_view next;
@@ -241,7 +237,7 @@ JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string_view& path, Js
     if (path.empty()) {
         return root;
     }
-    auto [key, next] = _split_path(path);
+    auto [key, next] = split_path(path);
     auto iter = root->children.find(key);
     JsonFlatPath* child_path = nullptr;
 
@@ -270,7 +266,7 @@ void JsonFlatPath::set_root(const std::string_view& new_root_path, JsonFlatPath*
         node->op = OP_ROOT;
         return;
     }
-    auto [key, next] = _split_path(new_root_path);
+    auto [key, next] = split_path(new_root_path);
 
     auto iter = node->children.begin();
     for (; iter != node->children.end(); iter++) {
@@ -515,8 +511,13 @@ void JsonPathDeriver::_finalize() {
         } else {
             update_stack.push_back(node);
             for (auto& [key, child] : node->children) {
-                if (!key.empty()) {
-                    // ignore empty key, it's invalid path in SQL
+                if (!key.empty() && key.find('.') == std::string::npos) {
+                    // ignore empty key/quote key, it's can't handle in SQL
+                    // why not support `.` in key?
+                    // FE will add `"`. e.g: `a.b` -> `"a.b"`, in binary `\"a.b\"`
+                    // but BE is hard to handle `"`, because vpackjson don't add escape for `"` and `\`
+                    // input string `a\"b` -> in binary `a\\\"b` -> vpack json binary `a\"b`
+                    // it's take us can't identify `"` and `\` corrently
                     stack.emplace_back(child.get(), path + "." + std::string(key));
                 } else {
                     node->remain = true;

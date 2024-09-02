@@ -96,8 +96,7 @@ public:
         return ss.str();
     }
 
-private:
-    static std::pair<std::string_view, std::string_view> _split_path(const std::string_view& path);
+    static std::pair<std::string_view, std::string_view> split_path(const std::string_view& path);
 };
 
 // to deriver json flanttern path

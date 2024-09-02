@@ -409,4 +409,32 @@ TEST_F(JsonFlattenerTest, testRemainFilter) {
     }
 }
 
+TEST_F(JsonFlattenerTest, testPointJson) {
+    // clang-format off
+    std::vector<std::string> jsons = {
+    R"( {"k1.k2.k3.k4": 1, "k2": 2} )",
+    R"( {"k1.k2.k3.k4": 3, "k2": 4} )"
+    };
+    // clang-format on
+
+    ColumnPtr input = JsonColumn::create();
+    JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    for (const auto& json : jsons) {
+        ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
+        json_input->append(&json_value);
+    }
+    JsonPathDeriver jf;
+    jf.derived({json_input});
+
+    auto& result = jf.flat_paths();
+    std::vector<std::string> paths = {"k2"};
+    EXPECT_EQ(true, jf.has_remain_json());
+    EXPECT_EQ(paths, result);
+
+    std::vector<LogicalType> types = {TYPE_BIGINT};
+    auto result_col = test_json(jsons, paths, types, false);
+    EXPECT_EQ("2", result_col[0]->debug_item(0));
+    EXPECT_EQ("4", result_col[0]->debug_item(1));
+}
+
 } // namespace starrocks
