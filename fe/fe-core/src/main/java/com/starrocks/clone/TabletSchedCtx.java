@@ -696,7 +696,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             } else if (replica.getLastSuccessVersion() > replica.getLastFailedVersion()) {
                 chosenReplica = replica;
                 break;
-            } else if (replica.getVersion() < chosen.getVersion()) {
+            } else if (replica.getVersion() < chosenReplica.getVersion()) {
                 // we should first repair the lower version replica
                 chosenReplica = replica;
             } else if (replica.getLastFailedVersion() < chosenReplica.getLastFailedVersion()) {
