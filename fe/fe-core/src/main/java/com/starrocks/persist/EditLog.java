@@ -1180,7 +1180,16 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_RECOVER_PARTITION_VERSION:
+=======
+                case OperationType.OP_DELETE_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
+                case OperationType.OP_RECOVER_PARTITION_VERSION: {
+>>>>>>> a88d3e4a29 ([Enhancement] Support show proc replications (#50483))
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
                     break;
@@ -1976,6 +1985,11 @@ public class EditLog {
     public void logReplicationJob(ReplicationJob replicationJob) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
         logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+    }
+
+    public void logDeleteReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
     }
 
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
