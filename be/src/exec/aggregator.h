@@ -400,6 +400,9 @@ public:
 
     bool is_streaming_all_states() const { return _streaming_all_states; }
 
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
+
     HashTableKeyAllocator _state_allocator;
 
 protected:

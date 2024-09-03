@@ -258,6 +258,7 @@ public:
     }
 
     ~AggFuncBasedValueAggregator() override {
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
         if (_state != nullptr) {
             _agg_func->destroy(_func_ctx, _state);
             std::free(_state);

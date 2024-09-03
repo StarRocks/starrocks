@@ -17,6 +17,7 @@
 #include "column/hash_set.h"
 #include "common/config.h"
 #include "runtime/memory/allocator.h"
+#include "runtime/memory/roaring_hook.h"
 
 namespace starrocks {
 
@@ -92,4 +93,20 @@ using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, Ha
 
 template <typename T>
 using VectorWithAggStateAllocator = std::vector<T, AggregateStateAllocator<T>>;
+
+// Thread local aggregate state allocator setter with roaring allocator
+class ThreadLocalStateAllocatorSetter {
+public:
+    ThreadLocalStateAllocatorSetter(Allocator* allocator)
+            : _agg_state_allocator_setter(allocator), _roaring_allocator_setter(allocator) {}
+    ~ThreadLocalStateAllocatorSetter() = default;
+
+private:
+    ThreadLocalAggregateStateAllocatorSetter _agg_state_allocator_setter;
+    ThreadLocalRoaringAllocatorSetter _roaring_allocator_setter;
+};
+
+#define SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalStateAllocatorSetter(allocator)
+
 } // namespace starrocks

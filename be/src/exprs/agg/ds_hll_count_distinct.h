@@ -20,11 +20,13 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "types/hll_sketch.h"
 
 namespace starrocks {
 
 struct HLLSketchState {
     std::unique_ptr<DataSketchesHll> hll_sketch = nullptr;
+    int64_t memory_usage = 0;
 };
 
 /**
@@ -101,10 +103,10 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         const BinaryColumn* hll_column = down_cast<const BinaryColumn*>(column);
-        DataSketchesHll hll(hll_column->get(row_num).get_slice());
+        DataSketchesHll hll(hll_column->get(row_num).get_slice(), &(this->data(state).memory_usage));
         if (UNLIKELY(this->data(state).hll_sketch == nullptr)) {
-            this->data(state).hll_sketch =
-                    std::make_unique<DataSketchesHll>(hll.get_lg_config_k(), hll.get_target_type());
+            this->data(state).hll_sketch = std::make_unique<DataSketchesHll>(
+                    hll.get_lg_config_k(), hll.get_target_type(), &(this->data(state).memory_usage));
         }
         int64_t prev_memory = this->data(state).hll_sketch->mem_usage();
         this->data(state).hll_sketch->merge(hll);
@@ -159,7 +161,8 @@ public:
         const Column** src_datas_ptr = src_datas.data();
         std::tie(log_k, tgt_type) = _parse_hll_sketch_args(ctx, src_datas_ptr);
         for (size_t i = 0; i < chunk_size; ++i) {
-            DataSketchesHll hll{log_k, tgt_type};
+            int64_t memory_usage = 0;
+            DataSketchesHll hll{log_k, tgt_type, &memory_usage};
             if constexpr (lt_is_string<LT>) {
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
@@ -201,7 +204,7 @@ private:
             uint8_t log_k;
             datasketches::target_hll_type tgt_type;
             std::tie(log_k, tgt_type) = _parse_hll_sketch_args(ctx, columns);
-            this->data(state).hll_sketch = _init_hll_sketch(log_k, tgt_type);
+            this->data(state).hll_sketch = _init_hll_sketch(log_k, tgt_type, &(this->data(state).memory_usage));
         }
     }
 
@@ -228,9 +231,9 @@ private:
     }
 
     // init hll sketch with default log_k and target type
-    std::unique_ptr<DataSketchesHll> _init_hll_sketch(
-            uint8_t log_k = DEFAULT_HLL_LOG_K, datasketches::target_hll_type tgt_type = datasketches::HLL_6) const {
-        return std::make_unique<DataSketchesHll>(log_k, tgt_type);
+    std::unique_ptr<DataSketchesHll> _init_hll_sketch(uint8_t log_k, datasketches::target_hll_type tgt_type,
+                                                      int64_t* memory_usage) const {
+        return std::make_unique<DataSketchesHll>(log_k, tgt_type, memory_usage);
     }
 };
 
