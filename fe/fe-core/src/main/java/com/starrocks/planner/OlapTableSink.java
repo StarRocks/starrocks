@@ -369,7 +369,7 @@ public class OlapTableSink extends DataSink {
                 tColumn.setColumn_name(column.getColumnId().getId());
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds());
                 columnsDesc.add(tColumn);
-                if (column.getDefaultExpr() != null) {
+                if (column.getDefaultExpr() != null && column.calculatedDefaultValue() != null) {
                     columnToExprValue.put(column.getColumnId().getId(), column.calculatedDefaultValue());
                 }
             }
