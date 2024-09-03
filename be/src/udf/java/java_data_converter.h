@@ -63,4 +63,9 @@ template <bool handle_null>
 jvalue cast_to_jvalue(PrimitiveType type, bool is_boxed, const Column* col, int row_num);
 void release_jvalue(bool is_boxed, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+Status check_type_matched(MethodTypeDescriptor method_type_desc, jobject val);
+} // namespace starrocks
+>>>>>>> f147df24a8 ([BugFix] add return type check in Java UDTF (#50615))
