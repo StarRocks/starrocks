@@ -100,7 +100,9 @@ Usage: $0 <options>
                         Turning this option on automatically disables ccache.
      --with-tenann
                         build with vector index tenann library
-
+     --with-compress-debug-symbol {ON|OFF}
+                        build with compressing debug symbol. (default: $WITH_COMPRESS)
+     -h,--help          Show this help message
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
@@ -115,8 +117,7 @@ Usage: $0 <options>
 
 OPTS=$(getopt \
   -n $0 \
-  -o '' \
-  -o 'h' \
+  -o 'hj:' \
   -l 'be' \
   -l 'fe' \
   -l 'spark-dpp' \
@@ -133,7 +134,7 @@ OPTS=$(getopt \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
   -l 'with-tenann' \
-  -o 'j:' \
+  -l 'with-compress-debug-symbol:' \
   -l 'help' \
   -- "$@")
 
@@ -246,6 +247,7 @@ else
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --with-tenann) WITH_TENANN=ON; shift ;;
+            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -266,30 +268,30 @@ if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${B
 fi
 
 echo "Get params:
-    BUILD_BE            -- $BUILD_BE
-    BE_CMAKE_TYPE       -- $BUILD_TYPE
-    BUILD_FE            -- $BUILD_FE
-    BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
-    BUILD_HIVE_UDF      -- $BUILD_HIVE_UDF
-    CCACHE              -- ${CCACHE}
-    CLEAN               -- $CLEAN
-    RUN_UT              -- $RUN_UT
-    WITH_GCOV           -- $WITH_GCOV
-    WITH_BENCH          -- $WITH_BENCH
-    WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
-    WITH_COMPRESS       -- $WITH_COMPRESS
-    WITH_STARCACHE      -- $WITH_STARCACHE
-    ENABLE_SHARED_DATA  -- $USE_STAROS
-    USE_AVX2            -- $USE_AVX2
-    USE_AVX512          -- $USE_AVX512
-    USE_SSE4_2          -- $USE_SSE4_2
-    JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
-    PARALLEL            -- $PARALLEL
-    ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
-    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
-    OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
-    WITH_TENANN   -- $WITH_TENANN
+    BUILD_BE                    -- $BUILD_BE
+    BE_CMAKE_TYPE               -- $BUILD_TYPE
+    BUILD_FE                    -- $BUILD_FE
+    BUILD_SPARK_DPP             -- $BUILD_SPARK_DPP
+    BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
+    CCACHE                      -- ${CCACHE}
+    CLEAN                       -- $CLEAN
+    RUN_UT                      -- $RUN_UT
+    WITH_GCOV                   -- $WITH_GCOV
+    WITH_BENCH                  -- $WITH_BENCH
+    WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
+    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+    WITH_STARCACHE              -- $WITH_STARCACHE
+    ENABLE_SHARED_DATA          -- $USE_STAROS
+    USE_AVX2                    -- $USE_AVX2
+    USE_AVX512                  -- $USE_AVX512
+    USE_SSE4_2                  -- $USE_SSE4_2
+    JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
+    PARALLEL                    -- $PARALLEL
+    ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
+    ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
+    WITH_TENANN                 -- $WITH_TENANN
 "
 
 check_tool()
