@@ -78,4 +78,12 @@ public class LazyConnector implements Connector {
         initIfNeeded();
         return delegate.getSamples();
     }
+
+    public String getRealConnectorClassName() {
+        if (delegate != null) {
+            return delegate.getClass().getSimpleName();
+        } else {
+            return LazyConnector.class.getSimpleName();
+        }
+    }
 }

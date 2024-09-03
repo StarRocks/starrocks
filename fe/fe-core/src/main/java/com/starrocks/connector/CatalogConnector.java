@@ -68,6 +68,10 @@ public class CatalogConnector implements Connector {
     }
 
     public String normalConnectorClassName() {
-        return normalConnector.getClass().getSimpleName();
+        if (normalConnector instanceof LazyConnector) {
+            return ((LazyConnector) normalConnector).getRealConnectorClassName();
+        } else {
+            return normalConnector.getClass().getSimpleName();
+        }
     }
 }

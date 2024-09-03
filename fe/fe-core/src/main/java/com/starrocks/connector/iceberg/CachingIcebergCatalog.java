@@ -450,17 +450,26 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .collect(Collectors.toList()),
                 partitionNames.size());
 
-        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFileCache.asMap().values()
-                .stream()
+        List<Object> dataFiles = dataFileCache.asMap().values()
+                .stream().flatMap(Set::stream)
                 .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList()),
-                dataFileCache.size());
+                .collect(Collectors.toList());
+        long dataFilesTotal = dataFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum();
+        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFiles, dataFilesTotal);
 
-        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFileCache.asMap().values()
-                .stream()
+        List<Object> deleteFiles = deleteFileCache.asMap().values()
+                .stream().flatMap(Set::stream)
                 .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList()),
-                deleteFileCache.size());
+                .collect(Collectors.toList());
+        long deleteFilesTotal = deleteFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum();
+        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
+
         return Lists.newArrayList(dbSamples, tableSamples, partitionSamples, dataFileSamples, deleteFileSamples);
     }
 
@@ -470,8 +479,14 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         counter.put("Database", databases.size());
         counter.put("Table", tables.size());
         counter.put("PartitionNames", partitionNames.size());
-        counter.put("ManifestOfDataFile", dataFileCache.size());
-        counter.put("ManifestOfDeleteFile", deleteFileCache.size());
+        counter.put("ManifestOfDataFile",  dataFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum());
+        counter.put("ManifestOfDeleteFile", deleteFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum());
         return counter;
     }
 }
