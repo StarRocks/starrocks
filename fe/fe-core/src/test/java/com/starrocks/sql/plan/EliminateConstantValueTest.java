@@ -40,7 +40,7 @@ public class EliminateConstantValueTest extends PlanTestBase {
             PlanTestBase.assertContains(plan, "  1:Project\n" +
                     "  |  <slot 1> : 1: L_ORDERKEY\n" +
                     "  |  <slot 2> : 2: L_PARTKEY\n" +
-                    "  |  <slot 19> : '2000-01-01'\n" +
+                    "  |  <slot 20> : '2000-01-01'\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partition");
@@ -66,7 +66,7 @@ public class EliminateConstantValueTest extends PlanTestBase {
                     "  |  <slot 15> : 15: L_SHIPMODE\n" +
                     "  |  <slot 16> : 16: L_COMMENT\n" +
                     "  |  <slot 17> : 17: PAD\n" +
-                    "  |  <slot 19> : '2000-01-01'\n" +
+                    "  |  <slot 20> : '2000-01-01'\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partitio");
@@ -82,7 +82,7 @@ public class EliminateConstantValueTest extends PlanTestBase {
             PlanTestBase.assertContains(plan, "  1:Project\n" +
                     "  |  <slot 1> : 1: L_ORDERKEY\n" +
                     "  |  <slot 2> : 2: L_PARTKEY\n" +
-                    "  |  <slot 19> : '2000-01-01'\n" +
+                    "  |  <slot 20> : '2000-01-01'\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partition");
@@ -96,12 +96,12 @@ public class EliminateConstantValueTest extends PlanTestBase {
             PlanTestBase.assertContains(plan, "  1:Project\n" +
                     "  |  <slot 1> : 1: L_ORDERKEY\n" +
                     "  |  <slot 2> : 2: L_PARTKEY\n" +
-                    "  |  <slot 19> : '2000-01-01'\n" +
+                    "  |  <slot 20> : '2000-01-01'\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partition\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 11: L_SHIPDATE = '2000-01-01', CAST(11: L_SHIPDATE AS DATETIME) IS NOT NULL");
+                    "     PREDICATES: 11: L_SHIPDATE = '2000-01-01'");
         }
 
         // join on multi columns
@@ -113,14 +113,13 @@ public class EliminateConstantValueTest extends PlanTestBase {
             PlanTestBase.assertContains(plan, "  1:Project\n" +
                     "  |  <slot 1> : 1: L_ORDERKEY\n" +
                     "  |  <slot 2> : 2: L_PARTKEY\n" +
-                    "  |  <slot 19> : '2000-01-01'\n" +
-                    "  |  <slot 20> : 'key1'\n" +
+                    "  |  <slot 21> : '2000-01-01'\n" +
+                    "  |  <slot 22> : 'key1'\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partition\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 11: L_SHIPDATE = '2000-01-01', CAST(2: L_PARTKEY AS VARCHAR(1048576)) = 'key1', " +
-                    "CAST(11: L_SHIPDATE AS DATETIME) IS NOT NULL, CAST(2: L_PARTKEY AS VARCHAR(1048576)) IS NOT NULL");
+                    "     PREDICATES: 11: L_SHIPDATE = '2000-01-01', CAST(2: L_PARTKEY AS VARCHAR(1048576)) = 'key1'");
         }
     }
 
@@ -188,7 +187,7 @@ public class EliminateConstantValueTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:Project\n" +
-                "  |    |  <slot 19> : '2000-01-01'\n" +
+                "  |    |  <slot 22> : 1\n" +
                 "  |    |  \n" +
                 "  |    2:UNION\n" +
                 "  |       constant exprs: \n" +
@@ -232,10 +231,10 @@ public class EliminateConstantValueTest extends PlanTestBase {
         String sql = "select * " +
                 "from (select '2000-01-01' as col) t2 left semi join lineitem_partition t1 on t1.L_SHIPDATE = t2.col";
         String plan = getFragmentPlan(sql);
-        PlanTestBase.assertContains(plan, "  5:HASH JOIN\n" +
-                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+        PlanTestBase.assertContains(plan, "4:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 21: cast = 20: cast");
+                "  |  other join predicates: 13: L_SHIPDATE = '2000-01-01'");
     }
 
     @Test
