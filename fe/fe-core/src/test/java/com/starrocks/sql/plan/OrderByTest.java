@@ -570,9 +570,6 @@ public class OrderByTest extends PlanTestBase {
 
         return list.stream();
     }
-<<<<<<< HEAD
-}
-=======
 
     private static Stream<Arguments> duplicateAliasSql() {
         List<Arguments> list = Lists.newArrayList();
@@ -605,4 +602,3 @@ public class OrderByTest extends PlanTestBase {
         return list.stream();
     }
 }
->>>>>>> 885c5009be ([BugFix] skip add the alias into fieldMapping when order by expr not referenced this alias (#50546))
