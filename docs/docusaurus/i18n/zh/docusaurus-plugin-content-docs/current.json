@@ -276,7 +276,7 @@
     "description": "The label for category Database in sidebar docs"
   },
   "sidebar.docs.category.Resource": {
-    "message": "资源组",
+    "message": "资源",
     "description": "The label for category Resource in sidebar docs"
   },
   "sidebar.docs.category.Table, bucket, partition, and index": {

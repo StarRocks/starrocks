@@ -164,6 +164,7 @@
                 },
                 "loading/StreamLoad",
                 "loading/hdfs_load",
+                "loading/cloud_storage_load",
                 {
                     "type": "category",
                     "label": "Load data from Apache Kafka",
