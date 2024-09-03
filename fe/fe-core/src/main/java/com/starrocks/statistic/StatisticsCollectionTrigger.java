@@ -151,6 +151,9 @@ public class StatisticsCollectionTrigger {
                     StatisticExecutor.overwritePartitionStatistics(
                             statsConnectCtx, db.getId(), table.getId(), sourcePartitionId, targetPartitionId);
                 }
+            } catch (Exception e) {
+                LOG.warn("overwrite partition stats failed table={} partitions={}",
+                        table.getId(), overwriteJobStats.getTargetPartitionIds(), e);
             }
         } else if (analyzeType != null) {
             // collect
