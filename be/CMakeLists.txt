@@ -786,6 +786,8 @@ endif()
 
 set(WL_START_GROUP "-Wl,--start-group")
 set(WL_END_GROUP "-Wl,--end-group")
+set(WL_LINK_STATIC "-Wl,-Bstatic")
+set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
@@ -965,7 +967,8 @@ else()
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    ${WL_LINK_STATIC} -lbfd
+    ${WL_LINK_DYNAMIC} -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
 )
 
 # link gcov if WITH_GCOV is on
