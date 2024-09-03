@@ -242,8 +242,8 @@ public class TabletSchedCtxTest {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID_2, replica1);
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID_2, replica2);
 
-        replica1.updateVersionInfo(100, 120, 100);
-        replica2.updateVersionInfo(101, 108, 101);
+        replica1.updateVersionInfo(101, 108, 101);
+        replica2.updateVersionInfo(100, 120, 100);
         replica1.setPathHash(Long.valueOf(100));
         replica2.setPathHash(Long.valueOf(101));
 
@@ -273,8 +273,16 @@ public class TabletSchedCtxTest {
         } catch (Exception e) {
             Assert.assertTrue(false);
         }
-        Assert.assertEquals(be1.getId(), ctx.getDestBackendId());
+        Assert.assertEquals(be2.getId(), ctx.getDestBackendId());
         
+        replica2.updateVersionInfo(101, 120, 101);
+        try {
+            ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+        Assert.assertEquals(be1.getId(), ctx.getDestBackendId());
+
     }
 
 }
