@@ -247,7 +247,7 @@ public class DDLStmtExecutor {
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.addFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
+                    db.addFunction(stmt.getFunction(), stmt.shouldReplaceIfExists(), stmt.createIfNotExists());
                 }
             });
             return null;

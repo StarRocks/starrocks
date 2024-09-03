@@ -1354,7 +1354,7 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
     ;
 inlineFunction
     : AS ATTACHMENT
