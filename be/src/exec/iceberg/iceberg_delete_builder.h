@@ -119,13 +119,10 @@ private:
 
 class IcebergDeleteBuilder {
 public:
-    IcebergDeleteBuilder(FileSystem* fs, std::string datafile_path, std::vector<ExprContext*> conjunct_ctxs,
-                         std::vector<SlotDescriptor*> materialize_slots, std::set<int64_t>* need_skip_rowids,
+    IcebergDeleteBuilder(FileSystem* fs, std::string datafile_path, std::set<int64_t>* need_skip_rowids,
                          const DataCacheOptions& datacache_options = DataCacheOptions())
             : _fs(fs),
               _datafile_path(std::move(datafile_path)),
-              _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _materialize_slots(std::move(materialize_slots)),
               _need_skip_rowids(need_skip_rowids),
               _datacache_options(datacache_options) {}
     ~IcebergDeleteBuilder() = default;
@@ -168,8 +165,6 @@ public:
 private:
     FileSystem* _fs;
     std::string _datafile_path;
-    std::vector<ExprContext*> _conjunct_ctxs;
-    std::vector<SlotDescriptor*> _materialize_slots;
     std::set<int64_t>* _need_skip_rowids;
     const DataCacheOptions _datacache_options;
 };
