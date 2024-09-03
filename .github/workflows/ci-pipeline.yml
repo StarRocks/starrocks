@@ -606,7 +606,7 @@ jobs:
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
       build_nece: ${{ steps.check-necessity.outputs.BUILD_NECE }}
     if: >
-      always() && needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure'
+      always() && needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure' && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success' || needs.test-checker.result == 'success')
     steps:
       - name: CLEAN
         run: |
