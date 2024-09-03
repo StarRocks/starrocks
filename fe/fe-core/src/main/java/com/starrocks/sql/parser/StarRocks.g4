@@ -2357,7 +2357,6 @@ informationFunctionExpression
     | name = DATABASE '(' ')'
     | name = SCHEMA '(' ')'
     | name = USER '(' ')'
-    | name = SESSION_USER '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE ('(' ')')?
     ;
