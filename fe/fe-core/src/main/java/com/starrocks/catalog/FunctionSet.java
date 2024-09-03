@@ -461,6 +461,9 @@ public class FunctionSet {
     public static final String MAP_FROM_ARRAYS = "map_from_arrays";
     public static final String MAP_KEYS = "map_keys";
     public static final String MAP_SIZE = "map_size";
+
+    public static final String MAP_AGG = "map_agg";
+
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
 
@@ -1093,6 +1096,9 @@ public class FunctionSet {
         // Percentile
         registerBuiltinPercentileAggFunction();
 
+        // map_agg
+        registerBuiltinMapAggFunction();
+
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
                 Lists.newArrayList(Type.HLL), Type.BIGINT, Type.HLL,
@@ -1320,6 +1326,28 @@ public class FunctionSet {
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+    }
+
+    private void registerBuiltinMapAggFunction() {
+        for (ScalarType keyType : Type.getNumericTypes()) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                        false, false, false));
+        }
+        for (ScalarType keyType : Type.STRING_TYPES) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                        false, false, false));
+        }
+
+        for (ScalarType keyType : Type.DATE_TYPES) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                        false, false, false));
+        }
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                Lists.newArrayList(Type.TIME, Type.ANY_ELEMENT), Type.ANY_MAP, null,
                 false, false, false));
     }
 
