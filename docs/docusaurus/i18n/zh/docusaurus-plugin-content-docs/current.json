@@ -80,7 +80,7 @@
     "description": "The label for category Data Lakes in sidebar docs"
   },
   "sidebar.docs.category.Catalog": {
-    "message": "Catalog",
+    "message": "数据目录",
     "description": "The label for category Catalog in sidebar docs"
   },
   "sidebar.docs.category.Data cache": {
