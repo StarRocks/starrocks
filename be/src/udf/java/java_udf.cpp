@@ -417,10 +417,6 @@ Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
     return {buffer->data(), buffer->length()};
 }
 
-Slice JVMFunctionHelper::sliceVal(jstring jstr) {
-    return {_env->GetStringUTFChars(jstr, nullptr)};
-}
-
 std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {
     std::string jni_class_name;
     auto inserter = std::inserter(jni_class_name, jni_class_name.end());

@@ -63,4 +63,5 @@ template <bool handle_null>
 jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num);
 void release_jvalue(bool is_boxed, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
+Status check_type_matched(MethodTypeDescriptor method_type_desc, jobject val);
 } // namespace starrocks
