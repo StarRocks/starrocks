@@ -1034,6 +1034,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
             } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
                 defaultValueDef = ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
+            } else if (defaultDescContext.CURRENT_DATE() != null) {
+                defaultValueDef = ColumnDef.DefaultValueDef.CURRENT_DATE_VALUE;
             } else if (defaultDescContext.qualifiedName() != null) {
                 String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
                 defaultValueDef = new ColumnDef.DefaultValueDef(true,
