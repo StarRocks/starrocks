@@ -1557,7 +1557,6 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
             t_slot_ref.tuple_id = 0;
             right_leaf_node.__set_slot_ref(t_slot_ref);
 
-
             TExprNode right_literal = create_int_literal_node(TPrimitiveType::SMALLINT, 1);
 
             nodes.emplace_back(right_eq);
@@ -1579,7 +1578,7 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
     EXPECT_EQ("leaf-0 = (column(id=2) = 1), leaf-1 = (column(id=3) = 1), expr = (or leaf-0 leaf-1)",
-        scanner->_orc_reader->get_search_argument_string());
+              scanner->_orc_reader->get_search_argument_string());
 
     ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
