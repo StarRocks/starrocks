@@ -299,7 +299,7 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starrocks-bdb-je</artifactId>
-                <version>18.3.18</version>
+                <version>18.3.19</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
