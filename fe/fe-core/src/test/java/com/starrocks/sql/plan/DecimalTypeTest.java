@@ -275,4 +275,15 @@ public class DecimalTypeTest extends PlanTestBase {
         assertContains(plan, "1:Project\n" +
                 "  |  <slot 16> : CAST(1: c_0_0 AS DOUBLE) < CAST('1969-12-10 23:46:53' AS DOUBLE)");
     }
+
+    @Test
+    public void testSameValueDiffTypeDecimal() throws Exception {
+        String sql = "SELECT t1a,\n" +
+                "    sum(t1f * 1.00000000000) / NULLIF(sum(t1c), 0) AS aaaa,\n" +
+                "    sum(t1f * 1.000) / NULLIF(sum(t1d * 1.000), 0) * 1000 AS bbbb\n" +
+                " FROM test_all_type \n" +
+                " GROUP BY t1a;\n ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 11> : 6: t1f * 1.0\n");
+    }
 }
