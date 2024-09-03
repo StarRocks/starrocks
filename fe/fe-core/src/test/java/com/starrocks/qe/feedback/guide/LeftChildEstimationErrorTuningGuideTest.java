@@ -66,6 +66,9 @@ class LeftChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBase
         Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
         Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("lineitem".equals(((PhysicalOlapScanOperator) newLeftChild.inputAt(0).getOp()).getTable().getName()));
-        Assert.assertTrue("supplier".equals(((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));    }
+        Assert.assertTrue("lineitem".equals(
+                ((PhysicalOlapScanOperator) newLeftChild.inputAt(0).getOp()).getTable().getName()));
+        Assert.assertTrue("supplier".equals(
+                ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
+    }
 }

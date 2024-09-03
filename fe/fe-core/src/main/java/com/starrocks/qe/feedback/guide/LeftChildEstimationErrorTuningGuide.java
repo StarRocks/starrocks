@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 import java.util.Optional;

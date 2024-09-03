@@ -25,7 +25,6 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 

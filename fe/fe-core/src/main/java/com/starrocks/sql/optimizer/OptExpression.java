@@ -61,9 +61,6 @@ public class OptExpression {
     // the actual output property of this expression
     private PhysicalPropertySet outputProperty;
 
-    // the flag if its parent has required data distribution property for this expression
-    private boolean existRequiredDistribution = true;
-
     private UKFKConstraints constraints;
 
     private Boolean isShortCircuit = false;
@@ -240,14 +237,6 @@ public class OptExpression {
 
     public void setShortCircuit(Boolean shortCircuit) {
         isShortCircuit = shortCircuit;
-    }
-
-    public boolean isExistRequiredDistribution() {
-        return existRequiredDistribution;
-    }
-
-    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
-        this.existRequiredDistribution = existRequiredDistribution;
     }
 
     @Override
