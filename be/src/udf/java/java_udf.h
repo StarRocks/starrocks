@@ -176,7 +176,6 @@ private:
     jobject _utf8_charsets;
 
     jclass _udf_helper_class;
-    jmethodID _equals;
     jmethodID _create_boxed_array;
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
