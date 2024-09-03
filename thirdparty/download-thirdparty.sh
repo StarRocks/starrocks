@@ -298,6 +298,7 @@ echo "Finished patching $LZ4_SOURCE"
 cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
     patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
+    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -407,10 +408,14 @@ if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; 
     patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.2.5-for-starrocks-static-link.patch
     touch $PATCHED_MARK
     echo "Finished patching $MARIADB_SOURCE"
-else
-    echo "$MARIADB_SOURCE not patched"
+fi
+if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.4" ]; then
+    patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.1.4-gcc14.patch
+    touch $PATCHED_MARK
+    echo "Finished patching $MARIADB_SOURCE"
 fi
 
+# patch aws-sdk-cpp
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
 if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
@@ -418,7 +423,6 @@ if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
         touch prefetch_crt_dep_ok
     fi
 fi
-
 
 # patch jemalloc_hook
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
@@ -463,6 +467,7 @@ cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
 if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
     patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
     cp $TP_PATCH_DIR/avro-1.10.2.c.findjansson.patch $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c/Findjansson.cmake
+    patch -p1 < $TP_PATCH_DIR/avro-1.10.2.c.gcc14.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -481,6 +486,7 @@ cd -
 cd $TP_SOURCE_DIR/$SASL_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
     patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
+    patch -p1 < $TP_PATCH_DIR/sasl2-gcc14.patch
     touch $PATCHED_MARK
 fi
 echo "Finished patching $SASL_SOURCE"
@@ -537,4 +543,16 @@ if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $POCO_SOURCE"
+fi
+
+# patch breakpad
+
+if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2022.07.02" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.02.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $BREAK_PAD_SOURCE"
 fi
