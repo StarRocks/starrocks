@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -47,6 +48,10 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
         }
     }
 
+    public SkeletonBuilder(Map<Integer, NodeExecStats> nodeExecStatsMap) {
+        this.nodeExecStatsMap = nodeExecStatsMap;
+    }
+
     public Pair<SkeletonNode, Map<Integer, SkeletonNode>> buildSkeleton(OptExpression root) {
         SkeletonNode skeletonRoot = root.getOp().accept(this, root, null);
         return Pair.create(skeletonRoot, skeletonNodeMap);
@@ -65,6 +70,15 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
         int planNodeId = optExpression.getOp().getPlanNodeId();
         SkeletonNode node = new SkeletonNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
         visitChildren(node, optExpression.getInputs());
+        fillNodeId(optExpression.getOp(), node);
+        skeletonNodeMap.putIfAbsent(planNodeId, node);
+        return node;
+    }
+
+    @Override
+    public SkeletonNode visitPhysicalScan(OptExpression optExpression, SkeletonNode parent) {
+        int planNodeId = optExpression.getOp().getPlanNodeId();
+        ScanNode node = new ScanNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
         fillNodeId(optExpression.getOp(), node);
         skeletonNodeMap.putIfAbsent(planNodeId, node);
         return node;

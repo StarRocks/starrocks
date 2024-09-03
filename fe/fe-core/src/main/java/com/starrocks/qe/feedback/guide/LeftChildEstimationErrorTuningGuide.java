@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -56,6 +57,10 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
         return "Advice: Adjust the distribution join execution type and join plan to improve the performance.";
     }
 
+
+    // The runtime filter may help reduce a lot of rows in left child which makes the pull rows of left child
+    // is far less than the statistics estimated rows. So here we just change the broadcast join to shuffle
+    // join when the right child output rows is larger than BROADCAST_THRESHOLD.
     @Override
     public Optional<OptExpression> applyImpl(OptExpression optExpression) {
         if (optExpression.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
@@ -63,27 +68,15 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
         }
 
         PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
-        SkeletonNode leftChildNode = joinNode.getChild(0);
         SkeletonNode rightChildNode = joinNode.getChild(1);
 
-        NodeExecStats leftNodeExecStats = leftChildNode.getNodeExecStats();
         NodeExecStats rightNodeExecStats = rightChildNode.getNodeExecStats();
-
-        Statistics leftStats = leftChildNode.getStatistics();
-        Statistics rightStats = rightChildNode.getStatistics();
-
-        double leftSize =
-                (leftNodeExecStats.getPullRows() + leftNodeExecStats.getRfFilterRows()) * leftStats.getAvgRowSize();
-        double rightSize = rightNodeExecStats.getPullRows() * rightStats.getAvgRowSize();
 
         OptExpression leftChild = optExpression.getInputs().get(0);
         OptExpression rightChild = optExpression.getInputs().get(1);
 
         JoinHelper originalHelper = JoinHelper.of(joinOperator, leftChild.getRowOutputInfo().getOutputColumnRefSet(),
                 rightChild.getRowOutputInfo().getOutputColumnRefSet());
-        JoinHelper commuteJoinHelper =
-                JoinHelper.of(joinOperator, rightChild.getRowOutputInfo().getOutputColumnRefSet(),
-                        leftChild.getRowOutputInfo().getOutputColumnRefSet());
 
         if (type == EstimationErrorType.LEFT_INPUT_OVERESTIMATED) {
             if (optExpression.isExistRequiredDistribution()) {
@@ -91,8 +84,8 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
             }
             if (isBroadcastJoin(rightChild) && rightNodeExecStats.getPullRows() >= BROADCAST_THRESHOLD) {
                 if (!originalHelper.onlyBroadcast()) {
-                    // original plan: small table inner join large table(broadcast)
-                    // rewrite to: small table(shuffle) inner large small table(shuffle)
+                    // original plan: large table inner join large table(broadcast)
+                    // rewrite to: large table(shuffle) inner large table(shuffle)
                     PhysicalDistributionOperator leftExchangeOp = new PhysicalDistributionOperator(
                             DistributionSpec.createHashDistributionSpec(
                                     new HashDistributionDesc(originalHelper.getLeftCols(),
@@ -104,11 +97,13 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
                                             HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
                     OptExpression newLeftChild = OptExpression.builder().with(leftChild)
                             .setOp(leftExchangeOp)
+                            .setRequiredProperties(List.of(PhysicalPropertySet.EMPTY))
                             .setInputs(List.of(leftChild))
                             .build();
 
                     OptExpression newRightChild = OptExpression.builder().with(rightChild)
                             .setOp(rightExchangeOp)
+                            .setRequiredProperties(List.of(PhysicalPropertySet.EMPTY))
                             .setInputs(rightChild.getInputs())
                             .build();
 

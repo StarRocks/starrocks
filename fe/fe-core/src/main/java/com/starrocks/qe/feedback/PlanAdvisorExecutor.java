@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
 
 import java.util.List;
+import java.util.UUID;
 
 public class PlanAdvisorExecutor {
 
@@ -89,7 +90,7 @@ public class PlanAdvisorExecutor {
 
         @Override
         public ShowResultSet visitDelPlanAdvisorStatement(DelPlanAdvisorStmt stmt, ConnectContext context) {
-            PlanTuningAdvisor.getInstance().deleteTuningGuides(stmt.getAdvisorId());
+            PlanTuningAdvisor.getInstance().deleteTuningGuides(UUID.fromString(stmt.getAdvisorId()));
             return null;
         }
 

@@ -53,7 +53,13 @@ public class ApplyTuningGuideRule implements TreeRewriteRule {
         SkeletonBuilder builder = new SkeletonBuilder();
         Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = builder.buildSkeleton(root);
         OperatorTuningGuides tuningGuides = PlanTuningAdvisor.getInstance().getTuningGuides(sql, pair.first);
-        if (tuningGuides == null || !tuningGuides.isUseful()) {
+        if (tuningGuides == null) {
+            return root;
+        }
+
+        // delete the useless tuning guides
+        if (!tuningGuides.isUseful()) {
+            PlanTuningAdvisor.getInstance().deleteTuningGuides(tuningGuides.getOriginalQueryId());
             return root;
         }
 

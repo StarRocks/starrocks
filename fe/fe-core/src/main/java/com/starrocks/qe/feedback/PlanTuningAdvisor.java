@@ -34,7 +34,7 @@ public class PlanTuningAdvisor {
     private final Map<UUID, OperatorTuningGuides.OptimizedRecord> optimizedQueryRecords;
     private PlanTuningAdvisor() {
         this.cache = Caffeine.newBuilder()
-                .maximumSize(1000)
+                .maximumSize(300)
                 .build();
         this.optimizedQueryRecords = Maps.newConcurrentMap();
     }
@@ -76,15 +76,15 @@ public class PlanTuningAdvisor {
         optimizedQueryRecords.clear();
     }
 
-    public void deleteTuningGuides(String queryId) {
-        UUID uuid = UUID.fromString(queryId);
+
+
+    public void deleteTuningGuides(UUID queryId) {
         for (Map.Entry<PlanTuningCacheKey, OperatorTuningGuides> entry : cache.asMap().entrySet()) {
-            if (entry.getValue().getOriginalQueryId().equals(uuid)) {
+            if (entry.getValue().getOriginalQueryId().equals(queryId)) {
                 cache.invalidate(entry.getKey());
             }
         }
-        optimizedQueryRecords.remove(uuid);
-
+        optimizedQueryRecords.remove(queryId);
     }
 
     public long getAdvisorSize() {

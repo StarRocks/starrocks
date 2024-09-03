@@ -305,6 +305,7 @@ public class OptExpression {
             optExpression.groupExpression = other.groupExpression;
             optExpression.requiredProperties = other.requiredProperties;
             optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            optExpression.outputProperty = other.outputProperty;
             return this;
         }
 

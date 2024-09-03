@@ -24,6 +24,7 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
@@ -36,6 +37,10 @@ import static com.starrocks.qe.feedback.guide.JoinTuningGuide.EstimationErrorTyp
 public class JoinTuningAnalyzer implements PlanTuningAnalyzer.Analyzer {
 
     private static final JoinTuningAnalyzer INSTANCE = new JoinTuningAnalyzer();
+
+    private static final long UNDERESTIMATED_FACTOR = 10000;
+
+    private static final long LARGE_TABLE_ROWS_THRESHOLD = 10000000;
 
     public static JoinTuningAnalyzer getInstance() {
         return INSTANCE;
@@ -68,8 +73,11 @@ public class JoinTuningAnalyzer implements PlanTuningAnalyzer.Analyzer {
         }
 
         @Override
-        public Void visitPhysicalJoin(OptExpression optExpression, Void context) {
-            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
+        public Void visitPhysicalHashJoin(OptExpression optExpression, Void context) {
+            PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+            if (!joinOperator.getJoinHint().isEmpty()) {
+                return null;
+            }
             SkeletonNode skeletonNode = skeletonNodeMap.get(joinOperator.getPlanNodeId());
             Preconditions.checkState(skeletonNode != null && skeletonNode instanceof JoinNode);
             Preconditions.checkState(skeletonNode.getChildren().size() == 2);
@@ -81,14 +89,14 @@ public class JoinTuningAnalyzer implements PlanTuningAnalyzer.Analyzer {
             Statistics leftStats = optExpression.getInputs().get(0).getStatistics();
             Statistics rightStats = optExpression.getInputs().get(1).getStatistics();
 
-            if (rightExecStats.getPullRows() > rightStats.getOutputRowCount() * 10000) {
+            if (rightExecStats.getPullRows() > rightStats.getOutputRowCount() * UNDERESTIMATED_FACTOR) {
                 tuningGuides.addTuningGuide(joinNode.getNodeId(),
                         new RightChildEstimationErrorTuningGuide(joinNode, RIGHT_INPUT_UNDERESTIMATED));
-            } else if (rightStats.getOutputRowCount() > rightExecStats.getPullRows() * 10000) {
+            } else if (rightStats.getOutputRowCount() > rightExecStats.getPullRows() * UNDERESTIMATED_FACTOR) {
                 tuningGuides.addTuningGuide(joinNode.getNodeId(),
                         new RightChildEstimationErrorTuningGuide(joinNode, RIGHT_INPUT_OVERESTIMATED));
-            } else if (rightExecStats.getPullRows() > 10000000 &&
-                    leftStats.getOutputRowCount() > leftExecStats.getPullRows() * 10000) {
+            } else if (rightExecStats.getPullRows() > LARGE_TABLE_ROWS_THRESHOLD &&
+                    leftStats.getOutputRowCount() > leftExecStats.getPullRows() * UNDERESTIMATED_FACTOR) {
                 tuningGuides.addTuningGuide(joinNode.getNodeId(),
                         new LeftChildEstimationErrorTuningGuide(joinNode, LEFT_INPUT_OVERESTIMATED));
             }
