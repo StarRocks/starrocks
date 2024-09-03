@@ -719,18 +719,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         Map<String, ColumnRefOperator> colNameMap = Maps.newHashMap();
-        colRefToColumnMetaMap.entrySet().stream()
-                .forEach(e -> colNameMap.put(e.getValue().getName(), e.getKey()));
-        List<ColumnRefOperator> partitionCols = Lists.newArrayList();
-        for (String partitionColName : olapTable.getPartitionColumnNames()) {
-            if (!colNameMap.containsKey(partitionColName)) {
-                return;
-            }
-            partitionCols.add(colNameMap.get(partitionColName));
-        }
+        colRefToColumnMetaMap.entrySet().stream().forEach(e -> colNameMap.put(e.getValue().getName(), e.getKey()));
+        // It might contain null value, if some partition columns are not referenced in the scan
+        List<ColumnRefOperator> partitionCols =
+                olapTable.getPartitionColumnNames().stream()
+                        .map(colNameMap::get)
+                        .collect(Collectors.toList());
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof RangePartitionInfo) {
-            if (partitionCols.size() != 1) {
+            if (partitionCols.size() != 1 || partitionCols.stream().anyMatch(Objects::isNull)) {
                 return;
             }
             if (optimizerContext.getDumpInfo() != null) {
@@ -778,15 +775,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             for (int i = 0; i < partitionCols.size(); i++) {
+                ColumnRefOperator columnRef = partitionCols.get(i);
+                // For multi-column list partition, pruning on any column should adjust the statistics
+                if (columnRef == null) {
+                    continue;
+                }
                 if (optimizerContext.getDumpInfo() != null) {
                     optimizerContext.getDumpInfo().addTableStatistics(olapTable,
                             partitionCols.get(i).getName(),
                             builder.getColumnStatistics(partitionCols.get(i)));
                 }
                 long ndv = extractDistinctPartitionValues(listPartitionInfo, selectedPartitionId, i);
-                ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(partitionCols.get(i)))
+                ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(columnRef))
                         .setDistinctValuesCount(ndv).build();
-                builder.addColumnStatistic(partitionCols.get(i), columnStatistic);
+                builder.addColumnStatistic(columnRef, columnStatistic);
             }
         }
     }
