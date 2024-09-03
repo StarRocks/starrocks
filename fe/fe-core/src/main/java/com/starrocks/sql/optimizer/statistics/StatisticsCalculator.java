@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -189,6 +190,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         this.expressionContext = expressionContext;
         this.columnRefFactory = columnRefFactory;
         this.optimizerContext = optimizerContext;
+    }
+
+    @VisibleForTesting
+    public StatisticsCalculator() {
+        this.expressionContext = null;
+        this.columnRefFactory = null;
+        this.optimizerContext = null;
     }
 
     public void estimatorStats() {
@@ -1679,10 +1687,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     // avoid use partition cols filter rows twice
-    private ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
+    @VisibleForTesting
+    public ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
                                                     OptimizerContext optimizerContext) {
-        boolean isTableTypeSupported =
-                operator instanceof LogicalIcebergScanOperator ||
+        boolean isTableTypeSupported = operator instanceof LogicalIcebergScanOperator ||
                         isOlapScanListPartitionTable(operator);
         if (isTableTypeSupported && !optimizerContext.isObtainedFromInternalStatistics()) {
             LogicalScanOperator scanOperator = operator.cast();

@@ -222,12 +222,13 @@ public class ListPartitionPruner implements PartitionPruner {
     }
 
     /**
+     * TODO: support more cases
      * Only some simple conjuncts can be pruned
      */
     public static boolean canPruneWithConjunct(ScalarOperator conjunct) {
         if (conjunct instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator bop = conjunct.cast();
-            return bop.getBinaryType().isEqualOrRange() && bop.getChild(1).isConstantRef();
+            return bop.getBinaryType().isEqualOrRange() && evaluateConstant(bop.getChild(1)) != null;
         } else if (conjunct instanceof InPredicateOperator) {
             InPredicateOperator inOp = conjunct.cast();
             return !inOp.isNotIn() && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant);

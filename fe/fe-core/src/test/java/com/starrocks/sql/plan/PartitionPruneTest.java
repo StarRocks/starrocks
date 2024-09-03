@@ -16,7 +16,15 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -200,6 +208,39 @@ public class PartitionPruneTest extends PlanTestBase {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=0/4");
+    }
+
+    private static Pair<ScalarOperator, LogicalScanOperator> buildConjunctAndScan(String sql) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        ExecPlan execPlan = pair.second;
+        LogicalScanOperator scanOperator =
+                (LogicalScanOperator) execPlan.getLogicalPlan().getRoot().inputAt(0).inputAt(0).inputAt(0).getOp();
+        ScalarOperator predicate = execPlan.getPhysicalPlan().getOp().getPredicate();
+        return Pair.create(predicate, scanOperator);
+    }
+
+    private void testRemovePredicate(String sql, String expected) throws Exception {
+        Pair<ScalarOperator, LogicalScanOperator> pair = buildConjunctAndScan(sql);
+        StatisticsCalculator calculator = new StatisticsCalculator();
+        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
+        ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, context);
+        Assert.assertEquals(expected, newPredicate.toString());
+    }
+
+    @Test
+    public void testGeneratedColumnPrune_RemovePredicate() throws Exception {
+        testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' ", "true");
+        testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' and c2 > 100", "true");
+        testRemovePredicate("select * from t_gen_col where c1 >= '2024-01-01'  and c1 <= '2024-01-03' " +
+                "and c2 > 100", "true");
+        testRemovePredicate("select * from t_gen_col where c2 in (1, 2,3)", "true");
+        testRemovePredicate("select * from t_gen_col where c2 = cast('123' as int)", "true");
+
+        // can not be removed
+        testRemovePredicate("select * from t_gen_col where c1 = random() and c2 > 100",
+                "cast(1: c1 as double) = random(1)");
+        testRemovePredicate("select * from t_gen_col where c2 + 100 > c1 + 1",
+                "cast(add(2: c2, 100) as double) > add(cast(1: c1 as double), 1)");
     }
 
     @Test
