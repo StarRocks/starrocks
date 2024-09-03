@@ -48,7 +48,7 @@ public class SecurityPolicyAnalyzer {
         @Override
         public Void visitCreatePolicyStatement(CreatePolicyStmt stmt, ConnectContext session) {
             PolicyName policyName = stmt.getPolicyName();
-            FeNameFormat.checkColumnName(policyName.getName());
+            FeNameFormat.checkTableName(policyName.getName());
             normalizationPolicyName(session, policyName);
             analyzePolicyBody(session, stmt.getPolicyType(), stmt.getExpression(),
                     stmt.getArgTypeDefs(), stmt.getReturnType().getType(), stmt.getArgNames());
@@ -69,7 +69,7 @@ public class SecurityPolicyAnalyzer {
 
             if (stmt.getAlterPolicyClause() instanceof AlterPolicyStmt.PolicyRename) {
                 AlterPolicyStmt.PolicyRename policyRename = (AlterPolicyStmt.PolicyRename) stmt.getAlterPolicyClause();
-                FeNameFormat.checkColumnName(policyRename.getNewPolicyName());
+                FeNameFormat.checkTableName(policyRename.getNewPolicyName());
             } else if (stmt.getAlterPolicyClause() instanceof AlterPolicyStmt.PolicySetBody) {
                 AlterPolicyStmt.PolicySetBody policySetBody = (AlterPolicyStmt.PolicySetBody) stmt.getAlterPolicyClause();
 
