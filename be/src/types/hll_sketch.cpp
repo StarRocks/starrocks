@@ -18,7 +18,6 @@
 #include "types/hll_sketch.h"
 
 #include "common/logging.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/string_value.h"
 

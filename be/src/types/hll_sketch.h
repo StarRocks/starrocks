@@ -17,20 +17,13 @@
 
 #pragma once
 
-#include <cmath>
-#include <cstdio>
 #include <memory>
 #include <string>
-#include <vector>
 
-#include "common/compiler_util.h"
-#include "common/logging.h"
 #include "datasketches/hll.hpp"
-#include "gutil/macros.h"
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "types/constexpr.h"
 
 namespace starrocks {
 
@@ -117,11 +110,19 @@ public:
     uint64_t serialize_size() const;
 
     // common interface
-    void clear() { _sketch_union->reset(); }
+    void clear() {
+        if (_sketch_union != nullptr) {
+            _sketch_union->reset();
+            _is_changed = true; // Mark as changed after reset
+        }
+    }
 
     // get hll_sketch object which is lazy initialized
     hll_sketch_type* get_hll_sketch() const {
         if (_is_changed) {
+            if (_sketch_union == nullptr) {
+                return nullptr;
+            }
             _sketch = std::make_unique<hll_sketch_type>(_sketch_union->get_result(_tgt_type));
             _is_changed = false;
         }
