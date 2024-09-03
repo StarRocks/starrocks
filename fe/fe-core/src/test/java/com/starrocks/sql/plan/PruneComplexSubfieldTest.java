@@ -841,10 +841,48 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "          B AS (SELECT 'a' as event_key, map { 'x' :1 } as props ) \n" +
                 "SELECT * FROM A JOIN B ON A.event_key = B.event_key WHERE props [property_key] = 1;";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, " 6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: expr = 5: expr\n" +
                 "  |  other join predicates: 6: expr[3: expr] = 1");
+=======
+        assertContains(plan, " 7:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:Project\n" +
+                "  |  <slot 2> : 'a'\n" +
+                "  |  <slot 3> : 'x'\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 5> : 'a'\n" +
+                "  |  <slot 6> : map{'x':1}\n" +
+                "  |  \n" +
+                "  4:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  3:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL");
+>>>>>>> 8921afdbd5 ([Enhancement] eliminate unnecessary project (#49724))
     }
 }

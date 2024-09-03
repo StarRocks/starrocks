@@ -82,6 +82,7 @@ import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
+import com.starrocks.sql.optimizer.rule.tree.InlineCteProjectPruneRule;
 import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
 import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -777,6 +778,7 @@ public class Optimizer {
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         // Put before ScalarOperatorsReuseRule
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+        result = new InlineCteProjectPruneRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates
