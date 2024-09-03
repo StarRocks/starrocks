@@ -3151,7 +3151,7 @@ public class Config extends ConfigBase {
     // backuped table is colocated
     @ConfField(mutable = true)
     public static boolean enable_colocate_restore = false;
-    
+
     @ConfField
     public static boolean enable_alter_struct_column = true;
 
@@ -3168,4 +3168,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static double partition_hash_join_min_cardinality_rate = 0.3;
+
+    @ConfField(mutable = true)
+    public static long slow_query_analyze_threshold = 5000;
 }

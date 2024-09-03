@@ -1275,7 +1275,7 @@ public class StmtExecutor {
         if (usedTuningGuides != null) {
             usedTuningGuides.addOptimizedRecord(context.getQueryId(), elapseMs);
             PlanTuningAdvisor.getInstance().removeOptimizedQueryRecord(context.getQueryId());
-        } else if (sessionVariable.isEnablePlanAnalyzer() || elapseMs > Config.qe_slow_log_ms) {
+        } else if (sessionVariable.isEnablePlanAnalyzer() || elapseMs > Config.slow_query_analyze_threshold) {
             try (Timer ignored = Tracers.watchScope(Tracers.Module.OPTIMIZER, "AnalyzeExecStats")) {
                 SkeletonBuilder builder = new SkeletonBuilder(statisticsForAuditLog.getNodeExecStatsItems());
                 Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = builder.buildSkeleton(execPlan.getPhysicalPlan());
