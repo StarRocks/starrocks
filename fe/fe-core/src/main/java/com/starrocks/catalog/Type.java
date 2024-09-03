@@ -1097,6 +1097,8 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isStringType() && to.isBitmapType()) {
             return true;
+        } else if (from.isArrayType() && to.isStringType()) {
+            return true;
         } else if (from.isScalarType() && to.isScalarType()) {
             return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {

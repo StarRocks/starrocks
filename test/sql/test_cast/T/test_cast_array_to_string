@@ -1,0 +1,4 @@
+-- name: test_cast_array_to_string
+select cast([] as string);
+select cast([1, 2, 3] as string);
+select cast(cast([[[1,2],[]],[[1,2]],[]] as string);

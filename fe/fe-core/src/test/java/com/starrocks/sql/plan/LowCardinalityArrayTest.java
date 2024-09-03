@@ -730,4 +730,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<ARRAY<VARCHAR(65533)>>)\n" +
                 "  |  limit: 1"));
     }
+
+    @Test
+    public void testCastArrayToString() throws Exception {
+        String sql = "select cast( S_ADDRESS as string) from supplier_nullable";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 9> : CAST(3: S_ADDRESS AS VARCHAR(65533))\n"));
+    }
 }
