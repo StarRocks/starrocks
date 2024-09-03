@@ -54,6 +54,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -229,7 +230,7 @@ public class InsertOverwriteJobRunner {
             OlapTable targetTable;
             targetTable = checkAndGetTable(db, tableId);
             List<String> sourcePartitionNames = Lists.newArrayList();
-            for (Long id : job.getSourcePartitionIds()) {
+            for (Long partitionId : job.getSourcePartitionIds()) {
                 Partition partition = targetTable.getPartition(partitionId);
                 if (partition == null) {
                     throw new DmlException("partition id:%s does not exist in table id:%s", partitionId, tableId);
@@ -446,20 +447,16 @@ public class InsertOverwriteJobRunner {
             tmpTargetTable = targetTable;
             List<String> sourcePartitionNames = job.getSourcePartitionNames();
             if (sourcePartitionNames == null || sourcePartitionNames.isEmpty()) {
-                sourcePartitionNames = job.getSourcePartitionIds().stream()
-                        .map(partitionId -> {
-                            Partition partition = targetTable.getPartition(partitionId);
-                            if (partition == null) {
-                                throw new DmlException("Partition id:%s does not exist in table id:%s", partitionId, tableId);
-                            }
-                            return partition.getName();
-                        })
-                        .collect(Collectors.toList());
+                sourcePartitionNames = new ArrayList<>();
+                for (Long partitionId : job.getSourcePartitionIds()) {
+                    Partition partition = targetTable.getPartition(partitionId);
+                    if (partition == null) {
+                        throw new DmlException("Partition id:%s does not exist in table id:%s", partitionId, tableId);
+                    } else {
+                        sourcePartitionNames.add(partition.getName());
+                    }
+                }
             }
-
-            List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
-                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
-                    .collect(Collectors.toList());
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
@@ -557,5 +554,9 @@ public class InsertOverwriteJobRunner {
         }
         Preconditions.checkState(table instanceof OlapTable);
         return (OlapTable) table;
+    }
+
+    public void testDoCommit(boolean isReplay) {
+        doCommit(isReplay);
     }
 }
