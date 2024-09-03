@@ -30,8 +30,9 @@ alter table t0 modify column v1 set masking policy mp;
 alter table t0 modify column v2 set masking policy mp using (v2);
 -- result:
 -- !result
- explain select * from t0;
+explain select * from t0;
 -- result:
+EXECUTE IN FE
 PLAN FRAGMENT 0
  OUTPUT EXPRS:4: expr | 5: expr | 3: v3
   PARTITION: UNPARTITIONED
@@ -46,8 +47,9 @@ alter table t0 modify column v1 unset masking policy;
 alter table t0 modify column v2 unset masking policy;
 -- result:
 -- !result
- explain select * from t0;
+explain select * from t0;
 -- result:
+EXECUTE IN FE
 PLAN FRAGMENT 0
  OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3
   PARTITION: UNPARTITIONED
@@ -78,8 +80,9 @@ PROPERTIES (
 alter table t1 modify column a set masking policy mp2 using (a, b, c);
 -- result:
 -- !result
- explain select * from t1;
+explain select * from t1;
 -- result:
+EXECUTE IN FE
 PLAN FRAGMENT 0
  OUTPUT EXPRS:4: if | 2: b | 3: c
   PARTITION: UNPARTITIONED
@@ -88,8 +91,9 @@ PLAN FRAGMENT 0
 
   0:EMPTYSET
 -- !result
- explain select * from t1 t;
+explain select * from t1 t;
 -- result:
+EXECUTE IN FE
 PLAN FRAGMENT 0
  OUTPUT EXPRS:4: if | 2: b | 3: c
   PARTITION: UNPARTITIONED
@@ -98,8 +102,9 @@ PLAN FRAGMENT 0
 
   0:EMPTYSET
 -- !result
- explain select t1.a from t1;
+explain select t1.a from t1;
 -- result:
+EXECUTE IN FE
 PLAN FRAGMENT 0
  OUTPUT EXPRS:4: if
   PARTITION: UNPARTITIONED
@@ -108,8 +113,9 @@ PLAN FRAGMENT 0
 
   0:EMPTYSET
 -- !result
- explain select t.a from t1 t;
+explain select t.a from t1 t;
 -- result:
+EXECUTE IN FE
 PLAN FRAGMENT 0
  OUTPUT EXPRS:4: if
   PARTITION: UNPARTITIONED
@@ -121,8 +127,9 @@ PLAN FRAGMENT 0
 alter table t1 modify column a unset masking policy;
 -- result:
 -- !result
- explain select * from t1;
+explain select * from t1;
 -- result:
+EXECUTE IN FE
 PLAN FRAGMENT 0
  OUTPUT EXPRS:1: a | 2: b | 3: c
   PARTITION: UNPARTITIONED
