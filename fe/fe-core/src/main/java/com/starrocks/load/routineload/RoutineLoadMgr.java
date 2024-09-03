@@ -93,10 +93,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
+    private Map<Long, Set<Long>> nodeToJobs = Maps.newHashMap();
     private ReentrantLock slotLock = new ReentrantLock();
-
-    // warehouse ==> {nodeId : {jobId}}
-    private Map<Long, Map<Long, Set<Long>>> warehouseNodeToJobs = Maps.newHashMap();
 
     // routine load job meta
     private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
@@ -121,92 +119,54 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public RoutineLoadMgr() {
-<<<<<<< HEAD
-    }
-
-    // returns -1 if there is no available be
-    public long takeBeTaskSlot() {
-=======
-        warehouseNodeTasksNum.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, Maps.newHashMap());
-        warehouseNodeToJobs.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, Maps.newHashMap());
     }
 
     // returns -1 if there is no available be
     // find the node with the fewest tasks
-    public long takeBeTaskSlot(long warehouseId, long jobId) {
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+    public long takeBeTaskSlot(long jobId) {
         slotLock.lock();
         try {
-            long beId = -1L;
+            long nodeId = -1L;
             int minTasksNum = Integer.MAX_VALUE;
-<<<<<<< HEAD
+            // find the node with the fewest tasks and does not contain the job
             for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
                 if (entry.getValue() < Config.max_routine_load_task_num_per_be
-                        && entry.getValue() < minTasksNum) {
-                    beId = entry.getKey();
+                        && entry.getValue() < minTasksNum
+                        && (nodeToJobs.get(entry.getKey()) == null
+                        || !nodeToJobs.get(entry.getKey()).contains(jobId))) {
+                    nodeId = entry.getKey();
                     minTasksNum = entry.getValue();
-=======
-            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
-            Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouseId);
-            if (nodeMap != null && nodeToJobs != null) {
-                // find the node with the fewest tasks and does not contain the job
-                for (Map.Entry<Long, Integer> entry : nodeMap.entrySet()) {
+                }
+            }
+            // if there is no available be, find the node with the fewest tasks
+            if (nodeId == -1) {
+                for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
                     if (entry.getValue() < Config.max_routine_load_task_num_per_be
-                            && entry.getValue() < minTasksNum
-                            && (nodeToJobs.get(entry.getKey()) == null
-                            || !nodeToJobs.get(entry.getKey()).contains(jobId))) {
+                            && entry.getValue() < minTasksNum) {
                         nodeId = entry.getKey();
                         minTasksNum = entry.getValue();
                     }
                 }
-                // if there is no available be, find the node with the fewest tasks
-                if (nodeId == -1) {
-                    for (Map.Entry<Long, Integer> entry : nodeMap.entrySet()) {
-                        if (entry.getValue() < Config.max_routine_load_task_num_per_be
-                                && entry.getValue() < minTasksNum) {
-                            nodeId = entry.getKey();
-                            minTasksNum = entry.getValue();
-                        }
-                    }
-                }
-                if (nodeId != -1) {
-                    nodeMap.put(nodeId, minTasksNum + 1);
-                    nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet()).add(jobId);
-                    warehouseNodeTasksNum.put(warehouseId, nodeMap);
-                    warehouseNodeToJobs.put(warehouseId, nodeToJobs);
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
-                }
             }
-            if (beId != -1) {
-                beTasksNum.put(beId, minTasksNum + 1);
+            if (nodeId != -1) {
+                beTasksNum.put(nodeId, minTasksNum + 1);
+                nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet()).add(jobId);
             }
-            return beId;
+            return nodeId;
         } finally {
             slotLock.unlock();
         }
     }
 
-<<<<<<< HEAD
-    public long takeBeTaskSlot(long beId) {
+    public long takeNodeById(long jobId, long nodeId) {
         slotLock.lock();
         try {
-            Integer taskNum = beTasksNum.get(beId);
-            if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
-                beTasksNum.put(beId, taskNum + 1);
-                return beId;
-=======
-    public long takeNodeById(long warehouseId, long jobId, long nodeId) {
-        slotLock.lock();
-        try {
-            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
-            Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouseId);
-            Integer taskNum = nodeMap.get(nodeId);
+            Integer taskNum = beTasksNum.get(nodeId);
             Set<Long> jobs = nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet());
             if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
-                nodeMap.put(nodeId, taskNum + 1);
+                beTasksNum.put(nodeId, taskNum + 1);
                 jobs.add(jobId);
                 return nodeId;
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
             } else {
                 return -1L;
             }
@@ -215,21 +175,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-<<<<<<< HEAD
-    public void releaseBeTaskSlot(long beId) {
+    public void releaseBeTaskSlot(long jobId, long nodeId) {
         slotLock.lock();
         try {
-            if (beTasksNum.containsKey(beId)) {
-                int tasksNum = beTasksNum.get(beId);
-=======
-    public void releaseBeTaskSlot(long warehouseId, long jobId, long nodeId) {
-        slotLock.lock();
-        try {
-            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
-            Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouseId);
-            if (nodeMap.containsKey(nodeId)) {
-                int tasksNum = nodeMap.get(nodeId);
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+            if (beTasksNum.containsKey(nodeId)) {
+                int tasksNum = beTasksNum.get(nodeId);
                 if (tasksNum > 0) {
                     beTasksNum.put(beId, tasksNum - 1);
                 } else {
@@ -251,7 +201,6 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             List<Long> aliveNodeIds = new ArrayList<>();
             // TODO: need to refactor after be split into cn + dn
             if (RunMode.isSharedDataMode()) {
-<<<<<<< HEAD
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                 for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                     ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
@@ -267,65 +216,14 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             for (Long nodeId : aliveNodeIds) {
                 if (!beTasksNum.containsKey(nodeId)) {
                     beTasksNum.put(nodeId, 0);
-=======
-                for (Warehouse warehouse : GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()) {
-                    List<Long> allComputeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getAllComputeNodeIds(warehouse.getId());
-                    List<Long> aliveNodeIds = new ArrayList<>();
-                    for (long nodeId : allComputeNodeIds) {
-                        ComputeNode node =
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-                        if (node != null && node.isAlive()) {
-                            aliveNodeIds.add(nodeId);
-                        }
-                    }
-
-                    finalAliveNodeIds.addAll(aliveNodeIds);
-
-                    // add new nodes
-                    Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(warehouse.getId());
-                    if (nodesInfo == null) {
-                        nodesInfo = new HashMap<>();
-                        warehouseNodeTasksNum.put(warehouse.getId(), nodesInfo);
-                    }
-                    Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouse.getId());
-                    if (nodeToJobs == null) {
-                        nodeToJobs = new HashMap<>();
-                        warehouseNodeToJobs.put(warehouse.getId(), nodeToJobs);
-                    }
-                    for (Long nodeId : aliveNodeIds) {
-                        if (!nodesInfo.containsKey(nodeId)) {
-                            nodesInfo.put(nodeId, 0);
-                            nodeToJobs.put(nodeId, Sets.newHashSet());
-                        }
-                    }
-                }
-            } else {
-                finalAliveNodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true));
-                // add new nodes
-                for (Long nodeId : finalAliveNodeIds) {
-                    Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-                    Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-                    if (!nodesInfo.containsKey(nodeId)) {
-                        nodesInfo.put(nodeId, 0);
-                        nodeToJobs.put(nodeId, Sets.newHashSet());
-                    }
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+                    nodeToJobs.put(nodeId, Sets.newHashSet());
                 }
             }
 
             // remove not alive be
-<<<<<<< HEAD
             List<Long> finalAliveNodeIds = aliveNodeIds;
             beTasksNum.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
-=======
-            for (Map<Long, Integer> nodesInfo : warehouseNodeTasksNum.values()) {
-                nodesInfo.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
-            }
-            for (Map<Long, Set<Long>> nodeToJobs : warehouseNodeToJobs.values()) {
-                nodeToJobs.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
-            }
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+            nodeToJobs.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
         } finally {
             slotLock.unlock();
         }

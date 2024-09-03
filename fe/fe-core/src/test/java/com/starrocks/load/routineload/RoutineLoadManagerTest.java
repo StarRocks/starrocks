@@ -319,11 +319,7 @@ public class RoutineLoadManagerTest {
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
-<<<<<<< HEAD
-        routineLoadManager.takeBeTaskSlot();
-=======
-        routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+        routineLoadManager.takeBeTaskSlot(1L);
 
         Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
@@ -351,13 +347,8 @@ public class RoutineLoadManagerTest {
         routineLoadManager.updateBeTaskSlot();
 
         // take tow slots
-<<<<<<< HEAD
-        long beId1 = routineLoadManager.takeBeTaskSlot();
-        long beId2 = routineLoadManager.takeBeTaskSlot();
-=======
-        long beId1 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
-        long beId2 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L);
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+        long beId1 = routineLoadManager.takeBeTaskSlot(1L);
+        long beId2 = routineLoadManager.takeBeTaskSlot(2L);
         Assert.assertTrue(beId1 != beId2);
         Assert.assertTrue(beId1 != -1L);
         Assert.assertTrue(beId2 != -1L);
@@ -365,36 +356,21 @@ public class RoutineLoadManagerTest {
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-<<<<<<< HEAD
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot() > 0));
-=======
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 3L) > 0));
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(3L) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
-<<<<<<< HEAD
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot());
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L));
-=======
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 4L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L, 5L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L, 6L));
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(4L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(5L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(6L));
 
         // release all slots
         ExecutorService es2 = Executors.newCachedThreadPool();
         for (int i = 0; i < Config.max_routine_load_task_num_per_be; i++) {
             es2.submit(() -> {
-<<<<<<< HEAD
-                routineLoadManager.releaseBeTaskSlot(1L);
-                routineLoadManager.releaseBeTaskSlot(2L);
-=======
-                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L, 1L);
-                routineLoadManager.releaseBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L, 2L);
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+                routineLoadManager.releaseBeTaskSlot(1L, 1L);
+                routineLoadManager.releaseBeTaskSlot(2L, 2L);
             });
         }
         es2.shutdown();

@@ -684,12 +684,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             unprotectRenewTask(System.currentTimeMillis() + taskSchedIntervalS * 1000,
                                     routineLoadTaskInfo);
                     GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-<<<<<<< HEAD
-                            .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
-=======
-                            .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
-                                    routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+                            .releaseBeTaskSlot(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                     GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newTask);
                     LOG.warn(
                             "routine load task [job name {}, task id {}] timeout, remove old task and generate new one",
@@ -1071,13 +1066,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
             }
             RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(timeToExecuteMs, routineLoadTaskInfo);
-<<<<<<< HEAD
-            GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
-=======
             GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
-                    releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
-                            routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+                    releaseBeTaskSlot(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
             GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
         } finally {
             writeUnlock();
@@ -1216,12 +1206,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
                 newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr, true);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-<<<<<<< HEAD
-                        .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
-=======
-                        .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
-                                routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+                        .releaseBeTaskSlot(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                 GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
                 LOG.warn(
                         "routine load task [job name {}, task id {}] aborted because of {}, remove old task and generate new one",
@@ -1363,12 +1348,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private void clearTasks() {
         for (RoutineLoadTaskInfo task : routineLoadTaskInfoList) {
             if (task.getBeId() != RoutineLoadTaskInfo.INVALID_BE_ID) {
-<<<<<<< HEAD
-                GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(task.getBeId());
-=======
-                GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
-                        releaseBeTaskSlot(task.getWarehouseId(), task.getJobId(), task.getBeId());
->>>>>>> 5c35b9707b ([Enhancement] Optimize routine load task schedule strategy, the distribution of nodes is as even as possible in scenarios with large differences in task scale. (#49542))
+                GlobalStateMgr.getCurrentState().getRoutineLoadMgr().releaseBeTaskSlot(task.getJobId(), task.getBeId());
             }
         }
         routineLoadTaskInfoList.clear();
