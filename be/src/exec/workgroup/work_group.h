@@ -23,7 +23,7 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "pipeline_executors_manager.h"
+#include "pipeline_executor_set_manager.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/priority_thread_pool.hpp"
@@ -197,14 +197,14 @@ public:
     void incr_cpu_runtime_ns(int64_t delta_ns) { _cpu_runtime_ns += delta_ns; }
     int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
 
-    void set_executors(PipelineExecutors* executors) { _executors = executors; }
-    void set_dedicated_executors(std::unique_ptr<PipelineExecutors> executors) {
+    void set_executors(PipelineExecutorSet* executors) { _executors = executors; }
+    void set_dedicated_executors(std::unique_ptr<PipelineExecutorSet> executors) {
         _dedicated_executors = std::move(executors);
         _executors = _dedicated_executors.get();
     }
 
-    PipelineExecutors* dedicated_executors() const { return _dedicated_executors.get(); }
-    PipelineExecutors* executors() const { return _executors; }
+    PipelineExecutorSet* dedicated_executors() const { return _dedicated_executors.get(); }
+    PipelineExecutorSet* executors() const { return _executors; }
 
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_MV_WG_ID = 1;
@@ -260,15 +260,15 @@ private:
     /// other threads including Source and Sink threads.
     std::atomic<int64_t> _cpu_runtime_ns = 0;
 
-    std::unique_ptr<PipelineExecutors> _dedicated_executors;
-    PipelineExecutors* _executors = nullptr;
+    std::unique_ptr<PipelineExecutorSet> _dedicated_executors;
+    PipelineExecutorSet* _executors = nullptr;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
 // pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
 public:
-    explicit WorkGroupManager(PipelineExecutorsConfig executors_manager_conf);
+    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf);
 
     ~WorkGroupManager();
 
@@ -294,7 +294,7 @@ public:
     void update_metrics();
 
     bool should_yield(const WorkGroup* wg) const;
-    PipelineExecutors* shared_executors() const { return _executors_manager.shared_executors(); }
+    PipelineExecutorSet* shared_executors() const { return _executors_manager.shared_executors(); }
     void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);

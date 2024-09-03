@@ -16,24 +16,24 @@
 
 #include <cstdint>
 
-#include "exec/workgroup/pipeline_executors.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/cpu_util.h"
 
 namespace starrocks::workgroup {
 
-/// Manage all PipelineExecutors and CPU resource allocation.
+/// Manage all PipelineExecutorSet and CPU resource allocation.
 ///
-/// There are two types of PipelineExecutors:
-/// - exclusive_executors: PipelineExecutors dedicated to a workgroup (workgroup with exclusive_cpu_cores > 0).
-/// - shared_executors: PipelineExecutors shared by other workgroups (workgroup with exclusive_cpu_cores <= 0).
-/// PipelineExecutors owner:
+/// There are two types of PipelineExecutorSet:
+/// - exclusive_executors: PipelineExecutorSet dedicated to a workgroup (workgroup with exclusive_cpu_cores > 0).
+/// - shared_executors: PipelineExecutorSet shared by other workgroups (workgroup with exclusive_cpu_cores <= 0).
+/// PipelineExecutorSet owner:
 /// - dedicated_executors: owned by workgroup.
 /// - shared_executors: owned by WorkGroupManager.
-/// The timing of creating and starting PipelineExecutors:
+/// The timing of creating and starting PipelineExecutorSet:
 /// - dedicated_executors: when creating or updating workgroup.
 /// - shared_executors: when starting BE process.
-/// The timing of stopping PipelineExecutors:
+/// The timing of stopping PipelineExecutorSet:
 /// - dedicated_executors: when workgroup destructs.
 /// - shared_executors: when closing BE process.
 ///
@@ -41,24 +41,24 @@ namespace starrocks::workgroup {
 /// All the methods need to be protected by the `WorkGroupManager::_mutex` outside by callers.
 class ExecutorsManager {
 public:
-    ExecutorsManager(WorkGroupManager* parent, PipelineExecutorsConfig conf);
+    ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf);
 
     void close() const;
 
     Status start_shared_executors();
     void update_shared_executors() const;
-    PipelineExecutors* shared_executors() const { return _shared_executors.get(); }
+    PipelineExecutorSet* shared_executors() const { return _shared_executors.get(); }
 
     void assign_cpuids_to_workgroup(WorkGroup* wg);
     void reclaim_cpuids_from_worgroup(WorkGroup* wg);
     const CpuUtil::CpuIds& get_cpuids_of_workgroup(WorkGroup* wg) const;
 
-    PipelineExecutors* create_and_assign_executors(WorkGroup* wg) const;
+    PipelineExecutorSet* create_and_assign_executors(WorkGroup* wg) const;
 
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
 
-    using ExecutorsConsumer = std::function<void(PipelineExecutors&)>;
+    using ExecutorsConsumer = std::function<void(PipelineExecutorSet&)>;
     void for_each_executors(const ExecutorsConsumer& consumer) const;
 
     /// Whether the task running on the borrowed CPU should yield the CPU, that is,
@@ -69,9 +69,9 @@ private:
     static constexpr WorkGroup* COMMON_WORKGROUP = nullptr;
 
     WorkGroupManager* const _parent;
-    PipelineExecutorsConfig _conf;
+    PipelineExecutorSetConfig _conf;
     std::unordered_map<WorkGroup*, CpuUtil::CpuIds> _wg_to_cpuids;
-    std::unique_ptr<PipelineExecutors> _shared_executors;
+    std::unique_ptr<PipelineExecutorSet> _shared_executors;
 
     struct CpuOwnerContext {
         std::shared_ptr<WorkGroup> wg;

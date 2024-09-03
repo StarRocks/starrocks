@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "exec/workgroup/pipeline_executors.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 
 #include <utility>
 
@@ -23,14 +23,14 @@
 namespace starrocks::workgroup {
 
 // ------------------------------------------------------------------------------------
-// PipelineExecutorsConfig
+// PipelineExecutorSetConfig
 // ------------------------------------------------------------------------------------
 
-PipelineExecutorsConfig::PipelineExecutorsConfig(uint32_t num_total_cores, uint32_t num_total_driver_threads,
-                                                 uint32_t num_total_scan_threads,
-                                                 uint32_t num_total_connector_scan_threads,
-                                                 CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus,
-                                                 bool enable_cpu_borrowing)
+PipelineExecutorSetConfig::PipelineExecutorSetConfig(uint32_t num_total_cores, uint32_t num_total_driver_threads,
+                                                     uint32_t num_total_scan_threads,
+                                                     uint32_t num_total_connector_scan_threads,
+                                                     CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus,
+                                                     bool enable_cpu_borrowing)
         : num_total_cores(num_total_cores),
           num_total_driver_threads(num_total_driver_threads),
           num_total_scan_threads(num_total_scan_threads),
@@ -39,7 +39,7 @@ PipelineExecutorsConfig::PipelineExecutorsConfig(uint32_t num_total_cores, uint3
           enable_bind_cpus(enable_bind_cpus),
           enable_cpu_borrowing(enable_cpu_borrowing) {}
 
-std::string PipelineExecutorsConfig::to_string() const {
+std::string PipelineExecutorSetConfig::to_string() const {
     return fmt::format(
             "([num_total_cores={}] [num_total_driver_threads={}] [num_total_scan_threads={}] "
             "[num_total_connector_scan_threads={}] [enable_bind_cpus={}] [enable_cpu_borrowing={}])",
@@ -48,21 +48,21 @@ std::string PipelineExecutorsConfig::to_string() const {
 }
 
 // ------------------------------------------------------------------------------------
-// PipelineExecutors
+// PipelineExecutorSet
 // ------------------------------------------------------------------------------------
 
-PipelineExecutors::PipelineExecutors(const PipelineExecutorsConfig& conf, std::string name, CpuUtil::CpuIds cpuids,
-                                     std::vector<CpuUtil::CpuIds> borrowed_cpuids)
+PipelineExecutorSet::PipelineExecutorSet(const PipelineExecutorSetConfig& conf, std::string name,
+                                         CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids)
         : _conf(conf),
           _name(std::move(name)),
           _cpuids(std::move(cpuids)),
           _borrowed_cpu_ids(std::move(borrowed_cpuids)) {}
 
-PipelineExecutors::~PipelineExecutors() {
+PipelineExecutorSet::~PipelineExecutorSet() {
     close();
 }
 
-std::string PipelineExecutors::to_string() const {
+std::string PipelineExecutorSet::to_string() const {
     return fmt::format(
             "([name={}] [num_driver_threads={}] [num_scan_threads={}] [num_connector_scan_threads={}] [cpuids={}] "
             "[conf={}])",
@@ -70,7 +70,7 @@ std::string PipelineExecutors::to_string() const {
             _conf.to_string());
 }
 
-Status PipelineExecutors::start() {
+Status PipelineExecutorSet::start() {
     if (_stage >= Stage::STARTED) {
         return Status::OK();
     }
@@ -121,7 +121,7 @@ Status PipelineExecutors::start() {
     return Status::OK();
 }
 
-void PipelineExecutors::close() {
+void PipelineExecutorSet::close() {
     if (_stage >= Stage::CLOSED) {
         return;
     }
@@ -142,7 +142,7 @@ void PipelineExecutors::close() {
     LOG(INFO) << "[WORKGROUP] close executors " << to_string();
 }
 
-void PipelineExecutors::change_cpus(CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids) {
+void PipelineExecutorSet::change_cpus(CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids) {
     if (_cpuids == cpuids && _borrowed_cpu_ids == borrowed_cpuids) {
         return;
     }
@@ -153,12 +153,12 @@ void PipelineExecutors::change_cpus(CpuUtil::CpuIds cpuids, std::vector<CpuUtil:
     notify_config_changed();
 }
 
-void PipelineExecutors::notify_num_total_connector_scan_threads_changed() const {
+void PipelineExecutorSet::notify_num_total_connector_scan_threads_changed() const {
     _connector_scan_executor->change_num_threads(num_connector_scan_threads());
     LOG(INFO) << "[WORKGROUP] change num_total_connector_scan_threads of executors " << to_string();
 }
 
-void PipelineExecutors::notify_config_changed() const {
+void PipelineExecutorSet::notify_config_changed() const {
     _driver_executor->bind_cpus(_cpuids, _borrowed_cpu_ids);
     _driver_executor->change_num_threads(num_driver_threads());
 
@@ -171,7 +171,7 @@ void PipelineExecutors::notify_config_changed() const {
     LOG(INFO) << "[WORKGROUP] change cpus and threads of executors " << to_string();
 }
 
-uint32_t PipelineExecutors::calculate_num_threads(uint32_t num_total_threads) const {
+uint32_t PipelineExecutorSet::calculate_num_threads(uint32_t num_total_threads) const {
     if (!_borrowed_cpu_ids.empty() || _cpuids.empty()) {
         return num_total_threads;
     }

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/workgroup/pipeline_executors_manager.h"
+#include "exec/workgroup/pipeline_executor_set_manager.h"
 
 #include "work_group.h"
 
 namespace starrocks::workgroup {
 
-ExecutorsManager::ExecutorsManager(WorkGroupManager* parent, PipelineExecutorsConfig conf)
+ExecutorsManager::ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf)
         : _parent(parent), _conf(std::move(conf)) {
     _wg_to_cpuids[COMMON_WORKGROUP] = _conf.total_cpuids;
     for (auto cpuid : _conf.total_cpuids) {
@@ -32,7 +32,7 @@ void ExecutorsManager::close() const {
 
 Status ExecutorsManager::start_shared_executors() {
     _shared_executors =
-            std::make_unique<PipelineExecutors>(_conf, "com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{});
+            std::make_unique<PipelineExecutorSet>(_conf, "com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{});
     return _shared_executors->start();
 }
 
@@ -106,7 +106,7 @@ const CpuUtil::CpuIds& ExecutorsManager::get_cpuids_of_workgroup(WorkGroup* wg) 
     return it->second;
 }
 
-PipelineExecutors* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) const {
+PipelineExecutorSet* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) const {
     const auto& cpuids = get_cpuids_of_workgroup(wg);
     if (wg->exclusive_cpu_cores() == 0 || cpuids.empty()) {
         LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
@@ -115,8 +115,8 @@ PipelineExecutors* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) 
         return _shared_executors.get();
     }
 
-    auto executors = std::make_unique<PipelineExecutors>(_conf, std::to_string(wg->id()), cpuids,
-                                                         std::vector<CpuUtil::CpuIds>{});
+    auto executors = std::make_unique<PipelineExecutorSet>(_conf, std::to_string(wg->id()), cpuids,
+                                                           std::vector<CpuUtil::CpuIds>{});
     if (const Status status = executors->start(); !status.ok()) {
         LOG(WARNING) << "[WORKGROUP] failed to start executors for workgroup "
                      << "[workgroup=" << wg->to_string() << "] "

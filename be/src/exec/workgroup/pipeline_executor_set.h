@@ -21,10 +21,10 @@
 
 namespace starrocks::workgroup {
 
-struct PipelineExecutorsConfig {
-    PipelineExecutorsConfig(uint32_t num_total_cores, uint32_t num_total_driver_threads,
-                            uint32_t num_total_scan_threads, uint32_t num_total_connector_scan_threads,
-                            CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus, bool enable_cpu_borrowing);
+struct PipelineExecutorSetConfig {
+    PipelineExecutorSetConfig(uint32_t num_total_cores, uint32_t num_total_driver_threads,
+                              uint32_t num_total_scan_threads, uint32_t num_total_connector_scan_threads,
+                              CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus, bool enable_cpu_borrowing);
 
     std::string to_string() const;
 
@@ -39,11 +39,11 @@ struct PipelineExecutorsConfig {
     bool enable_cpu_borrowing;
 };
 
-class PipelineExecutors {
+class PipelineExecutorSet {
 public:
-    PipelineExecutors(const PipelineExecutorsConfig& conf, std::string name, CpuUtil::CpuIds cpuids,
-                      std::vector<CpuUtil::CpuIds> borrowed_cpuids);
-    ~PipelineExecutors();
+    PipelineExecutorSet(const PipelineExecutorSetConfig& conf, std::string name, CpuUtil::CpuIds cpuids,
+                        std::vector<CpuUtil::CpuIds> borrowed_cpuids);
+    ~PipelineExecutorSet();
 
     Status start();
     void close();
@@ -67,7 +67,7 @@ private:
     uint32_t calculate_num_threads(uint32_t num_total_threads) const;
 
 private:
-    const PipelineExecutorsConfig& _conf;
+    const PipelineExecutorSetConfig& _conf;
     const std::string _name;
 
     CpuUtil::CpuIds _cpuids;

@@ -18,7 +18,7 @@
 
 #include "common/config.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/workgroup/pipeline_executors.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
@@ -272,7 +272,7 @@ void WorkGroup::copy_metrics(const WorkGroup& rhs) {
 // WorkGroupManager
 // ------------------------------------------------------------------------------------
 
-WorkGroupManager::WorkGroupManager(PipelineExecutorsConfig executors_manager_conf)
+WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf)
         : _executors_manager(this, std::move(executors_manager_conf)) {}
 
 WorkGroupManager::~WorkGroupManager() = default;
