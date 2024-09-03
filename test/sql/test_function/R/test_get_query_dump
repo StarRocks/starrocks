@@ -57,7 +57,7 @@ select get_query_dump('invalid-query');
 -- result:
 E: (6013, "SemanticException: Getting analyzing error. Detail message: Invalid parameter get_query_dump: execute query failed. Getting syntax error at line 1, column 0. Detail message: Unexpected input 'invalid', the most similar input is {'INSTALL', 'UNINSTALL', 'KILL', 'LOAD', 'ADMIN', '(', ';'}..")
 -- !result
-select get_query_dump(lower('select * from t1'));
+select get_query_dump(rtrim('select * from t1'));
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Meta function get_query_dump does not support non-constant arguments.')
 -- !result
