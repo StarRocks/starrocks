@@ -343,6 +343,12 @@ public class ReplicationJob implements GsonPostProcessable {
     @SerializedName(value = "jobId")
     private final String jobId;
 
+    @SerializedName(value = "createdTimeMs")
+    private final long createdTimeMs;
+
+    @SerializedName(value = "finishedTimeMs")
+    private volatile long finishedTimeMs;
+
     @SerializedName(value = "srcToken")
     private final String srcToken;
 
@@ -381,12 +387,24 @@ public class ReplicationJob implements GsonPostProcessable {
         return jobId;
     }
 
+    public long getCreatedTimeMs() {
+        return createdTimeMs;
+    }
+
+    public long getFinishedTimeMs() {
+        return finishedTimeMs;
+    }
+
     public long getDatabaseId() {
         return databaseId;
     }
 
     public long getTableId() {
         return tableId;
+    }
+
+    public long getTransactionId() {
+        return transactionId;
     }
 
     public long getReplicationDataSize() {
@@ -403,9 +421,38 @@ public class ReplicationJob implements GsonPostProcessable {
 
     private void setState(ReplicationJobState state) {
         this.state = state;
+        if (state.equals(ReplicationJobState.COMMITTED) || state.equals(ReplicationJobState.ABORTED)) {
+            finishedTimeMs = System.currentTimeMillis();
+        }
         GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
         LOG.info("Replication job state: {}, database id: {}, table id: {}, transaction id: {}",
                 state, databaseId, tableId, transactionId);
+    }
+
+    public boolean isExpired() {
+        return finishedTimeMs > 0 &&
+                (System.currentTimeMillis() - finishedTimeMs) > (Config.history_job_keep_max_second * 1000);
+    }
+
+    public long getRunningTaskNum() {
+        return runningTasks.size();
+    }
+
+    public long getTotalTaskNum() {
+        return taskNum;
+    }
+
+    public String getErrorMessage() {
+        if (!state.equals(ReplicationJobState.ABORTED)) {
+            return null;
+        }
+
+        TransactionState transactionState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
+                .getTransactionState(databaseId, transactionId);
+        if (transactionState == null) {
+            return "Transaction not found";
+        }
+        return transactionState.getReason();
     }
 
     public ReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
@@ -416,6 +463,8 @@ public class ReplicationJob implements GsonPostProcessable {
         } else {
             this.jobId = request.job_id;
         }
+        this.createdTimeMs = System.currentTimeMillis();
+        this.finishedTimeMs = 0;
         this.srcToken = request.src_token;
         this.databaseId = request.database_id;
         TableInfo tableInfo = initTableInfo(request);
@@ -440,6 +489,8 @@ public class ReplicationJob implements GsonPostProcessable {
         } else {
             this.jobId = jobId;
         }
+        this.createdTimeMs = System.currentTimeMillis();
+        this.finishedTimeMs = 0;
         this.srcToken = srcToken;
         this.databaseId = databaseId;
         TableInfo tableInfo = initTableInfo(table, srcTable, srcSystemInfoService);
