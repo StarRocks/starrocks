@@ -146,6 +146,14 @@ select * from read_range_test where c0 in (1, 4000);
 1	20000	1	[1,null,0]
 4000	16001	None	None
 -- !result
+select count(*) from read_range_test where c2 = '1';
+-- result:
+200
+-- !result
+select count(*) from read_range_test where c2 = '1' or c2 is null;
+-- result:
+2200
+-- !result
 select count(*) from read_range_test a join[broadcast] read_range_big_page_test b on a.c2 = b.c2 where b.c0 < 5;
 -- result:
 800
