@@ -321,9 +321,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
                         TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("13:Decode\n" +
-                "  |  <dict id 42> : <string id 18>\n" +
-                "  |  <dict id 43> : <string id 23>"));
+        Assert.assertTrue(plan, plan.contains(" 11:Decode\n" +
+                "  |  <dict id 41> : <string id 18>\n" +
+                "  |  <dict id 42> : <string id 23>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 
@@ -666,7 +666,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("38:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 396: substring = 361: date\n" +
+                "  |  equal join conjunct: 398: substring = 361: date\n" +
                 "  |  other join predicates: 209: zid = 298: zid"));
     }
 
@@ -888,18 +888,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("23:Project\n" +
                 "  |  <slot 193> : 193: mock_081\n" +
                 "  |  <slot 194> : 194: mock_089\n" +
-                "  |  <slot 233> : 233: mock_065\n" +
-                "  |  <slot 391> : 379: case\n" +
-                "  |  <slot 395> : '1'\n" +
-                "  |  \n" +
-                "  22:Project"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:SORT\n" +
-                "  |  order by: <slot 194> 194: mock_089 ASC, <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
+                "  |  <slot 391> : 391: case\n" +
+                "  |  <slot 396> : 396: rank()"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 20:SORT\n" +
+                "  |  order by: <slot 194> 194: mock_089 ASC," +
+                " <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
                 "<slot 233> 233: mock_065 ASC\n" +
                 "  |  analytic partition by: 194: mock_089, 395: case, 193: mock_081\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
-                "  24:EXCHANGE"));
+                "  19:EXCHANGE"));
     }
 
     @Test
