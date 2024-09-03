@@ -181,9 +181,9 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             if (beTasksNum.containsKey(nodeId)) {
                 int tasksNum = beTasksNum.get(nodeId);
                 if (tasksNum > 0) {
-                    beTasksNum.put(beId, tasksNum - 1);
+                    beTasksNum.put(nodeId, tasksNum - 1);
                 } else {
-                    beTasksNum.put(beId, 0);
+                    beTasksNum.put(nodeId, 0);
                 }
             }
             if (nodeToJobs.containsKey(nodeId)) {
@@ -252,8 +252,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         return beTasksNum;
     }
 
-    public Map<Long, Set<Long>> getNodeToJobs(long warehouseId) {
-        return warehouseNodeToJobs.get(warehouseId);
+    public Map<Long, Set<Long>> getNodeToJobs() {
+        return nodeToJobs;
     }
 
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {

@@ -403,7 +403,7 @@ public class RoutineLoadManagerTest {
             }
         }
 
-        Map<Long, Set<Long>> nodeToJobs = routineLoadManager.getNodeToJobs(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Map<Long, Set<Long>> nodeToJobs = routineLoadManager.getNodeToJobs();
         Assert.assertEquals(5, nodeToJobs.size());
         for (long beId : nodeToJobs.keySet()) {
             Assert.assertEquals(60, nodeToJobs.get(beId).size());
