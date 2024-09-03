@@ -488,13 +488,13 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "    group by cte.date1, cte.start_date, cte.end_date, t1.k1, t1.k2, t1.k3";
             sql(sql).contains("mv1")
                     .contains("  1:Project\n" +
-                            "  |  <slot 2> : '2024-07-20'\n" +
-                            "  |  <slot 3> : '2024-06-20 00:00:00'\n" +
-                            "  |  <slot 4> : '2024-08-20 00:00:00'\n" +
                             "  |  <slot 6> : 11: k1\n" +
                             "  |  <slot 7> : 12: k2\n" +
                             "  |  <slot 8> : 13: k3\n" +
-                            "  |  <slot 10> : 14: sum(v1)\n" +
+                            "  |  <slot 10> : '2024-07-20'\n" +
+                            "  |  <slot 11> : '2024-06-20 00:00:00'\n" +
+                            "  |  <slot 12> : '2024-08-20 00:00:00'\n" +
+                            "  |  <slot 13> : 14: sum(v1)\n" +
                             "  |  \n" +
                             "  0:OlapScanNode\n" +
                             "     TABLE: mv1");
@@ -514,8 +514,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "    group by cte.date1, cte.start_date, cte.end_date, t1.k1";
             sql(sql).contains("mv1")
                     .contains("1:Project\n" +
-                            "|  <slot 11> : col$: k1\n" +
-                            "|  <slot 14> : col$: sum(v1)\n" +
+                            "|  <slot 14> : col$: k1\n" +
+                            "|  <slot 17> : col$: sum(v1)\n" +
                             "|\n" +
                             "0:OlapScanNode\n" +
                             "TABLE: mv1");
