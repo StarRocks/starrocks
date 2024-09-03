@@ -1132,6 +1132,11 @@ public class JournalEntity implements Writable {
                 data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_DELETE_REPLICATION_JOB: {
+                data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_RECOVER_PARTITION_VERSION:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
                 isRead = true;
