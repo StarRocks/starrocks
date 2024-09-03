@@ -39,10 +39,8 @@ class LeftChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBase
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        connectContext.getSessionVariable().setEnableFineGrainedRangePredicate(true);
     }
 
-    // rewrite small table left
     @Test
     void testApplyImpl() throws Exception {
         String sql = "select * from lineitem l join supplier s on abs(l.l_orderkey) = abs(s.s_suppkey)";
@@ -61,7 +59,13 @@ class LeftChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBase
                 JoinTuningGuide.EstimationErrorType.LEFT_INPUT_OVERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
         Assert.assertTrue(res.isPresent());
-        Assert.assertTrue(res.get().inputAt(0).getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(res.get().inputAt(1).getOp() instanceof PhysicalDistributionOperator);
-    }
+
+        OptExpression newPlan = res.get();
+        OptExpression newLeftChild = newPlan.inputAt(0);
+        OptExpression newRightChild = newPlan.inputAt(1);
+        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
+        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+
+        Assert.assertTrue("lineitem".equals(((PhysicalOlapScanOperator) newLeftChild.inputAt(0).getOp()).getTable().getName()));
+        Assert.assertTrue("supplier".equals(((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));    }
 }
