@@ -138,21 +138,28 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
     std::vector<jvalue> call_stack;
     std::vector<jobject> rets;
-    DeferOp defer = DeferOp([&]() {
-        // clean up arrays
-        for (auto& ret : rets) {
-            if (ret) {
-                env->DeleteLocalRef(ret);
-            }
-        }
-    });
     size_t num_rows = cols[0]->size();
     size_t num_cols = cols.size();
     state->set_processed_rows(num_rows);
 
     call_stack.reserve(num_cols);
     rets.resize(num_rows);
+
+    // reserve 16 local refs
+    DeferOp defer = DeferOp([&]() {
+        // clean up arrays
+        env->PopLocalFrame(nullptr);
+    });
+    env->PushLocalFrame(num_cols * num_rows + 16);
+
     for (int i = 0; i < num_rows; ++i) {
+        DeferOp defer = DeferOp([&]() {
+            for (int j = 0; j < num_cols; ++j) {
+                release_jvalue(stateUDTF->method_process()->method_desc[j + 1].is_box, call_stack[j]);
+            }
+            call_stack.clear();
+        });
+
         for (int j = 0; j < num_cols; ++j) {
             auto method_type = stateUDTF->method_process()->method_desc[j + 1];
             jvalue val = cast_to_jvalue<true>(method_type.type, method_type.is_box, cols[j].get(), i);
@@ -161,11 +168,13 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
         rets[i] = env->CallObjectMethodA(stateUDTF->handle(), methodID, call_stack.data());
 
-        for (int j = 0; j < num_cols; ++j) {
-            release_jvalue(stateUDTF->method_process()->method_desc[j + 1].is_box, call_stack[j]);
+        if (auto jthr = helper.getEnv()->ExceptionOccurred(); jthr != nullptr) {
+            std::string err = fmt::format("execute UDF Function meet Exception:{}", helper.dumpExceptionString(jthr));
+            LOG(WARNING) << err;
+            helper.getEnv()->ExceptionClear();
+            state->set_status(Status::InternalError(err));
+            return std::make_pair(Columns{}, nullptr);
         }
-
-        call_stack.clear();
     }
 
     // Build Return Type
@@ -192,7 +201,6 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
                 return std::make_pair(Columns{}, nullptr);
             }
             append_jvalue(method_desc, col.get(), {.l = vi});
-            release_jvalue(method_desc.is_box, {.l = vi});
         }
     }
 

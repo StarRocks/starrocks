@@ -21,6 +21,7 @@
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
@@ -231,12 +232,16 @@ Status check_type_matched(MethodTypeDescriptor method_type_desc, jobject val) {
     auto* env = helper.getEnv();
 
     switch (method_type_desc.type) {
-#define INSTANCE_OF_TYPE(NAME, TYPE)                          \
-    case NAME: {                                              \
-        if (!env->IsInstanceOf(val, helper.TYPE##_class())) { \
-            return Status::InternalError("Type not matched"); \
-        }                                                     \
-        break;                                                \
+#define INSTANCE_OF_TYPE(NAME, TYPE)                                                            \
+    case NAME: {                                                                                \
+        if (!env->IsInstanceOf(val, helper.TYPE##_class())) {                                   \
+            auto clazz = env->GetObjectClass(val);                                              \
+            LOCAL_REF_GUARD(clazz);                                                             \
+            return Status::InternalError(fmt::format("Type not matched, expect {}, but got {}", \
+                                                     helper.to_string(helper.TYPE##_class()),   \
+                                                     helper.to_string(clazz)));                 \
+        }                                                                                       \
+        break;                                                                                  \
     }
         INSTANCE_OF_TYPE(TYPE_BOOLEAN, uint8_t)
         INSTANCE_OF_TYPE(TYPE_TINYINT, int8_t)
@@ -248,7 +253,10 @@ Status check_type_matched(MethodTypeDescriptor method_type_desc, jobject val) {
     case TYPE_VARCHAR: {
         std::string buffer;
         if (!env->IsInstanceOf(val, helper.string_clazz())) {
-            return Status::InternalError("Type not matched");
+            auto clazz = env->GetObjectClass(val);
+            LOCAL_REF_GUARD(clazz);
+            return Status::InternalError(
+                    fmt::format("Type not matched, expect string, but got {}", helper.to_string(clazz)));
         }
         break;
     }
