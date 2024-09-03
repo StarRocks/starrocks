@@ -1467,7 +1467,7 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("aaa", ScalarOperatorFunctions.lower(
                 new ConstantOperator("AAA", Type.VARCHAR)
         ).getVarchar());
-        assertEquals("AAA", ScalarOperatorFunctions.lower(
+        assertEquals("AAA", ScalarOperatorFunctions.upper(
                 new ConstantOperator("aaa", Type.VARCHAR)
         ).getVarchar());
     }
