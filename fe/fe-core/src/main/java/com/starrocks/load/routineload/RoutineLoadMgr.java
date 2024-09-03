@@ -93,6 +93,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
+    private Map<Long, Set<Long>> nodeToJobs = Maps.newHashMap();
     private ReentrantLock slotLock = new ReentrantLock();
 
     // routine load job meta
@@ -121,34 +122,51 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     // returns -1 if there is no available be
-    public long takeBeTaskSlot() {
+    // find the node with the fewest tasks
+    public long takeBeTaskSlot(long jobId) {
         slotLock.lock();
         try {
-            long beId = -1L;
+            long nodeId = -1L;
             int minTasksNum = Integer.MAX_VALUE;
+            // find the node with the fewest tasks and does not contain the job
             for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
                 if (entry.getValue() < Config.max_routine_load_task_num_per_be
-                        && entry.getValue() < minTasksNum) {
-                    beId = entry.getKey();
+                        && entry.getValue() < minTasksNum
+                        && (nodeToJobs.get(entry.getKey()) == null
+                        || !nodeToJobs.get(entry.getKey()).contains(jobId))) {
+                    nodeId = entry.getKey();
                     minTasksNum = entry.getValue();
                 }
             }
-            if (beId != -1) {
-                beTasksNum.put(beId, minTasksNum + 1);
+            // if there is no available be, find the node with the fewest tasks
+            if (nodeId == -1) {
+                for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
+                    if (entry.getValue() < Config.max_routine_load_task_num_per_be
+                            && entry.getValue() < minTasksNum) {
+                        nodeId = entry.getKey();
+                        minTasksNum = entry.getValue();
+                    }
+                }
             }
-            return beId;
+            if (nodeId != -1) {
+                beTasksNum.put(nodeId, minTasksNum + 1);
+                nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet()).add(jobId);
+            }
+            return nodeId;
         } finally {
             slotLock.unlock();
         }
     }
 
-    public long takeBeTaskSlot(long beId) {
+    public long takeNodeById(long jobId, long nodeId) {
         slotLock.lock();
         try {
-            Integer taskNum = beTasksNum.get(beId);
+            Integer taskNum = beTasksNum.get(nodeId);
+            Set<Long> jobs = nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet());
             if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
-                beTasksNum.put(beId, taskNum + 1);
-                return beId;
+                beTasksNum.put(nodeId, taskNum + 1);
+                jobs.add(jobId);
+                return nodeId;
             } else {
                 return -1L;
             }
@@ -157,16 +175,20 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public void releaseBeTaskSlot(long beId) {
+    public void releaseBeTaskSlot(long jobId, long nodeId) {
         slotLock.lock();
         try {
-            if (beTasksNum.containsKey(beId)) {
-                int tasksNum = beTasksNum.get(beId);
+            if (beTasksNum.containsKey(nodeId)) {
+                int tasksNum = beTasksNum.get(nodeId);
                 if (tasksNum > 0) {
-                    beTasksNum.put(beId, tasksNum - 1);
+                    beTasksNum.put(nodeId, tasksNum - 1);
                 } else {
-                    beTasksNum.put(beId, 0);
+                    beTasksNum.put(nodeId, 0);
                 }
+            }
+            if (nodeToJobs.containsKey(nodeId)) {
+                Set<Long> jobs = nodeToJobs.get(nodeId);
+                jobs.remove(jobId);
             }
         } finally {
             slotLock.unlock();
@@ -194,12 +216,14 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             for (Long nodeId : aliveNodeIds) {
                 if (!beTasksNum.containsKey(nodeId)) {
                     beTasksNum.put(nodeId, 0);
+                    nodeToJobs.put(nodeId, Sets.newHashSet());
                 }
             }
 
             // remove not alive be
             List<Long> finalAliveNodeIds = aliveNodeIds;
             beTasksNum.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
+            nodeToJobs.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
         } finally {
             slotLock.unlock();
         }
@@ -226,6 +250,10 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     @VisibleForTesting
     public Map<Long, Integer> getBeTasksNum() {
         return beTasksNum;
+    }
+
+    public Map<Long, Set<Long>> getNodeToJobs() {
+        return nodeToJobs;
     }
 
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
