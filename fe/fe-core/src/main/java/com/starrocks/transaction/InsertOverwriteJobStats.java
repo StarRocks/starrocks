@@ -21,18 +21,18 @@ import java.util.List;
  */
 public class InsertOverwriteJobStats {
 
-    private List<Long> targetPartitionIds;
     private List<Long> sourcePartitionIds;
+    private List<Long> targetPartitionIds;
     private long sourceRows;
     private long targetRows;
 
     public InsertOverwriteJobStats() {
     }
 
-    public InsertOverwriteJobStats(List<Long> targetPartitionIds, List<Long> sourcePartitionIds, long sourceRows,
+    public InsertOverwriteJobStats(List<Long> sourcePartitionIds, List<Long> targetPartitionIds, long sourceRows,
                                    long targetRows) {
-        this.targetPartitionIds = targetPartitionIds;
         this.sourcePartitionIds = sourcePartitionIds;
+        this.targetPartitionIds = targetPartitionIds;
         this.sourceRows = sourceRows;
         this.targetRows = targetRows;
     }

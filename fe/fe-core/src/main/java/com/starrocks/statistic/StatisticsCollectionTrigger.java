@@ -33,6 +33,7 @@ import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -84,7 +85,7 @@ public class StatisticsCollectionTrigger {
     private Future<?> future;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
-    public static void triggerOnInsertOverwrite(InsertOverwriteJobStats stats,
+    public static StatisticsCollectionTrigger triggerOnInsertOverwrite(InsertOverwriteJobStats stats,
                                                 Database db,
                                                 Table table,
                                                 boolean sync,
@@ -97,9 +98,10 @@ public class StatisticsCollectionTrigger {
         trigger.overwriteJobStats = stats;
         trigger.useLock = useLock;
         trigger.process();
+        return trigger;
     }
 
-    public static void triggerOnFirstLoad(TransactionState txnState,
+    public static StatisticsCollectionTrigger triggerOnFirstLoad(TransactionState txnState,
                                           Database db,
                                           Table table,
                                           boolean sync,
@@ -112,6 +114,7 @@ public class StatisticsCollectionTrigger {
         trigger.txnState = txnState;
         trigger.useLock = useLock;
         trigger.process();
+        return trigger;
     }
 
     private void process() {
@@ -236,15 +239,15 @@ public class StatisticsCollectionTrigger {
             locker.lockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
         }
         try {
-            for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+            for (var entry : tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
                 // partition commit info id is physical partition id.
                 // statistic collect granularity is logic partition.
-                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                if (physicalPartition != null) {
+                long physicalPartitionId = entry.getKey();
+                PartitionCommitInfo partitionCommitInfo = entry.getValue();
+                if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
+                    PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     Partition partition = table.getPartition(physicalPartition.getParentId());
-                    if (partition != null && partition.isFirstLoad()) {
-                        partitionIds.add(partition.getId());
-                    }
+                    partitionIds.add(partition.getId());
                 }
             }
         } finally {
@@ -304,5 +307,9 @@ public class StatisticsCollectionTrigger {
         } else {
             return StatsConstants.AnalyzeType.FULL;
         }
+    }
+
+    StatsConstants.AnalyzeType getAnalyzeType() {
+        return analyzeType;
     }
 }
