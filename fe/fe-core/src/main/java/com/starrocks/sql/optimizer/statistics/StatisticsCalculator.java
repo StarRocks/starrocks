@@ -531,10 +531,26 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             ColumnStatistic partitionColumnStatistic =
                     GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
 
+<<<<<<< HEAD
+=======
+        Map<String, ColumnRefOperator> colNameMap = Maps.newHashMap();
+        colRefToColumnMetaMap.entrySet().stream().forEach(e -> colNameMap.put(e.getValue().getName(), e.getKey()));
+        // It might contain null value, if some partition columns are not referenced in the scan
+        List<ColumnRefOperator> partitionCols =
+                olapTable.getPartitionColumnNames().stream()
+                        .map(colNameMap::get)
+                        .collect(Collectors.toList());
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo instanceof RangePartitionInfo) {
+            if (partitionCols.size() != 1 || partitionCols.stream().anyMatch(Objects::isNull)) {
+                return;
+            }
+>>>>>>> 7bdc5bf563 ([BugFix] fix multiple partition column statistics (#50488))
             if (optimizerContext.getDumpInfo() != null) {
                 optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
             }
 
+<<<<<<< HEAD
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo instanceof RangePartitionInfo) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
@@ -572,6 +588,33 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                 allNoEmptyPartitionsSize;
                 return buildFrom(partitionColumnStatistic).
                         setMinValue(min).setMaxValue(max).setDistinctValuesCount(max(distinctValues, 1)).build();
+=======
+            int selectedPartitionsSize = selectedPartitionId.size();
+            int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
+            double distinctValues =
+                    builder.getColumnStatistics(partitionCols.get(0)).getDistinctValuesCount() * 1.0 * selectedPartitionsSize /
+                            allNoEmptyPartitionsSize;
+            ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(partitionCols.get(0)))
+                    .setMinValue(min).setMaxValue(max).setDistinctValuesCount(max(distinctValues, 1)).build();
+            builder.addColumnStatistic(partitionCols.get(0), columnStatistic);
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            for (int i = 0; i < partitionCols.size(); i++) {
+                ColumnRefOperator columnRef = partitionCols.get(i);
+                // For multi-column list partition, pruning on any column should adjust the statistics
+                if (columnRef == null) {
+                    continue;
+                }
+                if (optimizerContext.getDumpInfo() != null) {
+                    optimizerContext.getDumpInfo().addTableStatistics(olapTable,
+                            partitionCols.get(i).getName(),
+                            builder.getColumnStatistics(partitionCols.get(i)));
+                }
+                long ndv = extractDistinctPartitionValues(listPartitionInfo, selectedPartitionId, i);
+                ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(columnRef))
+                        .setDistinctValuesCount(ndv).build();
+                builder.addColumnStatistic(columnRef, columnStatistic);
+>>>>>>> 7bdc5bf563 ([BugFix] fix multiple partition column statistics (#50488))
             }
         }
         return null;

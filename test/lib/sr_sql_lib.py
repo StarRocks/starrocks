@@ -1751,6 +1751,94 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
+<<<<<<< HEAD
+=======
+
+    def assert_explain_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        sql = "explain %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
+
+    def assert_explain_not_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        sql = "explain %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
+
+    def assert_explain_verbose_contains(self, query, *expects):
+        """
+        assert explain verbose result contains expect string
+        """
+        sql = "explain verbose %s" % (query)
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res['msg'])
+        for expect in expects:
+            plan_string = "\n".join(item[0] for item in res["result"])
+            tools.assert_true(plan_string.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan_string))
+
+    def assert_explain_costs_contains(self, query, *expects):
+        """
+        assert explain costs result contains expect string
+        """
+        sql = "explain costs %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_trace_values_contains(self, query, *expects):
+        """
+        assert trace values result contains expect string
+        """
+        sql = "trace values %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])),
+            )
+
+    def assert_prepare_execute(self, db, query, params=()):
+        conn = mysql.connector.connect(
+            host=self.mysql_host, user=self.mysql_user, password="", port=self.mysql_port, database=db
+        )
+        cursor = conn.cursor(prepared=True)
+
+        try:
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            cursor.fetchall()
+        except mysql.connector.Error as e:
+            tools.assert_true(1 == 0, e)
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def assert_trace_times_contains(self, query, *expects):
+        """
+        assert trace times result contains expect string
+        """
+        sql = "trace times %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])),
+            )
+
+>>>>>>> 7bdc5bf563 ([BugFix] fix multiple partition column statistics (#50488))
     def assert_clear_stale_stats(self, query, expect_num):
         timeout = 300
         num = 0;
