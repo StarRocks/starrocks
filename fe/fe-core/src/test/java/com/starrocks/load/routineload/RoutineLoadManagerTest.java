@@ -399,7 +399,7 @@ public class RoutineLoadManagerTest {
         Collections.shuffle(jobIDs);
         for (long jobID : jobIDs) {
             for (long taskId = 0; taskId < 3; taskId++) {
-                long beId = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobID);
+                long beId = routineLoadManager.takeBeTaskSlot(jobID);
             }
         }
 
@@ -410,13 +410,13 @@ public class RoutineLoadManagerTest {
             long total = 0;
             for (long jobId : nodeToJobs.get(beId)) {
                 total += jobId;
-                routineLoadManager.takeNodeById(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobId, beId);
+                routineLoadManager.takeNodeById(jobId, beId);
             }
             LOG.warn("beId: {}, total: {}", beId, total);
         }
         for (long beId : nodeToJobs.keySet()) {
             Assert.assertEquals(60, nodeToJobs.get(beId).size());
-            Assert.assertEquals(120, routineLoadManager.getNodeTasksNum().get(beId).intValue());
+            Assert.assertEquals(120, routineLoadManager.getBeTasksNum().get(beId).intValue());
         }
         Config.max_routine_load_task_num_per_be = 16;
     }
