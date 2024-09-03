@@ -58,11 +58,6 @@ public class CatalogConnector implements Connector {
     }
 
     @Override
-    public long estimateSize() {
-        return normalConnector.estimateSize();
-    }
-
-    @Override
     public Map<String, Long> estimateCount() {
         return normalConnector.estimateCount();
     }
