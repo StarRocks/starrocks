@@ -197,17 +197,17 @@ You can create a materialized view whose partitioning granularity is larger than
 
 ### Align partitions at a customized time granularity
 
-The partition rollup method mentioned above only allows partitioning the materialized view based on specific time granularities and does not permit customizing the partition time range. If your business scenario requires partitioning using a customized time granularity, you can create a materialized view and define the time granularity for its partitions by using the date_trunc function with the [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) or [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md) function, which can convert a given time into the beginning or end of a time interval based on the specified time granularity.
+The partition rollup method mentioned above only allows partitioning the materialized view based on specific time granularities and does not permit customizing the partition time range. If your business scenario requires partitioning using a customized time granularity, you can create a materialized view and define the time granularity for its partitions by using the date_trunc function with the [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)  function, which can convert a given time into the beginning or end of a time interval based on the specified time granularity.
 
-You need to define the new time granularity (interval) by using the time_slice or date_slice function on the Partitioning Key of the base table in the SELECT list, set an alias for it, and use it in the date_trunc function to specify the Partitioning Key of the materialized view.
+You need to define the new time granularity (interval) by using the time_slice function on the Partitioning Key of the base table in the SELECT list, set an alias for it, and use it in the date_trunc function to specify the Partitioning Key of the materialized view.
 
 ```SQL
 PARTITION BY
 date_trunc(<format>, <mv_partitioning_column>)
 AS
 SELECT 
-  -- You can use time_slice or date_slice.
-  date_slice(<base_table_partitioning_column>, <interval>) AS <mv_partitioning_column>
+  -- You can use time_slice.
+  time_slice(<base_table_partitioning_column>, <interval>) AS <mv_partitioning_column>
 ```
 
 Example:
