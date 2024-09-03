@@ -429,7 +429,7 @@ public:
         return Status::OK();
     }
 
-    bool can_vectorized() const override { return true; }
+    bool can_vectorized() const override { return false; }
 
     PredicateType type() const override { return PredicateType::kInList; }
 
