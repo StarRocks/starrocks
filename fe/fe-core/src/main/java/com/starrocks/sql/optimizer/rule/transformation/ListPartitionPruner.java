@@ -242,7 +242,7 @@ public class ListPartitionPruner implements PartitionPruner {
      * - conjunct: dt >= '2024-01-01'
      * - generate-expr: month=date_trunc('MONTH', dt)
      */
-    public static List<String> deduceColumns(LogicalScanOperator scanOperator) {
+    public static List<String> deduceGenerateColumns(LogicalScanOperator scanOperator) {
         List<String> partitionColumnNames = scanOperator.getTable().getPartitionColumnNames();
         if (CollectionUtils.isEmpty(partitionColumnNames)) {
             return Lists.newArrayList();

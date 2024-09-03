@@ -1695,7 +1695,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (isTableTypeSupported && !optimizerContext.isObtainedFromInternalStatistics()) {
             LogicalScanOperator scanOperator = operator.cast();
             List<String> partitionColNames = scanOperator.getTable().getPartitionColumnNames();
-            partitionColNames.addAll(ListPartitionPruner.deduceColumns(scanOperator));
+            partitionColNames.addAll(ListPartitionPruner.deduceGenerateColumns(scanOperator));
 
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
             List<ScalarOperator> newPredicates = Lists.newArrayList();
