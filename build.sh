@@ -95,7 +95,9 @@ Usage: $0 <options>
      --without-starcache
                         build Backend without starcache library
      -j                 build Backend parallel
-
+     --with-compress-debug-symbol {ON|OFF}
+                        build with compressing debug symbol. (default: $WITH_COMPRESS)
+     -h,--help          Show this help message
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
@@ -110,8 +112,7 @@ Usage: $0 <options>
 
 OPTS=$(getopt \
   -n $0 \
-  -o '' \
-  -o 'h' \
+  -o 'hj:' \
   -l 'be' \
   -l 'fe' \
   -l 'spark-dpp' \
@@ -126,7 +127,7 @@ OPTS=$(getopt \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
-  -o 'j:' \
+  -l 'with-compress-debug-symbol:' \
   -l 'help' \
   -- "$@")
 
@@ -231,6 +232,7 @@ else
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -262,7 +264,7 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
-    WITH_COMPRESS       -- $WITH_COMPRESS
+    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     WITH_STARCACHE      -- $WITH_STARCACHE
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
