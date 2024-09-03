@@ -525,8 +525,10 @@ struct ChunkSliceTemplate {
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-    const auto& get_data(const Column* column) { return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); }
-    const auto& get_data(const ColumnPtr& column) {
+    static const auto& get_data(const Column* column) {
+        return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
+    }
+    static const auto& get_data(const ColumnPtr& column) {
         return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data();
     }
 };
@@ -534,10 +536,10 @@ struct GetContainer {
 #define GET_CONTAINER(ltype)                                                                  \
     template <>                                                                               \
     struct GetContainer<ltype> {                                                              \
-        const auto& get_data(const Column* column) {                                          \
+        static const auto& get_data(const Column* column) {                                   \
             return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
         }                                                                                     \
-        const auto& get_data(const ColumnPtr& column) {                                       \
+        static const auto& get_data(const ColumnPtr& column) {                                \
             return ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_proxy_data(); \
         }                                                                                     \
     };

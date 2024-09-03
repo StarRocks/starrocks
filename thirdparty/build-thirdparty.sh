@@ -80,6 +80,18 @@ check_prerequest() {
     fi
 }
 
+# echo if gcc version is greater than 14.0.0
+# else echo ""
+echo_gt_gcc14() {
+    local version=$($CC -dumpfullversion | grep -oP '(?<=\s)\d+\.\d+\.\d+' | head -1)
+    if [[ $(echo -e "14.0.0\n$version" | sort -V | tail -1) == "14.0.0" ]]; then
+        echo ""
+    else
+        #gt gcc14
+        echo "$1"
+    fi
+}
+
 # sudo apt-get install cmake
 # sudo yum install cmake
 check_prerequest "${CMAKE_CMD} --version" "cmake"
@@ -588,7 +600,7 @@ build_rocksdb() {
 
     CFLAGS= \
     EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR} ${FILE_PREFIX_MAP_OPTION}" \
-    EXTRA_CXXFLAGS="-fPIC -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" \
+    EXTRA_CXXFLAGS=$(echo_opts_gcc14 -Wno-error=redundant-move)" -fPIC -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
     PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
 
@@ -652,12 +664,18 @@ build_flatbuffers() {
   mkdir -p $BUILD_DIR
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
+
+  export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g " $(echo_opts_gcc14 "-Wno-error=stringop-overread")
+  export CPPFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g " $(echo_opts_gcc14 "-Wno-error=stringop-overread")
+
   LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
   ${BUILD_SYSTEM} -j$PARALLEL
   cp flatc  $TP_INSTALL_DIR/bin/flatc
   cp -r ../include/flatbuffers  $TP_INCLUDE_DIR/flatbuffers
   cp libflatbuffers.a $TP_LIB_DIR/libflatbuffers.a
+
+  restore_compile_flags
 }
 
 build_brotli() {
@@ -1097,10 +1115,14 @@ build_benchmark() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
+    # https://github.com/google/benchmark/issues/773
     cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
           -DBENCHMARK_ENABLE_GTEST_TESTS=off \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
+          -DRUN_HAVE_STD_REGEX=0 \
+          -DRUN_HAVE_POSIX_REGEX=0 \
+          -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
           -DCMAKE_BUILD_TYPE=Release ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
