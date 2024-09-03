@@ -89,7 +89,7 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
                 return Optional.empty();
             }
             if (isBroadcastJoin(rightChild)) {
-                if (leftNodeExecStats.getPushRows() < BROADCAST_THRESHOLD && leftSize < rightSize
+                if (leftNodeExecStats.getPullRows() < BROADCAST_THRESHOLD && leftSize < rightSize
                         && !commuteJoinHelper.onlyShuffle()) {
                     // original plan: small table inner join large table(broadcast)
                     // rewrite to: large table inner join small table(broadcast)
@@ -160,7 +160,7 @@ public class RightChildEstimationErrorTuningGuide extends JoinTuningGuide {
                             .build());
                 }
             } else if (isShuffleJoin(leftChild, rightChild)) {
-                if (leftNodeExecStats.getPushRows() < BROADCAST_THRESHOLD &&
+                if (leftNodeExecStats.getPullRows() < BROADCAST_THRESHOLD &&
                         leftSize < rightSize && !commuteJoinHelper.onlyShuffle()) {
                     if (optExpression.isExistRequiredDistribution()) {
                         return Optional.empty();

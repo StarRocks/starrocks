@@ -79,7 +79,7 @@ public class ApplyTuningGuideRule implements TreeRewriteRule {
         QueryStatement queryStmt = (QueryStatement) stmt;
 
         String sql = stmt.getOrigStmt().getOrigStmt();
-        if (queryStmt.getQueryStartIndex() != -1) {
+        if (queryStmt.getQueryStartIndex() != -1 && queryStmt.getQueryStartIndex() < sql.length()) {
             sql = sql.substring(queryStmt.getQueryStartIndex());
         }
         return sql;
