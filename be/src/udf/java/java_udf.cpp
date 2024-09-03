@@ -102,6 +102,8 @@ void JVMFunctionHelper::_init() {
     CHECK(_list_class);
     CHECK(_exception_util_class);
 
+    _equals = _env->GetMethodID(_object_class, "equals", "(Ljava/lang/Object;)Z");
+
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
     ADD_NUMBERIC_CLASS(byte, Byte, B);
     ADD_NUMBERIC_CLASS(short, Short, S);
@@ -218,6 +220,19 @@ std::string JVMFunctionHelper::array_to_string(jobject object) {
     CHECK_FUNCTION_EXCEPTION(_env, "array_to_string")
     value = to_cxx_string((jstring)jstr);
     return value;
+}
+
+bool JVMFunctionHelper::equals(jobject obj1, jobject obj2) {
+    if (obj1 == obj2) {
+        return true;
+    }
+    if (obj1 == nullptr) {
+        return false;
+    }
+    _env->ExceptionClear();
+    bool res = _env->CallBooleanMethod(obj1, _equals, obj2);
+    CHECK_FUNCTION_EXCEPTION(_env, "equals")
+    return res;
 }
 
 std::string JVMFunctionHelper::to_string(jobject obj) {
@@ -415,10 +430,6 @@ Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
     buffer->resize(length);
     _env->GetStringUTFRegion(jstr, 0, length, buffer->data());
     return {buffer->data(), buffer->length()};
-}
-
-Slice JVMFunctionHelper::sliceVal(jstring jstr) {
-    return {_env->GetStringUTFChars(jstr, nullptr)};
 }
 
 std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {

@@ -21,6 +21,7 @@
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "util/defer_op.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \
@@ -161,7 +162,8 @@ void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_n
         if (val.l == nullptr) {
             col->append_nulls(1);
         } else {
-            auto slice = helper.sliceVal((jstring)val.l);
+            std::string buffer;
+            auto slice = helper.sliceVal((jstring)val.l, &buffer);
             col->append_datum(Datum(slice));
         }
         break;
@@ -209,7 +211,8 @@ void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue va
             APPEND_BOX_TYPE(TYPE_DOUBLE, double)
 
         case TYPE_VARCHAR: {
-            auto slice = helper.sliceVal((jstring)val.l);
+            std::string buffer;
+            auto slice = helper.sliceVal((jstring)val.l, &buffer);
             col->append_datum(Datum(slice));
             break;
         }
@@ -218,6 +221,43 @@ void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue va
             break;
         }
     }
+}
+
+Status check_type_matched(MethodTypeDescriptor method_type_desc, jobject val) {
+    if (val == nullptr) {
+        return Status::OK();
+    }
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+
+    switch (method_type_desc.type) {
+#define INSTANCE_OF_TYPE(NAME, TYPE)                          \
+    case NAME: {                                              \
+        if (!env->IsInstanceOf(val, helper.TYPE##_class())) { \
+            return Status::InternalError("Type not matched"); \
+        }                                                     \
+        break;                                                \
+    }
+        INSTANCE_OF_TYPE(TYPE_BOOLEAN, uint8_t)
+        INSTANCE_OF_TYPE(TYPE_TINYINT, int8_t)
+        INSTANCE_OF_TYPE(TYPE_SMALLINT, int16_t)
+        INSTANCE_OF_TYPE(TYPE_INT, int32_t)
+        INSTANCE_OF_TYPE(TYPE_BIGINT, int64_t)
+        INSTANCE_OF_TYPE(TYPE_FLOAT, float)
+        INSTANCE_OF_TYPE(TYPE_DOUBLE, double)
+    case TYPE_VARCHAR: {
+        std::string buffer;
+        if (!env->IsInstanceOf(val, helper.string_clazz())) {
+            return Status::InternalError("Type not matched");
+        }
+        break;
+    }
+    default:
+        DCHECK(false) << "unsupport UDF TYPE" << method_type_desc.type;
+        break;
+    }
+
+    return Status::OK();
 }
 
 Status ConvertDirectBufferVistor::do_visit(const NullableColumn& column) {

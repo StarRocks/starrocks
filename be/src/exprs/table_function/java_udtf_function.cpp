@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "exprs/table_function/table_function.h"
 #include "gutil/casts.h"
 #include "jni.h"
@@ -185,6 +186,11 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
         for (int j = 0; j < len; ++j) {
             jobject vi = env->GetObjectArrayElement((jobjectArray)rets[i], j);
             LOCAL_REF_GUARD_ENV(env, vi);
+            auto st = check_type_matched(method_desc, vi);
+            if (UNLIKELY(!st.ok())) {
+                state->set_status(st);
+                return std::make_pair(Columns{}, nullptr);
+            }
             append_jvalue(method_desc, col.get(), {.l = vi});
             release_jvalue(method_desc.is_box, {.l = vi});
         }
