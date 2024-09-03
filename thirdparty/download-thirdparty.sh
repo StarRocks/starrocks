@@ -463,9 +463,10 @@ cd -
 echo "Finished patching $VPACK_SOURCE"
 
 # patch avro-c
-cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
 if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE
     cp $TP_PATCH_DIR/avro-1.10.2.c.findjansson.patch $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c/Findjansson.cmake
     patch -p1 < $TP_PATCH_DIR/avro-1.10.2.c.gcc14.patch
     touch $PATCHED_MARK
