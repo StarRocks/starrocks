@@ -1973,7 +1973,8 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  output columns:\n" +
-                "  |  12 <-> CASE WHEN DictDecode(38: P_NAME, [<place-holder> = 'a']) THEN 'a1' WHEN DictDecode(39: P_BRAND, [<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  12 <-> CASE WHEN DictDecode(38: P_NAME, [<place-holder> = 'a']) THEN 'a1' " +
+                "WHEN DictDecode(39: P_BRAND, [<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
                 "  |  38 <-> [38: P_NAME, INT, false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
@@ -1985,6 +1986,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "     table: part_v2, rollup: part_v2\n" +
                 "     preAggregation: on\n" +
                 "     dict_col=P_NAME,P_BRAND");
+        System.out.println(plan);
     }
 
 }
