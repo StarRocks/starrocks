@@ -45,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
@@ -90,6 +91,7 @@ import java.util.stream.Collectors;
 
 public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
@@ -739,4 +741,13 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         return ImmutableMap.of("RoutineLoad", (long) idToRoutineLoadJob.size());
     }
 
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = idToRoutineLoadJob.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+
+        return Lists.newArrayList(Pair.create(samples, (long) idToRoutineLoadJob.size()));
+    }
 }

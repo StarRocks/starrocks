@@ -14,6 +14,7 @@
 
 package io.airbyte.integrations.destination.starrocks;
 
+<<<<<<< HEAD:contrib/destination-starrocks/src/main/java/io/airbyte/integrations/destination/starrocks/StreamLoader.java
 import io.airbyte.protocol.models.v0.AirbyteRecordMessage;
 
 import java.util.List;
@@ -23,5 +24,15 @@ public interface StreamLoader {
     void close();
 
     StreamLoadResponse send(List<AirbyteRecordMessage> records) throws Exception;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.metastore.IMetastore;
+import com.starrocks.memory.MemoryTrackable;
+
+import java.util.List;
+
+public interface IDeltaLakeMetastore extends IMetastore, MemoryTrackable {
+    Table getTable(String dbName, String tableName);
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841)):fe/fe-core/src/main/java/com/starrocks/connector/delta/IDeltaLakeMetastore.java
 
 }

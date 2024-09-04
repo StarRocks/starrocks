@@ -122,7 +122,6 @@ import com.starrocks.thrift.TWorkGroupOp;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -136,18 +135,35 @@ import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon implements MemoryTrackable {
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(reportQueue) + SizeEstimator.estimate(pendingTaskMap);
+    public List<Pair<List<Object>, Long>> getSamples() {
+        synchronized (pendingTaskMap) {
+            List<Pair<List<Object>, Long>> result = new ArrayList<>();
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                result.add(Pair.create(taskMap.values()
+                        .stream()
+                        .limit(1)
+                        .collect(Collectors.toList()),
+                        (long) taskMap.size()));
+            }
+            return result;
+        }
     }
 
     @Override
     public Map<String, Long> estimateCount() {
-        long count = 0;
-        for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
-            count += taskMap.size();
+        synchronized (pendingTaskMap) {
+            long count = 0;
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                count += taskMap.size();
+            }
+            return ImmutableMap.of("PendingTask", count,
+                    "ReportQueue", (long) reportQueue.size());
         }
+<<<<<<< HEAD
         return ImmutableMap.of("PendingTask", count,
                                 "ReportQueue", (long) reportQueue.size());
+=======
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
     }
 
     public enum ReportType {
@@ -166,9 +182,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
 
-    private BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
+    private final BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
 
-    private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
+    private final Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
     /**
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
