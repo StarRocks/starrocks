@@ -4,6 +4,18 @@ displayed_sidebar: docs
 
 # StarRocks version 3.1
 
+## 3.1.15
+
+Release date: September 4, 2024
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- During query rewrite with asynchronous materialized views, `count(*)` on certain tables returns NULL. [#49288](https://github.com/StarRocks/starrocks/pull/49288)
+- `partition_linve_nubmer` does not take effect. [#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- FE throws a tablet exception: BE disk offline, and cannot migrate tablets. [#47833](https://github.com/StarRocks/starrocks/pull/47833)
+
 ## 3.1.14
 
 Release date: July 29, 2024
