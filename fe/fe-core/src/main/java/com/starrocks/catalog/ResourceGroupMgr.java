@@ -641,7 +641,6 @@ public class ResourceGroupMgr implements Writable {
             CreateResourceGroupStmt defaultWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME,
                     true, false, Collections.emptyList(), defaultWgProperties);
             defaultWgStmt.analyze();
-            defaultWgStmt.getResourceGroup().setId(ResourceGroup.DEFAULT_WG_ID);
             createResourceGroup(defaultWgStmt);
 
             Map<String, String> defaultMvWgProperties = ImmutableMap.of(
