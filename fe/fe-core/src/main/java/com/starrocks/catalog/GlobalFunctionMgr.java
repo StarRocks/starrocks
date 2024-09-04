@@ -78,6 +78,11 @@ public class GlobalFunctionMgr {
     private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists) throws UserException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
+        if (allowExists && createIfNotExists) {
+            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+            throw new UserException(
+                    "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
+        }
         if (!isReplay) {
             for (Function existFunc : existFuncs) {
                 if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
