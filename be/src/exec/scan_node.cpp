@@ -112,8 +112,7 @@ static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeli
 
     if (morsel_queue_type == pipeline::MorselQueue::Type::FIXED) {
         for (auto& [operator_seq, morsels] : morsels_per_driver) {
-            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(
-                                                           std::move(morsels), morsel_queue->has_more()));
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
         }
     } else {
         for (auto& [operator_seq, morsels] : morsels_per_driver) {
@@ -145,10 +144,9 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
         if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
-            bool has_more = morsel_queue->has_more();
             auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
-                                                                            /*could_local_shuffle*/ true, has_more);
+                                                                            /*could_local_shuffle*/ true);
         } else {
             if (config::use_default_dop_when_shared_scan && enable_shared_scan && is_fixed_or_dynamic_morsel_queue) {
                 scan_dop = pipeline_dop;
@@ -171,7 +169,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
 
         // both of global_scan_ranges and scan_ranges_per_driver_seq are empty, create an empty morsel queue
         if (queue_per_driver_seq.empty()) {
-            queue_per_driver_seq.emplace(pipeline_dop - 1, pipeline::create_empty_morsel_queue(false));
+            queue_per_driver_seq.emplace(pipeline_dop - 1, pipeline::create_empty_morsel_queue());
         }
 
         if (output_chunk_by_bucket()) {
@@ -179,8 +177,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                                                 /*could_local_shuffle*/ false);
         } else {
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
-                                                                            /*could_local_shuffle*/ false,
-                                                                            /*has_more*/ false);
+                                                                            /*could_local_shuffle*/ false);
         }
     }
 }
@@ -190,10 +187,11 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
-    bool has_more_morsel = false;
+    [[maybe_unused]] bool has_more_morsel = false;
     pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
                                              &has_more_morsel);
-    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), has_more_morsel);
+    DCHECK(has_more_morsel == false);
+    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
 }
 
 void ScanNode::enable_shared_scan(bool enable) {

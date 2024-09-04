@@ -26,9 +26,10 @@ pipeline::OpFactories CaptureVersionNode::decompose_to_pipeline(pipeline::Pipeli
 StatusOr<pipeline::MorselQueueFactoryPtr> CaptureVersionNode::scan_range_to_morsel_queue_factory(
         const std::vector<TScanRangeParams>& scan_ranges) {
     pipeline::Morsels morsels;
-    bool has_more_morsel = false;
+    [[maybe_unused]] bool has_more_morsel = false;
     pipeline::ScanMorsel::build_scan_morsels(id(), scan_ranges, true, &morsels, &has_more_morsel);
-    auto morsel_queue = std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), has_more_morsel);
+    DCHECK(has_more_morsel == false);
+    auto morsel_queue = std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), 1);
 }
 

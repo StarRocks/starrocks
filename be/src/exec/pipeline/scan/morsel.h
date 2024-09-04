@@ -272,8 +272,7 @@ private:
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
 public:
-    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle,
-                                 bool has_more);
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle);
     ~IndividualMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
@@ -287,8 +286,6 @@ public:
 
     bool is_shared() const override { return false; }
     bool could_local_shuffle() const override { return _could_local_shuffle; }
-
-    Status append_morsels(Morsels&& morsels, bool has_more) override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
@@ -369,9 +366,7 @@ protected:
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
 class FixedMorselQueue final : public MorselQueue {
 public:
-    explicit FixedMorselQueue(Morsels&& morsels, bool has_more) : MorselQueue(std::move(morsels)), _pop_index(0) {
-        _has_more = has_more;
-    }
+    explicit FixedMorselQueue(Morsels&& morsels) : MorselQueue(std::move(morsels)), _pop_index(0) {}
     ~FixedMorselQueue() override = default;
     bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
@@ -600,7 +595,7 @@ private:
     size_t _degree_of_parallelism;
 };
 
-MorselQueuePtr create_empty_morsel_queue(bool has_more);
+MorselQueuePtr create_empty_morsel_queue();
 
 } // namespace pipeline
 } // namespace starrocks

@@ -69,7 +69,7 @@ TEST_F(OlapScanOperatorTest, test_finish_sequence) {
                                           [](void* arg) { *(Status*)arg = Status::EndOfFile(""); });
 
     Morsels morsels;
-    FixedMorselQueue morsel_queue(std::move(morsels), false);
+    FixedMorselQueue morsel_queue(std::move(morsels));
 
     OlapScanNode scan_node(&_object_pool, _tnode, *_tbl);
     auto scan_ctx_factory =
