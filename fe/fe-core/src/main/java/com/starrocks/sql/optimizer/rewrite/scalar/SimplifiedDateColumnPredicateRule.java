@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -73,9 +75,11 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
             }
             // date_format(t, '%Y-%m-%d') <= '2023-03-27' -> t < days_add('2023-03-27', 1)
             if (binaryType == BinaryType.LE) {
+                Function daysAddFn = Expr.getBuiltinFunction(FunctionSet.DAYS_ADD,
+                        new Type[] {Type.DATETIME, Type.INT}, Function.CompareMode.IS_IDENTICAL);
                 return new BinaryPredicateOperator(BinaryType.LT, columnRef, new CallOperator(
-                        FunctionSet.DAYS_SUB, Type.DATETIME,
-                        ImmutableList.of(right, ConstantOperator.createInt(1))));
+                        FunctionSet.DAYS_ADD, Type.DATETIME,
+                        ImmutableList.of(right, ConstantOperator.createInt(1)), daysAddFn));
             }
         }
         return predicate;
