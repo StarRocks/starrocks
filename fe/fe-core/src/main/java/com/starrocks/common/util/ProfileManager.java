@@ -36,8 +36,10 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
 import org.apache.logging.log4j.LogManager;
@@ -47,6 +49,7 @@ import org.apache.spark.util.SizeEstimator;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,7 +94,7 @@ public class ProfileManager implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
-                               "LoadProfile", (long) loadProfileMap.size());
+                "LoadProfile", (long) loadProfileMap.size());
     }
 
     public static class ProfileElement {
@@ -212,11 +215,15 @@ public class ProfileManager implements MemoryTrackable {
         }
     }
 
+    /**
+     * Get all queries sorted by start time in descending order.
+     */
     public List<List<String>> getAllQueries() {
         List<List<String>> result = Lists.newLinkedList();
-        readLock.lock();
-        try {
-            for (ProfileElement element : profileMap.values()) {
+        try (CloseableLock ignored = CloseableLock.lock(readLock)) {
+            Iterable<ProfileElement> profileElements = getProfileElements();
+
+            for (ProfileElement element : profileElements) {
                 Map<String, String> infoStrings = element.infoStrings;
                 List<String> row = Lists.newArrayList();
                 for (String str : PROFILE_HEADERS) {
@@ -224,16 +231,6 @@ public class ProfileManager implements MemoryTrackable {
                 }
                 result.add(0, row);
             }
-            for (ProfileElement element : loadProfileMap.values()) {
-                Map<String, String> infoStrings = element.infoStrings;
-                List<String> row = Lists.newArrayList();
-                for (String str : PROFILE_HEADERS) {
-                    row.add(infoStrings.get(str));
-                }
-                result.add(0, row);
-            }
-        } finally {
-            readLock.unlock();
         }
         return result;
     }
@@ -286,16 +283,13 @@ public class ProfileManager implements MemoryTrackable {
         }
     }
 
+    /**
+     * Get all profiles sorted by start time in ascending order.
+     */
     public List<ProfileElement> getAllProfileElements() {
-        List<ProfileElement> result = Lists.newArrayList();
-        readLock.lock();
-        try {
-            result.addAll(profileMap.values());
-            result.addAll(loadProfileMap.values());
-        } finally {
-            readLock.unlock();
+        try (CloseableLock ignored = CloseableLock.lock(readLock)) {
+            return Lists.newArrayList(getProfileElements());
         }
-        return result;
     }
 
     public long getQueryProfileCount() {
@@ -314,5 +308,18 @@ public class ProfileManager implements MemoryTrackable {
         } finally {
             readLock.unlock();
         }
+    }
+
+    /**
+     * Get all profiles sorted by start time in ascending order.
+     * Note that it needs to be guarded by {@link #readLock}.
+     */
+    private Iterable<ProfileElement> getProfileElements() {
+        return Iterables.mergeSorted(
+                List.of(profileMap.values(), loadProfileMap.values()),
+                Comparator.comparing(profileElement -> {
+                    String startTime = profileElement.infoStrings.get(START_TIME);
+                    return startTime == null ? "" : startTime;
+                }));
     }
 }
