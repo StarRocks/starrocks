@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "common/status.h"
 #include "exec/chunks_sorter_distinct_topn.h"
 
 namespace starrocks {
@@ -46,6 +47,8 @@ Status ChunksSorterDistinctTopn::_sort_chunks(RuntimeState* state) {
     // the second ordered group contains both permutations.second and _merged_segment
     RETURN_IF_ERROR(_merge_sort_data_as_merged_segment_for_dense_rank(
             state, permutations, segments, distinct_top_n_of_first_size, distinct_top_n_of_second_size));
+
+    return Status::OK();
 }
 
 Status ChunksSorterDistinctTopn::_filter_and_sort_data_for_dense_rank(RuntimeState* state,
@@ -99,15 +102,22 @@ Status ChunksSorterDistinctTopn::_filter_and_sort_data_for_dense_rank(RuntimeSta
         if (distinct_top_n_of_first_size >= rows_to_sort) {
             // clear permutations.second which is useless
             Permutation().swap(permutations.second);
-            return Status::OK();
+            filtered_rows -= smaller_num;
         } else {
             // otherwise we need to get more distinct top n from INCLUDE_IN_SEGMENT
             RETURN_IF_ERROR(_partial_sort_col_wise(state, permutations.second, segments,
                                                    distinct_top_n_of_first_size - rows_to_sort,
                                                    distinct_top_n_of_second_size));
-            return Status::OK();
+            filtered_rows -= smaller_num;
+            filtered_rows -= include_num;
+        }
+
+        if (_sort_filter_rows) {
+            COUNTER_UPDATE(_sort_filter_rows, filtered_rows);
         }
     }
+
+    return Status::OK();
 }
 
 Status ChunksSorterDistinctTopn::_merge_sort_data_as_merged_segment_for_dense_rank(
@@ -180,8 +190,7 @@ Status ChunksSorterDistinctTopn::_hybrid_sort_common_for_dense_rank(
         // we need to merge INCLUDE_IN_SEGMENT and _merged_segment, get 'distinct_rows_to_keep' top elements from merged result and append them to big_chunk
         size_t merged_distinct_num;
         RETURN_IF_ERROR(_merge_sort_common(big_chunk, segments, distinct_rows_to_keep, new_permutation.second,
-                                           second_distinct_num),
-                        &merged_distinct_num);
+                                           second_distinct_num, &merged_distinct_num));
         new_distinct_top_n += merged_distinct_num;
     }
     RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
@@ -210,6 +219,8 @@ Status ChunksSorterDistinctTopn::_partial_sort_col_wise(RuntimeState* state, Per
         return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_desc, permutation, limit, _topn_type,
                                     &distinct_top_n);
     }
+
+    return Status::OK();
 }
 
 } // namespace starrocks
