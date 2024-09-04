@@ -626,7 +626,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
 Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
                              const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range,
                              const bool build_tie, const size_t limit, size_t* limited, bool is_dense_rank_topn,
-                             size_t* top_distinct_num, bool is_sorted = false) {
+                             size_t* top_distinct_num, bool is_sorted) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
 

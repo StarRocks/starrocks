@@ -68,7 +68,8 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
 Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
                              const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range,
                              const bool build_tie, const size_t limit = 0, size_t* limited = nullptr,
-                             bool is_dense_rank_topn = false);
+                             bool is_dense_rank_topn = false, size_t* top_distinct_num = nullptr,
+                             bool is_sorted = false);
 
 Status sort_vertical_columns_for_dense_rank(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
                                             const SortDesc& sort_desc, Permutation& permutation, Tie& tie,

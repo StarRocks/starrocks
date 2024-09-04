@@ -81,6 +81,7 @@ public:
     std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
 
 protected:
+    virtual Status _sort_chunks(RuntimeState* state);
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
     // build data for top-n
