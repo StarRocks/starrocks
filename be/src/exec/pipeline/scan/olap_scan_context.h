@@ -96,7 +96,10 @@ public:
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
 
-    void set_prepare_finished() { _is_prepare_finished.store(true, std::memory_order_release); }
+    void set_prepare_finished() {
+        _is_prepare_finished.store(true, std::memory_order_release);
+        _publisher.notify();
+    }
     bool is_prepare_finished() const { return _is_prepare_finished.load(std::memory_order_acquire); }
 
     Status parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,

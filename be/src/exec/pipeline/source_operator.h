@@ -157,6 +157,12 @@ public:
         return _source_factory()->group_dependent_pipelines();
     }
 
+    void notify() override {
+        if (is_finished() || has_output()) {
+            Operator::notify();
+        }
+    }
+
 protected:
     const SourceOperatorFactory* _source_factory() const { return down_cast<const SourceOperatorFactory*>(_factory); }
 

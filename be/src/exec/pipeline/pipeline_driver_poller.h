@@ -69,11 +69,15 @@ public:
     size_t backup_count() const { return _backup_count.load(); }
 
     void upgrade_to_blocked_driver(const DriverRawPtr driver);
-    void upgrade_to_blocked_driver2(const DriverRawPtr driver);
+    void driver_event_action(const DriverRawPtr driver);
+    void on_cancel2(DriverRawPtr driver, std::vector<DriverRawPtr>& ready_drivers);
 
 private:
     void run_internal();
-    void backup_run_internal();
+    void timepoint_run_internal();
+
+    bool _driver_is_ready(DriverRawPtr driver, const std::string& msg) const;
+
     PipelineDriverPoller(const PipelineDriverPoller&) = delete;
     PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
 

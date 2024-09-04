@@ -18,6 +18,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -132,9 +133,7 @@ size_t OlapScanOperator::num_buffered_chunks() const {
 ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
     ChunkPtr chunk = nullptr;
     if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
-        if (num_buffered_chunks() == 0) {
-            notify();
-        }
+        notify();
         return chunk;
     }
     return nullptr;

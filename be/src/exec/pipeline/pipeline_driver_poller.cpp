@@ -17,6 +17,7 @@
 #include <chrono>
 
 #include "common/config.h"
+#include "exec/pipeline/pipeline_fwd.h"
 namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
@@ -28,7 +29,7 @@ void PipelineDriverPoller::start() {
     }
 
     status = Thread::create(
-            "pipeline", "pipeline_backup_poller", [this]() { backup_run_internal(); }, &this->_backup_thread);
+            "pipeline", "pipeline_backup_poller", [this]() { timepoint_run_internal(); }, &this->_backup_thread);
     if (!status.ok()) {
         LOG(FATAL) << "Fail to create PipelineDriverBackupPoller: error=" << status.to_string();
     }
@@ -98,14 +99,18 @@ void PipelineDriverPoller::run_internal() {
                     driver->fragment_ctx()->cancel(
                             Status::TimedOut(fmt::format("Query exceeded time limit of {} seconds",
                                                          driver->query_ctx()->get_query_expire_seconds())));
+
+                    LOG(INFO) << "Driver is exprired:" << driver->to_readable_string();
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (driver->fragment_ctx()->is_canceled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
+                    LOG(INFO) << "Driver is cancel:" << driver->to_readable_string();
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (driver->need_report_exec_state()) {
                     // If the runtime profile is enabled, the driver should be rescheduled after the timeout for triggering
                     // the profile report prcessing.
+                    LOG(INFO) << "Driver is report:" << driver->to_readable_string();
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
                 } else if (driver->pending_finish()) {
@@ -118,6 +123,7 @@ void PipelineDriverPoller::run_internal() {
                         // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
                         // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
                         // FragmentContext is unregistered prematurely.
+                        LOG(INFO) << "Driver is pending finish:" << driver->to_readable_string();
                         driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
                                                                                        : DriverState::FINISH);
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
@@ -127,23 +133,28 @@ void PipelineDriverPoller::run_internal() {
                     if (driver->is_still_epoch_finishing()) {
                         ++driver_it;
                     } else {
+                        LOG(INFO) << "Driver is epoch_finishing:" << driver->to_readable_string();
                         driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
                                                                                        : DriverState::EPOCH_FINISH);
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
                 } else if (driver->is_epoch_finished()) {
+                    LOG(INFO) << "Driver is epoch_finish:" << driver->to_readable_string();
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
                 } else if (driver->is_finished()) {
+                    LOG(INFO) << "Driver is finish:" << driver->to_readable_string();
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
                 } else {
                     auto status_or_is_not_blocked = driver->is_not_blocked();
                     if (!status_or_is_not_blocked.ok()) {
+                        LOG(INFO) << "Driver is still cancel:" << driver->to_readable_string();
                         driver->fragment_ctx()->cancel(status_or_is_not_blocked.status());
                         on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                     } else if (status_or_is_not_blocked.value()) {
+                        LOG(INFO) << "Driver is still ready:" << driver->to_readable_string();
                         driver->set_driver_state(DriverState::READY);
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
@@ -186,49 +197,90 @@ void PipelineDriverPoller::run_internal() {
     }
 }
 
-void PipelineDriverPoller::backup_run_internal() {
+void PipelineDriverPoller::timepoint_run_internal() {
     DriverList tmp_drivers;
+    std::vector<DriverRawPtr> ready_drivers;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
         _backup_count++;
         {
             std::unique_lock<std::mutex> lock(_backup_mutex);
             tmp_drivers.assign(_backup_drivers.begin(), _backup_drivers.end());
+            LOG(INFO) << "Driver backup queue size2:" << _backup_drivers.size();
         }
         auto driver_it = tmp_drivers.begin();
+        ready_drivers.clear();
         while (driver_it != tmp_drivers.end()) {
             auto* driver = *driver_it;
 
             if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
-                // LOG(INFO) << "Driver is exprired:" << driver->to_readable_string();
-                upgrade_to_blocked_driver(driver);
-            } else if (driver->fragment_ctx()->is_canceled() || driver->need_report_exec_state()) {
-                // LOG(INFO) << "Driver is cancel:" << driver->to_readable_string();
-                upgrade_to_blocked_driver(driver);
-            } else if ((driver->pending_finish() && driver->is_still_pending_finish()) ||
-                       (driver->is_epoch_finishing() && driver->is_still_epoch_finishing()) ||
-                       driver->is_epoch_finished() || driver->is_finished()) {
-                // LOG(INFO) << "Driver is pending finish:" << driver->to_readable_string();
-                upgrade_to_blocked_driver(driver);
+                // there are not any drivers belonging to a query context can make progress for an expiration period
+                // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
+                // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
+                //
+                // If the fragment is expired when the source operator is already pending i/o task,
+                // The state of driver shouldn't be changed.
+                size_t expired_log_count = driver->fragment_ctx()->expired_log_count();
+                if (expired_log_count <= 10) {
+                    LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
+                    driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
+                }
+                LOG(INFO) << "Driver is exprired:" << driver->to_readable_string();
+                driver->fragment_ctx()->cancel(Status::TimedOut(fmt::format(
+                        "Query exceeded time limit of {} seconds", driver->query_ctx()->get_query_expire_seconds())));
+                on_cancel2(driver, ready_drivers);
+            } else if (driver->fragment_ctx()->is_canceled()) {
+                LOG(INFO) << "Driver is cancel:" << driver->to_readable_string();
+                on_cancel2(driver, ready_drivers);
+            } else if (driver->need_report_exec_state()) {
+                LOG(INFO) << "Driver is report:" << driver->to_readable_string();
+                ready_drivers.emplace_back(driver);
+            } else if ((driver->pending_finish())) {
+                LOG(INFO) << "Driver is pending finish:" << driver->is_still_pending_finish() << ", "
+                          << driver->to_readable_string();
+                if (!driver->is_still_pending_finish()) {
+                    driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                   : DriverState::FINISH);
+                    ready_drivers.emplace_back(driver);
+                }
+            } else if ((driver->is_epoch_finishing())) {
+                LOG(INFO) << "Driver is epoch_finishing:" << driver->is_still_epoch_finishing() << ", "
+                          << driver->to_readable_string();
+                if (!driver->is_still_epoch_finishing()) {
+                    driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                   : DriverState::EPOCH_FINISH);
+                    ready_drivers.emplace_back(driver);
+                }
+            } else if (driver->is_epoch_finished() || driver->is_finished()) {
+                LOG(INFO) << "Driver is finish:" << driver->to_readable_string();
+                ready_drivers.emplace_back(driver);
             } else {
                 auto status_or_is_not_blocked = driver->is_not_blocked();
-                if (status_or_is_not_blocked.ok() && status_or_is_not_blocked.value()) {
-                    // LOG(INFO) << "Driver is still ready:" << driver->to_readable_string()
-                    //           << ", sink finished: " << driver->sink_operator()->is_finished()
-                    //           << ", source finished: " << driver->source_operator()->is_finished()
-                    //           << ", source output: " << driver->source_operator()->has_output();
-                    upgrade_to_blocked_driver(driver);
+                if (!status_or_is_not_blocked.ok()) {
+                    LOG(INFO) << "Driver is still cancel:" << driver->to_readable_string();
+                    on_cancel2(driver, ready_drivers);
+                } else if (status_or_is_not_blocked.value()) {
+                    LOG(INFO) << "Driver is still ready:" << driver->to_readable_string();
+                    driver->set_driver_state(DriverState::READY);
+                    ready_drivers.emplace_back(driver);
                 } else {
-                    // LOG(INFO) << "Driver is not ready:" << driver->to_readable_string()
-                    //           << ", sink finished: " << driver->sink_operator()->is_finished()
-                    //           << ", source finished: " << driver->source_operator()->is_finished()
-                    //           << ", source output: " << driver->source_operator()->has_output();
+                    LOG(INFO) << "Driver is not ready:" << driver->to_readable_string();
                 }
             }
             driver_it++;
         }
 
         tmp_drivers.clear();
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        if (!ready_drivers.empty()) {
+            {
+                std::unique_lock<std::mutex> lock(_backup_mutex);
+                for (auto driver : ready_drivers) {
+                    _backup_drivers.remove(driver);
+                }
+                LOG(INFO) << "Driver backup queue size3:" << _backup_drivers.size();
+            }
+            _driver_queue->put_back(ready_drivers);
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(5));
     }
 }
 
@@ -241,36 +293,56 @@ void PipelineDriverPoller::backup_run_internal() {
 //     _cond.notify_one();
 // }
 
-void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
-    if (config::enable_pipeline_event_poller) {
-        if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
-        } else if (driver->fragment_ctx()->is_canceled()) {
-        } else if (driver->need_report_exec_state()) {
-        } else if (driver->pending_finish() && driver->is_still_pending_finish()) {
-            // LOG(INFO) << "Driver put pending_finish:" << driver->to_readable_string();
-            std::unique_lock<std::mutex> lock(_backup_mutex);
-            _backup_drivers.push_back(driver);
-            return;
-        } else if (driver->is_epoch_finishing() && driver->is_still_epoch_finishing()) {
-            LOG(INFO) << "Driver put epoch finishing:" << driver->to_readable_string();
-            std::unique_lock<std::mutex> lock(_backup_mutex);
-            _backup_drivers.push_back(driver);
-            return;
-        } else if (driver->is_epoch_finished()) {
-        } else if (driver->is_finished()) {
-        } else {
-            auto status_or_is_not_blocked = driver->is_not_blocked();
-            if (status_or_is_not_blocked.ok() && !status_or_is_not_blocked.value()) {
-                // LOG(INFO) << "Driver put blocked:" << driver->to_readable_string()
-                //           << ", sink finished: " << driver->sink_operator()->is_finished()
-                //           << ", source finished: " << driver->source_operator()->is_finished()
-                //           << ", source output: " << driver->source_operator()->has_output();
-                std::unique_lock<std::mutex> lock(_backup_mutex);
-                _backup_drivers.push_back(driver);
-                return;
-            }
+bool PipelineDriverPoller::_driver_is_ready(DriverRawPtr driver, const std::string& msg) const {
+    if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
+        // time driver
+        return false;
+    } else if (driver->fragment_ctx()->is_canceled() || driver->need_report_exec_state()) {
+        // time driver
+        return false;
+    } else if (driver->pending_finish()) {
+        LOG(INFO) << msg << " pending_finish:" << driver->is_still_pending_finish() << ", "
+                  << driver->to_readable_string();
+        if (!driver->is_still_pending_finish()) {
+            driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                           : DriverState::FINISH);
+            return true;
+        }
+    } else if (driver->is_epoch_finishing()) {
+        LOG(INFO) << msg << " epoch finishing:" << driver->is_still_epoch_finishing() << ", "
+                  << driver->to_readable_string();
+        if (!driver->is_still_epoch_finishing()) {
+            driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                           : DriverState::EPOCH_FINISH);
+            return true;
+        }
+    } else if (driver->is_epoch_finished() || driver->is_finished()) {
+        LOG(INFO) << msg << " finished:" << driver->to_readable_string();
+        return true;
+    } else {
+        auto status_or_is_not_blocked = driver->is_not_blocked();
+        if (status_or_is_not_blocked.ok() && status_or_is_not_blocked.value()) {
+            LOG(INFO) << msg << " ready:" << driver->to_readable_string();
+            driver->set_driver_state(DriverState::READY);
+            return true;
         }
     }
+    return false;
+}
+
+void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
+    if (config::enable_pipeline_event_poller) {
+        bool is_ready = _driver_is_ready(driver, "Driver put");
+        if (is_ready) {
+            _driver_queue->put_back(driver);
+            return;
+        }
+        LOG(INFO) << "Driver put queue:" << driver->to_readable_string();
+        std::unique_lock<std::mutex> lock(_backup_mutex);
+        _backup_drivers.push_back(driver);
+        return;
+    }
+
     std::unique_lock<std::mutex> lock(_global_mutex);
     _blocked_drivers.push_back(driver);
     _blocked_driver_queue_len++;
@@ -296,51 +368,21 @@ void PipelineDriverPoller::upgrade_to_blocked_driver(const DriverRawPtr driver) 
     }
 }
 
-void PipelineDriverPoller::upgrade_to_blocked_driver2(const DriverRawPtr driver) {
-    {
-        std::unique_lock<std::mutex> lock(_backup_mutex);
-        if (_backup_drivers.remove(driver) < 1) {
-            return;
-        }
-    }
-    bool is_ready = false;
-    bool is_upgrade = false;
-    if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
-        is_upgrade = true;
-    } else if (driver->fragment_ctx()->is_canceled() || driver->need_report_exec_state()) {
-        is_upgrade = true;
-    } else if (driver->pending_finish() && !driver->is_still_pending_finish()) {
-        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED : DriverState::FINISH);
-        is_ready = true;
-    } else if (driver->is_epoch_finishing() && !driver->is_still_epoch_finishing()) {
-        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                       : DriverState::EPOCH_FINISH);
-        is_ready = true;
-    } else if (driver->is_epoch_finished() || driver->is_finished()) {
-        is_ready = true;
-    } else {
-        auto status_or_is_not_blocked = driver->is_not_blocked();
-        if (!status_or_is_not_blocked.ok()) {
-            is_upgrade = true;
-        } else if (status_or_is_not_blocked.value()) {
-            is_ready = true;
-        }
-    }
-    if (is_upgrade) {
-        std::unique_lock<std::mutex> lock(_global_mutex);
-        _blocked_drivers.push_back(driver);
-        _blocked_driver_queue_len++;
-        driver->_pending_timer_sw->reset();
-        driver->driver_acct().clean_local_queue_infos();
-        _cond.notify_one();
-        return;
-    }
+void PipelineDriverPoller::driver_event_action(const DriverRawPtr driver) {
+    bool is_ready = _driver_is_ready(driver, "Driver event action ");
+    bool in_backup = false;
     if (is_ready) {
-        _driver_queue->put_back(driver);
-    } else {
         std::unique_lock<std::mutex> lock(_backup_mutex);
-        _backup_drivers.emplace_back(driver);
+        in_backup = _backup_drivers.remove(driver) > 0;
+
+        if (in_backup) {
+            driver->_pending_timer_sw->reset();
+            driver->driver_acct().clean_local_queue_infos();
+            _driver_queue->put_back(driver);
+        }
     }
+    LOG(INFO) << "Driver event action: " << driver->to_readable_string() << ", is_ready: " << is_ready
+              << ", in_backup: " << in_backup;
 }
 
 void PipelineDriverPoller::park_driver(const DriverRawPtr driver) {
@@ -402,6 +444,16 @@ void PipelineDriverPoller::on_cancel(DriverRawPtr driver, std::vector<DriverRawP
     } else {
         driver->set_driver_state(DriverState::CANCELED);
         remove_blocked_driver(local_blocked_drivers, driver_it);
+        ready_drivers.emplace_back(driver);
+    }
+}
+
+void PipelineDriverPoller::on_cancel2(DriverRawPtr driver, std::vector<DriverRawPtr>& ready_drivers) {
+    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+    if (driver->is_still_pending_finish()) {
+        driver->set_driver_state(DriverState::PENDING_FINISH);
+    } else {
+        driver->set_driver_state(DriverState::CANCELED);
         ready_drivers.emplace_back(driver);
     }
 }

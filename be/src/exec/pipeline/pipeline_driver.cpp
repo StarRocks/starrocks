@@ -731,6 +731,21 @@ std::string PipelineDriver::to_readable_string() const {
         }
     }
     ss << "]";
+
+    auto source = _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
+    auto sink = _operators.back().get();
+
+    if (sink != nullptr) {
+        ss << ", sink["
+           << "pending_finish: " << sink->pending_finish() << ", is_finished: " << sink->is_finished()
+           << ", need_input: " << sink->need_input() << "] ";
+    }
+
+    if (source != nullptr) {
+        ss << ", source["
+           << "is_finished: " << source->is_finished() << ", has_output: " << source->has_output() << "] ";
+    }
+
     return ss.str();
 }
 

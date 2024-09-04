@@ -49,6 +49,9 @@ using PipelineObserverPtr = std::shared_ptr<PipelineObserver>;
 
 class PipelinePublisher {
 public:
+    PipelinePublisher() = default;
+    virtual ~PipelinePublisher() = default;
+
     void attach(PipelineObserverPtr& observer) {
         std::lock_guard<std::mutex> l(_mutex);
         _observers.emplace_back(observer);
@@ -59,7 +62,7 @@ public:
         _observers.erase(std::remove(_observers.begin(), _observers.end(), observer), _observers.end());
     }
 
-    void notify() {
+    virtual void notify() {
         std::lock_guard<std::mutex> l(_mutex);
         for (auto& ob : _observers) {
             ob->update();

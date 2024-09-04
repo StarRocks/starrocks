@@ -72,8 +72,10 @@ public:
 
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override {
-        std::lock_guard<std::mutex> l(_chunk_lock);
-        _is_finished = true;
+        {
+            std::lock_guard<std::mutex> l(_chunk_lock);
+            _is_finished = true;
+        }
         notify();
         return Status::OK();
     }

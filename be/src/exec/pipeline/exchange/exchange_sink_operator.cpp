@@ -480,6 +480,12 @@ Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
     return Status::OK();
 }
 
+void ExchangeSinkOperator::notify() {
+    if (is_finished() || pending_finish() || need_input()) {
+        Operator::notify();
+    }
+}
+
 StatusOr<ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't call pull_chunk from exchange sink.");
 }

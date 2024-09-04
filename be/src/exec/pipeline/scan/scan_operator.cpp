@@ -240,13 +240,13 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
-    DeferOp op = DeferOp([this] { notify(); });
     {
         std::lock_guard guard(_task_mutex);
         _detach_chunk_sources();
         set_buffer_finished();
         _is_finished = true;
     }
+    notify();
     return Status::OK();
 }
 
@@ -358,8 +358,11 @@ void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_s
 }
 
 void ScanOperator::_close_chunk_source(RuntimeState* state, int chunk_source_index) {
-    std::lock_guard guard(_task_mutex);
-    _close_chunk_source_unlocked(state, chunk_source_index);
+    {
+        std::lock_guard guard(_task_mutex);
+        _close_chunk_source_unlocked(state, chunk_source_index);
+    }
+    notify();
 }
 
 void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
@@ -381,9 +384,7 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         }
         _is_io_task_running[chunk_source_index] = false;
     }
-    if (_num_running_io_tasks == 0) {
-        notify();
-    }
+    notify();
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
@@ -481,9 +482,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         // TODO(hcf) set a proper retry times
         LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload, retryCnt="
                      << _io_task_retry_cnt;
-        if (_num_running_io_tasks == 0) {
-            notify();
-        }
+        notify();
         if (++_io_task_retry_cnt > 100) {
             return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
         }
@@ -503,9 +502,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         if (need_detach) {
             detach_chunk_source(chunk_source_index);
         }
-        if (_morsel_queue->empty()) {
-            notify();
-        }
+        notify();
     });
 
     // if current morsel not ready for get next. we should wait current bucket finish. just return directly

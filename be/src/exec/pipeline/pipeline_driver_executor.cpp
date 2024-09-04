@@ -260,11 +260,9 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
 
     if (config::enable_pipeline_event_poller) {
         driver->observe_operator([&](DriverRawPtr dr) {
-            // LOG(INFO) << "Driver event action:" << driver->to_readable_string()
-            //           << ", sink finished: " << driver->sink_operator()->is_finished()
-            //           << ", source finished: " << driver->source_operator()->is_finished()
-            //           << ", source output: " << driver->source_operator()->has_output();
-            _blocked_driver_poller->upgrade_to_blocked_driver2(dr);
+            if (dr->driver_state() != DriverState::RUNNING) {
+                _blocked_driver_poller->driver_event_action(dr);
+            }
         });
     }
 
