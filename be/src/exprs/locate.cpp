@@ -79,7 +79,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
         start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_expansion);
     }
 
-    const std::vector<uint32_t>& offsets = haystack->get_offset();
+    const Buffer<uint32_t>& offsets = haystack->get_offset();
     Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
     auto res = RunTimeColumnType<TYPE_INT>::create();
     res->resize(haystack->size());

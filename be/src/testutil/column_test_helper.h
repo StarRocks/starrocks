@@ -37,7 +37,7 @@ public:
             return data;
         } else if constexpr (std::is_same_v<T, Slice>) {
             auto data = BinaryColumn::create();
-            data->append_strings(values);
+            data->append_strings(values.data(), values.size());
             return data;
         } else if constexpr (std::is_same_v<T, double>) {
             auto data = DoubleColumn ::create();

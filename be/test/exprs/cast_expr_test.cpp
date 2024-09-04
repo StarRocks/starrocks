@@ -1140,11 +1140,11 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
         auto v = std::static_pointer_cast<BitmapColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
-        std::vector<int64_t> expect_array;
+        Buffer<int64_t> expect_array;
         expect_array.push_back(1);
 
         for (int j = 0; j < v->size(); ++j) {
-            std::vector<int64_t> array;
+            Buffer<int64_t> array;
             v->get_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
@@ -1213,12 +1213,12 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
         auto v = std::static_pointer_cast<BitmapColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
-        std::vector<int64_t> expect_array;
+        Buffer<int64_t> expect_array;
         expect_array.push_back(1);
         expect_array.push_back(2);
 
         for (int j = 0; j < v->size(); ++j) {
-            std::vector<int64_t> array;
+            Buffer<int64_t> array;
             v->get_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
@@ -1290,13 +1290,13 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
         auto v = std::static_pointer_cast<BitmapColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
-        std::vector<int64_t> expect_array;
+        Buffer<int64_t> expect_array;
         expect_array.push_back(1);
         expect_array.push_back(342);
         expect_array.push_back(2222);
 
         for (int j = 0; j < v->size(); ++j) {
-            std::vector<int64_t> array;
+            Buffer<int64_t> array;
             v->get_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }

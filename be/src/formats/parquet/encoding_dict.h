@@ -19,6 +19,7 @@
 
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "simd/simd.h"
@@ -187,9 +188,8 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
-        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
+        const NullData& null_data = nulls.immutable_null_column_data();
         bool has_null = nulls.has_null();
         bool all_null = false;
 
@@ -295,7 +295,6 @@ private:
     std::vector<Slice> _dict;
     std::vector<uint32_t> _indexes;
     std::vector<Slice> _slices;
-
     size_t _max_value_length = 0;
 };
 

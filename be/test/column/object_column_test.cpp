@@ -189,7 +189,7 @@ TEST(ObjectColumnTest, HLL_test_reset_column) {
     c->append(HyperLogLog());
     c->append(HyperLogLog());
     c->append(HyperLogLog());
-    const std::vector<HyperLogLog*>& data = c->get_data();
+    const auto& data = c->get_data();
     ASSERT_EQ(3, data.size());
     c->set_delete_state(DEL_PARTIAL_SATISFIED);
 

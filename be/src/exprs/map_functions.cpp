@@ -254,7 +254,7 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
     } else {
         filter = down_cast<ArrayColumn*>(raw_filter.get());
     }
-    std::vector<uint32_t> indexes;
+    Buffer<uint32_t> indexes;
     // only keep the elements whose filter is not null and not 0.
     for (size_t i = 0; i < src_column->size(); ++i) {
         if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {         // dest_null_map[i] is not null

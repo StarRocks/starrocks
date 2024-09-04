@@ -80,7 +80,7 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     PredicateTree _non_pushdown_pred_tree;
-    std::vector<uint8_t> _selection;
+    Filter _selection;
 
     ObjectPool _obj_pool;
 

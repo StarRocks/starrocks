@@ -21,6 +21,7 @@
 #include <memory>
 #include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/parquet_types.h"
 #include "utils.h"
@@ -60,8 +61,7 @@ public:
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                                   Column* column) {
+    virtual Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
 

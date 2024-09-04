@@ -101,7 +101,7 @@ public:
 
     bool append_nulls(size_t count) override { return false; }
 
-    bool append_strings(const Buffer<Slice>& strs) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 

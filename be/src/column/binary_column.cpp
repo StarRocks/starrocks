@@ -121,7 +121,7 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
+ColumnPtr BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     auto dest = std::dynamic_pointer_cast<BinaryColumnBase<T>>(BinaryColumnBase<T>::create());
     auto& dest_offsets = dest->get_offset();
     auto& dest_bytes = dest->get_bytes();
@@ -147,8 +147,9 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::append_strings(const Buffer<Slice>& strs) {
-    for (const auto& s : strs) {
+bool BinaryColumnBase<T>::append_strings(const Slice* data, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        const auto& s = data[i];
         const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
         _bytes.insert(_bytes.end(), p, p + s.size);
         _offsets.emplace_back(_bytes.size());
@@ -160,26 +161,28 @@ bool BinaryColumnBase<T>::append_strings(const Buffer<Slice>& strs) {
 // NOTE: this function should not be inlined. If this function is inlined,
 // the append_strings_overflow will be slower by 30%
 template <typename T, size_t copy_length>
-void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename BinaryColumnBase<T>::Offsets* offsets)
-        __attribute__((noinline));
+void append_fixed_length(const Slice* data, size_t data_size, Bytes* bytes,
+                         typename BinaryColumnBase<T>::Offsets* offsets) __attribute__((noinline));
 
 template <typename T, size_t copy_length>
-void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename BinaryColumnBase<T>::Offsets* offsets) {
+void append_fixed_length(const Slice* data, size_t data_size, Bytes* bytes,
+                         typename BinaryColumnBase<T>::Offsets* offsets) {
     size_t size = bytes->size();
-    for (const auto& s : strs) {
+    for (size_t i = 0; i < data_size; i++) {
+        const auto& s = data[i];
         size += s.size;
     }
 
     size_t offset = bytes->size();
     bytes->resize(size + copy_length);
 
-    size_t rows = strs.size();
+    size_t rows = data_size;
     size_t length = offsets->size();
     raw::stl_vector_resize_uninitialized(offsets, offsets->size() + rows);
 
     for (size_t i = 0; i < rows; ++i) {
-        memcpy(&(*bytes)[offset], strs[i].get_data(), copy_length);
-        offset += strs[i].get_size();
+        memcpy(&(*bytes)[offset], data[i].get_data(), copy_length);
+        offset += data[i].get_size();
         (*offsets)[length++] = offset;
     }
 
@@ -187,19 +190,20 @@ void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename Binar
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
+bool BinaryColumnBase<T>::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
     if (max_length <= 8) {
-        append_fixed_length<T, 8>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 8>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 16) {
-        append_fixed_length<T, 16>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 16>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 32) {
-        append_fixed_length<T, 32>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 32>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 64) {
-        append_fixed_length<T, 64>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 64>(data, size, &_bytes, &_offsets);
     } else if (max_length <= 128) {
-        append_fixed_length<T, 128>(strs, &_bytes, &_offsets);
+        append_fixed_length<T, 128>(data, size, &_bytes, &_offsets);
     } else {
-        for (const auto& s : strs) {
+        for (size_t i = 0; i < size; i++) {
+            const auto& s = data[i];
             const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
             _bytes.insert(_bytes.end(), p, p + s.size);
             _offsets.emplace_back(_bytes.size());
@@ -210,17 +214,18 @@ bool BinaryColumnBase<T>::append_strings_overflow(const Buffer<Slice>& strs, siz
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::append_continuous_strings(const Buffer<Slice>& strs) {
-    if (strs.empty()) {
+bool BinaryColumnBase<T>::append_continuous_strings(const Slice* data, size_t size) {
+    if (size == 0) {
         return true;
     }
     size_t new_size = _bytes.size();
-    const auto* p = reinterpret_cast<const uint8_t*>(strs.front().data);
-    const auto* q = reinterpret_cast<const uint8_t*>(strs.back().data + strs.back().size);
+    const auto* p = reinterpret_cast<const uint8_t*>(data[0].data);
+    const auto* q = reinterpret_cast<const uint8_t*>(data[size - 1].data + data[size - 1].size);
     _bytes.insert(_bytes.end(), p, q);
 
-    _offsets.reserve(_offsets.size() + strs.size());
-    for (const Slice& s : strs) {
+    _offsets.reserve(_offsets.size() + size);
+    for (size_t i = 0; i < size; i++) {
+        const auto& s = data[i];
         new_size += s.size;
         _offsets.emplace_back(new_size);
     }

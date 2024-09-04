@@ -53,7 +53,7 @@ public:
 
     // Restore intermediate state if needed by using last run state table's results from
     // result/intermediate state table.
-    Status allocate_intermediate_state(size_t chunk_size, const std::vector<uint8_t>& keys_not_in_map,
+    Status allocate_intermediate_state(size_t chunk_size, const Filter& keys_not_in_map,
                                        const StateTableResult* state_result,
                                        const Buffer<AggGroupStatePtr>& agg_group_state) const;
 

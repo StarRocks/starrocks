@@ -61,8 +61,7 @@ public:
 
     Status get_dict_values(Column* column) override { return _inner_reader->get_dict_values(column); }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
         return _inner_reader->get_dict_values(dict_codes, nulls, column);
     }
 

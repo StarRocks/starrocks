@@ -202,7 +202,7 @@ private:
     }
 
     // res[i] = mapping[index[i]]
-    std::vector<uint32_t> _code_convert(const std::vector<int32_t>& index, const std::vector<int16_t>& mapping) {
+    std::vector<uint32_t> _code_convert(const Buffer<int32_t>& index, const std::vector<int16_t>& mapping) {
         std::vector<uint32_t> res(index.size());
         SIMDGather::gather(res.data(), mapping.data(), index.data(), mapping.size(), index.size());
         return res;

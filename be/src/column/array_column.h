@@ -97,8 +97,6 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    bool append_strings(const Buffer<Slice>& strs) override { return false; }
-
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override;

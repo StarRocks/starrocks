@@ -15,6 +15,7 @@
 #pragma once
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
