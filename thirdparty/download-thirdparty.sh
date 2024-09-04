@@ -493,6 +493,14 @@ fi
 echo "Finished patching $SASL_SOURCE"
 cd -
 
+cd $TP_SOURCE_DIR/$RAPIDJSON_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $RAPIDJSON_SOURCE = "rapidjson-1.1.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/rapidjson-gcc14.patch
+    touch $PATCHED_MARK
+fi
+echo "Finished patching $RAPIDJSON_SOURCE"
+cd -
+
 # patch arrow
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
