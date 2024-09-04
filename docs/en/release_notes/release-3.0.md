@@ -236,7 +236,7 @@ Release date: June 28, 2023
 ### Improvements
 
 - Metadata synchronization of StarRocks external tables has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
-- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](https://docs.starrocks.io/en-us/3.0/table_design/dynamic_partitioning). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](https://docs.starrocks.io/docs/table_design/expression_partitioning/). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
 - Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 
 ### Bug Fixes
