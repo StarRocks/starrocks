@@ -48,7 +48,7 @@ public class FragmentAssignmentStrategyFactory {
                     executionDAG.isGatherOutput(), random);
         } else {
             return new LocalFragmentAssignmentStrategy(connectContext, workerProvider, jobSpec.isEnablePipeline(),
-                    jobSpec.isLoadType());
+                    jobSpec.isLoadType(), jobSpec.isIncrementalScanRanges());
         }
     }
 }

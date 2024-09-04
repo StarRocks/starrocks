@@ -36,6 +36,7 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -256,6 +257,14 @@ public class CoordinatorPreprocessor {
 
         executionDAG.prepareCaptureVersion(enablePhasedSchedule);
         executionDAG.finalizeDAG();
+    }
+
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws UserException {
+        execFragment.getScanRangeAssignment().clear();
+        for (FragmentInstance instance : execFragment.getInstances()) {
+            instance.getNode2ScanRanges().clear();
+        }
+        fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
     }
 
     private void validateExecutionDAG() throws StarRocksPlannerException {
