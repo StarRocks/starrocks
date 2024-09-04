@@ -526,7 +526,7 @@ public class DecimalLiteral extends LiteralExpr {
 
     @Override
     public boolean equals(Object obj) {
-        return super.equals(obj);
+        return super.equals(obj) && (type.matchesType(((LiteralExpr) obj).getType()));
     }
 
     @Override
