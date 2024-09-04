@@ -464,6 +464,7 @@ echo "Finished patching $VPACK_SOURCE"
 
 # patch avro-c
 if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
+    touch $PATCHED_MARK
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
     cd $TP_SOURCE_DIR/$AVRO_SOURCE
@@ -570,8 +571,8 @@ fi
 
 if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
-    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2022.07.02" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.02.patch"
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2022.07.12" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
