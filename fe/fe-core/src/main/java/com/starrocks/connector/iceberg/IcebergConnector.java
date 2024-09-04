@@ -19,6 +19,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -35,6 +36,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -124,4 +126,55 @@ public class IcebergConnector implements Connector {
         }
         return icebergNativeCatalog;
     }
+<<<<<<< HEAD
+=======
+
+    private ExecutorService buildIcebergJobPlanningExecutor() {
+        if (icebergJobPlanningExecutor == null) {
+            icebergJobPlanningExecutor = newWorkerPool(catalogName + "-sr-iceberg-worker-pool",
+                    icebergCatalogProperties.getIcebergJobPlanningThreadNum());
+        }
+
+        return icebergJobPlanningExecutor;
+    }
+
+    public ExecutorService buildRefreshOtherFeExecutor() {
+        if (refreshOtherFeExecutor == null) {
+            refreshOtherFeExecutor = newWorkerPool(catalogName + "-refresh-others-fe-iceberg-metadata-cache",
+                    icebergCatalogProperties.getRefreshOtherFeIcebergCacheThreadNum());
+        }
+        return refreshOtherFeExecutor;
+    }
+
+    private ExecutorService buildBackgroundJobPlanningExecutor() {
+        return newWorkerPool(catalogName + "-background-iceberg-worker-pool",
+                icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
+    }
+
+    @Override
+    public void shutdown() {
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCachingIcebergCatalog(catalogName);
+        if (icebergJobPlanningExecutor != null) {
+            icebergJobPlanningExecutor.shutdown();
+        }
+        if (refreshOtherFeExecutor != null) {
+            refreshOtherFeExecutor.shutdown();
+        }
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return icebergCatalogProperties.enableIcebergMetadataCache() && icebergNativeCatalog != null;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return icebergNativeCatalog.estimateCount();
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return icebergNativeCatalog.getSamples();
+    }
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }

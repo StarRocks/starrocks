@@ -18,6 +18,7 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
@@ -46,9 +47,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     @SerializedName(value = "overwriteJobMap")
     private Map<Long, InsertOverwriteJob> overwriteJobMap;
@@ -265,4 +268,21 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
         tableToOverwriteJobs = catalog.tableToOverwriteJobs;
         runningJobs = catalog.runningJobs;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("insertOverwriteJobs", (long) overwriteJobMap.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = overwriteJobMap.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) overwriteJobMap.size()));
+    }
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }

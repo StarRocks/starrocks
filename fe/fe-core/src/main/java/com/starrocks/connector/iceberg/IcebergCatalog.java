@@ -17,6 +17,11 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorViewDefinition;
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -60,4 +65,39 @@ public interface IcebergCatalog {
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
+<<<<<<< HEAD
+=======
+    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
+    }
+
+    default void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {
+        return new StarRocksIcebergTableScan(
+                table,
+                table.schema(),
+                newTableScanContext(table),
+                srScanContext);
+    }
+
+    default String defaultTableLocation(String dbName, String tableName) {
+        return "";
+    }
+
+    default Map<String, Object> loadNamespaceMetadata(String dbName) {
+        return new HashMap<>();
+    }
+
+    default Map<String, Long> estimateCount() {
+        return new HashMap<>();
+    }
+
+    default List<Pair<List<Object>, Long>> getSamples() {
+        return new ArrayList<>();
+    }
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }

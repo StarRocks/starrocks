@@ -14,10 +14,21 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -210,4 +221,34 @@ public class CompactionMgr {
     public long getPartitionStatsCount() {
         return partitionStatisticsHashMap.size();
     }
+<<<<<<< HEAD
 }
+=======
+
+    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            return v;
+        });
+        LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("PartitionStats", (long) partitionStatisticsHashMap.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = partitionStatisticsHashMap.values()
+                .stream()
+                .limit(1)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) partitionStatisticsHashMap.size()));
+    }
+}
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
