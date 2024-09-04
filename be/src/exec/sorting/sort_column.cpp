@@ -232,7 +232,8 @@ class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSor
 public:
     explicit VerticalColumnSorter(const std::atomic<bool>& cancel, std::vector<ColumnPtr> columns,
                                   const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
-                                  std::pair<int, int> range, bool build_tie, size_t limit)
+                                  std::pair<int, int> range, bool build_tie, size_t limit,
+                                  bool is_dense_rank_topn = false, bool isSorted = false)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
@@ -242,9 +243,12 @@ public:
               _range(std::move(range)),
               _build_tie(build_tie),
               _limit(limit),
-              _pruned_limit(permutation.size()) {}
+              _pruned_limit(permutation.size()),
+              _is_dense_rank_topn(is_dense_rank_topn),
+              _is_sorted(isSorted) {}
 
     size_t get_limited() const { return _pruned_limit; }
+    size_t get_top_distinct_num() const { return _top_distinct_num; }
 
     Status do_visit(const NullableColumn& column) {
         std::vector<const NullData*> null_datas;
@@ -262,7 +266,7 @@ public:
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
                                                                   _permutation, _tie, _range, _build_tie, _limit,
-                                                                  &_pruned_limit));
+                                                                  &_pruned_limit, _is_dense_rank_topn));
         } else {
             auto null_pred = [&](const PermutationItem& item) -> bool {
                 return (*null_datas[item.chunk_index])[item.index_in_chunk] != 1;
@@ -270,7 +274,7 @@ public:
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
                                                                   _permutation, _tie, _range, _build_tie, _limit,
-                                                                  &_pruned_limit));
+                                                                  &_pruned_limit, _is_dense_rank_topn));
         }
 
         _prune_limit();
@@ -298,7 +302,8 @@ public:
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range,
-                                                _build_tie, _limit, &_pruned_limit));
+                                                _build_tie, _limit, &_pruned_limit, _is_dense_rank_topn,
+                                                &_top_distinct_num, _is_sorted));
             _restore_inlined_permutation(inlined);
         } else {
             auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
@@ -310,7 +315,8 @@ public:
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp,
-                                                _range, _build_tie, _limit, &_pruned_limit));
+                                                _range, _build_tie, _limit, &_pruned_limit, _is_dense_rank_topn,
+                                                &_top_distinct_num, _is_sorted));
         }
         _prune_limit();
         return Status::OK();
@@ -333,7 +339,8 @@ public:
             }
             auto inlined = _create_inlined_permutation<T>(containers);
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range,
-                                                _build_tie, _limit, &_pruned_limit));
+                                                _build_tie, _limit, &_pruned_limit, _is_dense_rank_topn,
+                                                &_top_distinct_num, _is_sorted));
             _restore_inlined_permutation(inlined);
         } else {
             using ItemType = PermutationItem;
@@ -346,7 +353,8 @@ public:
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp,
-                                                _range, _build_tie, _limit, &_pruned_limit));
+                                                _range, _build_tie, _limit, &_pruned_limit, _is_dense_rank_topn,
+                                                &_top_distinct_num, _is_sorted));
         }
         _prune_limit();
         return Status::OK();
@@ -365,7 +373,8 @@ public:
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
-                                            _build_tie, _limit, &_pruned_limit));
+                                            _build_tie, _limit, &_pruned_limit, _is_dense_rank_topn, &_top_distinct_num,
+                                            _is_sorted));
         _prune_limit();
         return Status::OK();
     }
@@ -378,7 +387,8 @@ public:
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
-                                            _build_tie, _limit, &_pruned_limit));
+                                            _build_tie, _limit, &_pruned_limit, _is_dense_rank_topn, &_top_distinct_num,
+                                            _is_sorted));
         _prune_limit();
         return Status::OK();
     }
@@ -402,7 +412,8 @@ public:
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
-                                            _build_tie, _limit, &_pruned_limit));
+                                            _build_tie, _limit, &_pruned_limit, _is_dense_rank_topn, &_top_distinct_num,
+                                            _is_sorted));
         _prune_limit();
         return Status::OK();
     }
@@ -452,6 +463,7 @@ private:
         if (_pruned_limit < _permutation.size()) {
             _permutation.resize(_pruned_limit);
             _tie.resize(_pruned_limit);
+            _range.second = _pruned_limit;
         }
     }
 
@@ -464,8 +476,11 @@ private:
     Tie& _tie;
     std::pair<int, int> _range;
     bool _build_tie;
-    size_t _limit;        // The requested limit
-    size_t _pruned_limit; // The pruned limit during partial sorting
+    size_t _limit;            // The requested limit
+    size_t _pruned_limit;     // The pruned limit during partial sorting
+    size_t _top_distinct_num; // The number of distinct elements before _pruned_limit, which <= _limit
+    bool _is_dense_rank_topn;
+    bool _is_sorted; // whether permutation is sorted already, if true, we can skip sorting
 };
 
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
@@ -610,7 +625,8 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
 
 Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
                              const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                             const bool build_tie, const size_t limit, size_t* limited) {
+                             const bool build_tie, const size_t limit, size_t* limited, bool is_dense_rank_topn,
+                             size_t* top_distinct_num, bool is_sorted = false) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
 
@@ -620,30 +636,42 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
         }
     }
 
-    VerticalColumnSorter sorter(cancel, columns, sort_desc, permutation, tie, range, build_tie, limit);
+    VerticalColumnSorter sorter(cancel, columns, sort_desc, permutation, tie, range, build_tie, limit,
+                                is_dense_rank_topn, is_sorted);
     RETURN_IF_ERROR(columns[0]->accept(&sorter));
     if (limit > 0 && limited != nullptr) {
         *limited = std::min(*limited, sorter.get_limited());
+    }
+
+    if (is_dense_rank_topn) {
+        DCHECK(top_distinct_num != nullptr);
+        *top_distinct_num = sorter.get_top_distinct_num();
     }
     return Status::OK();
 }
 
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
-                            const SortDescs& sort_desc, Permutation& perm, const size_t limit,
-                            const bool is_limit_by_rank) {
+                            const SortDescs& sort_desc, Permutation& perm, size_t limit, TTopNType::type topn_type,
+                            size_t* distinct_topn, bool is_sorted) {
     if (vertical_chunks.empty() || perm.empty()) {
         return Status::OK();
     }
 
     size_t num_columns = vertical_chunks[0].size();
     size_t num_rows = perm.size();
+    // all equal, so we have to sort all of them at the first round
     Tie tie(num_rows, 1);
 
     DCHECK_EQ(num_columns, sort_desc.num_columns());
 
     for (int col = 0; col < num_columns; col++) {
         // TODO: use the flag directly
-        bool build_tie = col != num_columns - 1;
+        bool build_tie;
+        if (topn_type == TTopNType::DENSE_RANK) {
+            build_tie = true;
+        } else {
+            build_tie = col != num_columns - 1;
+        }
         std::pair<int, int> range(0, perm.size());
         DCHECK_GT(perm.size(), 0);
 
@@ -654,11 +682,19 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
         }
 
         RETURN_IF_ERROR(sort_vertical_columns(cancel, vertical_columns, sort_desc.get_column_desc(col), perm, tie,
-                                              range, build_tie, limit));
+                                              range, build_tie, limit, nullptr, topn_type == TTopNType::DENSE_RANK,
+                                              distinct_topn, is_sorted));
+    }
+
+    if (topn_type == TTopNType::DENSE_RANK) {
+        DCHECK(distinct_topn != nullptr);
+        // size_t count_zero = SIMD::count_zero(tie);
+        // *distinct_topn = count_zero;
+        return Status::OK();
     }
 
     if (limit < perm.size()) {
-        if (is_limit_by_rank) {
+        if (topn_type == TTopNType::RANK) {
             // Given that
             // * number array `[1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5]`
             // * rank array `[1, 1, 1, 1, 1, 1, 1, 8, 8, 10, 11, 12]`

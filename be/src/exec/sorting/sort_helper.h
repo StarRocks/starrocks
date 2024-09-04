@@ -15,6 +15,7 @@
 #pragma once
 
 #include <algorithm>
+#include <boost/mpl/size.hpp>
 #include <concepts>
 
 #include "column/nullable_column.h"
@@ -101,7 +102,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
                                                            NullPred null_pred, const SortDesc& sort_desc,
                                                            Permutation& permutation, Tie& tie,
                                                            std::pair<int, int> range, bool build_tie, size_t limit,
-                                                           size_t* limited) {
+                                                           size_t* limited, bool is_dense_rank_topn) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
@@ -143,8 +144,8 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
     }
 
     // TODO(Murphy): avoid sort the null datums in the column
-    RETURN_IF_ERROR(
-            sort_vertical_columns(cancel, data_columns, sort_desc, permutation, tie, range, build_tie, limit, limited));
+    RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, sort_desc, permutation, tie, range, build_tie, limit,
+                                          limited, is_dense_rank_topn));
 
     return Status::OK();
 }
@@ -226,11 +227,155 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
     return Status::OK();
 }
 
+// for every equal range in permutation[range.begin,range.end), sort them and rebuild tie from [range.begin,range.end)
+// if limit is not zero and  is in equal range, we can just get the top 'limit' element instead of sort the whole equal range
+// note:tie's equal range is derived from the former sort result by previous column, so we only need sort the values that are equal on previous columns
+template <class DataComparator, class PermutationType>
+static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>& cancel, const Column* column,
+                                                        bool is_asc_order, PermutationType& permutation, Tie& tie,
+                                                        DataComparator cmp, std::pair<int, int> range, size_t limit,
+                                                        size_t* limited, size_t* result_distinct_top_n,
+                                                        bool is_sorted) {
+    DCHECK(result_distinct_top_n != nullptr);
+    DCHECK(limited != nullptr);
+    auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
+    auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
+
+    // permutation[range_first,range_last) is current equal range, distinct_top_n is current distinct top n before this equal range
+    // this function will try to find enough distinct top values so total distinct_top_n >= limit
+    auto do_topn_for_dense_rank = [&](size_t first_iter, size_t last_iter, size_t distinct_top_n) -> size_t {
+        auto begin = permutation.begin() + first_iter;
+        auto end = permutation.begin() + last_iter;
+
+        // only try 3 times to find enough distinct elements, otherwise fall back to full sort
+        size_t begin_index = 0;
+        // if we find 'limit' + 1 distinct topn, then it's safe to get 'limit' distinct topn
+        // for example: 1 1 1 2 2 2 3 3 4, limit = 2, if we only see 1 1 1 2 2, we may not get enough number
+        // but if we see 1 1 1 2 2 2 3, which means we get 'limit' + 1 distinct topn, then 1 1 1 2 2 2 is enough
+        if (!is_sorted) {
+            size_t number_to_look_up = limit - distinct_top_n + 1;
+            for (size_t i = 0; i < 3; i++) {
+                // in this case, no need to try, just full back to full sort
+                if (end - begin < number_to_look_up) break;
+                // only get top n
+                if (is_asc_order) {
+                    std::partial_sort(begin, begin + number_to_look_up, end, lesser);
+                } else {
+                    std::partial_sort(begin, begin + number_to_look_up, end, greater);
+                }
+                // build the tie and count distinct for [first_iter + begin_index, first_iter + begin_index + n)
+                for (auto j = first_iter + begin_index; j < first_iter + begin_index + number_to_look_up; j++) {
+                    // equal range's begin
+                    if (j == first_iter) {
+                        tie[j] = 0;
+                        distinct_top_n++;
+                        if (distinct_top_n == limit + 1) {
+                            *limited = first_iter - 1;
+                            return distinct_top_n - 1;
+                        }
+                    } else {
+                        if (cmp(permutation[j - 1], permutation[j]) != 0) {
+                            tie[j] = 0;
+                            distinct_top_n++;
+                            if (distinct_top_n == limit + 1) {
+                                *limited = first_iter + j - 1;
+                                return distinct_top_n;
+                            }
+                        } else {
+                            tie[j] = 1;
+                        }
+                    }
+                }
+
+                begin_index += number_to_look_up;
+                // make sure begin = permutation.begin() + begin_indx
+                begin += number_to_look_up;
+            }
+        }
+
+        // fall back the left data to full sort
+        if (first_iter + begin_index < last_iter) {
+            if (!is_sorted) {
+                if (is_asc_order) {
+                    ::pdqsort(begin, end, lesser);
+                } else {
+                    ::pdqsort(begin, end, greater);
+                }
+            }
+
+            // build the tie and count distinct
+            for (auto j = first_iter + begin_index; j < last_iter; j++) {
+                if (UNLIKELY(j == first_iter)) {
+                    tie[j] = 0;
+                    distinct_top_n++;
+                    if (distinct_top_n == limit + 1) {
+                        *limited = j - 1;
+                        return distinct_top_n;
+                    }
+                } else {
+                    if (cmp(permutation[j - 1], permutation[j]) != 0) {
+                        tie[j] = 0;
+                        distinct_top_n++;
+                        if (distinct_top_n == limit + 1) {
+                            *limited = j - 1;
+                            return distinct_top_n;
+                        }
+                    } else {
+                        tie[j] = 1;
+                    }
+                }
+            }
+
+            // at the end of this equal range, if distinct_top_n == limit, it's also safe to set limited
+            if (distinct_top_n == limit) {
+                *limited = last_iter - 1;
+            }
+            DCHECK(distinct_top_n < limit);
+        }
+
+        return distinct_top_n;
+    };
+
+    DCHECK(limit > 0);
+    DCHECK(limited != nullptr);
+
+    // iterate range's every equal range to find at least 'limit' distinct elements
+    TieIterator iterator(tie, range.first, range.second);
+    size_t distinct_top_n = 0;
+    while (iterator.next()) {
+        if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
+            return Status::Cancelled("Sort cancelled");
+        }
+        // current equal range is [range_first,range_last)
+        int range_first = iterator.range_first;
+        int range_last = iterator.range_last;
+
+        if (LIKELY(range_last - range_first > 1)) {
+            distinct_top_n = do_topn_for_dense_rank(range_first, range_last, distinct_top_n);
+        }
+
+        if (distinct_top_n >= limit) {
+            *result_distinct_top_n = distinct_top_n;
+            return Status::OK();
+        }
+    }
+
+    *result_distinct_top_n = distinct_top_n;
+    return Status::OK();
+}
+
+// for every equal range in permutation[range.begin,range.end), sort them and rebuild tie from [range.begin,range.end)
+// if limit is not zero and  is in equal range, we can only get the top limit element instread of sort the whole equal range
 template <class DataComparator, class PermutationType>
 static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column* column, bool is_asc_order,
                                          PermutationType& permutation, Tie& tie, DataComparator cmp,
                                          std::pair<int, int> range, bool build_tie, size_t limit = 0,
-                                         size_t* limited = nullptr) {
+                                         size_t* limited = nullptr, bool is_dense_rank_topn = false,
+                                         size_t* distinct_top_n = nullptr, bool is_sorted = false) {
+    if (is_dense_rank_topn)
+        return sort_and_tie_helper_for_dense_rank<DataComparator, PermutationType>(
+                cancel, column, is_asc_order, permutation, tie, cmp, range, limit, limited, distinct_top_n, is_sorted);
+
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](size_t first_iter, size_t last_iter) {
@@ -278,7 +423,9 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
         }
 
         if (LIKELY(range_last - range_first > 1)) {
-            do_sort(range_first, range_last);
+            if (!is_sorted) {
+                do_sort(range_first, range_last);
+            }
             if (build_tie) {
                 tie[range_first] = 0;
                 for (int i = range_first + 1; i < range_last; i++) {

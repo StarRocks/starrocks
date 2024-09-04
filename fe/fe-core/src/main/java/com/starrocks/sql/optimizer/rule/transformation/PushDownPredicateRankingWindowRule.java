@@ -89,7 +89,8 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
 
         // TODO(hcf) we support dense_rank later
         if (!FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) &&
-                !FunctionSet.RANK.equals(callOperator.getFnName())) {
+                !FunctionSet.RANK.equals(callOperator.getFnName()) &&
+                !FunctionSet.DENSE_RANK.equals(callOperator.getFnName())) {
             return false;
         }
 

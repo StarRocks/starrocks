@@ -345,8 +345,7 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
         vertical_chunks.push_back(segment.order_by_columns);
     }
     auto do_sort = [&](Permutation& perm, size_t limit) {
-        return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_desc, perm, limit,
-                                    _topn_type == TTopNType::RANK);
+        return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_desc, perm, limit, _topn_type);
     };
 
     size_t first_size = std::min(permutations.first.size(), rows_to_sort);
@@ -390,7 +389,8 @@ Status ChunksSorterTopn::_merge_sort_data_as_merged_segment(RuntimeState* state,
 // Take rows_to_sort rows from permutation_second merge-sort with _merged_segment.
 // And take result datas into big_chunk.
 Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
-                                            size_t sorted_size, Permutation& permutation_second) {
+                                            Permutation& permutation_second, size_t new_permutation_distinct_num,
+                                            size_t* result_distinct_num) {
     // Assemble the permutated segments into a chunk
     std::vector<ChunkPtr> right_chunks;
     for (auto& segment : segments) {
@@ -417,12 +417,28 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
     // avoid exaggerated limit + offset, for an example select * from t order by col limit 9223372036854775800,1
     merged_perm.reserve(std::min<size_t>(rows_to_keep, 10'000'000ul));
 
-    RETURN_IF_ERROR(merge_sorted_chunks_two_way(_sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
-                                                &merged_perm));
+    if (_topn_type == TTopNType::DENSE_RANK) {
+        DCHECK(result_distinct_num != nullptr);
+        StatusOr<size_t> result = merge_sorted_chunks_top_distinct_n(
+                _sort_desc, {left_chunk, left_columns}, _current_distinct_top_n, {right_chunk, right_columns},
+                new_permutation_distinct_num, &merged_perm, rows_to_keep);
+        ASSIGN_OR_RETURN(*result_distinct_num, result);
+    } else {
+        RETURN_IF_ERROR(merge_sorted_chunks_two_way(_sort_desc, {left_chunk, left_columns},
+                                                    {right_chunk, right_columns}, &merged_perm));
+    }
+
     CHECK_GE(merged_perm.size(), rows_to_keep);
-    merged_perm.resize(rows_to_keep);
+    if (_topn_type == TTopNType::DENSE_RANK) {
+        size_t distinct_num = 0;
+        // xxx
+        merged_perm.resize(distinct_num);
+    } else {
+        merged_perm.resize(rows_to_keep);
+    }
 
     std::vector<ChunkPtr> chunks{left_chunk, right_chunk};
+
     materialize_by_permutation(big_chunk.get(), chunks, merged_perm);
     return Status::OK();
 }
@@ -479,7 +495,7 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
             // For rank type, there may exist a wide equal range, so we need to keep all elements of part2 and part3
             rows_to_keep = sorted_size + second_size;
         }
-        RETURN_IF_ERROR(_merge_sort_common(big_chunk, segments, rows_to_keep, sorted_size, new_permutation.second));
+        RETURN_IF_ERROR(_merge_sort_common(big_chunk, segments, rows_to_keep, new_permutation.second));
     }
     RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
 
@@ -497,7 +513,8 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     size_t rows_to_keep = rows_to_sort;
 
     rows_to_keep = std::min(new_permutation.size(), rows_to_keep);
-    if (_topn_type == TTopNType::RANK && new_permutation.size() > rows_to_keep) {
+    if ((_topn_type == TTopNType::RANK || _topn_type == TTopNType::DENSE_RANK) &&
+        new_permutation.size() > rows_to_keep) {
         // For rank type, the number of rows may be greater than the specified limit rank number
         // For example, given set [1, 1, 1, 1, 1], all the element's rank is 1, so we must keep
         // all the element if rank limit number is 1
