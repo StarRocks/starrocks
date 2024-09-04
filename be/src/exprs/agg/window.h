@@ -33,7 +33,7 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
-                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                 AggDataPtr* states, const Filter& filter) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
@@ -53,7 +53,7 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** column,
-                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                  AggDataPtr* states, const Filter& filter) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 

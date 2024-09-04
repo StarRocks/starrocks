@@ -764,9 +764,9 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     }
 
     ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
-    std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
+    Filter filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
 
-    std::vector<uint8_t> init_filter(chunk->num_rows(), 0);
+    Filter init_filter(chunk->num_rows(), 0);
 
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
@@ -1062,7 +1062,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMALV2: {
             column = ColumnHelper::get_data_column(column);
             auto* decimal = down_cast<DecimalColumn*>(column);
-            std::vector<DecimalV2Value>& datas = decimal->get_data();
+            Buffer<DecimalV2Value>& datas = decimal->get_data();
             int scale = desc->type().scale;
             for (size_t j = 0; j < num_rows; ++j) {
                 if (_validate_selection[j] == VALID_SEL_OK) {

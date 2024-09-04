@@ -116,8 +116,7 @@ struct AggHashMapWithKey {
 
     template <typename Func>
     void build_hash_map_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                       std::vector<uint8_t>* not_founds) {
+                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
         return static_cast<Impl*>(this)->template compute_agg_states<Func, false, true>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, not_founds);
     }
@@ -125,7 +124,7 @@ struct AggHashMapWithKey {
     template <typename Func>
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                      std::vector<uint8_t>* not_founds) {
+                                                      Filter* not_founds) {
         return static_cast<Impl*>(this)->template compute_agg_states<Func, true, true>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, not_founds);
     }
@@ -155,7 +154,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
-                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+                            Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
         if constexpr (is_nullable) {
             return this->template compute_agg_states_nullable<Func, allocate_and_compute_state, compute_not_founds>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, not_founds);
@@ -169,7 +168,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_states_non_nullable(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                          Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                         std::vector<uint8_t>* not_founds) {
+                                                         Filter* not_founds) {
         DCHECK(!key_columns[0]->is_nullable());
         auto column = down_cast<ColumnType*>(key_columns[0].get());
 
@@ -194,7 +193,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_states_nullable(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                      Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                     std::vector<uint8_t>* not_founds) {
+                                                     Filter* not_founds) {
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
             DCHECK(not_founds);
@@ -232,7 +231,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
     // prefetch branch better performance in case with larger hash tables
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_prefetch(ColumnType* column, Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
-                                              std::vector<uint8_t>* not_founds) {
+                                              Filter* not_founds) {
         AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
@@ -263,7 +262,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
     // prefetch branch better performance in case with small hash tables
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_noprefetch(ColumnType* column, Buffer<AggDataPtr>* agg_states,
-                                                Func&& allocate_func, std::vector<uint8_t>* not_founds) {
+                                                Func&& allocate_func, Filter* not_founds) {
         size_t num_rows = column->size();
         for (size_t i = 0; i < num_rows; i++) {
             FieldType key = column->get_data()[i];
@@ -291,7 +290,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_through_null_data(size_t chunk_size, NullableColumn* nullable_column,
                                                        Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
-                                                       std::vector<uint8_t>* not_founds) {
+                                                       Filter* not_founds) {
         auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
         for (size_t i = 0; i < chunk_size; i++) {
@@ -313,7 +312,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
     template <typename Func, bool compute_not_founds>
     void _handle_data_key_column(ColumnType* data_column, size_t row, Func&& allocate_func,
-                                 Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+                                 Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
         auto key = data_column->get_data()[row];
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             if constexpr (compute_not_founds) {
@@ -327,7 +326,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
     }
 
     void _handle_data_key_column_without_allocate(ColumnType* data_column, size_t row, Buffer<AggDataPtr>* agg_states,
-                                                  std::vector<uint8_t>* not_founds) {
+                                                  Filter* not_founds) {
         auto key = data_column->get_data()[row];
         if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
             (*agg_states)[row] = iter->second;
@@ -365,7 +364,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     using Base = AggHashMapWithKey<HashMap, Self>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    using ResultVector = typename std::vector<Slice>;
+    using ResultVector = Buffer<Slice>;
 
     template <class... Args>
     AggHashMapWithOneStringKeyWithNullable(Args&&... args) : Base(std::forward<Args>(args)...) {}
@@ -374,7 +373,7 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
-                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+                            Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
         if constexpr (is_nullable) {
             return this->template compute_agg_states_nullable<Func, allocate_and_compute_state, compute_not_founds>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, not_founds);
@@ -388,7 +387,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_states_non_nullable(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                          Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                         std::vector<uint8_t>* not_founds) {
+                                                         Filter* not_founds) {
         DCHECK(key_columns[0]->is_binary());
         auto column = down_cast<BinaryColumn*>(key_columns[0].get());
 
@@ -411,7 +410,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_states_nullable(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                      Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                     std::vector<uint8_t>* not_founds) {
+                                                     Filter* not_founds) {
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
             DCHECK(not_founds);
@@ -448,7 +447,7 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_prefetch(BinaryColumn* column, Buffer<AggDataPtr>* agg_states, MemPool* pool,
-                                              Func&& allocate_func, std::vector<uint8_t>* not_founds) {
+                                              Func&& allocate_func, Filter* not_founds) {
         AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
@@ -479,7 +478,7 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_noprefetch(BinaryColumn* column, Buffer<AggDataPtr>* agg_states, MemPool* pool,
-                                                Func&& allocate_func, std::vector<uint8_t>* not_founds) {
+                                                Func&& allocate_func, Filter* not_founds) {
         size_t num_rows = column->size();
         for (size_t i = 0; i < num_rows; i++) {
             auto key = column->get_slice(i);
@@ -510,7 +509,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_through_null_data(size_t chunk_size, NullableColumn* nullable_column,
                                                        Buffer<AggDataPtr>* agg_states, MemPool* pool,
-                                                       Func&& allocate_func, std::vector<uint8_t>* not_founds) {
+                                                       Func&& allocate_func, Filter* not_founds) {
         auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
         for (size_t i = 0; i < chunk_size; i++) {
@@ -533,7 +532,7 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     template <typename Func, bool compute_not_founds>
     void _handle_data_key_column(BinaryColumn* data_column, size_t row, MemPool* pool, Func&& allocate_func,
-                                 Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+                                 Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
         auto key = data_column->get_slice(row);
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             if constexpr (compute_not_founds) {
@@ -549,7 +548,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     }
 
     void _handle_data_key_column_without_allocate(BinaryColumn* data_column, size_t row, Buffer<AggDataPtr>* agg_states,
-                                                  std::vector<uint8_t>* not_founds) {
+                                                  Filter* not_founds) {
         auto key = data_column->get_slice(row);
         if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
             (*agg_states)[row] = iter->second;
@@ -564,13 +563,13 @@ struct AggHashMapWithOneStringKeyWithNullable
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
             keys.resize(chunk_size);
-            column->append_strings(keys);
+            column->append_strings(keys.data(), keys.size());
             nullable_column->null_column_data().resize(chunk_size);
         } else {
             DCHECK(!null_key_data);
             auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
             keys.resize(chunk_size);
-            column->append_strings(keys);
+            column->append_strings(keys.data(), keys.size());
         }
     }
 
@@ -590,7 +589,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     using Base = AggHashMapWithKey<HashMap, AggHashMapWithSerializedKey<HashMap>>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    using ResultVector = typename std::vector<Slice>;
+    using ResultVector = Buffer<Slice>;
 
     template <class... Args>
     AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
@@ -603,7 +602,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
-                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+                            Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
         slice_sizes.assign(_chunk_size, 0);
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
@@ -637,7 +636,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_states_by_rows(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                    std::vector<uint8_t>* not_founds, size_t max_serialize_each_row) {
+                                                    Filter* not_founds, size_t max_serialize_each_row) {
         for (size_t i = 0; i < chunk_size; ++i) {
             auto serialize_cursor = buffer;
             for (const auto& key_column : key_columns) {
@@ -674,7 +673,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_states_by_cols(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                    std::vector<uint8_t>* not_founds, size_t max_serialize_each_row) {
+                                                    Filter* not_founds, size_t max_serialize_each_row) {
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             max_one_row_size = cur_max_one_row_size;
@@ -792,7 +791,7 @@ struct AggHashMapWithSerializedKeyFixedSize
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns,
                                               Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
-                                              std::vector<uint8_t>* not_founds) {
+                                              Filter* not_founds) {
         auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
@@ -836,7 +835,7 @@ struct AggHashMapWithSerializedKeyFixedSize
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns,
                                                 Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
-                                                std::vector<uint8_t>* not_founds) {
+                                                Filter* not_founds) {
         constexpr int key_size = sizeof(FixedSizeSliceKey);
         auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         for (const auto& key_column : key_columns) {
@@ -871,7 +870,7 @@ struct AggHashMapWithSerializedKeyFixedSize
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
-                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+                            Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
         DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
         // Assign not_founds vector when needs compute not founds.
@@ -923,7 +922,8 @@ struct AggHashMapWithSerializedKeyFixedSize
     Buffer<uint32_t> slice_sizes;
     std::unique_ptr<MemPool> mem_pool;
     ResultVector results;
-    std::vector<Slice> tmp_slices;
+    Buffer<Slice> tmp_slices;
+    // std::vector<Slice> tmp_slices;
 
     int32_t _chunk_size;
 };

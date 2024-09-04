@@ -194,10 +194,6 @@ bool StructColumn::append_nulls(size_t count) {
     return true;
 }
 
-bool StructColumn::append_strings(const Buffer<Slice>& strs) {
-    return false;
-}
-
 size_t StructColumn::append_numbers(const void* buff, size_t length) {
     return -1;
 }

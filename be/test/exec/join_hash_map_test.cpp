@@ -100,7 +100,7 @@ protected:
     void check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
                               int32_t expect_num_colums);
 
-    void sort_results_from_coroutine(std::vector<uint32_t>& pid, std::vector<uint32_t>& bid, int size) {
+    void sort_results_from_coroutine(Buffer<uint32_t>& pid, Buffer<uint32_t>& bid, int size) {
         std::vector<std::pair<int, int>> zipped;
         for (auto i = 0; i < size; i++) {
             zipped.push_back(std::make_pair(pid[i], bid[i]));

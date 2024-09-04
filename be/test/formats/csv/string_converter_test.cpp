@@ -199,7 +199,8 @@ TEST_F(StringConverterTest, test_read_large_quoted_string04) {
 TEST_F(StringConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
-    (void)col->append_strings({"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"});
+    std::vector<Slice> strings = {"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"};
+    (void)col->append_strings(strings.data(), strings.size());
 
     csv::OutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());

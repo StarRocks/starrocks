@@ -475,7 +475,7 @@ protected:
         nc->reserve(count);
         down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
-            (void)col->append_strings({s1, s2, s3, s4, s5, s6, s7, s8});
+            (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
 
             std::next_permutation(s1.begin(), s1.end());
             std::next_permutation(s2.begin(), s2.end());

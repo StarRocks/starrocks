@@ -17,6 +17,8 @@
 #include <memory>
 #include <vector>
 
+#include "runtime/memory/column_allocator.h"
+
 namespace starrocks {
 
 class DecimalV2Value;
@@ -36,9 +38,12 @@ class Column;
 class Schema;
 struct ProtobufChunkMeta;
 
+template <typename T>
+class ColumnAllocator;
+
 // We may change the Buffer implementation in the future.
 template <typename T>
-using Buffer = std::vector<T>;
+using Buffer = std::vector<T, ColumnAllocator<T>>;
 
 class ArrayColumn;
 class MapColumn;

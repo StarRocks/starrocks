@@ -846,7 +846,7 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     // 2. probe index
     RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
 
-    std::vector<uint8_t> filter;
+    Filter filter;
     uint32_t gen_num = 0;
     for (unsigned long v : rss_rowids) {
         uint32_t rssid = v >> 32;

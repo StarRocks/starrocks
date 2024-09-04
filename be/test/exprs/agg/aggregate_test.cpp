@@ -138,7 +138,7 @@ template <>
 ColumnPtr gen_input_column1<Slice>() {
     auto column = BinaryColumn::create();
     std::vector<Slice> strings{{"ddd"}, {"ddd"}, {"eeeee"}, {"ff"}, {"ff"}, {"ddd"}};
-    column->append_strings(strings);
+    column->append_strings(strings.data(), strings.size());
     return column;
 }
 
@@ -146,7 +146,7 @@ template <>
 ColumnPtr gen_input_column2<Slice>() {
     auto column2 = BinaryColumn::create();
     std::vector<Slice> strings2{{"kkk"}, {"k"}, {"kk"}, {"kkk"}};
-    column2->append_strings(strings2);
+    column2->append_strings(strings2.data(), strings2.size());
     return column2;
 }
 
@@ -688,7 +688,7 @@ TEST_F(AggregateTest, test_maxby) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -744,7 +744,7 @@ TEST_F(AggregateTest, test_minby) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"ccc"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -804,7 +804,7 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -869,7 +869,7 @@ TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"xxx"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);

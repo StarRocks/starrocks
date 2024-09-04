@@ -387,7 +387,7 @@ public:
     template <LogicOp Op>
     inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
         const Int32Column* dict_code_column = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
-        std::vector<int32_t> data = dict_code_column->get_data();
+        const auto& data = dict_code_column->get_data();
         Filter filter(to - from, 1);
 
         if (column->has_null()) {

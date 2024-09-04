@@ -102,8 +102,8 @@ struct JoinHashTableItems {
     //TODO: memory continues problem?
     ChunkPtr build_chunk = nullptr;
     Columns key_columns;
-    Buffer<HashTableSlotDescriptor> build_slots;
-    Buffer<HashTableSlotDescriptor> probe_slots;
+    std::vector<HashTableSlotDescriptor> build_slots;
+    std::vector<HashTableSlotDescriptor> probe_slots;
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
     // buckets of the hash map, and it holds the index of the first key value saved in each bucket,
     // while other keys can be found by following the indices saved in
