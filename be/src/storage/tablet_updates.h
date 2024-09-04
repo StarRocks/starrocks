@@ -466,6 +466,8 @@ private:
         }
     }
 
+    bool compaction_running() { return _compaction_running; }
+
     void check_for_apply() { _check_for_apply(); }
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
