@@ -688,6 +688,95 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
     return create_struct_iter(this, std::move(null_iter), std::move(field_iters), path);
 }
 
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path,
+                                                                     const TabletColumn* column) {
+    if (_column_type == LogicalType::TYPE_JSON) {
+        return _new_json_iterator(path, column);
+    } else if (is_scalar_field_type(delegate_type(_column_type))) {
+        return std::make_unique<ScalarColumnIterator>(this);
+    } else if (_column_type == LogicalType::TYPE_ARRAY) {
+        size_t col = 0;
+
+        ColumnAccessPath* value_path = nullptr;
+        if (path != nullptr && !path->children().empty()) {
+            // must be OFFSET or INDEX or ALL
+            if (UNLIKELY(path->children().size() != 1)) {
+                LOG(WARNING) << "bad access path on column: " << *path;
+            } else {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
+                }
+            }
+        }
+
+        auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
+        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path, sub_column));
+
+        std::unique_ptr<ColumnIterator> null_iterator;
+        if (is_nullable()) {
+            ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[col++]->new_iterator());
+        }
+        ASSIGN_OR_RETURN(auto array_size_iterator, (*_sub_readers)[col++]->new_iterator());
+
+        return std::make_unique<ArrayColumnIterator>(this, std::move(null_iterator), std::move(array_size_iterator),
+                                                     std::move(element_iterator), path);
+    } else if (_column_type == LogicalType::TYPE_MAP) {
+        size_t col = 0;
+
+        ColumnAccessPath* value_path = nullptr;
+        if (path != nullptr && !path->children().empty()) {
+            // must be OFFSET or INDEX or ALL or KEY
+            if (UNLIKELY(path->children().size() != 1)) {
+                LOG(WARNING) << "bad access path on column: " << *path;
+            } else {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
+                }
+            }
+        }
+
+        // key must scalar type now
+        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
+        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path, nullptr));
+        std::unique_ptr<ColumnIterator> nulls;
+        if (is_nullable()) {
+            ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
+        }
+        ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
+        return std::make_unique<MapColumnIterator>(this, std::move(nulls), std::move(offsets), std::move(keys),
+                                                   std::move(values), path);
+    } else if (_column_type == LogicalType::TYPE_STRUCT) {
+        if (column != nullptr) {
+            return _create_merge_struct_iter(path, column);
+        }
+        auto num_fields = _sub_readers->size();
+
+        std::unique_ptr<ColumnIterator> null_iter;
+        if (is_nullable()) {
+            num_fields -= 1;
+            ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[num_fields]->new_iterator());
+        }
+
+        std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
+        if (path != nullptr && !path->children().empty()) {
+            for (const auto& child : path->children()) {
+                child_paths[child->index()] = child.get();
+            }
+        }
+
+        std::vector<std::unique_ptr<ColumnIterator>> field_iters;
+        for (int i = 0; i < num_fields; ++i) {
+            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[i]->new_iterator(child_paths[i]));
+            field_iters.emplace_back(std::move(iter));
+        }
+        return create_struct_iter(this, std::move(null_iter), std::move(field_iters), path);
+    } else {
+        return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
+    }
+}
+
 StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(ColumnAccessPath* path,
                                                                            const TabletColumn* column) {
     DCHECK(_column_type == LogicalType::TYPE_JSON);
@@ -824,95 +913,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
 
     return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,
                                      source_paths, source_types);
-}
-
-StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path,
-                                                                     const TabletColumn* column) {
-    if (_column_type == LogicalType::TYPE_JSON) {
-        return _new_json_iterator(path, column);
-    } else if (is_scalar_field_type(delegate_type(_column_type))) {
-        return std::make_unique<ScalarColumnIterator>(this);
-    } else if (_column_type == LogicalType::TYPE_ARRAY) {
-        size_t col = 0;
-
-        ColumnAccessPath* value_path = nullptr;
-        if (path != nullptr && !path->children().empty()) {
-            // must be OFFSET or INDEX or ALL
-            if (UNLIKELY(path->children().size() != 1)) {
-                LOG(WARNING) << "bad access path on column: " << *path;
-            } else {
-                auto* p = path->children()[0].get();
-                if (p->is_index() || p->is_all()) {
-                    value_path = p;
-                }
-            }
-        }
-
-        auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
-        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path, sub_column));
-
-        std::unique_ptr<ColumnIterator> null_iterator;
-        if (is_nullable()) {
-            ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[col++]->new_iterator());
-        }
-        ASSIGN_OR_RETURN(auto array_size_iterator, (*_sub_readers)[col++]->new_iterator());
-
-        return std::make_unique<ArrayColumnIterator>(this, std::move(null_iterator), std::move(array_size_iterator),
-                                                     std::move(element_iterator), path);
-    } else if (_column_type == LogicalType::TYPE_MAP) {
-        size_t col = 0;
-
-        ColumnAccessPath* value_path = nullptr;
-        if (path != nullptr && !path->children().empty()) {
-            // must be OFFSET or INDEX or ALL or KEY
-            if (UNLIKELY(path->children().size() != 1)) {
-                LOG(WARNING) << "bad access path on column: " << *path;
-            } else {
-                auto* p = path->children()[0].get();
-                if (p->is_index() || p->is_all()) {
-                    value_path = p;
-                }
-            }
-        }
-
-        // key must scalar type now
-        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
-        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path, nullptr));
-        std::unique_ptr<ColumnIterator> nulls;
-        if (is_nullable()) {
-            ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
-        }
-        ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
-        return std::make_unique<MapColumnIterator>(this, std::move(nulls), std::move(offsets), std::move(keys),
-                                                   std::move(values), path);
-    } else if (_column_type == LogicalType::TYPE_STRUCT) {
-        if (column != nullptr) {
-            return _create_merge_struct_iter(path, column);
-        }
-        auto num_fields = _sub_readers->size();
-
-        std::unique_ptr<ColumnIterator> null_iter;
-        if (is_nullable()) {
-            num_fields -= 1;
-            ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[num_fields]->new_iterator());
-        }
-
-        std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
-        if (path != nullptr && !path->children().empty()) {
-            for (const auto& child : path->children()) {
-                child_paths[child->index()] = child.get();
-            }
-        }
-
-        std::vector<std::unique_ptr<ColumnIterator>> field_iters;
-        for (int i = 0; i < num_fields; ++i) {
-            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[i]->new_iterator(child_paths[i]));
-            field_iters.emplace_back(std::move(iter));
-        }
-        return create_struct_iter(this, std::move(null_iter), std::move(field_iters), path);
-    } else {
-        return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
-    }
 }
 
 size_t ColumnReader::mem_usage() const {
