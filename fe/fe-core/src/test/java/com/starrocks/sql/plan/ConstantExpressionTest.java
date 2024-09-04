@@ -454,4 +454,5 @@ public class ConstantExpressionTest extends PlanTestBase {
             connectContext.getSessionVariable().setSqlMode(prevSqlMode);
         }
     }
+
 }
