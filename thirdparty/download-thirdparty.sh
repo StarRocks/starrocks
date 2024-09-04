@@ -543,6 +543,17 @@ if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     echo "Finished patching $BITSHUFFLE_SOURCE"
 fi
 
+#patch clucene
+if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CLUCENE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] ; then
+        patch -p1 < "$TP_PATCH_DIR/clucene-gcc14.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CLUCENE_SOURCE"
+fi
+
 #patch poco
 if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$POCO_SOURCE
