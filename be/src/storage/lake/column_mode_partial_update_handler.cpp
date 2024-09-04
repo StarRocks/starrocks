@@ -16,6 +16,7 @@
 
 #include "common/tracer.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -232,8 +233,13 @@ StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepar
         const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema) {
     const std::string path = params.tablet->segment_location(gen_cols_filename(_txn_id));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        opts.encryption_info = pair.info;
+        writer_options.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(opts, path));
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tschema, writer_options);
     RETURN_IF_ERROR(segment_writer->init(false));
     return std::move(segment_writer);
@@ -435,7 +441,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // {{1,2}, {3,4}} -> {"aaa.cols", "bbb.cols"}
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
     std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
-    std::map<uint32_t, std::vector<std::string>> dcg_column_files;
+    std::map<uint32_t, std::vector<std::pair<std::string, std::string>>> dcg_column_file_with_encryption_metas;
     // 3. read from raw segment file and update file, and generate `.col` files one by one
     for (uint32_t col_index = 0; col_index < update_column_ids.size(); col_index += BATCH_HANDLE_COLUMN_CNT) {
         for (const auto& each : rss_upt_id_to_rowid_pairs) {
@@ -468,13 +474,14 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             }
             // 3.6 prepare column id list and dcg file list
             dcg_column_ids[each.first].push_back(selective_unique_update_column_ids);
-            dcg_column_files[each.first].push_back(file_name(delta_column_group_writer->segment_path()));
+            dcg_column_file_with_encryption_metas[each.first].emplace_back(
+                    file_name(delta_column_group_writer->segment_path()), delta_column_group_writer->encryption_meta());
             TRACE_COUNTER_INCREMENT("pcu_handle_cnt", 1);
         }
     }
     // 4 generate delta columngroup
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
-        builder->append_dcg(each.first, dcg_column_files[each.first], dcg_column_ids[each.first]);
+        builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first]);
     }
     builder->apply_column_mode_partial_update(params.op_write);
 

@@ -35,7 +35,7 @@ public:
     DeltaColumnGroup() {}
     ~DeltaColumnGroup() {}
     void init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
-              const std::vector<std::string>& column_files);
+              const std::vector<std::string>& column_files, const std::vector<std::string>& encryption_metas = {});
     Status load(int64_t version, const char* data, size_t length);
     Status load(int64_t version, const DeltaColumnGroupVerPB& dcg_ver_pb);
     std::string save() const;
@@ -92,6 +92,8 @@ public:
 
     const std::vector<std::string>& relative_column_files() const { return _column_files; }
 
+    const std::vector<std::string>& encryption_metas() const { return _encryption_metas; }
+
 private:
     void _calc_memory_usage();
 
@@ -99,6 +101,7 @@ private:
     int64_t _version = 0;
     std::vector<std::vector<ColumnUID>> _column_uids;
     std::vector<std::string> _column_files;
+    std::vector<std::string> _encryption_metas;
     size_t _memory_usage = 0;
 };
 
