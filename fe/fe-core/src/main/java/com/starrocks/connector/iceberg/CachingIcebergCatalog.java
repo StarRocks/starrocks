@@ -444,11 +444,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .collect(Collectors.toList()),
                 tables.size());
 
-        Pair<List<Object>, Long> partitionSamples = Pair.create(partitionNames.asMap().values()
+        List<Object> partitions = partitionNames.asMap().values()
                 .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList()),
-                partitionNames.size());
+                .flatMap(List::stream)
+                .limit(MEMORY_FILE_SAMPLES)
+                .collect(Collectors.toList());
+        long partitionTotal = partitionNames.asMap().values()
+                .stream()
+                .mapToLong(List::size)
+                .sum();
+        Pair<List<Object>, Long> partitionSamples = Pair.create(partitions, partitionTotal);
 
         List<Object> dataFiles = dataFileCache.asMap().values()
                 .stream().flatMap(Set::stream)
@@ -478,7 +483,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         Map<String, Long> counter = new HashMap<>();
         counter.put("Database", databases.size());
         counter.put("Table", tables.size());
-        counter.put("PartitionNames", partitionNames.size());
+        counter.put("PartitionNames", partitionNames.asMap().values()
+                .stream()
+                .mapToLong(List::size)
+                .sum());
         counter.put("ManifestOfDataFile",  dataFileCache.asMap().values()
                 .stream()
                 .mapToLong(Set::size)
