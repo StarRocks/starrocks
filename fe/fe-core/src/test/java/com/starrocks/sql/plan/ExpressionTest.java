@@ -1583,7 +1583,7 @@ public class ExpressionTest extends PlanTestBase {
 
         String sql2 = "select ilike('AA', concat('a', 'A'))";
         String plan2 = getFragmentPlan(sql2);
-        assertContains(plan2, "<slot 2> : like(lower('AA'), lower('aA'))");
+        assertContains(plan2, "<slot 2> : like('aa', 'aa')");
     }
 
     @Test
