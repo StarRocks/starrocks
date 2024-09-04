@@ -229,6 +229,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
     ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+    // check memory usage
+    ASSERT_TRUE(sst->memory_usage() > 0);
 
     {
         // 3. multi get with version (all keys included)
