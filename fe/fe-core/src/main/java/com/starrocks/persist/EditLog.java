@@ -1185,10 +1185,17 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
-                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
                     break;
+                }
+                case OperationType.OP_ADD_KEY: {
+                    Text keyJson = (Text) journal.getData();
+                    EncryptionKeyPB keyPB = GsonUtils.GSON.fromJson(keyJson.toString(), EncryptionKeyPB.class);
+                    GlobalStateMgr.getCurrentState().getKeyMgr().replayAddKey(keyPB);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
