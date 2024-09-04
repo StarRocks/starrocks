@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.QeProcessor;
@@ -29,6 +30,8 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -42,6 +45,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
             new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
 
     public static final Map<String, Map<String, MemoryStat>> MEMORY_USAGE = Maps.newConcurrentMap();
+    private static MemoryMXBean memoryMXBean;
 
     private boolean initialize;
     public MemoryUsageTracker() {
@@ -64,11 +68,11 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Task", currentState.getTaskManager());
         registerMemoryTracker("Task", currentState.getTaskManager().getTaskRunManager());
         registerMemoryTracker("TabletInvertedIndex", currentState.getTabletInvertedIndex());
+        registerMemoryTracker("LocalMetastore", currentState.getLocalMetastore());
 
         registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
         registerMemoryTracker("Agent", new AgentTaskTracker());
-        registerMemoryTracker("LocalCatalog", new InternalCatalogMemoryTracker());
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
         if (qeProcessor instanceof QeProcessorImpl) {
@@ -79,6 +83,8 @@ public class MemoryUsageTracker extends FrontendDaemon {
         if (dictManager instanceof CacheDictManager) {
             registerMemoryTracker("Dict", (CacheDictManager) dictManager);
         }
+
+        memoryMXBean = ManagementFactory.getMemoryMXBean();
 
         LOG.info("Memory usage tracker init success");
 
@@ -91,11 +97,30 @@ public class MemoryUsageTracker extends FrontendDaemon {
     }
 
     public static void trackMemory() {
-        trackMemory(REFERENCE);
-        trackMemory(ImmutableMap.of("Connector", GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
+        long totalTracked = trackMemory(REFERENCE);
+        totalTracked += trackMemory(ImmutableMap.of("Connector",
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
+
+        LOG.info("total tracked memory: {}, jvm: {}", new ByteSizeValue(totalTracked), getJVMMemory());
     }
 
-    private static void trackMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
+    private static String getJVMMemory() {
+        JvmStats jvmStats = JvmStats.jvmStats();
+        long directBufferUsed = 0;
+        for (JvmStats.BufferPool pool : jvmStats.getBufferPools()) {
+            if (pool.getName().equalsIgnoreCase("direct")) {
+                directBufferUsed = pool.getUsed();
+            }
+        }
+        return String.format("Process used: %s, heap used: %s, non heap used: %s, direct buffer used: %s",
+                new ByteSizeValue(Runtime.getRuntime().totalMemory()),
+                new ByteSizeValue(jvmStats.getMem().getHeapUsed()),
+                new ByteSizeValue(jvmStats.getMem().getNonHeapUsed()),
+                new ByteSizeValue(directBufferUsed));
+    }
+
+    private static long trackMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
+        long totalTracked = 0;
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
@@ -127,11 +152,15 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 memoryStat.setCounterMap(counterMap);
                 usageMap.put(className, memoryStat);
 
+                totalTracked += currentEstimateSize;
+
                 LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",
                         endTime - startTime, moduleName, className,
                         new ByteSizeValue(currentEstimateSize), sb.toString());
             }
         }
+
+        return totalTracked;
     }
 
     @Override

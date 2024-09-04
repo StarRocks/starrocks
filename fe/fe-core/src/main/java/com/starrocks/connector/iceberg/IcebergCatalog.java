@@ -18,6 +18,7 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
@@ -150,5 +151,13 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     default Map<String, Object> loadNamespaceMetadata(String dbName) {
         return new HashMap<>();
+    }
+
+    default Map<String, Long> estimateCount() {
+        return new HashMap<>();
+    }
+
+    default List<Pair<List<Object>, Long>> getSamples() {
+        return new ArrayList<>();
     }
 }
