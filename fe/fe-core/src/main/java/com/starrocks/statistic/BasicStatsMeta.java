@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.MapUtils;
@@ -34,8 +35,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-public class BasicStatsMeta implements Writable {
+public class BasicStatsMeta implements Writable, GsonPostProcessable {
     @SerializedName("dbId")
     private long dbId;
 
@@ -210,7 +212,22 @@ public class BasicStatsMeta implements Writable {
         return Lists.newArrayList(columnStatsMetaMap.values());
     }
 
+    public String getColumnStatsString() {
+        if (MapUtils.isEmpty(columnStatsMetaMap)) {
+            return "";
+        }
+        return columnStatsMetaMap.values().stream()
+                .map(ColumnStatsMeta::simpleString).collect(Collectors.joining(","));
+    }
+
     public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (columnStatsMetaMap == null) {
+            columnStatsMetaMap = Maps.newConcurrentMap();
+        }
     }
 }

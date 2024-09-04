@@ -63,6 +63,10 @@ public class ColumnStatsMeta {
         this.updateTime = updateTime;
     }
 
+    public String simpleString() {
+        return String.format("(%s,%s)", columnName, type.toString());
+    }
+
     @Override
     public String toString() {
         final StringBuffer sb = new StringBuffer("ColumnStatsMeta{");
