@@ -115,8 +115,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
 
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
-                // TODO: lock the table instead of database
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
                 Map<Long, Long> indexRowCountMap = Maps.newHashMap();
                 try {
                     OlapTable olapTable = (OlapTable) table;
@@ -140,11 +139,11 @@ public class TabletStatMgr extends FrontendDaemon {
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
                 }
 
                 // update
-                locker.lockDatabase(db, LockType.WRITE);
+                locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -160,7 +159,7 @@ public class TabletStatMgr extends FrontendDaemon {
                     }
                     adjustStatUpdateRows(table.getId(), totalRowCount);
                 } finally {
-                    locker.unLockDatabase(db, LockType.WRITE);
+                    locker.unLockTableWithIntensiveDbLock(db, table, LockType.WRITE);
                 }
             }
         }
