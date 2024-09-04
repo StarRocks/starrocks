@@ -92,6 +92,10 @@ public class AlterResourceGroupStmt extends DdlStmt {
                         "should be specified");
             }
         }
+
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterProperties)) {
+            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
+        }
     }
 
     public List<ResourceGroupClassifier> getNewAddedClassifiers() {
