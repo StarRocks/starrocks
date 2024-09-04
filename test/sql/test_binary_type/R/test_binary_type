@@ -1,4 +1,10 @@
 -- name: test_binary_type
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 create table t0(c0 INT, c1 binary(16), c2 binary, c3 varbinary, c4 varchar(16)) 
         DUPLICATE KEY(c0) 
         DISTRIBUTED BY HASH(c0) 
@@ -35,4 +41,22 @@ select hex(c1), hex(c2), hex(c3), hex(c4) from t1 order by c0;
 -- result:
 AB01	ABAB	ABAC	61623031
 AB01	ABAB	ABAC	61623031
+-- !result
+create table t2(c1 int, c2 varbinary) duplicate key(c1) properties("replication_num"="1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/common/data/stream_load/test_stream_load_binary_type.json -XPUT -H "strip_outer_array: true" -H "format:JSON" -H "Expect:100-continue" -H "jsonpaths: [\"$.c1\",\"$.c2\"]" -H "columns: c1,c2" ${url}/api/db_${uuid0}/t2/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t2;
+-- result:
+1	1234
 -- !result
