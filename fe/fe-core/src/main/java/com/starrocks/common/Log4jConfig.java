@@ -257,8 +257,8 @@ public class Log4jConfig extends XmlConfiguration {
         final String jsonLoggingConfValue = "json";
         if (jsonLoggingConfValue.equalsIgnoreCase(Config.sys_log_format)) {
             // json logging
-            String jsonLayout =
-                    "<JsonTemplateLayout maxStringLength=\"104857600\" locationInfoEnabled=\"true\">\n" +
+            String jsonLayoutFormatter =
+                    "<JsonTemplateLayout maxStringLength=\"%d\" locationInfoEnabled=\"true\">\n" +
                             "        <EventTemplate><![CDATA[\n{\n" +
                             "   \"@timestamp\": {\n" +
                             "       \"$resolver\": \"timestamp\",\n" +
@@ -305,12 +305,14 @@ public class Log4jConfig extends XmlConfiguration {
                             "      }" +
                             "      }\n]]></EventTemplate>\n" +
                             "</JsonTemplateLayout>";
-            properties.put("syslog_default_layout", jsonLayout);
-            properties.put("syslog_warning_layout", jsonLayout);
-            properties.put("syslog_audit_layout", jsonLayout);
-            properties.put("syslog_dump_layout", jsonLayout);
-            properties.put("syslog_bigquery_layout", jsonLayout);
-            properties.put("syslog_profile_layout", jsonLayout);
+            String jsonLayoutDefault = String.format(jsonLayoutFormatter, Config.sys_log_json_max_string_length);
+            String jsonLayoutProfile = String.format(jsonLayoutFormatter, Config.sys_log_json_profile_max_string_length);
+            properties.put("syslog_default_layout", jsonLayoutDefault);
+            properties.put("syslog_warning_layout", jsonLayoutDefault);
+            properties.put("syslog_audit_layout", jsonLayoutDefault);
+            properties.put("syslog_dump_layout", jsonLayoutDefault);
+            properties.put("syslog_bigquery_layout", jsonLayoutDefault);
+            properties.put("syslog_profile_layout", jsonLayoutProfile);
         } else {
             // fallback to plaintext logging
             properties.put("syslog_default_layout",
