@@ -102,6 +102,9 @@ Usage: $0 <options>
                         build with vector index tenann library
      --skip-proguard
                         skip proguard when compiling FE
+     --with-compress-debug-symbol {ON|OFF}
+                        build with compressing debug symbol. (default: $WITH_COMPRESS)
+     -h,--help          Show this help message
 
   Eg.
     $0                                           build all
@@ -117,8 +120,7 @@ Usage: $0 <options>
 
 OPTS=$(getopt \
   -n $0 \
-  -o '' \
-  -o 'h' \
+  -o 'hj:' \
   -l 'be' \
   -l 'fe' \
   -l 'spark-dpp' \
@@ -136,7 +138,7 @@ OPTS=$(getopt \
   -l 'output-compile-time' \
   -l 'with-tenann' \
   -l 'skip-proguard' \
-  -o 'j:' \
+  -l 'with-compress-debug-symbol:' \
   -l 'help' \
   -- "$@")
 
@@ -251,6 +253,7 @@ else
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --with-tenann) WITH_TENANN=ON; shift ;;
             --skip-proguard) SKIP_PROGUARD=true; shift ;;
+            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -283,6 +286,7 @@ echo "Get params:
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
     WITH_COMPRESS       -- $WITH_COMPRESS
+    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     WITH_STARCACHE      -- $WITH_STARCACHE
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
