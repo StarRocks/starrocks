@@ -80,10 +80,8 @@ public:
 
     std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
 
-private:
+protected:
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
-
-    Status _sort_chunks(RuntimeState* state);
 
     // build data for top-n
     Status _build_sorting_data(RuntimeState* state, Permutation& permutation_second, DataSegments& segments);
@@ -94,7 +92,8 @@ private:
                                DataSegments& segments);
 
     Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
-                              size_t sorted_size, Permutation& new_permutation);
+                              Permutation& new_permutation, size_t new_permutation_distinct_num = 0,
+                              size_t* result_distinct_num = nullptr);
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 
@@ -142,6 +141,10 @@ private:
     const size_t _limit;
     const size_t _offset;
     const TTopNType::type _topn_type;
+
+    // only used for TTopNType::DENSE_RANK
+    // if _merged_segment's data is 111222333, then  _current_distinct_top_n is 3
+    size_t _current_distinct_top_n{0};
 
     std::vector<JoinRuntimeFilter*> _runtime_filter;
 

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <gen_cpp/PlanNodes_types.h>
+
 #include <span>
 
 #include "column/chunk.h"
@@ -65,12 +67,17 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
 // Sort multiple columns in vertical
 Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
                              const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                             const bool build_tie, const size_t limit = 0, size_t* limited = nullptr);
+                             const bool build_tie, const size_t limit = 0, size_t* limited = nullptr,
+                             bool is_dense_rank_topn = false);
+
+Status sort_vertical_columns_for_dense_rank(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+                                            const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
+                                            std::pair<int, int> range, const size_t limit = 0);
 
 // Sort multiple chunks in column-wise style
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
-                            const SortDescs& sort_desc, Permutation& perm, const size_t limit,
-                            const bool is_limit_by_rank = false);
+                            const SortDescs& sort_desc, Permutation& perm, size_t limit, TTopNType::type topn_type,
+                            size_t* distinct_topn = nullptr, bool is_sorted = false);
 
 // Compare the column with the `rhs_value`, which must have the some type with column.
 // @param cmp_result compare result is written into this array, value must within -1,0,1

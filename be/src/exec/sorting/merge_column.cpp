@@ -279,6 +279,60 @@ public:
 
         return Status::OK();
     }
+
+    static StatusOr<size_t> merge_sorted_chunks_top_distinct_n(const SortDescs& sort_desc, const SortedRun& left_run,
+                                                               size_t left_distinct_num, const SortedRun& right_run,
+                                                               size_t right_distinct_num, Permutation* output,
+                                                               size_t target_distinct_num) {
+        DCHECK(!!left_run.chunk);
+        DCHECK(!!right_run.chunk);
+        DCHECK_EQ(left_run.num_columns(), right_run.num_columns());
+
+        if (left_run.empty()) {
+            size_t count = right_run.num_rows();
+            output->resize(count);
+            for (size_t i = 0; i < count; i++) {
+                (*output)[i].chunk_index = kRightChunkIndex;
+                (*output)[i].index_in_chunk = i + right_run.range.first;
+            }
+            return right_distinct_num;
+        } else if (right_run.empty()) {
+            size_t count = left_run.num_rows();
+            output->resize(count);
+            for (size_t i = 0; i < count; i++) {
+                (*output)[i].chunk_index = kLeftChunkIndex;
+                (*output)[i].index_in_chunk = i + left_run.range.first;
+            }
+            return left_distinct_num;
+        } else {
+            // 1.Merge the two sorted chunk into output
+            std::vector<EqualRange> equal_ranges;
+            equal_ranges.emplace_back(left_run.range, right_run.range);
+            size_t count = left_run.range.second + right_run.range.second;
+            DCHECK_LT(count, Column::MAX_CAPACITY_LIMIT);
+            output->resize(count);
+            equal_ranges.reserve(std::max((size_t)1, count / 4));
+
+            for (int col = 0; col < sort_desc.num_columns(); col++) {
+                const Column* left_col = left_run.get_column(col);
+                const Column* right_col = right_run.get_column(col);
+                MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
+                Status st = left_col->accept(&merge2);
+                CHECK(st.ok());
+                if (equal_ranges.size() == 0) {
+                    break;
+                }
+            }
+            // 2.Find the top-n distinct rows from output which is sorted
+            size_t result_top_distinct_num;
+            sort_vertical_chunks(false, {left_run.orderby, right_run.orderby}, sort_desc, *output, target_distinct_num,
+                                 TTopNType::DENSE_RANK, &result_top_distinct_num, true);
+            DCHECK(result_top_distinct_num <= target_distinct_num);
+            return result_top_distinct_num;
+        }
+
+        return Status::OK();
+    }
 };
 
 SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs)
@@ -500,6 +554,14 @@ ChunkPtr SortedRuns::assemble() const {
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output) {
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left, right, output);
+}
+
+StatusOr<size_t> merge_sorted_chunks_top_distinct_n(const SortDescs& sort_desc, const SortedRun& left,
+                                                    size_t left_distinct_num, const SortedRun& right,
+                                                    size_t right_distinct_num, Permutation* output,
+                                                    size_t target_distinct_num) {
+    return MergeTwoChunk::merge_sorted_chunks_top_distinct_n(sort_desc, left, left_distinct_num, right,
+                                                             right_distinct_num, output, target_distinct_num);
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,

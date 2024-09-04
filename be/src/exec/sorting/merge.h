@@ -201,6 +201,14 @@ class SimpleChunkSortCursor;
 // Underlying algorithm is multi-level cascade-merge, which could be streaming and short-circuit
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
+
+// merge two sorted chunk in columnwise 2-way merge, and try to find top distinct 'target_distinct_num' from merged result, keep these in output
+// return the actually distinct number of output which can be smaller than 'limit'
+StatusOr<size_t> merge_sorted_chunks_top_distinct_n(const SortDescs& sort_desc, const SortedRun& left,
+                                                    size_t left_distinct_num, const SortedRun& right,
+                                                    size_t right_distinct_num, Permutation* output,
+                                                    size_t target_distinct_num);
+
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            std::vector<ChunkUniquePtr>& chunks, SortedRuns* output);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
