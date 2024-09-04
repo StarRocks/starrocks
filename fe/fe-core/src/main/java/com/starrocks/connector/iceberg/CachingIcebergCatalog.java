@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -44,7 +45,6 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -65,6 +65,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
+    private static final int MEMORY_META_SAMPLES = 10;
+    private static final int MEMORY_FILE_SAMPLES = 100;
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final Cache<IcebergTableName, Table> tables;
@@ -429,13 +431,51 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(databases) +
-                SizeEstimator.estimate(tables) +
-                SizeEstimator.estimate(partitionNames) +
-                SizeEstimator.estimate(dataFileCache) +
-                SizeEstimator.estimate(deleteFileCache);
+    public List<Pair<List<Object>, Long>> getSamples() {
+        Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList()),
+                databases.size());
 
+        Pair<List<Object>, Long> tableSamples = Pair.create(tables.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList()),
+                tables.size());
+
+        List<Object> partitions = partitionNames.asMap().values()
+                .stream()
+                .flatMap(List::stream)
+                .limit(MEMORY_FILE_SAMPLES)
+                .collect(Collectors.toList());
+        long partitionTotal = partitionNames.asMap().values()
+                .stream()
+                .mapToLong(List::size)
+                .sum();
+        Pair<List<Object>, Long> partitionSamples = Pair.create(partitions, partitionTotal);
+
+        List<Object> dataFiles = dataFileCache.asMap().values()
+                .stream().flatMap(Set::stream)
+                .limit(MEMORY_FILE_SAMPLES)
+                .collect(Collectors.toList());
+        long dataFilesTotal = dataFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum();
+        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFiles, dataFilesTotal);
+
+        List<Object> deleteFiles = deleteFileCache.asMap().values()
+                .stream().flatMap(Set::stream)
+                .limit(MEMORY_FILE_SAMPLES)
+                .collect(Collectors.toList());
+        long deleteFilesTotal = deleteFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum();
+        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
+
+        return Lists.newArrayList(dbSamples, tableSamples, partitionSamples, dataFileSamples, deleteFileSamples);
     }
 
     @Override
@@ -443,9 +483,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         Map<String, Long> counter = new HashMap<>();
         counter.put("Database", databases.size());
         counter.put("Table", tables.size());
-        counter.put("PartitionNames", partitionNames.size());
-        counter.put("ManifestOfDataFile", dataFileCache.size());
-        counter.put("ManifestOfDeleteFile", deleteFileCache.size());
+        counter.put("PartitionNames", partitionNames.asMap().values()
+                .stream()
+                .mapToLong(List::size)
+                .sum());
+        counter.put("ManifestOfDataFile",  dataFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum());
+        counter.put("ManifestOfDeleteFile", deleteFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum());
         return counter;
     }
 }
