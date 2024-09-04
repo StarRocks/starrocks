@@ -1764,6 +1764,16 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
+    public void testCreateBuiltinGroup() throws Exception {
+        Assert.assertThrows("RESOURCE_GROUP(default_wg) already exists",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(
+                        "CREATE RESOURCE GROUP default_wg WITH ( 'cpu_weight' = '14', 'mem_limit' = '0.1' )"));
+        Assert.assertThrows("RESOURCE_GROUP(default_mv_wg) already exists",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(
+                        "CREATE RESOURCE GROUP default_mv_wg WITH ( 'cpu_weight' = '14', 'mem_limit' = '0.1' )"));
+    }
+
+    @Test
     public void testDropBuiltinGroup() {
         Assert.assertThrows("cannot drop builtin resource group [default_wg]",
                 SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP default_wg"));
