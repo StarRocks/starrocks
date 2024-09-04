@@ -322,9 +322,14 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_params.deletes.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+<<<<<<< HEAD
     const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path,
                                                       _scanner_params.conjunct_ctxs, _scanner_params.materialize_slots,
                                                       &_need_skip_rowids);
+=======
+    const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path, &_need_skip_rowids,
+                                                      _scanner_params.datacache_options);
+>>>>>>> 8bf333e5fd ([Enhancement] Support to pushdown compound predicates in orc (#50613))
 
     for (const auto& tdelete_file : _scanner_params.deletes) {
         RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
@@ -531,6 +536,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             for (const auto& it2 : it.second) {
                 conjuncts.push_back(it2->root());
             }
+        }
+        // add scanner's conjunct also, because SearchArgumentBuilder can support it
+        for (const auto& it : _scanner_params.scanner_conjunct_ctxs) {
+            conjuncts.push_back(it->root());
         }
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
