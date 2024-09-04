@@ -739,6 +739,11 @@ size_t LakePersistentIndex::memory_usage() const {
     if (_immutable_memtable != nullptr) {
         mem_usage += _immutable_memtable->memory_usage();
     }
+    for (const auto& sst_ptr : _sstables) {
+        if (sst_ptr != nullptr) {
+            mem_usage += sst_ptr->memory_usage();
+        }
+    }
     return mem_usage;
 }
 
