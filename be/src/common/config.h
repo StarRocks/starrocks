@@ -1272,7 +1272,8 @@ CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
-// Used by default mv resource group
+// Used by default mv resource group.
+// These parameters are deprecated because now FE store and persist default_mv_wg.
 CONF_Double(default_mv_resource_group_memory_limit, "0.8");
 CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 CONF_Int32(default_mv_resource_group_concurrency_limit, "0");
