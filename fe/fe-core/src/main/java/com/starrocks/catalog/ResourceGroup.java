@@ -54,7 +54,7 @@ public class ResourceGroup {
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
 
     /**
-     * EN: In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
+     * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
      * BE. Its ID is 0 and 1. To distinguish it from the old version, a new ID 2 and 3 is used here.
      */
     public static final long DEFAULT_WG_ID = 2;
