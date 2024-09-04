@@ -241,7 +241,7 @@ public class DDLStmtExecutor {
                 if (name.isGlobalFunction()) {
                     context.getGlobalStateMgr()
                             .getGlobalFunctionMgr()
-                            .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
+                            .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists(), stmt.createIfNotExists());
                 } else {
                     Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {

@@ -75,13 +75,18 @@ public class GlobalFunctionMgr {
         return func;
     }
 
-    private void addFunction(Function function, boolean isReplay, boolean allowExists) throws UserException {
+    private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists) throws UserException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (!isReplay) {
             for (Function existFunc : existFuncs) {
-                if (!allowExists && function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
-                    throw new UserException("function already exists");
+                if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                    if (createIfNotExists) {
+                        LOG.info("create function [{}] which already exists", functionName);
+                        return;
+                    } else if (!allowExists) {
+                        throw new UserException("function already exists");
+                    }
                 }
             }
             assignIdToUserDefinedFunction(function);
@@ -117,14 +122,14 @@ public class GlobalFunctionMgr {
         function.setFunctionId(-functionId);
     }
 
-    public synchronized void userAddFunction(Function f, boolean allowExists) throws UserException {
-        addFunction(f, false, allowExists);
+    public synchronized void userAddFunction(Function f, boolean allowExists, boolean createIfNotExists) throws UserException {
+        addFunction(f, false, allowExists, createIfNotExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
 
     public synchronized void replayAddFunction(Function f) {
         try {
-            addFunction(f, true, false);
+            addFunction(f, true, false, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
