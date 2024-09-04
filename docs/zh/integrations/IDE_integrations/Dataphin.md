@@ -208,7 +208,7 @@ Dataphin 支持 StarRocks 数据源作为实时计算的读写目标端，支持
 
 - 已安装 Dataphin，且 Dataphin 版本为 3.12 及以上。
 
-- 统计信息采集已开启，StarRocks 安装后采集即默认开启。详情见[CBO 统计信息](https://docs.starrocks.io/zh-cn/latest/using_starrocks/Cost_based_optimizer)。
+- 统计信息采集已开启，StarRocks 安装后采集即默认开启。详情见[CBO 统计信息](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/)。
 
 - 仅支持 StarRocks Internal Catalog，即 `default_catalog`，不支持 External Catalog。
 
