@@ -234,7 +234,7 @@ public class HDFSBackendSelector implements BackendSelector {
             boolean hasMore = scanNode.hasMoreScanRanges();
             TScanRangeParams end = new TScanRangeParams();
             end.setScan_range(new TScanRange());
-            end.setPlaceholder(true);
+            end.setEmpty(true);
             end.setHas_more(hasMore);
             for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
                 assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);

@@ -41,7 +41,7 @@ void ScanMorsel::build_scan_morsels(int node_id, const std::vector<TScanRangePar
     pipeline::Morsels& morsels = *ptr_morsels;
     *has_more_morsel = false;
     for (const auto& scan_range : scan_ranges) {
-        if (scan_range.__isset.placeholder && scan_range.placeholder) {
+        if (scan_range.__isset.empty && scan_range.empty) {
             if (scan_range.__isset.has_more) {
                 *has_more_morsel = scan_range.has_more;
             }

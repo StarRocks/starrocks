@@ -331,7 +331,7 @@ struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
   // if this is just a placeholder and no `scan_range` data in it.
-  3: optional bool placeholder = false
+  3: optional bool empty = false;
   // if there is no more scan range from this scan node.
   4: optional bool has_more = false;
 }
