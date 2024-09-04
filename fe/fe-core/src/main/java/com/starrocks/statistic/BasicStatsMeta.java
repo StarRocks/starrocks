@@ -230,4 +230,9 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
             columnStatsMetaMap = Maps.newConcurrentMap();
         }
     }
+
+    public BasicStatsMeta clone() {
+        String json = GsonUtils.GSON.toJson(this);
+        return GsonUtils.GSON.fromJson(json, BasicStatsMeta.class);
+    }
 }

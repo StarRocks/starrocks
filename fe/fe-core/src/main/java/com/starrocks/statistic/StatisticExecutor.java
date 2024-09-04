@@ -371,6 +371,8 @@ public class StatisticExecutor {
                     basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                             statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
                             statsJob.getProperties(), existUpdateRows);
+                } else {
+                    basicStatsMeta = basicStatsMeta.clone();
                 }
 
                 if (!statsJob.isAllColumns()) {
