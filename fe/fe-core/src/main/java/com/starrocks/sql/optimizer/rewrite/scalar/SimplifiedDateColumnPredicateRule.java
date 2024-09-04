@@ -200,12 +200,10 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
     private static class ReplaceAndSubstrExtractor implements Extractor {
         private final CallOperator call;
         private final ConstantOperator value;
-        private final SubstrExtractor substrExtractor;
 
         public ReplaceAndSubstrExtractor(CallOperator call, ConstantOperator value) {
             this.call = call;
             this.value = value;
-            this.substrExtractor = new SubstrExtractor((CallOperator) call.getChild(0), value, 8);
         }
 
         @Override
@@ -223,12 +221,12 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
             if (value.getVarchar().length() != 8) {
                 return false;
             }
-            return substrExtractor.check();
+            return new SubstrExtractor((CallOperator) call.getChild(0), value, 8).check();
         }
 
         @Override
         public ScalarOperator extractColumn() {
-            return substrExtractor.extractColumn();
+            return new SubstrExtractor((CallOperator) call.getChild(0), value, 8).extractColumn();
         }
     }
 }
