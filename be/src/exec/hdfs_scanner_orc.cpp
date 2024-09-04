@@ -315,11 +315,19 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
     return false;
 }
 
+<<<<<<< HEAD
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
     ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
+=======
+Status HdfsOrcScanner::build_iceberg_delete_builder() {
+    if (_scanner_params.deletes.empty()) return Status::OK();
+    SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+    const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path, &_need_skip_rowids,
+                                                      _scanner_params.datacache_options);
+>>>>>>> 8bf333e5fd ([Enhancement] Support to pushdown compound predicates in orc (#50613))
 
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
@@ -407,7 +415,14 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             stripes.emplace_back(s);
             _stats.stripe_sizes.push_back(s.length);
         }
+<<<<<<< HEAD
         orc_hdfs_file_stream->setStripes(std::move(stripes));
+=======
+        // add scanner's conjunct also, because SearchArgumentBuilder can support it
+        for (const auto& it : _scanner_params.scanner_conjunct_ctxs) {
+            conjuncts.push_back(it->root());
+        }
+>>>>>>> 8bf333e5fd ([Enhancement] Support to pushdown compound predicates in orc (#50613))
     }
 
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));

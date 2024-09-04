@@ -424,7 +424,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.partition_index_in_chunk = _partition_index_in_chunk;
     scanner_params._partition_index_in_hdfs_partition_columns = _partition_index_in_hdfs_partition_columns;
     scanner_params.partition_values = _partition_values;
-    scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
+    scanner_params.scanner_conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
     scanner_params.conjunct_slots = _conjunct_slots;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;

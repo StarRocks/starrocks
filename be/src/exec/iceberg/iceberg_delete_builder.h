@@ -47,6 +47,7 @@ private:
 
 class IcebergDeleteBuilder {
 public:
+<<<<<<< HEAD
     IcebergDeleteBuilder(FileSystem* fs, std::string datafile_path, std::vector<ExprContext*> conjunct_ctxs,
                          std::vector<SlotDescriptor*> materialize_slots, std::set<std::int64_t>* need_skip_rowids)
             : _fs(fs),
@@ -54,6 +55,14 @@ public:
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _materialize_slots(std::move(materialize_slots)),
               _need_skip_rowids(need_skip_rowids) {}
+=======
+    IcebergDeleteBuilder(FileSystem* fs, std::string datafile_path, std::set<int64_t>* need_skip_rowids,
+                         const DataCacheOptions& datacache_options = DataCacheOptions())
+            : _fs(fs),
+              _datafile_path(std::move(datafile_path)),
+              _need_skip_rowids(need_skip_rowids),
+              _datacache_options(datacache_options) {}
+>>>>>>> 8bf333e5fd ([Enhancement] Support to pushdown compound predicates in orc (#50613))
     ~IcebergDeleteBuilder() = default;
 
     Status build_orc(const std::string& timezone, const TIcebergDeleteFile& delete_file) {
@@ -70,9 +79,14 @@ public:
 private:
     FileSystem* _fs;
     std::string _datafile_path;
+<<<<<<< HEAD
     std::vector<ExprContext*> _conjunct_ctxs;
     std::vector<SlotDescriptor*> _materialize_slots;
     std::set<std::int64_t>* _need_skip_rowids;
+=======
+    std::set<int64_t>* _need_skip_rowids;
+    const DataCacheOptions _datacache_options;
+>>>>>>> 8bf333e5fd ([Enhancement] Support to pushdown compound predicates in orc (#50613))
 };
 
 class IcebergDeleteFileMeta {

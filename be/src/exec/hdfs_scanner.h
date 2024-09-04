@@ -116,10 +116,18 @@ struct HdfsScannerParams {
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
+<<<<<<< HEAD
     // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
     std::unordered_set<SlotId> conjunct_slots;
     bool eval_conjunct_ctxs = true;
+=======
+    // all conjuncts except `conjunct_ctxs_by_slot`, like compound predicates
+    std::vector<ExprContext*> scanner_conjunct_ctxs;
+    std::unordered_set<SlotId> slots_in_conjunct;
+    // slot used by conjunct_ctxs
+    std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
+>>>>>>> 8bf333e5fd ([Enhancement] Support to pushdown compound predicates in orc (#50613))
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
