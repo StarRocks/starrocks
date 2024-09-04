@@ -1560,8 +1560,16 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
         rs1->rowset_meta()->set_segments_overlap_pb(NONOVERLAPPING);
         ASSERT_TRUE(_tablet2->rowset_commit(2, rs1).ok());
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_EQ(100, read_tablet(_tablet, 2));
         ASSERT_TRUE(_tablet2->updates()->compaction(_compaction_mem_tracker.get()).ok());
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        int32_t count = 0;
+        while (_tablet->updates()->compaction_running()) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            // wait for compaction finish at most 60 seconds
+            if (++count > 60) {
+                break;
+            }
+        }
 
         ASSERT_EQ(_tablet2->updates()->num_rowsets(), 1);
         ASSERT_EQ(_tablet2->updates()->version_history_count(), 3);
