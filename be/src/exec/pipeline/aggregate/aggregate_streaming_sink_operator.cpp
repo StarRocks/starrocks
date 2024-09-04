@@ -68,8 +68,8 @@ void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
             _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
         }
     }
-    if (_limited_mem_state.has_limited(*_aggregator) && !_aggregator->ht_need_consume()) {
-        _aggregator->set_ht_need_consume(true);
+    if (_limited_mem_state.has_limited(*_aggregator) && !_aggregator->is_streaming_all_states()) {
+        _aggregator->set_streaming_all_states(true);
     }
 }
 
@@ -306,7 +306,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
 Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size) {
     if (_limited_mem_state.has_limited(*_aggregator)) {
         RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
-        _aggregator->set_ht_need_consume(true);
+        _aggregator->set_streaming_all_states(true);
     } else {
         RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk_size));
     }

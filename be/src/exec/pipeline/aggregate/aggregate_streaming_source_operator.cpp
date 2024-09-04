@@ -30,10 +30,9 @@ bool AggregateStreamingSourceOperator::has_output() const {
         return true;
     }
 
-    if (!_aggregator->is_sink_complete() && _aggregator->ht_need_consume()) {
+    if (_aggregator->is_streaming_all_states()) {
         return true;
     }
-
     // There are four cases where chunk buffer is empty
     // case1: streaming mode is 'FORCE_STREAMING'
     // case2: streaming mode is 'AUTO'
@@ -89,7 +88,7 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
 
     RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
 
-    auto need_reset_aggregator = _aggregator->ht_need_consume() && _aggregator->is_ht_eos();
+    auto need_reset_aggregator = _aggregator->is_streaming_all_states() && _aggregator->is_ht_eos();
 
     FAIL_POINT_TRIGGER_EXECUTE(force_reset_aggregator_after_agg_streaming_sink_finish, {
         if (_aggregator->is_sink_complete()) {
@@ -101,7 +100,7 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
         if (!_aggregator->is_sink_complete()) {
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
         }
-        _aggregator->set_ht_need_consume(false);
+        _aggregator->set_streaming_all_states(false);
     }
 
     return Status::OK();
