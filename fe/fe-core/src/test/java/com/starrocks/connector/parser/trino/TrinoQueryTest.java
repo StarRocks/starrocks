@@ -1031,7 +1031,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : trim('  abcd')");
 
         sql = "select trim(trailing 'ER' from upper('worker'));";
-        assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+        assertPlanContains(sql, "<slot 2> : rtrim('WORKER', 'ER')");
 
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
