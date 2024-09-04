@@ -33,7 +33,6 @@ import static org.junit.Assert.assertSame;
 public class SimplifiedDateColumnPredicateRuleTest {
     private static final ConstantOperator DATE_BEGIN = ConstantOperator.createVarchar("20240506");
     private static final ConstantOperator DATE_BEGIN2 = ConstantOperator.createVarchar("2024-05-06");
-    private static final ConstantOperator DATE_END = ConstantOperator.createVarchar("20240606");
 
     private final SimplifiedDateColumnPredicateRule rule = new SimplifiedDateColumnPredicateRule();
 
@@ -48,6 +47,8 @@ public class SimplifiedDateColumnPredicateRuleTest {
             verifyDate(new BinaryPredicateOperator(BinaryType.EQ, call, DATE_BEGIN));
             verifyDate(new BinaryPredicateOperator(BinaryType.GE, call, DATE_BEGIN));
             verifyNotDate(new BinaryPredicateOperator(BinaryType.EQ, call, DATE_BEGIN2));
+            verifyNotDate(
+                    new BinaryPredicateOperator(BinaryType.GT, call, ConstantOperator.createVarchar("2024050600")));
         }
         {
             // dt is date
@@ -58,6 +59,8 @@ public class SimplifiedDateColumnPredicateRuleTest {
             verifyNotDate(new BinaryPredicateOperator(BinaryType.EQ, call, DATE_BEGIN));
             verifyDate(new BinaryPredicateOperator(BinaryType.GE, call, DATE_BEGIN2));
             verifyNotDate(new BinaryPredicateOperator(BinaryType.EQ, call, DATE_BEGIN));
+            verifyNotDate(
+                    new BinaryPredicateOperator(BinaryType.EQ, call, ConstantOperator.createVarchar("2024050600")));
         }
         {
             // dt is datetime

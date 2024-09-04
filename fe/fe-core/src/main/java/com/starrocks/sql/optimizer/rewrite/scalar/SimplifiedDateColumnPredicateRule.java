@@ -26,6 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.util.regex.Pattern;
+
 /**
  * if t is date
  * date_format(t, '%Y%m%d') >= '20230327' -> `t` >= '20230327'
@@ -99,11 +101,23 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         ScalarOperator extractColumn();
 
         boolean check();
+
+        Pattern DATE_PATTERN1 = Pattern.compile("\\d{8}");
+        Pattern DATE_PATTERN2 = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+
+        static boolean isDatePattern(int expectedLength, String date) {
+            if (expectedLength == 8 && DATE_PATTERN1.matcher(date).matches()) {
+                return true;
+            } else if (expectedLength == 10 && DATE_PATTERN2.matcher(date).matches()) {
+                return true;
+            }
+            return false;
+        }
     }
 
     /**
      * date_format(t, '%Y%m%d') -> t
-      */
+     */
     private static class DateFormatExtractor implements Extractor {
         private final CallOperator call;
         private final ConstantOperator value;
@@ -126,13 +140,12 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         @Override
         public ScalarOperator extractColumn() {
             ScalarOperator dateColumn = call.getChild(0);
-            ConstantOperator child = call.getChild(1).cast();
-            if ("%Y%m%d".equalsIgnoreCase(child.getVarchar()) || "%Y-%m-%d".equalsIgnoreCase(child.getVarchar())) {
+            String pattern = ((ConstantOperator) call.getChild(1)).getVarchar();
+            if ("%Y%m%d".equalsIgnoreCase(pattern) || "%Y-%m-%d".equalsIgnoreCase(pattern)) {
                 // %Y%m%d(6) -> yyyyMMdd(8), %Y-%m-%d(8) -> yyyy-MM-dd(10), the length diff is 2
-                if (value.getVarchar().length() != child.getVarchar().length() + 2) {
-                    return null;
+                if (Extractor.isDatePattern(pattern.length() + 2, value.getVarchar())) {
+                    return dateColumn;
                 }
-                return dateColumn;
             }
             return null;
         }
@@ -140,7 +153,7 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
 
     /**
      * substr(cast(t as varchar), 1, 10) -> t
-      */
+     */
     private static class SubstrExtractor implements Extractor {
         private final CallOperator call;
         private final ConstantOperator value;
@@ -168,11 +181,12 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
 
         @Override
         public ScalarOperator extractColumn() {
-            CastOperator op = call.getChild(0).cast();
-            if (value.getVarchar().length() != expectedLength) {
-                return null;
+            CastOperator castOperator = call.getChild(0).cast();
+            ScalarOperator dateColumn = castOperator.getChild(0);
+            if (Extractor.isDatePattern(expectedLength, value.getVarchar())) {
+                return dateColumn;
             }
-            return op.getChild(0);
+            return null;
         }
     }
 
@@ -182,10 +196,12 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
     private static class ReplaceAndSubstrExtractor implements Extractor {
         private final CallOperator call;
         private final ConstantOperator value;
+        private final SubstrExtractor substrExtractor;
 
         public ReplaceAndSubstrExtractor(CallOperator call, ConstantOperator value) {
             this.call = call;
             this.value = value;
+            this.substrExtractor = new SubstrExtractor((CallOperator) call.getChild(0), value, 8);
         }
 
         @Override
@@ -203,12 +219,12 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
             if (value.getVarchar().length() != 8) {
                 return false;
             }
-            return new SubstrExtractor((CallOperator) call.getChild(0), value, 8).check();
+            return substrExtractor.check();
         }
 
         @Override
         public ScalarOperator extractColumn() {
-            return new SubstrExtractor((CallOperator) call.getChild(0), value, 8).extractColumn();
+            return substrExtractor.extractColumn();
         }
     }
 }
