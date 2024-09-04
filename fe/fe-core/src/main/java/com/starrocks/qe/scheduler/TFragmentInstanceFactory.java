@@ -39,6 +39,7 @@ import com.starrocks.thrift.TQueryQueueOptions;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 public class TFragmentInstanceFactory {
@@ -87,6 +88,17 @@ public class TFragmentInstanceFactory {
         toThriftFromCommonParams(result, instance.getExecFragment(), descTable, totalTableSinkDop);
         toThriftForUniqueParams(result, instance, accTabletSinkDop);
 
+        return result;
+    }
+
+    public TExecPlanFragmentParams createIncrementalScanRanges(FragmentInstance instance) {
+        TExecPlanFragmentParams result = new TExecPlanFragmentParams();
+        result.setProtocol_version(InternalServiceVersion.V1);
+        result.setParams(new TPlanFragmentExecParams());
+        result.params.setQuery_id(jobSpec.getQueryId());
+        result.params.setFragment_instance_id(instance.getInstanceId());
+        result.params.setPer_node_scan_ranges(instance.getNode2ScanRanges());
+        result.params.setPer_exch_num_senders(new HashMap<>());
         return result;
     }
 
