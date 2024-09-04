@@ -1350,11 +1350,11 @@ showFunctionsStatement
     ;
 
 dropFunctionStatement
-    : DROP GLOBAL? FUNCTION qualifiedName '(' typeList ')'
+    : DROP GLOBAL? FUNCTION (IF EXISTS)?  qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
     ;
 inlineFunction
     : AS ATTACHMENT
