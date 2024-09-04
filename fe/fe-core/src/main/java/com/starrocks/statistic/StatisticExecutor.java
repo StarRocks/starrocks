@@ -50,6 +50,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
+import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
@@ -122,16 +123,8 @@ public class StatisticExecutor {
         if (table != null && meta != null) {
             List<ColumnStatsMeta> columnStatsMetaList = meta.getColumnStatsMetaList();
             if (CollectionUtils.isNotEmpty(columnStatsMetaList)) {
-                List<String> columnNamesForStats =
-                        columnStatsMetaList.stream().map(ColumnStatsMeta::getColumnName)
-                                .collect(Collectors.toList());
-                List<Type> columnTypesForStats =
-                        columnNamesForStats.stream()
-                                .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x))
-                                .collect(Collectors.toList());
-                String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
-                        dbId, tableId, columnNamesForStats, columnTypesForStats);
-                List<TStatisticData> columnStats = executeStatisticDQL(context, statsSql);
+                List<TStatisticData> columnStats =
+                        queryExtraColumnStats(context, dbId, tableId, columnStatsMetaList, table);
 
                 // overwrite table-stats
                 Map<String, TStatisticData> merged = tableStats.stream()
@@ -141,6 +134,45 @@ public class StatisticExecutor {
             }
         }
         return tableStats;
+    }
+
+    private @NotNull List<TStatisticData> queryExtraColumnStats(ConnectContext context, Long dbId, Long tableId,
+                                                                List<ColumnStatsMeta> columnStatsMetaList,
+                                                                Table table) {
+        List<ColumnStatsMeta> columnWithFullStats =
+                columnStatsMetaList.stream()
+                        .filter(x -> x.getType() == StatsConstants.AnalyzeType.FULL)
+                        .collect(Collectors.toList());
+        List<ColumnStatsMeta> columnWithSampleStats =
+                columnStatsMetaList.stream()
+                        .filter(x -> x.getType() == StatsConstants.AnalyzeType.SAMPLE)
+                        .collect(Collectors.toList());
+
+        List<TStatisticData> columnStats = Lists.newArrayList();
+        if (CollectionUtils.isNotEmpty(columnWithFullStats)) {
+            List<String> columnNamesForStats =
+                    columnWithFullStats.stream().map(ColumnStatsMeta::getColumnName)
+                            .collect(Collectors.toList());
+            List<Type> columnTypesForStats =
+                    columnWithFullStats.stream()
+                            .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
+                            .collect(Collectors.toList());
+
+            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
+                    dbId, tableId, columnNamesForStats, columnTypesForStats);
+            List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+            columnStats.addAll(tStatisticData);
+        }
+        if (CollectionUtils.isNotEmpty(columnWithSampleStats)) {
+            List<String> columnNamesForStats =
+                    columnWithSampleStats.stream().map(ColumnStatsMeta::getColumnName)
+                            .collect(Collectors.toList());
+            String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(
+                    dbId, tableId, columnNamesForStats);
+            List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+            columnStats.addAll(tStatisticData);
+        }
+        return columnStats;
     }
 
     public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds,
