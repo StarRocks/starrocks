@@ -491,7 +491,7 @@ public class ConstantExpressionTest extends PlanTestBase {
 
             // Non-constant arguments.
             {
-                String sql = "SELECT get_query_dump(lower('select count(v1) from t0')) from t0";
+                String sql = "SELECT get_query_dump(rtrim('select count(v1) from t0')) from t0";
                 Assert.assertThrows("Meta function get_query_dump does not support non-constant arguments",
                         SemanticException.class, () -> getFragmentPlan(sql));
             }
