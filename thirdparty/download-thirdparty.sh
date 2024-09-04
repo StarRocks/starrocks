@@ -409,8 +409,8 @@ if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; 
     touch $PATCHED_MARK
     echo "Finished patching $MARIADB_SOURCE"
 fi
-if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.4" ]; then
-    patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.1.4-gcc14.patch
+if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.14" ]; then
+    patch -p1 < $TP_PATCH_DIR/mariadb-connector-c-3.1.14-gcc14.patch
     touch $PATCHED_MARK
     echo "Finished patching $MARIADB_SOURCE"
 fi
