@@ -5428,6 +5428,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         String functionName = qualifiedName.toString();
         boolean isGlobal = context.GLOBAL() != null;
+        boolean dropIfExist = context.IF() != null && context.EXISTS() != null;
         FunctionName fnName = FunctionName.createFnName(functionName);
         if (isGlobal) {
             if (!Strings.isNullOrEmpty(fnName.getDb())) {
@@ -5436,7 +5437,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             fnName.setAsGlobalFunction();
         }
 
-        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()), createPos(context));
+        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()), createPos(context), dropIfExist);
     }
 
     @Override

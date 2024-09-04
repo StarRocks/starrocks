@@ -258,13 +258,14 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 if (name.isGlobalFunction()) {
-                    context.getGlobalStateMgr().getGlobalFunctionMgr().userDropFunction(stmt.getFunctionSearchDesc());
+                    context.getGlobalStateMgr().getGlobalFunctionMgr()
+                            .userDropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
                 } else {
                     Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.dropFunction(stmt.getFunctionSearchDesc());
+                    db.dropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
                 }
             });
             return null;

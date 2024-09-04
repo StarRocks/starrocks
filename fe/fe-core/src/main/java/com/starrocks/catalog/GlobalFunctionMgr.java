@@ -130,10 +130,14 @@ public class GlobalFunctionMgr {
         }
     }
 
-    private void dropFunction(FunctionSearchDesc function) throws UserException {
+    private void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
@@ -146,6 +150,10 @@ public class GlobalFunctionMgr {
             }
         }
         if (!isFound) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         ImmutableList<Function> newFunctions = builder.build();
@@ -156,14 +164,14 @@ public class GlobalFunctionMgr {
         }
     }
 
-    public synchronized void userDropFunction(FunctionSearchDesc f) throws UserException {
-        dropFunction(f);
+    public synchronized void userDropFunction(FunctionSearchDesc f, boolean dropIfExists) throws UserException {
+        dropFunction(f, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(f);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc f) {
         try {
-            dropFunction(f);
+            dropFunction(f, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }

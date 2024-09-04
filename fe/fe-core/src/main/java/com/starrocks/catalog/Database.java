@@ -645,14 +645,14 @@ public class Database extends MetaObject implements Writable {
         name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
     }
 
-    public synchronized void dropFunction(FunctionSearchDesc function) throws UserException {
-        dropFunctionImpl(function);
+    public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+        dropFunctionImpl(function, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
         try {
-            dropFunctionImpl(functionSearchDesc);
+            dropFunctionImpl(functionSearchDesc, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
@@ -683,10 +683,14 @@ public class Database extends MetaObject implements Writable {
         return func;
     }
 
-    private void dropFunctionImpl(FunctionSearchDesc function) throws UserException {
+    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
@@ -699,6 +703,10 @@ public class Database extends MetaObject implements Writable {
             }
         }
         if (!isFound) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         if (newFunctions.isEmpty()) {
