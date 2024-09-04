@@ -429,6 +429,13 @@ public class PlanFragmentBuilder {
         }
 
         private void collectExecStatsIds(PlanNode root) {
+            if (ConnectContext.get() == null) {
+                return;
+            }
+            if (!ConnectContext.get().getSessionVariable().isEnablePlanAdvisor()) {
+                return;
+            }
+
             for (PlanNode child : root.getChildren()) {
                 collectExecStatsIds(child);
             }
