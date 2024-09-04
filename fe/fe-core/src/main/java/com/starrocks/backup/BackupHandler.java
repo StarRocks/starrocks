@@ -93,6 +93,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -758,6 +759,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
     }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> jobSamples = new ArrayList<>(dbIdToBackupOrRestoreJob.values());
+        return Lists.newArrayList(Pair.create(jobSamples, (long) dbIdToBackupOrRestoreJob.size()));
+    }
 }
-
-

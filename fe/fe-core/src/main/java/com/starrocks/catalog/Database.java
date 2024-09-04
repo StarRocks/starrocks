@@ -70,7 +70,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+import java.util.Objects;
+>>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -748,5 +752,22 @@ public class Database extends MetaObject implements Writable {
 
     public boolean getExist() {
         return exist;
+    }
+
+    public List<PhysicalPartition> getPartitionSamples() {
+        return this.idToTable.values()
+                .stream()
+                .filter(table -> table instanceof OlapTable)
+                .map(table -> ((OlapTable) table).getPartitionSample())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    public int getOlapPartitionsCount() {
+        return this.idToTable.values()
+                .stream()
+                .filter(table -> table instanceof OlapTable)
+                .mapToInt(table -> ((OlapTable) table).getPartitionsCount())
+                .sum();
     }
 }
