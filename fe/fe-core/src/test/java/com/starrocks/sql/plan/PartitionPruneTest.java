@@ -15,9 +15,25 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertTrue;
 
@@ -177,6 +193,50 @@ public class PartitionPruneTest extends PlanTestBase {
         sql = "select * from ptest where cast('  -111 2  ' as int) = k1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 1: k1 = CAST('  -111 2  ' AS INT)");
+    }
+
+    private static Pair<ScalarOperator, LogicalScanOperator> buildConjunctAndScan(String sql) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        ExecPlan execPlan = pair.second;
+        PhysicalOlapScanOperator physicalOlapScanOperator = execPlan.getPhysicalPlan().getOp().cast();
+        Map<Column, ColumnRefOperator> refMap =
+                physicalOlapScanOperator.getColRefToColumnMetaMap()
+                        .entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+
+        LogicalOlapScanOperator logicalOlapScan = new LogicalOlapScanOperator(
+                physicalOlapScanOperator.getTable(),
+                physicalOlapScanOperator.getColRefToColumnMetaMap(),
+                refMap,
+                physicalOlapScanOperator.getDistributionSpec(),
+                -1,
+                physicalOlapScanOperator.getPredicate());
+        ScalarOperator predicate = execPlan.getPhysicalPlan().getOp().getPredicate();
+        return Pair.create(predicate, logicalOlapScan);
+    }
+
+    private void testRemovePredicate(String sql, String expected) throws Exception {
+        Pair<ScalarOperator, LogicalScanOperator> pair = buildConjunctAndScan(sql);
+        StatisticsCalculator calculator = new StatisticsCalculator();
+        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
+        ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, context);
+        Assert.assertEquals(expected, newPredicate.toString());
+    }
+
+    @Test
+    public void testGeneratedColumnPrune_RemovePredicate() throws Exception {
+        testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' ", "true");
+        testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' and c2 > 100", "true");
+        testRemovePredicate("select * from t_gen_col where c1 >= '2024-01-01'  and c1 <= '2024-01-03' " +
+                "and c2 > 100", "true");
+        testRemovePredicate("select * from t_gen_col where c2 in (1, 2,3)", "true");
+        testRemovePredicate("select * from t_gen_col where c2 = cast('123' as int)", "true");
+
+        // can not be removed
+        testRemovePredicate("select * from t_gen_col where c1 = random() and c2 > 100",
+                "cast(1: c1 as double) = random(1)");
+        testRemovePredicate("select * from t_gen_col where c2 + 100 > c1 + 1",
+                "cast(add(2: c2, 100) as double) > add(cast(1: c1 as double), 1)");
     }
 
     @Test
