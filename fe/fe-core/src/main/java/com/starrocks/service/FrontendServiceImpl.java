@@ -92,6 +92,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -2248,7 +2249,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         AddPartitionClause addPartitionClause;
         List<String> partitionColNames = Lists.newArrayList();
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values);
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
@@ -2314,8 +2316,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
-            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-            analyzer.analyze(ctx, addPartitionClause);
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                    LockType.READ)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(ctx, addPartitionClause);
+            }
             state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to cancel alter operation", e);
