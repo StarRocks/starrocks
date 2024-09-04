@@ -665,8 +665,8 @@ build_flatbuffers() {
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
 
-  export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g " $(echo_gt_gcc14 "-Wno-error=stringop-overread")
-  export CPPFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g " $(echo_gt_gcc14 "-Wno-error=stringop-overread")
+  export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g "$(echo_gt_gcc14 "-Wno-error=stringop-overread")
+  export CPPFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g "$(echo_gt_gcc14 "-Wno-error=stringop-overread")
 
   LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
