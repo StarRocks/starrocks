@@ -224,6 +224,13 @@ public class SelectStmtTest {
     }
 
     @Test
+    void testSessionUserFunSupport() throws Exception {
+        String sql = "select session_user()";
+        String result = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(result.contains("root"));
+    }
+
+    @Test
     void testTimeFunSupport() throws Exception {
         String sql = "select current_timestamp()";
         starRocksAssert.query(sql).explainQuery();

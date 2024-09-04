@@ -513,6 +513,8 @@ public class FunctionSet {
 
     public static final String USER = "user";
 
+    public static final String SESSION_USER = "session_user";
+
     public static final String CURRENT_USER = "current_user";
 
     public static final String CURRENT_ROLE = "current_role";
@@ -721,6 +723,7 @@ public class FunctionSet {
             .add(DATABASE)
             .add(SCHEMA)
             .add(USER)
+            .add(SESSION_USER)
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
             .build();
