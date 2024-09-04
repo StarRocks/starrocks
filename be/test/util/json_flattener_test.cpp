@@ -69,9 +69,9 @@ TEST_P(JsonPathDeriverTest, json_path_deriver_test) {
     std::vector<std::string> path = jf.flat_paths();
     std::vector<LogicalType> type = jf.flat_types();
 
-    ASSERT_EQ(param_has_remain, jf.has_remain_json());
-    ASSERT_EQ(param_flat_path, path);
-    ASSERT_EQ(param_flat_type, type);
+    EXPECT_EQ(param_has_remain, jf.has_remain_json());
+    EXPECT_EQ(param_flat_path, path);
+    EXPECT_EQ(param_flat_type, type);
 }
 
 // clang-format off
@@ -83,14 +83,15 @@ INSTANTIATE_TEST_SUITE_P(JsonPathDeriverCases, JsonPathDeriverTest,
         std::make_tuple(R"( {"k1": 1, "k2": 2} )", R"( {"k1": 3, "k3": 4} )", true, std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_BIGINT}),
 
         // EMPTY
-        std::make_tuple(R"( {"k1": 1, "k2": {}} )", R"( {"k1": 3, "k2": {}} )", true, std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_BIGINT}),
+        std::make_tuple(R"( {"k1": 1, "k2": {}} )", R"( {"k1": 3, "k2": {}} )", false, std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_JSON}),
+        std::make_tuple(R"( {"k1": 1, "k2": {}} )", R"( {"k1": 3, "k2": {"k3": 123}} )", true, std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_JSON}),
         std::make_tuple(R"( {} )", R"( {"k1": 3} )", true, std::vector<std::string> {}, std::vector<LogicalType> {}),
         std::make_tuple(R"( {"": 123} )", R"( {"": 234} )", true, std::vector<std::string> {}, std::vector<LogicalType> {}),
 
         // DEEP
         std::make_tuple(R"( {"k2": {"j1": 1, "j2": 2}} )", R"( {"k2": {"j1": 3, "j2": 4}} )", false, std::vector<std::string> {"k2.j1", "k2.j2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_BIGINT}),
         std::make_tuple(R"( {"k2": {"j1": 1, "j2": 2}} )", R"( {"k2": {"j1": 3, "j3": 4}} )", true, std::vector<std::string> {"k2.j1"}, std::vector<LogicalType> {TYPE_BIGINT}),
-        std::make_tuple(R"( {"k2": {"j1": 1, "j2": 2}} )", R"( {"k2": {"j1": 3, "j2": {"p1": "abc"}}} )", true, std::vector<std::string> {"k2.j1"}, std::vector<LogicalType> {TYPE_BIGINT}),
+        std::make_tuple(R"( {"k2": {"j1": 1, "j2": 2}} )", R"( {"k2": {"j1": 3, "j2": {"p1": "abc"}}} )", true, std::vector<std::string> {"k2.j1", "k2.j2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_JSON}),
         std::make_tuple(R"( {"k2": {"j1": 1, "j2": {"p1": [1,2,3,4]}}} )", R"( {"k2": {"j1": 3, "j2": {"p1": "abc"}}} )", false, std::vector<std::string> {"k2.j1", "k2.j2.p1"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_JSON})
 ));
 // clang-format on

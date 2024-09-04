@@ -57,9 +57,11 @@ class JsonFlatPath {
 public:
     using OP = uint8_t;
     static const OP OP_INCLUDE = 0;
-    static const OP OP_EXCLUDE = 1; // for compaction remove extract json
-    static const OP OP_IGNORE = 2;  // for merge and read middle json
-    static const OP OP_ROOT = 3;    // to mark new root
+    static const OP OP_EXCLUDE = 1;   // for compaction remove extract json
+    static const OP OP_IGNORE = 2;    // for merge and read middle json
+    static const OP OP_ROOT = 3;      // to mark new root
+    static const OP OP_NEW_LEVEL = 4; // for merge flat json use, to mark the path is need
+
     // for express flat path
     int index = -1; // flat paths array index, only use for leaf, to find column
     LogicalType type = LogicalType::TYPE_JSON;
@@ -127,7 +129,11 @@ public:
 private:
     void _derived(const Column* json_data, size_t mark_row);
 
+    JsonFlatPath* _normalize_exists_path(const std::string_view& path, JsonFlatPath* root, uint64_t hits);
+
     void _finalize();
+    uint32_t _dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
+                           std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf);
 
     void _derived_on_flat_json(const std::vector<const Column*>& json_datas);
 
@@ -145,7 +151,7 @@ private:
         uint64_t max = 0;
 
         // same key may appear many times in json, so we need avoid duplicate compute hits
-        uint64_t last_row = -1;
+        int64_t last_row = -1;
         uint64_t multi_times = 0;
     };
 
@@ -209,6 +215,8 @@ public:
 
     // for compaction, set exclude paths, to remove the path
     void set_exclude_paths(const std::vector<std::string>& exclude_paths);
+    // for compaction, set level paths, to generate the level in json
+    void add_level_paths(const std::vector<std::string>& level_paths);
 
     bool has_exclude_paths() const { return !_exclude_paths.empty(); }
 
@@ -225,6 +233,8 @@ private:
 
     void _merge_json(const JsonFlatPath* root, vpack::Builder* builder, size_t index);
 
+    void _add_level_paths_impl(const std::string_view& path, JsonFlatPath* root);
+
 private:
     std::vector<std::string> _src_paths;
     bool _has_remain = false;
@@ -232,6 +242,7 @@ private:
     std::shared_ptr<JsonFlatPath> _src_root;
     std::vector<const Column*> _src_columns;
     std::vector<std::string> _exclude_paths;
+    std::vector<std::string> _level_paths;
     bool _output_nullable = false;
 
     ColumnPtr _result;
