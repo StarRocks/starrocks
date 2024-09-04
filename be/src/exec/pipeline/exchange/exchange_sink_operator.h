@@ -28,6 +28,7 @@
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
@@ -171,6 +172,8 @@ private:
 
     CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
     const BlockCompressionCodec* _compress_codec = nullptr;
+    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
+    std::shared_ptr<serde::CompressStrategy> _compress_strategy;
 
     RuntimeProfile::Counter* _serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
@@ -179,6 +182,7 @@ private:
     RuntimeProfile::Counter* _compress_timer = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _sender_input_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _unserialized_bytes_counter = nullptr;
     RuntimeProfile::Counter* _serialized_bytes_counter = nullptr;
     RuntimeProfile::Counter* _compressed_bytes_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _pass_through_buffer_peak_mem_usage = nullptr;
@@ -209,7 +213,6 @@ private:
 
     std::unique_ptr<Shuffler> _shuffler;
 
-    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {

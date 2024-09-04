@@ -20,6 +20,8 @@
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
 
+#include <alp.hpp>
+
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_visitor_adapter.h"
@@ -31,6 +33,8 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
@@ -118,7 +122,7 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
     }
     uint64_t encode_size =
             LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint64_t)),
-                              size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
+                              size, LZ4_compressBound(size), config::lz4_acceleration);
     if (encode_size <= 0) {
         throw std::runtime_error("lz4 compress error.");
     }
@@ -160,36 +164,77 @@ public:
         }
     }
 
-    static uint8_t* serialize(const FixedLengthColumnBase<T>& column, uint8_t* buff, const int encode_level) {
+    // double type
+    static uint8_t* serialize_double(const DoubleColumn& column, uint8_t* buff, const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
-        if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
-            if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
-                buff = encode_integers<true>(column.raw_data(), size, buff, encode_level);
-            } else {
-                buff = encode_integers<false>(column.raw_data(), size, buff, encode_level);
-            }
+
+        if (EncodeContext::enable_encode_float(encode_level) && column.size() > 1024) {
+            auto compressor = alp::AlpCompressor<double>();
+            compressor.compress((double*)column.raw_data(), column.size(), buff);
+            VLOG_ROW << "compress double input_size=" << size << " compressed_size=" << compressor.get_size();
+            return buff + compressor.get_size();
         } else {
-            buff = write_raw(column.raw_data(), size, buff);
+            return write_raw(column.raw_data(), size, buff);
         }
-        return buff;
+    }
+
+    static const uint8_t* deserialize_double(const uint8_t* buff, DoubleColumn* column, const int encode_level) {
+        uint32_t size = 0;
+        buff = read_little_endian_32(buff, &size);
+        size_t count = size / sizeof(T);
+        std::vector<T>& data = column->get_data();
+        raw::make_room(&data, count);
+
+        if (EncodeContext::enable_encode_float(encode_level) && count > 1024) {
+            auto decompressor = alp::AlpDecompressor<double>();
+            decompressor.decompress((uint8_t*)buff, count, data.data());
+            VLOG_ROW << "decompress double input_size=" << size
+                     << " compressed_size=" << decompressor.reader.get_size();
+            return buff + decompressor.reader.get_size();
+        } else {
+            return read_raw(buff, data.data(), size);
+        }
+    }
+
+    static uint8_t* serialize(const FixedLengthColumnBase<T>& column, uint8_t* buff, const int encode_level) {
+        if constexpr (std::is_same_v<T, double>) {
+            return serialize_double((const DoubleColumn&)column, buff, encode_level);
+        } else {
+            uint32_t size = sizeof(T) * column.size();
+            buff = write_little_endian_32(size, buff);
+            if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
+                if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
+                    buff = encode_integers<true>(column.raw_data(), size, buff, encode_level);
+                } else {
+                    buff = encode_integers<false>(column.raw_data(), size, buff, encode_level);
+                }
+            } else {
+                buff = write_raw(column.raw_data(), size, buff);
+            }
+            return buff;
+        }
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, FixedLengthColumnBase<T>* column, const int encode_level) {
-        uint32_t size = 0;
-        buff = read_little_endian_32(buff, &size);
-        std::vector<T>& data = column->get_data();
-        raw::make_room(&data, size / sizeof(T));
-        if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
-            if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
-                buff = decode_integers<true>(buff, data.data(), size);
-            } else {
-                buff = decode_integers<false>(buff, data.data(), size);
-            }
+        if constexpr (std::is_same_v<T, double>) {
+            return deserialize_double(buff, (DoubleColumn*)column, encode_level);
         } else {
-            buff = read_raw(buff, data.data(), size);
+            uint32_t size = 0;
+            buff = read_little_endian_32(buff, &size);
+            std::vector<T>& data = column->get_data();
+            raw::make_room(&data, size / sizeof(T));
+            if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
+                if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
+                    buff = decode_integers<true>(buff, data.data(), size);
+                } else {
+                    buff = decode_integers<false>(buff, data.data(), size);
+                }
+            } else {
+                buff = read_raw(buff, data.data(), size);
+            }
+            return buff;
         }
-        return buff;
     }
 };
 
