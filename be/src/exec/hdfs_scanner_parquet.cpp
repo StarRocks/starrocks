@@ -27,9 +27,14 @@ static const std::string kParquetProfileSectionPrefix = "Parquet";
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+<<<<<<< HEAD
         std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(
                 new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
                                          scanner_params.materialize_slots, &_need_skip_rowids));
+=======
+        std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(new IcebergDeleteBuilder(
+                scanner_params.fs, scanner_params.path, &_need_skip_rowids, scanner_params.datacache_options));
+>>>>>>> 8bf333e5fd ([Enhancement] Support to pushdown compound predicates in orc (#50613))
         for (const auto& tdelete_file : scanner_params.deletes) {
             RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
                     runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
