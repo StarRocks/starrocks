@@ -51,6 +51,8 @@ public:
     Status MultiGet(const ReadOptions&, const Slice* keys, ForwardIt begin, ForwardIt end,
                     std::vector<std::string>* values);
 
+    size_t memory_usage() const;
+
 private:
     struct Rep;
 

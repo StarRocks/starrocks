@@ -105,4 +105,8 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     return Status::OK();
 }
 
+size_t PersistentIndexSstable::memory_usage() const {
+    return (_sst != nullptr) ? _sst->memory_usage() : 0;
+}
+
 } // namespace starrocks::lake

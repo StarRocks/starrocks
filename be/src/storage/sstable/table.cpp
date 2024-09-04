@@ -27,18 +27,20 @@ struct Table::Rep {
     ~Rep() {
         delete filter;
         delete[] filter_data;
+        filter_data_size = 0;
         delete index_block;
     }
 
     Options options;
     Status status;
-    RandomAccessFile* file;
-    uint64_t cache_id;
-    FilterBlockReader* filter;
-    const char* filter_data;
+    RandomAccessFile* file = nullptr;
+    uint64_t cache_id = 0;
+    FilterBlockReader* filter = nullptr;
+    const char* filter_data = nullptr;
+    size_t filter_data_size = 0;
 
     BlockHandle metaindex_handle; // Handle to metaindex_block: saved from footer
-    Block* index_block;
+    Block* index_block = nullptr;
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, Table** table) {
@@ -135,7 +137,8 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
         return;
     }
     if (block.heap_allocated) {
-        rep_->filter_data = block.data.get_data(); // Will need to delete later
+        rep_->filter_data = block.data.get_data();      // Will need to delete later
+        rep_->filter_data_size = block.data.get_size(); // mem tracker will track this piece of memory.
     }
     rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
 }
@@ -300,6 +303,12 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
     TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
     return s;
+}
+
+size_t Table::memory_usage() const {
+    const size_t index_block_sz = (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
+    const size_t filter_data_sz = rep_->filter_data_size;
+    return index_block_sz + filter_data_sz;
 }
 
 // If new container wants to be supported in MultiGet, the initialization can be added here.

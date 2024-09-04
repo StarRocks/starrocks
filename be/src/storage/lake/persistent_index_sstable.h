@@ -58,6 +58,8 @@ public:
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
 
+    size_t memory_usage() const;
+
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
     std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
