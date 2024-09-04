@@ -1287,6 +1287,7 @@ public class StmtExecutor {
         }
     }
 
+    // TODO: move to DdlExecutor
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         TableName tableName = analyzeStmt.getTableName();

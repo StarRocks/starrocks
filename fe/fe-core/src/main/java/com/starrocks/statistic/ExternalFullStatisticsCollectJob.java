@@ -78,8 +78,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
                                             List<String> columnNames, List<Type> columnTypes,
                                             StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                            Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+                                            Map<String, String> properties, boolean allColumns) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties, allColumns);
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
     }

@@ -32,14 +32,14 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     public SampleStatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                      Map<String, String> properties) {
-        super(db, table, columnNames, type, scheduleType, properties);
+                                      Map<String, String> properties, boolean allColumns) {
+        super(db, table, columnNames, type, scheduleType, properties, allColumns);
     }
 
     public SampleStatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                      Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+                                      Map<String, String> properties, boolean allColumns) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties, allColumns);
     }
 
     @Override

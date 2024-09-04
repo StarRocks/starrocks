@@ -14,6 +14,8 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -60,6 +62,9 @@ public class BasicStatsMeta implements Writable {
 
     @SerializedName("deltaRows")
     private long deltaRows;
+
+    @SerializedName("columnStats")
+    private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
 
     public BasicStatsMeta(long dbId, long tableId, List<String> columns,
                           StatsConstants.AnalyzeType type,
@@ -189,5 +194,23 @@ public class BasicStatsMeta implements Writable {
         } else {
             return updateTime.isAfter(loadTime);
         }
+    }
+
+    public void updateStats(StatsConstants.AnalyzeType type, LocalDateTime updateTime, Map<String, String> properties) {
+        this.type = type;
+        this.updateTime = updateTime;
+        this.properties = properties;
+    }
+
+    public Map<String, ColumnStatsMeta> getColumnStatsMetaMap() {
+        return columnStatsMetaMap;
+    }
+
+    public List<ColumnStatsMeta> getColumnStatsMetaList() {
+        return Lists.newArrayList(columnStatsMetaMap.values());
+    }
+
+    public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
+        this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
     }
 }

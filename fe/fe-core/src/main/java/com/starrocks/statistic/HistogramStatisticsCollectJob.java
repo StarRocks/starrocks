@@ -57,7 +57,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     public HistogramStatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
                                          StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                          Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties, false);
     }
 
     @Override

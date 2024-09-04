@@ -44,6 +44,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -54,6 +55,9 @@ import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
@@ -76,7 +80,7 @@ public class StatisticExecutor {
     public List<TStatisticData> queryStatisticSync(ConnectContext context, Long dbId, Long tableId,
                                                    List<String> columnNames) {
         String sql;
-        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
             Table table = null;
             if (dbId == null) {
@@ -112,8 +116,31 @@ public class StatisticExecutor {
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
+        List<TStatisticData> tableStats = executeStatisticDQL(context, sql);
 
-        return executeStatisticDQL(context, sql);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table != null && meta != null) {
+            List<ColumnStatsMeta> columnStatsMetaList = meta.getColumnStatsMetaList();
+            if (CollectionUtils.isNotEmpty(columnStatsMetaList)) {
+                List<String> columnNamesForStats =
+                        columnStatsMetaList.stream().map(ColumnStatsMeta::getColumnName)
+                                .collect(Collectors.toList());
+                List<Type> columnTypesForStats =
+                        columnNamesForStats.stream()
+                                .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x))
+                                .collect(Collectors.toList());
+                String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
+                        dbId, tableId, columnNamesForStats, columnTypesForStats);
+                List<TStatisticData> columnStats = executeStatisticDQL(context, statsSql);
+
+                // overwrite table-stats
+                Map<String, TStatisticData> merged = tableStats.stream()
+                        .collect(Collectors.toMap(TStatisticData::getColumnName, Function.identity()));
+                columnStats.forEach(x -> merged.put(x.getColumnName(), x));
+                tableStats = Lists.newArrayList(merged.values());
+            }
+        }
+        return tableStats;
     }
 
     public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds,
@@ -336,13 +363,29 @@ public class StatisticExecutor {
                 }
             }
         } else {
+            AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
             if (table.isNativeTableOrMaterializedView()) {
-                long existUpdateRows = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExistUpdateRows(table.getId());
-                BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
-                        statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
-                        statsJob.getProperties(), existUpdateRows);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshBasicStatisticsCache(
+                BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
+                if (basicStatsMeta == null) {
+                    long existUpdateRows = analyzeMgr.getExistUpdateRows(table.getId());
+                    basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
+                            statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
+                            statsJob.getProperties(), existUpdateRows);
+                }
+
+                if (!statsJob.isAllColumns()) {
+                    for (String column : statsJob.getColumnNames()) {
+                        ColumnStatsMeta meta =
+                                new ColumnStatsMeta(column, statsJob.getType(), analyzeStatus.getEndTime());
+                        basicStatsMeta.addColumnStatsMeta(meta);
+                    }
+                } else {
+                    basicStatsMeta.updateStats(
+                            statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
+                }
+
+                analyzeMgr.addBasicStatsMeta(basicStatsMeta);
+                analyzeMgr.refreshBasicStatisticsCache(
                         basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
                         refreshAsync);
             } else {

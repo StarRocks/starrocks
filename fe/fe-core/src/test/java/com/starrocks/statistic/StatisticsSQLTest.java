@@ -165,7 +165,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         List<String> columnNames = Lists.newArrayList("j1", "s1");
         FullStatisticsCollectJob job = new FullStatisticsCollectJob(db, t0, pids, columnNames,
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), false);
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
         Assert.assertEquals(2, sqls.size());
@@ -190,7 +190,8 @@ public class StatisticsSQLTest extends PlanTestBase {
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
 
         FullStatisticsCollectJob job = new FullStatisticsCollectJob(db, t0, pids, columnNames, ImmutableList.of(Type.INT,
-                Type.INT, Type.INT), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+                Type.INT, Type.INT), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap(), false);
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
         Assert.assertEquals(3, sqls.size());
@@ -275,7 +276,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         FullStatisticsCollectJob job = new FullStatisticsCollectJob(db, t0, pids, columnNames,
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), false);
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
         Assert.assertEquals(7, sqls.size());

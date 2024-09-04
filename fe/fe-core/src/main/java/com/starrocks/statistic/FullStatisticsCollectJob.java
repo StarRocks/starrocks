@@ -70,15 +70,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columns,
                                     StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                    Map<String, String> properties) {
-        super(db, table, columns, type, scheduleType, properties);
+                                    Map<String, String> properties, boolean allColumns) {
+        super(db, table, columns, type, scheduleType, properties, allColumns);
         this.partitionIdList = partitionIdList;
     }
 
     public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                     List<Type> columnTypes, StatsConstants.AnalyzeType type,
-                                    StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+                                    StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
+                                    boolean allColumns) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties, allColumns);
         this.partitionIdList = partitionIdList;
     }
 

@@ -58,7 +58,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
                                                  List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                                  StatsConstants.ScheduleType scheduleType,
                                                  Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties, false);
         this.catalogName = catalogName;
     }
 

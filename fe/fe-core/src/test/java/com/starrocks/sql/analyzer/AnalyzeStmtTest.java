@@ -302,7 +302,7 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList(partition.getId()),
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
-                Maps.newHashMap());
+                Maps.newHashMap(), false);
     }
 
     @Test
