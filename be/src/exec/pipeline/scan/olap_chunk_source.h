@@ -78,7 +78,7 @@ private:
     TInternalScanRange* _scan_range;
 
     PredicateTree _non_pushdown_pred_tree;
-    std::vector<uint8_t> _selection;
+    Filter _selection;
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;

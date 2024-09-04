@@ -112,8 +112,6 @@ public:
 
     [[nodiscard]] bool append_nulls(size_t count) override;
 
-    [[nodiscard]] bool append_strings(const Buffer<Slice>& strs) override;
-
     [[nodiscard]] size_t append_numbers(const void* buff, size_t length) override;
 
     void append_value_multiple_times(const void* value, size_t count) override;

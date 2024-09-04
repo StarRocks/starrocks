@@ -607,7 +607,7 @@ protected:
             return;
         }
 
-        auto null_first_fn = [src_null_column](size_t i) -> bool { return src_null_column.get_data()[i] == 1; };
+        auto null_first_fn = [&src_null_column](size_t i) -> bool { return src_null_column.get_data()[i] == 1; };
 
         auto begin_of_not_null =
                 std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);

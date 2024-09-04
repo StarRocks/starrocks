@@ -548,7 +548,7 @@ void NLJoinProbeOperator::_permute_left_join(const ChunkPtr& chunk, size_t probe
 
 // Permute build side for right join
 Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
-    const std::vector<uint8_t>& build_match_flag = _cross_join_context->get_shared_build_match_flag();
+    const Filter& build_match_flag = _cross_join_context->get_shared_build_match_flag();
     if (!SIMD::contain_zero(build_match_flag)) {
         return Status::OK();
     }

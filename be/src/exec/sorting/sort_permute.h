@@ -141,6 +141,6 @@ private:
 };
 
 // Compare result of column, value must be -1,0,1
-using CompareVector = std::vector<int8_t>;
+using CompareVector = Buffer<int8_t>;
 
 } // namespace starrocks
