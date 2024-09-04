@@ -1560,6 +1560,7 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
         rs1->rowset_meta()->set_segments_overlap_pb(NONOVERLAPPING);
         ASSERT_TRUE(_tablet2->rowset_commit(2, rs1).ok());
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_EQ(100, read_tablet(_tablet, 2));
         ASSERT_TRUE(_tablet2->updates()->compaction(_compaction_mem_tracker.get()).ok());
         int32_t count = 0;
         while (_tablet->updates()->compaction_running()) {
