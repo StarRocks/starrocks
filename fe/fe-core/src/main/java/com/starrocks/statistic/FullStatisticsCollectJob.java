@@ -136,7 +136,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
+            Partition partition = table.getPartition(data.getPartitionId());
+            if (partition == null) {
+                continue;
+            }
+            String partitionName = StringEscapeUtils.escapeSql(partition.getName());
 
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
