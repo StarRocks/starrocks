@@ -668,8 +668,10 @@ public class RuntimeProfile {
                         continue;
                     }
                     Pair<Counter, String> pair = profile.counterMap.get(name);
-                    Preconditions.checkNotNull(pair, "missing counter, profileName={}, counterName={}", profile.name,
-                            name);
+                    if (pair == null) {
+                        LOG.warn("missing counter, profileName={}, counterName={}", profile.name, name);
+                        continue;
+                    }
                     Counter counter = pair.first;
                     String parentName = pair.second;
 
