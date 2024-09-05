@@ -26,11 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.LogUtil;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;

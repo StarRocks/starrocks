@@ -70,11 +70,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-<<<<<<< HEAD
-import java.util.Optional;
-=======
 import java.util.Objects;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;

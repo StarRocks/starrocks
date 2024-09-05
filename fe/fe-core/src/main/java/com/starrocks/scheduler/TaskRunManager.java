@@ -18,11 +18,7 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.LogUtil;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
