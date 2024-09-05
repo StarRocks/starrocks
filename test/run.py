@@ -28,14 +28,13 @@ import sys
 
 import nose
 
-from lib.sr_sql_lib import self_print
-from lib import ColorEnum
-
 if not os.environ.get("version"):
     version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     os.environ["version"] = version
 
-from lib import sr_sql_lib
+from lib import sr_sql_lib, ColorEnum
+from lib.sr_sql_lib import self_print
+
 
 DEFAULT_TIMEOUT = 600
 
