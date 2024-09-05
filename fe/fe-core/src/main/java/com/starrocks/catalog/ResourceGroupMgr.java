@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -58,7 +59,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -109,10 +110,10 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             ResourceGroup wg = stmt.getResourceGroup();
+            boolean needReplace = false;
             if (resourceGroupMap.containsKey(wg.getName())) {
-                // create resource_group or replace <name> ...
                 if (stmt.isReplaceIfExists()) {
-                    dropResourceGroupUnlocked(wg.getName());
+                    needReplace = true;
                 } else if (!stmt.isIfNotExists()) {
                     throw new DdlException(String.format("RESOURCE_GROUP(%s) already exists", wg.getName()));
                 } else {
@@ -131,7 +132,8 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("MV Resource Group not support classifiers.");
             }
 
-            if (wg.getClassifiers() == null || wg.getClassifiers().isEmpty() &&
+            if ((wg.getClassifiers() == null || wg.getClassifiers().isEmpty()) &&
+                    !ResourceGroup.BUILTIN_WG_NAMES.contains(wg.getName()) &&
                     !wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
                 throw new DdlException("This type Resource Group need define classifiers.");
             }
@@ -143,7 +145,18 @@ public class ResourceGroupMgr implements Writable {
                         BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
             }
 
-            wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+            if (needReplace) {
+                dropResourceGroupUnlocked(wg.getName());
+            }
+
+            if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+                wg.setId(ResourceGroup.DEFAULT_WG_ID);
+            } else if (ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+                wg.setId(ResourceGroup.DEFAULT_MV_WG_ID);
+            } else {
+                wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+            }
+
             wg.setVersion(wg.getId());
             for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
                 classifier.setResourceGroupId(wg.getId());
@@ -166,11 +179,9 @@ public class ResourceGroupMgr implements Writable {
 
         List<List<String>> rows;
         if (stmt.getName() != null) {
-            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showOneResourceGroup(
-                    stmt.getName(), stmt.isVerbose());
+            rows = showOneResourceGroup(stmt.getName(), stmt.isVerbose());
         } else {
-            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                    .showAllResourceGroups(ConnectContext.get(), stmt.isVerbose(), stmt.isListAll());
+            rows = showAllResourceGroups(ConnectContext.get(), stmt.isVerbose(), stmt.isListAll());
         }
         return rows;
     }
@@ -326,23 +337,6 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public ResourceGroup getResourceGroupIncludingDefault(long id) {
-        ResourceGroup group = getResourceGroup(id);
-        if (group != null) {
-            return group;
-        }
-
-        if (id == ResourceGroup.DEFAULT_WG_ID) {
-            return ResourceGroup.DEFAULT_WG;
-        }
-
-        if (id == ResourceGroup.DEFAULT_MV_WG_ID) {
-            return ResourceGroup.DEFAULT_MV_WG;
-        }
-
-        return null;
-    }
-
     public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
@@ -356,6 +350,7 @@ public class ResourceGroupMgr implements Writable {
                     !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
                 throw new DdlException("MV Resource Group not support classifiers.");
             }
+
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
                 List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
@@ -439,13 +434,8 @@ public class ResourceGroupMgr implements Writable {
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);
             } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers) {
-                Set<Long> classifierToDrop = stmt.getClassifiersToDrop().stream().collect(Collectors.toSet());
-                Iterator<ResourceGroupClassifier> classifierIterator = wg.getClassifiers().iterator();
-                while (classifierIterator.hasNext()) {
-                    if (classifierToDrop.contains(classifierIterator.next().getId())) {
-                        classifierIterator.remove();
-                    }
-                }
+                Set<Long> classifierToDrop = new HashSet<>(stmt.getClassifiersToDrop());
+                wg.getClassifiers().removeIf(classifier -> classifierToDrop.contains(classifier.getId()));
                 for (Long classifierId : classifierToDrop) {
                     classifierMap.remove(classifierId);
                 }
@@ -456,6 +446,7 @@ public class ResourceGroupMgr implements Writable {
                 }
                 classifierList.clear();
             }
+
             // only when changing properties, version is required to update. because changing classifiers needs not
             // propagate to BE.
             if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
@@ -648,6 +639,38 @@ public class ResourceGroupMgr implements Writable {
             }
         } finally {
             readUnlock();
+        }
+    }
+
+    public void createBuiltinResourceGroupsIfNotExist() {
+        try {
+            ResourceGroup defaultWg = getResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+            if (defaultWg != null) {
+                return;
+            }
+
+            final int avgCpuCores = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
+
+            Map<String, String> defaultWgProperties = ImmutableMap.of(
+                    ResourceGroup.CPU_WEIGHT, Integer.toString(avgCpuCores),
+                    ResourceGroup.MEM_LIMIT, "1.0"
+            );
+            CreateResourceGroupStmt defaultWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME,
+                    true, false, Collections.emptyList(), defaultWgProperties);
+            defaultWgStmt.analyze();
+            createResourceGroup(defaultWgStmt);
+
+            Map<String, String> defaultMvWgProperties = ImmutableMap.of(
+                    ResourceGroup.CPU_WEIGHT, "1",
+                    ResourceGroup.MEM_LIMIT, "0.8",
+                    ResourceGroup.SPILL_MEM_LIMIT_THRESHOLD, "0.8"
+            );
+            CreateResourceGroupStmt defaultMvWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME,
+                    true, false, Collections.emptyList(), defaultMvWgProperties);
+            defaultMvWgStmt.analyze();
+            createResourceGroup(defaultMvWgStmt);
+        } catch (Exception e) {
+            LOG.warn("failed to create builtin resource groups", e);
         }
     }
 
