@@ -141,6 +141,17 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+### 设置变量为用户属性
+
+您可以通过 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
+
+示例：
+
+```SQL
+-- 设置用户 jack 的 Session 变量 `query_timeout` 为 `600`。
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
 ## 支持的变量
 
 本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
@@ -404,6 +415,28 @@ SELECT /*+ SET_VAR
 * 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 * 引入版本：v3.2.1
 
+### enable_metadata_profile
+
+* 描述：是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* 默认值：true
+* 引入版本：v3.3.3
+
+### plan_mode
+
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg_catalog.md#附录自适应元数据检索方案)。有效值：
+  * `auto`：系统自动选择方案。
+  * `local`：使用本地缓存方案。
+  * `distributed`：使用分布式方案。
+* 默认值：auto
+* 引入版本：v3.3.3
+
+### metadata_collect_query_timeout
+
+* 描述：Iceberg Catalog 元数据收集阶段的超时时间。
+* 单位： 秒
+* 默认值：60
+* 引入版本：v3.3.3
+
 ### enable_insert_strict
 
 * 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
@@ -436,7 +469,7 @@ SELECT /*+ SET_VAR
 
 ### enable_spill_to_remote_storage
 
-* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
 * 默认值：false
 * 引入版本：v3.3.0
 
@@ -914,7 +947,7 @@ SELECT /*+ SET_VAR
 
 ### spill_storage_volume
 
-* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#将中间结果落盘至对象存储)。
+* 描述：用于存储触发落盘的查询的中间结果的存储卷。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
 * 默认值：空字符串
 * 引入版本：v3.3.0
 

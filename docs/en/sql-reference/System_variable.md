@@ -144,6 +144,17 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+### Set variables as user properties
+
+You can set session variables as user properties using the [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
+
+Example:
+
+```SQL
+-- Set the session variable `query_timeout` to `600` for the user jack.
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
 ## Descriptions of variables
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
@@ -408,6 +419,28 @@ Default value: `true`.
 * **Description**: Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 * **Introduced in**: v3.2.1
 
+### enable_metadata_profile
+
+* **Description**: 是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* **Default**: true
+* **Introduced in**: v3.3.3
+
+### plan_mode
+
+* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
+  * `auto`: The system will automatically select the retrieval plan.
+  * `local`: Use the local cache plan.
+  * `distributed`: Use the distributed plan.
+* **Default**: auto
+* **Introduced in**: v3.3.3
+
+### metadata_collect_query_timeout
+
+* **Description**: The timeout duration for Iceberg Catalog metadata collection queries.
+* **Unit**: Second
+* **Default**: 60
+* **Introduced in**: v3.3.3
+
 ### enable_insert_strict
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
@@ -438,7 +471,7 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 ### enable_spill_to_remote_storage
 
-* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: false
 * **Introduced in**: v3.3.0
 
@@ -900,7 +933,7 @@ This variable takes effect only when the variable `enable_spill` is set to `true
 
 ### spill_storage_volume
 
-* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#spill-intermediate-result-to-object-storage).
+* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: Empty string
 * **Introduced in**: v3.3.0
 
