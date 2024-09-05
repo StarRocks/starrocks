@@ -19,7 +19,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "connector_chunk_sink.h"
+#include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
@@ -127,7 +127,7 @@ class DataSourceProvider {
 public:
     static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;  // 16MB
     static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024; // 256MB
-    static constexpr int64_t PER_FIELD_MEM_BYTES = 4 * 1024 * 1024;         // 4MB
+    static constexpr int64_t PER_FIELD_MEM_BYTES = 1 * 1024 * 1024;         // 1MB
 
     virtual ~DataSourceProvider() = default;
 

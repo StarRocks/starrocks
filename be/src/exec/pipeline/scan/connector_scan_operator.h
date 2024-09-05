@@ -35,8 +35,7 @@ struct ConnectorScanOperatorMemShareArbitrator {
     int64_t scan_mem_limit = 0;
     std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
 
-    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit)
-            : query_mem_limit(query_mem_limit), scan_mem_limit(query_mem_limit) {}
+    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit, int scan_node_number);
 
     int64_t set_scan_mem_ratio(double mem_ratio) {
         scan_mem_limit = std::max<int64_t>(1, query_mem_limit * mem_ratio);
