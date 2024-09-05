@@ -30,7 +30,11 @@ ARG GITHUB_TOKEN
 # the root directory to build the project
 ARG BUILD_ROOT=/build
 
+<<<<<<< HEAD
 FROM starrocks/toolchains-${distro}:main-20230823 as base
+=======
+FROM starrocks/toolchains-${distro}:main-20240724 as base
+>>>>>>> 104eae4c54 ([Tool] update toolchain to 20240724 (#50674))
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /
