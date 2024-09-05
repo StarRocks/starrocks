@@ -8,13 +8,6 @@ displayed_sidebar: "English"
 
 Creates a dictionary object based on an original object. The dictionary object organizes the key-value mappings from the original object in the form of a hash table and is cached in the memory of all BE nodes. It can be viewed as a cached table.
 
-**Scenarios**
-
-Dictionary objects can replace original objects, such as dictionary tables or dimension tables, to accelerate queries:
-
-- **Dictionary object as a replacement for dictionary table**: During data loading, you can use the `[dictionary_get()](xxx)` function to fetch the mapped value based on the key of the dictionary object, which is faster than querying the dictionary table using the `[dict_mapping()](xxx)` function.
-- **Dictionary object as a replacement for dimension table**: During data loading, you can directly query the dictionary object using the `[dictionary_get()](xxx)` function to get dimension values, which is faster than using JOINs to query the dimension table.
-
 **Advantages**
 
 - **Richer original objects for dictionary objects**: When using  `dictionary_get()` to query dictionary objects, the original object can be a table of any type, asynchronous materialized view, or logical view. However, when using `dict_mapping()` to query dictionary tables, the dictionary tables can only be primary key tables.
