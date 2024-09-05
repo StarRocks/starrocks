@@ -212,13 +212,8 @@ struct TQueryOptions {
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
 
-<<<<<<< HEAD
   85: optional TSpillMode spill_mode;
   
-=======
-  82: optional TSpillOptions spill_options;
-
->>>>>>> 15a6518fae ([Enhancement] reduce mem alloc failed because unfair memory sharing (#50686))
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;

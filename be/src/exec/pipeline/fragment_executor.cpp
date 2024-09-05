@@ -241,13 +241,10 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         spill_mem_limit_ratio = query_options.spill_mem_limit_threshold;
     }
 
-<<<<<<< HEAD
-=======
     int scan_node_number = 1;
     if (query_globals.__isset.scan_node_number) {
         scan_node_number = query_globals.scan_node_number;
     }
->>>>>>> 15a6518fae ([Enhancement] reduce mem alloc failed because unfair memory sharing (#50686))
     _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
                                  wg.get(), runtime_state, scan_node_number);
 

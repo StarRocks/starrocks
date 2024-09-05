@@ -18,10 +18,6 @@
 #include <string>
 #include <unordered_map>
 
-<<<<<<< HEAD
-=======
-#include "connector/connector_chunk_sink.h"
->>>>>>> 15a6518fae ([Enhancement] reduce mem alloc failed because unfair memory sharing (#50686))
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
