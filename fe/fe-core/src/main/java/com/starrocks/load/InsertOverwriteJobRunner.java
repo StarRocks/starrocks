@@ -556,7 +556,7 @@ public class InsertOverwriteJobRunner {
         return (OlapTable) table;
     }
 
-    public void testDoCommit(boolean isReplay) {
+    protected void testDoCommit(boolean isReplay) {
         doCommit(isReplay);
     }
 }
