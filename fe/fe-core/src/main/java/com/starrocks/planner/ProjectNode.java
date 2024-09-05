@@ -161,8 +161,17 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
+<<<<<<< HEAD
         return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
+=======
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                optProbeExprCandidates,
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+>>>>>>> a810948f01 ([BugFix] Clear probe RF whose probe expr contains dict mapping expr (#50690))
     }
 
     // This functions is used by query cache to compute digest of fragments. for examples:

@@ -6,9 +6,19 @@
 
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
+<<<<<<< HEAD:be/src/exprs/vectorized/runtime_filter_bank.cpp
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/runtime_filter.h"
+=======
+#include "exprs/dictmapping_expr.h"
+#include "exprs/in_const_predicate.hpp"
+#include "exprs/literal.h"
+#include "exprs/runtime_filter.h"
+#include "exprs/runtime_filter_layout.h"
+#include "gen_cpp/RuntimeFilter_types.h"
+#include "gen_cpp/Types_types.h"
+>>>>>>> a810948f01 ([BugFix] Clear probe RF whose probe expr contains dict mapping expr (#50690)):be/src/exprs/runtime_filter_bank.cpp
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
@@ -514,6 +524,23 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     }
 }
 
+static bool contains_dict_mapping_expr(Expr* expr) {
+    if (typeid(*expr) == typeid(DictMappingExpr)) {
+        return true;
+    }
+
+    return std::any_of(expr->children().begin(), expr->children().end(),
+                       [](Expr* child) { return contains_dict_mapping_expr(child); });
+}
+
+static bool contains_dict_mapping_expr(RuntimeFilterProbeDescriptor* probe_desc) {
+    auto* probe_expr_ctx = probe_desc->probe_expr_ctx();
+    if (probe_expr_ctx == nullptr) {
+        return false;
+    }
+    return contains_dict_mapping_expr(probe_expr_ctx->root());
+}
+
 void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id,
                                             RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
                                             std::set<TPlanNodeId>& local_rf_waiting_set) {
@@ -525,8 +552,15 @@ void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNode
             ++iter;
             continue;
         }
+<<<<<<< HEAD:be/src/exprs/vectorized/runtime_filter_bank.cpp
         if (desc->is_bound(tuple_ids) && !(state->broadcast_join_right_offsprings().count(target_plan_node_id) &&
                                            state->non_broadcast_rf_ids().count(desc->filter_id()))) {
+=======
+        if (desc->is_bound(tuple_ids) &&
+            !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
+              state->non_broadcast_rf_ids().contains(desc->filter_id())) &&
+            !contains_dict_mapping_expr(desc)) {
+>>>>>>> a810948f01 ([BugFix] Clear probe RF whose probe expr contains dict mapping expr (#50690)):be/src/exprs/runtime_filter_bank.cpp
             add_descriptor(desc);
             if (desc->is_local()) {
                 local_rf_waiting_set.insert(desc->build_plan_node_id());
