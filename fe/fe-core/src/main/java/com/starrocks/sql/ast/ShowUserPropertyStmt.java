@@ -74,6 +74,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
 
         UserProperty userProperty = authenticationManager.getUserProperty(user);
         rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_CONNECTIONS, String.valueOf(userProperty.getMaxConn())));
+        rows.add(Lists.newArrayList(UserProperty.PROP_RAM_USER, String.valueOf(userProperty.getRamUser())));
         rows.add(Lists.newArrayList(UserProperty.PROP_CATALOG, userProperty.getCatalog()));
         rows.add(Lists.newArrayList(UserProperty.PROP_DATABASE, userProperty.getDatabase()));
         for (Map.Entry<String, String> entry : userProperty.getSessionVariables().entrySet()) {

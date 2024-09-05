@@ -14,11 +14,15 @@
 
 package com.starrocks.planner;
 
+import com.aliyun.datalake.common.impl.Base64Util;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.common.util.DlfUtil;
 import com.starrocks.connector.Connector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -44,6 +48,7 @@ import org.apache.paimon.types.TimeType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,7 +64,7 @@ public class PaimonTableSink extends DataSink {
     private final List<String> columnTypes = new ArrayList<>();
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
-    private final CloudConfiguration cloudConfiguration;
+    private CloudConfiguration cloudConfiguration;
 
     public PaimonTableSink(PaimonTable paimonTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
         Table nativeTable = paimonTable.getNativeTable();
@@ -96,6 +101,22 @@ public class PaimonTableSink extends DataSink {
         tPaimonTableSink.setTarget_table_id(targetTableId);
         tPaimonTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        try {
+            String dataTokenPath = DlfUtil.getDataTokenPath(location);
+            if (!Strings.isNullOrEmpty(dataTokenPath)) {
+                dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
+                File dataTokenFile = new File(dataTokenPath);
+
+                if (dataTokenFile.exists()) {
+                    cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(
+                            DlfUtil.setDataToken(dataTokenFile));
+                } else {
+                    LOG.warn("Cannot find data token file " + dataTokenPath);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Fail to get data token: " + e.getMessage());
+        }
         cloudConfiguration.toThrift(tCloudConfiguration);
         tPaimonTableSink.setCloud_configuration(tCloudConfiguration);
         tPaimonTableSink.setData_column_names(columnNames);

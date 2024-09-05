@@ -299,6 +299,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+import static com.aliyun.datalake.core.constant.DataLakeConfig.DLF_AUTH_USER_NAME;
+
 // Execute one show statement.
 public class ShowExecutor {
     private static final Logger LOG = LogManager.getLogger(ShowExecutor.class);
@@ -2680,6 +2682,7 @@ public class ShowExecutor {
                 createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
             }
             Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
+            clonedConfig.remove(DLF_AUTH_USER_NAME);
             CredentialUtil.maskCredential(clonedConfig);
             // Properties
             createCatalogSql.append("PROPERTIES (")

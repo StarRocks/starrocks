@@ -18,4 +18,9 @@ import java.util.Map;
 
 public interface CloudConfigurationProvider {
     CloudConfiguration build(Map<String, String> properties);
+
+    // Currently only used for dlf2.0
+    default CloudConfiguration build(Map<String, String> properties, Map<String, String> dlfOptions) {
+        return build(properties);
+    }
 }

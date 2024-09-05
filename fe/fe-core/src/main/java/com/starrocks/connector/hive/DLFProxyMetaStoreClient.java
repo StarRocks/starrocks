@@ -48,18 +48,18 @@
 
 package com.starrocks.connector.hive;
 
-import com.aliyun.datalake.metastore.common.DataLakeConfig;
-import com.aliyun.datalake.metastore.common.ProxyMode;
-import com.aliyun.datalake.metastore.common.Version;
-import com.aliyun.datalake.metastore.common.functional.FunctionalUtils;
-import com.aliyun.datalake.metastore.common.functional.ThrowingConsumer;
-import com.aliyun.datalake.metastore.common.functional.ThrowingFunction;
-import com.aliyun.datalake.metastore.common.functional.ThrowingRunnable;
-import com.aliyun.datalake.metastore.common.util.DataLakeUtil;
-import com.aliyun.datalake.metastore.common.util.ProxyLogUtils;
+import com.aliyun.datalake.core.DlfVersion;
+import com.aliyun.datalake.core.constant.DataLakeConfig;
+import com.aliyun.datalake.core.constant.ProxyMode;
+import com.aliyun.datalake.core.metastore.functional.FunctionalUtils;
+import com.aliyun.datalake.core.metastore.functional.ThrowingConsumer;
+import com.aliyun.datalake.core.metastore.functional.ThrowingFunction;
+import com.aliyun.datalake.core.metastore.functional.ThrowingRunnable;
+import com.aliyun.datalake.core.metastore.util.ProxyLogUtils;
+import com.aliyun.datalake.core.util.DataLakeUtil;
 import com.aliyun.datalake.metastore.hive.common.utils.ClientUtils;
 import com.aliyun.datalake.metastore.hive.common.utils.ConfigUtils;
-import com.aliyun.datalake.metastore.hive2.DlfSessionMetaStoreClient;
+import com.aliyun.datalake.metastore.hive3.DlfSessionMetaStoreClient;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
@@ -178,10 +178,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DLFProxyMetaStoreClient implements IMetaStoreClient {
-    private static final Logger LOGGER =
-            LoggerFactory.getLogger(com.aliyun.datalake.metastore.hive2.ProxyMetaStoreClient.class);
-    private static final String HIVE_FACTORY_CLASS = "org.apache.hadoop.hive.ql.metadata" +
-            ".SessionHiveMetaStoreClientFactory";
+    private static final Logger LOGGER = LoggerFactory.getLogger(DLFProxyMetaStoreClient.class);
+    private static final String HIVE_FACTORY_CLASS
+            = "org.apache.hadoop.hive.ql.metadata.SessionHiveMetaStoreClientFactory";
 
     private final ProxyMode proxyMode;
 
@@ -201,29 +200,36 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
     private boolean allowFailure = false;
 
     // copy Hive conf
-    private final Configuration hiveConf;
+    private final HiveConf hiveConf;
 
     private final String readWriteClientType;
 
-    public DLFProxyMetaStoreClient(Configuration hiveConf) throws MetaException {
+    public DLFProxyMetaStoreClient(HiveConf hiveConf) throws MetaException {
         this(hiveConf, null, false);
     }
 
-    public DLFProxyMetaStoreClient(Configuration hiveConf, HiveMetaHookLoader hiveMetaHookLoader, Boolean allowEmbedded)
+    public DLFProxyMetaStoreClient(Configuration hiveConf,
+                                   HiveMetaHookLoader hiveMetaHookLoader,
+                                   Boolean allowEmbedded) throws MetaException {
+        this((HiveConf) hiveConf, hiveMetaHookLoader, allowEmbedded);
+    }
+
+    public DLFProxyMetaStoreClient(HiveConf hiveConf, HiveMetaHookLoader hiveMetaHookLoader, Boolean allowEmbedded)
             throws MetaException {
         long startTime = System.currentTimeMillis();
-        LOGGER.info("ProxyMetaStoreClient start, datalake-metastore-client-version:{}",
-                Version.DATALAKE_METASTORE_CLIENT_VERSION);
-        this.hiveConf = new HiveConf((HiveConf) hiveConf);
+        LOGGER.info("DLFProxyMetaStoreClient start, datalake-metastore-client-version:{}", DlfVersion.dlf_version);
+        this.hiveConf = new HiveConf(hiveConf);
 
         proxyMode = ConfigUtils.getProxyMode(hiveConf);
 
         // init logging if needed
-        ProxyLogUtils.initLogUtils(proxyMode, hiveConf.get(DataLakeConfig.CATALOG_PROXY_LOGSTORE,
+        ProxyLogUtils.initLogUtils(proxyMode,
+                hiveConf.get(com.aliyun.datalake.core.constant.DataLakeConfig.CATALOG_PROXY_LOGSTORE,
                         ConfigUtils.getUserId(hiveConf)),
-                hiveConf.getBoolean(DataLakeConfig.CATALOG_ACTION_LOG_ENABLED,
-                        DataLakeConfig.DEFAULT_CATALOG_ACTION_LOG_ENABLED),
-                hiveConf.getBoolean(DataLakeConfig.CATALOG_LOG_ENABLED, DataLakeConfig.DEFAULT_CATALOG_LOG_ENABLED));
+                hiveConf.getBoolean(com.aliyun.datalake.core.constant.DataLakeConfig.CATALOG_ACTION_LOG_ENABLED,
+                        com.aliyun.datalake.core.constant.DataLakeConfig.DEFAULT_CATALOG_ACTION_LOG_ENABLED),
+                hiveConf.getBoolean(com.aliyun.datalake.core.constant.DataLakeConfig.CATALOG_LOG_ENABLED,
+                        DataLakeConfig.DEFAULT_CATALOG_LOG_ENABLED));
 
         // init Dlf Client if any
         createClient(true, () -> initDlfClient(hiveConf, hiveMetaHookLoader, allowEmbedded, new ConcurrentHashMap<>()));
@@ -237,7 +243,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
 
         readWriteClientType = this.readWriteClient instanceof DlfSessionMetaStoreClient ? "dlf" : "hive";
 
-        LOGGER.info("ProxyMetaStoreClient end, cost:{}ms", System.currentTimeMillis() - startTime);
+        LOGGER.info("DLFProxyMetaStoreClient end, cost:{}ms", System.currentTimeMillis() - startTime);
     }
 
     public static Map<String, org.apache.hadoop.hive.ql.metadata.Table> getTempTablesForDatabase(String dbName) {
@@ -331,7 +337,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
             case DLF_METASTORE_SUCCESS:
             case DLF_METASTORE_FAILURE:
             case DLF_ONLY:
-                this.dlfSessionMetaStoreClient = new DlfSessionMetaStoreClient(hiveConf, hiveMetaHookLoader,
+                this.dlfSessionMetaStoreClient = new DlfSessionMetaStoreClient((HiveConf) hiveConf, hiveMetaHookLoader,
                         allowEmbedded);
                 break;
             default:

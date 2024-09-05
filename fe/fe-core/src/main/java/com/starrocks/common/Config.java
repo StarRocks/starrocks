@@ -3299,6 +3299,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean emr_internal_redirect = false;
 
+    @ConfField(mutable = true)
+    public static long dlf_data_token_refresh_check_interval_second = 1800;
+
     /**
      * Enable auto create tablet when creating table and add partition
      **/

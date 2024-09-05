@@ -14,7 +14,16 @@
 
 package com.starrocks.catalog;
 
+import com.aliyun.datalake.catalog.CatalogClient;
+import com.aliyun.datalake.common.DlfDataToken;
+import com.aliyun.datalake.common.credential.SimpleStsCredentialsProvider;
+import com.aliyun.datalake.common.impl.Base64Util;
+import com.aliyun.datalake.core.DlfAuthContext;
+import com.aliyun.datalake.paimon.fs.DlfPaimonFileIO;
+import com.aliyun.datalake.paimon.table.DlfPaimonTable;
+import com.google.common.base.Strings;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.util.DlfUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TIcebergSchema;
@@ -22,20 +31,32 @@ import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_STS_TOKEN;
 
 public class PaimonTable extends Table {
+    private static final Logger LOG = LogManager.getLogger(PaimonTable.class);
     public static final String FILE_FORMAT = "file.format";
     private String catalogName;
     private String databaseName;
@@ -142,12 +163,73 @@ public class PaimonTable extends Table {
     }
 
     public boolean supportInsert() {
-        return "parquet".equalsIgnoreCase(paimonNativeTable.options().get(FILE_FORMAT));
+        String format = paimonNativeTable.options().get(FILE_FORMAT);
+        if (Strings.isNullOrEmpty(format)) {
+            format = CoreOptions.FILE_FORMAT.defaultValue();
+        }
+        return Arrays.asList("parquet", "orc", "avro").contains(format.toLowerCase());
     }
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TPaimonTable tPaimonTable = new TPaimonTable();
+
+        if (paimonNativeTable instanceof DlfPaimonTable) {
+            FileIO paimonFileIO = ((DlfPaimonTable) paimonNativeTable).fileIO();
+            if (paimonFileIO instanceof DlfPaimonFileIO) {
+                CatalogClient client = DlfUtil.getFieldValue(paimonFileIO, "client");
+                DlfAuthContext dlfAuthContext = DlfUtil.getFieldValue(paimonFileIO, "dlfAuthContext");
+                Map<String, String> options = ((DlfPaimonFileIO) paimonFileIO).dlsFileSystemOptions(false);
+                Properties properties = new Properties();
+                for (Map.Entry<String, String> entry : options.entrySet()) {
+                    properties.setProperty(entry.getKey(), entry.getValue());
+                }
+                String dlfAuthConfigPrefix = DlfUtil.getFieldValue(paimonFileIO, "dlfAuthConfigPrefix");
+                org.apache.paimon.fs.Path basePath = DlfUtil.getFieldValue(paimonFileIO, "basePath");
+
+                String dataTokenPath = DlfUtil.getDataTokenPath(getTableLocation());
+                dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
+                File dataTokenFile = new File(dataTokenPath);
+                Map<String, String> dataToken = new HashMap<>();
+                if (dataTokenFile.exists()) {
+                    try {
+                        dataToken = DlfUtil.setDataToken(dataTokenFile);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    SimpleStsCredentialsProvider<DlfDataToken> provider = new SimpleStsCredentialsProvider<>();
+                    // Ignore fs.dlf since there is no longer this kind of scheme
+                    properties.setProperty("fs.oss.credentials.provider",
+                            "com.aliyun.jindodata.oss.auth.CommonCredentialsProvider");
+                    properties.remove("aliyun.oss.provider.url");
+                    properties.put("fs.oss.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
+                    properties.put("fs.oss.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
+                    properties.put("fs.oss.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
+
+                    properties.setProperty("fs.dls.credentials.provider",
+                            "com.aliyun.jindodata.dls.auth.CommonCredentialsProvider");
+                    properties.remove("aliyun.dls.provider.url");
+                    properties.put("fs.dls.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
+                    properties.put("fs.dls.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
+                    properties.put("fs.dls.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
+
+                    provider.init(properties, "fs.oss.", DlfDataToken.class);
+                    paimonFileIO = new DlfPaimonFileIO(client,
+                            provider,
+                            dlfAuthContext,
+                            properties,
+                            dlfAuthConfigPrefix,
+                            basePath);
+                    paimonNativeTable = new DlfPaimonTable(paimonFileIO,
+                            ((DlfPaimonTable) paimonNativeTable).location(),
+                            ((DlfPaimonTable) paimonNativeTable).schema(),
+                            DlfUtil.getFieldValue(paimonNativeTable, "catalogEnvironment"),
+                            DlfUtil.getFieldValue(paimonNativeTable, "checker"));
+                } else {
+                    LOG.warn("Cannot find data token file " + dataTokenPath);
+                }
+            }
+        }
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
         tPaimonTable.setPaimon_native_table(encodedTable);
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());

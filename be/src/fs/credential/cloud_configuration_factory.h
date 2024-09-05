@@ -53,6 +53,7 @@ static const std::string AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
 static const std::string ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
 static const std::string ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
 static const std::string ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
+static const std::string ALIYUN_OSS_SECURITY_TOKEN = "aliyun.oss.sts_token";
 
 // Configuration for Azure
 // Currently only supported for Azure Blob Storage

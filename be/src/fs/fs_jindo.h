@@ -95,6 +95,7 @@ private:
     static constexpr const char* OSS_ACCESS_KEY_ID = "fs.oss.accessKeyId";
     static constexpr const char* OSS_ACCESS_KEY_SECRET = "fs.oss.accessKeySecret";
     static constexpr const char* OSS_ENDPOINT_KEY = "fs.oss.endpoint";
+    static constexpr const char* OSS_SECURITY_TOKEN = "fs.oss.securityToken";
     static constexpr const char* OSS_HDFS_BUCKET = "starrocks.internal.jindo.osshdfs.bucket";
 
     std::mutex _lock;

@@ -25,6 +25,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_STS_FILE_PATH;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_STS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_USE_DEFAULT_CREDENTIAL;
 
 public class AliyunCloudConfigurationProvider implements CloudConfigurationProvider {
@@ -38,7 +39,28 @@ public class AliyunCloudConfigurationProvider implements CloudConfigurationProvi
                 properties.getOrDefault(ALIYUN_OSS_SECRET_KEY, ""),
                 properties.getOrDefault(ALIYUN_OSS_ENDPOINT, ""),
                 properties.getOrDefault(ALIYUN_OSS_REGION, ""),
+                properties.getOrDefault(ALIYUN_OSS_STS_TOKEN, ""),
                 properties.getOrDefault(ALIYUN_OSS_STS_FILE_PATH, ""),
+                Boolean.parseBoolean(properties.getOrDefault(ALIYUN_OSS_USE_DEFAULT_CREDENTIAL, "false"))
+        );
+        if (!aliyunCloudCredential.validate()) {
+            return null;
+        }
+        return new AliyunCloudConfiguration(aliyunCloudCredential);
+    }
+
+    @Override
+    public CloudConfiguration build(Map<String, String> properties, Map<String, String> dlfOptions) {
+        Preconditions.checkNotNull(properties);
+
+        AliyunCloudCredential aliyunCloudCredential = new AliyunCloudCredential(
+                properties.getOrDefault(ALIYUN_OSS_ACCESS_KEY, ""),
+                properties.getOrDefault(ALIYUN_OSS_SECRET_KEY, ""),
+                properties.getOrDefault(ALIYUN_OSS_ENDPOINT, ""),
+                properties.getOrDefault(ALIYUN_OSS_REGION, ""),
+                properties.getOrDefault(ALIYUN_OSS_STS_TOKEN, ""),
+                properties.getOrDefault(ALIYUN_OSS_STS_FILE_PATH, ""),
+                dlfOptions,
                 Boolean.parseBoolean(properties.getOrDefault(ALIYUN_OSS_USE_DEFAULT_CREDENTIAL, "false"))
         );
         if (!aliyunCloudCredential.validate()) {

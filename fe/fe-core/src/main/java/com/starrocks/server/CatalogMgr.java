@@ -231,7 +231,6 @@ public class CatalogMgr {
             if (stmt.getAlterClause() instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 alterCatalog(catalog, properties, false);
-
                 AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog);
             }

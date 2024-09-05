@@ -144,6 +144,8 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
     std::string endpoint = "";
     std::string ak_id = "";
     std::string ak_secret = "";
+    std::string security_token = "";
+    std::unordered_map<std::string, std::string> options;
 
     // load default configs from jindosdk.cfg and be.conf (_jindo_config_map)
     JdoOptions_t jdo_options = jdo_createOptions();
@@ -172,6 +174,12 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
         }
         if (!aliyun_cloud_credential.secret_key.empty()) {
             ak_secret = aliyun_cloud_credential.secret_key;
+        }
+        if (!aliyun_cloud_credential.security_token.empty()) {
+            security_token = aliyun_cloud_credential.security_token;
+        }
+        if (!aliyun_cloud_credential.options.empty()) {
+            options = aliyun_cloud_credential.options;
         }
     } else if (hdfs_properties != nullptr) {
         if (hdfs_properties->__isset.end_point) {
@@ -202,6 +210,16 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
     }
     if (!bucket.empty() && endpoint.find("oss-dls")) {
         jdo_setOption(jdo_options, OSS_HDFS_BUCKET, bucket.c_str());
+    }
+    if (!security_token.empty()) {
+        jdo_setOption(jdo_options, OSS_SECURITY_TOKEN, security_token.c_str());
+    }
+    if (!options.empty()) {
+        for (const auto& pair : options) {
+            jdo_setOption(jdo_options, pair.first.c_str(), pair.second.c_str());
+        }
+        jdo_setOption(jdo_options, "fs.oss.provider.endpoint", "");
+        jdo_setOption(jdo_options, "fs.oss.provider.format", "");
     }
     return jdo_options;
 }

@@ -220,7 +220,7 @@ inline bool is_azblob_uri(std::string_view uri) {
 }
 
 inline bool is_oss_uri(std::string_view uri) {
-    return starts_with(uri, "oss://");
+    return starts_with(uri, "oss://") || starts_with(uri, "dls://");
 }
 
 inline bool is_azure_uri(std::string_view uri) {

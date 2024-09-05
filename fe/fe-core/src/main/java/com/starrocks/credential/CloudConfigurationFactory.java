@@ -83,6 +83,20 @@ public class CloudConfigurationFactory {
         return null;
     }
 
+    public static CloudConfiguration buildDlfConfigurationForStorage(Map<String, String> properties,
+                                                                     Map<String, String> options) {
+        ImmutableList<CloudConfigurationProvider> factories = cloudConfigurationFactoryChain;
+        for (CloudConfigurationProvider factory : factories) {
+            CloudConfiguration cloudConfiguration = factory.build(properties, options);
+            if (cloudConfiguration != null) {
+                cloudConfiguration.loadCommonFields(properties);
+                return cloudConfiguration;
+            }
+        }
+        // Should never reach here.
+        return null;
+    }
+
     public static CloudConfiguration buildCloudConfigurationForVendedCredentials(Map<String, String> properties) {
         Map<String, String> copiedProperties = new HashMap<>();
         String sessionAk = properties.getOrDefault(S3FileIOProperties.ACCESS_KEY_ID, null);

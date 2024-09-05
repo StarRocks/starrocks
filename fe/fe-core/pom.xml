@@ -40,7 +40,8 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <paimon.ali.dlf.version>1.0-ali-SNAPSHOT</paimon.ali.dlf.version>
+        <paimon.version>1.0-20241202-271de7-SNAPSHOT</paimon.version>
+        <dlf.sdk.version>2.3.0-20241203-e6d780-SNAPSHOT</dlf.sdk.version>
         <python>python</python>
     </properties>
 
@@ -517,12 +518,15 @@ under the License.
             <artifactId>hive-apache</artifactId>
         </dependency>
 
+<<<<<<< HEAD
         <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
         <dependency>
             <groupId>com.aliyun.datalake</groupId>
             <artifactId>metastore-client-hive3</artifactId>
         </dependency>
 
+=======
+>>>>>>> d3f8b0f518 ([EMR][Feature] Support DLF 2.0 Paimon catalog)
         <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
@@ -673,6 +677,18 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>com.aliyun.datalake</groupId>
+            <artifactId>dlf-sdk-assembly</artifactId>
+            <version>${dlf.sdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
             <version>${paimon.version}</version>
@@ -686,38 +702,6 @@ under the License.
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-oss</artifactId>
-        </dependency>
-
-        <dependency>
-            <artifactId>paimon-ali-dlf-catalog</artifactId>
-            <groupId>org.apache.paimon</groupId>
-            <version>${paimon.ali.dlf.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.aliyun.datalake</groupId>
-                    <artifactId>metastore-client-hive2</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hive</groupId>
-                    <artifactId>hive-metastore</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hive</groupId>
-                    <artifactId>hive-exec</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.paimon</groupId>
-                    <artifactId>paimon-core</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.paimon</groupId>
-                    <artifactId>paimon-common</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.paimon</groupId>
-                    <artifactId>paimon-hive-catalog</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>

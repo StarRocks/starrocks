@@ -52,9 +52,12 @@ public:
     std::string access_key;
     std::string secret_key;
     std::string endpoint;
+    std::string security_token;
+    std::unordered_map<std::string, std::string> options;
 
     bool operator==(const AliyunCloudCredential& rhs) const {
-        return access_key == rhs.access_key && secret_key == rhs.secret_key && endpoint == rhs.endpoint;
+        return access_key == rhs.access_key && secret_key == rhs.secret_key && endpoint == rhs.endpoint &&
+               security_token == rhs.security_token && options == rhs.options;
     }
 };
 

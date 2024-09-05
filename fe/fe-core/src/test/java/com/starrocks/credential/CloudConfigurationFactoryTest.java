@@ -99,6 +99,7 @@ public class CloudConfigurationFactoryTest {
                 put(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY, "XX");
                 put(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY, "YY");
                 put(CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT, "ZZ");
+                put(CloudConfigurationConstants.ALIYUN_OSS_STS_TOKEN, "TTT");
                 put(CloudConfigurationConstants.ALIYUN_OSS_STS_FILE_PATH, "AAA");
                 put(CloudConfigurationConstants.ALIYUN_OSS_USE_DEFAULT_CREDENTIAL, "false");
             }
@@ -113,7 +114,7 @@ public class CloudConfigurationFactoryTest {
         cc.toFileStoreInfo();
         Assertions.assertEquals(cc.toConfString(),
                 "AliyunCloudConfiguration{resources='', jars='', hdpuser='', cred=AliyunCloudCredential{accessKey='XX', " +
-                        "secretKey='YY', endpoint='ZZ', stsFilePath='AAA', useDefaultCredential=false}}");
+                        "secretKey='YY', endpoint='ZZ', stsToken='TTT', stsFilePath='AAA', useDefaultCredential=false}}");
     }
 
     @Test

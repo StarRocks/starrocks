@@ -20,6 +20,7 @@ import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessControl
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,6 +53,10 @@ public class LazyConnector implements Connector {
                         if (Config.access_control.equals("ranger")) {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new RangerStarRocksAccessController());
+                        } else if (context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
+                                && context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
+                            Authorizer.getInstance().setAccessControl(context.getCatalogName(),
+                                    new com.starrocks.privilege.DlfAccessController(context.getProperties()));
                         } else {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new NativeAccessController());

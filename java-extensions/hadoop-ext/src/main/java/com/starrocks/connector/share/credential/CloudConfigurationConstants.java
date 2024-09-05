@@ -147,5 +147,6 @@ public class CloudConfigurationConstants {
 
     public static final String ALIYUN_OSS_REGION = "aliyun.oss.region";
     public static final String ALIYUN_OSS_STS_FILE_PATH = "aliyun.oss.sts_file_path";
+    public static final String ALIYUN_OSS_STS_TOKEN = "aliyun.oss.sts_token";
     public static final String ALIYUN_OSS_USE_DEFAULT_CREDENTIAL = "aliyun.oss.use_default_credential";
 }

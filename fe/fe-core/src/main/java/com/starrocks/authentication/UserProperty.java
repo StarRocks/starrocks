@@ -48,6 +48,7 @@ public class UserProperty {
     // Because session variables does not include these two properties, we define them here.
     public static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
     public static final String PROP_DATABASE = "database";
+    public static final String PROP_RAM_USER = "aliyun_ram_user";
     // In order to keep consistent with database, we support user to set session.catalog = xxx or catalog = yyy
     public static final String PROP_CATALOG = SessionVariable.CATALOG;
     public static final String PROP_SESSION_PREFIX = "session.";
@@ -64,6 +65,9 @@ public class UserProperty {
 
     @SerializedName(value = "d")
     private String database = DATABASE_DEFAULT_VALUE;
+
+    @SerializedName(value = "ram")
+    private String ramUser;
 
     @SerializedName(value = "c")
     private String catalog = CATALOG_DEFAULT_VALUE;
@@ -107,6 +111,8 @@ public class UserProperty {
                 } else {
                     checkSessionVariable(sessionKey, value);
                 }
+            } else if (key.equalsIgnoreCase(PROP_RAM_USER)) {
+                ramUser = value;
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
@@ -183,6 +189,14 @@ public class UserProperty {
 
     public String getDatabase() {
         return database;
+    }
+
+    public String getRamUser() {
+        return ramUser;
+    }
+
+    public void setRamUser(String ramUser) {
+        this.ramUser = ramUser;
     }
 
     public void setDatabase(String sessionDatabase) {
