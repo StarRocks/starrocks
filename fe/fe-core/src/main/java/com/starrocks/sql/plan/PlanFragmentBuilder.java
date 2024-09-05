@@ -258,6 +258,8 @@ public class PlanFragmentBuilder {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
 
+        fragments.forEach(PlanFragment::removeDictMappingProbeRuntimeFilters);
+
         if (useQueryCache(execPlan)) {
             List<PlanFragment> fragmentsWithLeftmostOlapScanNode = execPlan.getFragments().stream()
                     .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
