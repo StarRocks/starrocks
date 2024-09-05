@@ -1951,7 +1951,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 38> : <string id 2>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
-                "  |  - filter_id = 1, probe_expr = (2: P_NAME)\n" +
+                "  |  - filter_id = 1, probe_expr = (2)\n" +
                 "  |  column statistics: \n" +
                 "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                 "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
@@ -1959,8 +1959,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  output columns:\n" +
-                "  |  12 <-> CASE WHEN DictDecode(38: P_NAME, [<place-holder> = 'a']) THEN 'a1' " +
-                "WHEN DictDecode(39: P_BRAND, [<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  12 <-> CASE WHEN DictExpr(38: P_NAME,[<place-holder> = 'a']) THEN 'a1' WHEN DictExpr(39: P_BRAND,[<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
                 "  |  38 <-> [38: P_NAME, INT, false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
