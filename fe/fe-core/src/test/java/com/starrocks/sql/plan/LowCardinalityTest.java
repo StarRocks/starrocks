@@ -1892,4 +1892,46 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "if(DictExpr(10: S_ADDRESS,[<place-holder> = '']), '', " +
                 "substr(md5(DictExpr(10: S_ADDRESS,[<place-holder>])), 1, 3))");
     }
+
+    @Test
+    public void testRuntimeFilterOnProjectWithDictExpr() throws Exception {
+        String sql = "WITH \n" +
+                "   w1 AS (\n" +
+                "     SELECT CASE\n" +
+                "         WHEN P_NAME = 'a' THEN 'a1'\n" +
+                "         WHEN P_BRAND = 'b' THEN 'b1'\n" +
+                "         ELSE 'c1'\n" +
+                "      END as P_NAME2, P_NAME from part_v2\n" +
+                "      UNION ALL\n" +
+                "      SELECT P_NAME, P_NAME from part_v2\n" +
+                ")\n" +
+                "SELECT count(1) \n" +
+                "FROM  \n" +
+                "   w1 t1 \n" +
+                "   JOIN [broadcast] part_v2 t2 ON t1.P_NAME2 = t2.P_NAME AND t1.P_NAME = t2.P_NAME;";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 62> : <string id 26>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  36 <-> CASE WHEN DictExpr(62: P_NAME,[<place-holder> = 'a']) THEN 'a1' WHEN " +
+                "DictExpr(63: P_BRAND,[<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  62 <-> [62: P_NAME, INT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     table: part_v2, rollup: part_v2\n" +
+                "     preAggregation: on\n" +
+                "     dict_col=P_NAME,P_BRAND");
+        System.out.println(plan);
+    }
+
 }
