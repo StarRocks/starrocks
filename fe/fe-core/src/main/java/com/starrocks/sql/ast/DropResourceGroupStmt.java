@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 // Drop ResourceGroup specified by name
@@ -32,6 +34,12 @@ public class DropResourceGroupStmt extends DdlStmt {
 
     public String getName() {
         return name;
+    }
+
+    public void analyze() {
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name)) {
+            throw new SemanticException(String.format("cannot drop builtin resource group [%s]", name));
+        }
     }
 
     @Override

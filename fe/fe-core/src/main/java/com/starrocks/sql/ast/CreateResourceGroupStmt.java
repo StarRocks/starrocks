@@ -36,27 +36,27 @@ import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_DEDICATED_C
 // with ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type' = 'normal');
 //
 public class CreateResourceGroupStmt extends DdlStmt {
-    private String name;
+    private final String name;
     private boolean ifNotExists;
     private boolean replaceIfExists;
-    private List<List<Predicate>> classifiers;
-    private Map<String, String> properties;
+    private final List<List<Predicate>> classifiers;
+    private final Map<String, String> properties;
     private ResourceGroup resourceGroup;
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
-                                   List<List<Predicate>> classifiers, Map<String, String> proeprties) {
-        this(name, ifNotExists, replaceIfExists, classifiers, proeprties, NodePosition.ZERO);
+                                   List<List<Predicate>> classifiers, Map<String, String> properties) {
+        this(name, ifNotExists, replaceIfExists, classifiers, properties, NodePosition.ZERO);
     }
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
-                                   List<List<Predicate>> classifiers, Map<String, String> proeprties,
+                                   List<List<Predicate>> classifiers, Map<String, String> properties,
                                    NodePosition pos) {
         super(pos);
         this.name = name;
         this.ifNotExists = ifNotExists;
         this.replaceIfExists = replaceIfExists;
         this.classifiers = classifiers;
-        this.properties = proeprties;
+        this.properties = properties;
     }
 
     public boolean isIfNotExists() {

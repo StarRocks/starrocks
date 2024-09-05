@@ -193,8 +193,8 @@ public class ResourceGroupAnalyzer {
                 } else {
                     memLimit = Double.parseDouble(value);
                 }
-                if (memLimit <= 0.0 || memLimit >= 1.0) {
-                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(exclude)");
+                if (memLimit <= 0.0 || memLimit > 1.0) {
+                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(include)");
                 }
                 resourceGroup.setMemLimit(memLimit);
                 continue;
