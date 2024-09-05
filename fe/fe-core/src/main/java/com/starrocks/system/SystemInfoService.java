@@ -673,7 +673,7 @@ public class SystemInfoService implements GsonPostProcessable {
             List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages = new ArrayList<>(groupUsages.size());
             for (TResourceGroupUsage usage : groupUsages) {
                 ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                        .getResourceGroupIncludingDefault(usage.getGroup_id());
+                        .getResourceGroup(usage.getGroup_id());
                 if (group == null) {
                     continue;
                 }

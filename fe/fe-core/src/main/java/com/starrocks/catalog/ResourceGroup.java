@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -25,6 +26,7 @@ import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
@@ -51,20 +53,15 @@ public class ResourceGroup {
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
 
-    public static final long DEFAULT_WG_ID = 0;
-    public static final long DEFAULT_MV_WG_ID = 1;
-    public static final long DEFAULT_MV_VERSION = 1;
+    /**
+     * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
+     * BE. Its ID is 0 and 1. To distinguish it from the old version, a new ID 2 and 3 is used here.
+     */
+    public static final long DEFAULT_WG_ID = 2;
+    public static final long DEFAULT_MV_WG_ID = 3;
 
-    public static final ResourceGroup DEFAULT_WG = new ResourceGroup();
-    public static final ResourceGroup DEFAULT_MV_WG = new ResourceGroup();
-
-    static {
-        DEFAULT_WG.setId(DEFAULT_WG_ID);
-        DEFAULT_WG.setName(DEFAULT_RESOURCE_GROUP_NAME);
-
-        DEFAULT_MV_WG.setId(DEFAULT_MV_WG_ID);
-        DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
-    }
+    public static final Set<String> BUILTIN_WG_NAMES =
+            ImmutableSet.of(DEFAULT_RESOURCE_GROUP_NAME, DEFAULT_MV_RESOURCE_GROUP_NAME);
 
     private static class ColumnMeta {
         public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier) {
