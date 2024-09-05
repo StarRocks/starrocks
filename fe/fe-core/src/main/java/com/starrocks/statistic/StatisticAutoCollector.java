@@ -14,6 +14,8 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
@@ -68,6 +70,13 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         initDefaultJob();
 
+        runJobs();
+    }
+
+    @VisibleForTesting
+    protected List<StatisticsCollectJob> runJobs() {
+        List<StatisticsCollectJob> result = Lists.newArrayList();
+
         List<NativeAnalyzeJob> allNativeAnalyzeJobs =
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
         allNativeAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
@@ -78,6 +87,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
         LOG.info("auto collect statistic on analyze job[{}] start", analyzeJobIds);
         for (NativeAnalyzeJob nativeAnalyzeJob : allNativeAnalyzeJobs) {
             List<StatisticsCollectJob> jobs = nativeAnalyzeJob.instantiateJobs();
+            result.addAll(jobs);
             ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
             statsConnectCtx.setThreadLocalInfo();
             nativeAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
@@ -104,6 +114,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
                     continue;
                 }
 
+                result.add(statsJob);
                 AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                         statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
                         statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
@@ -128,10 +139,14 @@ public class StatisticAutoCollector extends FrontendDaemon {
             for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
-                externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, externalAnalyzeJob.instantiateJobs());
+                List<StatisticsCollectJob> jobs = externalAnalyzeJob.instantiateJobs();
+                result.addAll(jobs);
+                externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
             }
             LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);
         }
+
+        return result;
     }
 
     private void initDefaultJob() {
