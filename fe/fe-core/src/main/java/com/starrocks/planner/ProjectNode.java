@@ -177,8 +177,11 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
         return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
-                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+                optProbeExprCandidates,
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
