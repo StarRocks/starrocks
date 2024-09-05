@@ -91,19 +91,6 @@ CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 GRANT SELECT ON . TO 'test'@'%';
 ```
 
-## What do I do if the error "Failed to get scan range, no queryable replica found in tablet:xxxxx" occurs after I extend the BE disk space?
-
-### Problem description
-
-This error may occur during data loading into Primary Key tables. During data loading, the destination BE does not have enough disk space for the loaded data and the BE crashes. New disks are then added to extend the disk space. However, Primary Key tables do not support disk space re-balancing and the data cannot be offloaded to other disks.
-
-### Solution
-
-Patches to this bug (Primary Key tables do not support BE disk space re-balancing) is still under active development. Currently, you can fix it in either of the following two ways:
-
-- Manually distribute data among disks. For example, copy the directory from the disk with a high space usage to a disk with a larger space.
-- If the data on these disks is not important, we recommend you delete the disks and modify the disk path. If this error persists, use [TRUNCATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) to clear data in the table to free up some space.
-
 ## Why does the error "Fe type:unknown ,is ready :false." occur when I start an FE during the cluster restart?
 
 Check if the leader FE is running. If not, restart the FE nodes in your cluster one by one.
