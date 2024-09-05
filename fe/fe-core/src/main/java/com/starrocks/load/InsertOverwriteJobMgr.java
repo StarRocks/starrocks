@@ -49,7 +49,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobMgr.class);
-    private static final int MEMORY_JOB_SAMPLES = 10;
 
     @SerializedName(value = "overwriteJobMap")
     private Map<Long, InsertOverwriteJob> overwriteJobMap;

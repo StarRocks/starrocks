@@ -41,5 +41,4 @@ public class CatalogConnector implements Connector {
     public void shutdown() {
         normalConnector.shutdown();
     }
-
 }
