@@ -2860,12 +2860,12 @@ public class OlapTable extends Table {
     }
 
     public int getPartitionsCount() {
-        return physicalPartitionIdToPartitionId.size();
+        return idToPartition.size() + tempPartitions.getPartitionsCount();
     }
 
-    public PhysicalPartition getPartitionSample() {
+    public Partition getPartitionSample() {
         if (!idToPartition.isEmpty()) {
-            return idToPartition.values().iterator().next().getSubPartitions().iterator().next();
+            return idToPartition.values().iterator().next();
         } else {
             return null;
         }

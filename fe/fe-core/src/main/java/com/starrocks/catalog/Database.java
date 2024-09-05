@@ -918,7 +918,7 @@ public class Database extends MetaObject implements Writable {
         return exist;
     }
 
-    public List<PhysicalPartition> getPartitionSamples() {
+    public List<Partition> getPartitionSamples() {
         return this.idToTable.values()
                 .stream()
                 .filter(table -> table instanceof OlapTable)

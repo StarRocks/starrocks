@@ -132,6 +132,10 @@ public class TempPartitions implements Writable, GsonPostProcessable {
         }
     }
 
+    public int getPartitionsCount() {
+        return idToPartition.size();
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
