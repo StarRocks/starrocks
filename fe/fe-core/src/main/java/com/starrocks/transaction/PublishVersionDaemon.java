@@ -272,6 +272,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
         List<Long> transactionIds = new ArrayList<>();
+        List<TransactionState> publishTransactions = new ArrayList<>();
         // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
@@ -280,13 +281,18 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 batchTask.addTask(task);
             }
             if (!tasks.isEmpty()) {
-                transactionState.setHasSendTask(true);
-                transactionIds.add(transactionState.getTransactionId());
+                publishTransactions.add(transactionState);
             }
         }
-        LOG.debug("send publish tasks for transactions: {}", transactionIds);
         if (!batchTask.getAllTasks().isEmpty()) {
-            AgentTaskExecutor.submit(batchTask);
+            boolean successSubmit = AgentTaskExecutor.submit(batchTask);
+            if (successSubmit) {
+                for (TransactionState transactionState : publishTransactions) {
+                    transactionState.setHasSendTask(true);
+                    transactionIds.add(transactionState.getTransactionId());
+                }
+                LOG.debug("send publish tasks for transactions: {}", transactionIds);
+            }
         }
 
         // FIXME(murphy) refresh the mv in new publish mechanism
@@ -809,7 +815,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return true;
         } catch (Throwable e) {
             // prevent excessive logging
-            if (partitionCommitInfo.getVersionTime() < 0 && 
+            if (partitionCommitInfo.getVersionTime() < 0 &&
                     Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
                 return false;
             }
