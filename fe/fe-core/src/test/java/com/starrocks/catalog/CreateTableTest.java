@@ -783,7 +783,7 @@ public class CreateTableTest {
         starRocksAssert.useDatabase("test");
         String sql = "CREATE TABLE `test_create_default_current_date` (\n" +
                 "    k1 int,\n" +
-                "    ts datetime NOT NULL DEFAULT CURRENT_DATE\n" +
+                "    ts date NOT NULL DEFAULT CURRENT_DATE\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`k1`)\n" +
                 "COMMENT \"OLAP\"\n" +
