@@ -1502,4 +1502,15 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return hints;
     }
 
+    public boolean containsDictMappingExpr() {
+        return containsDictMappingExpr(this);
+    }
+
+    private static boolean containsDictMappingExpr(Expr expr) {
+        if (expr instanceof DictMappingExpr) {
+            return true;
+        }
+        return expr.getChildren().stream().anyMatch(child -> containsDictMappingExpr(child));
+    }
+
 }
