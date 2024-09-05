@@ -43,12 +43,21 @@ The `a` and `b` fields exist in most rows and their data types are similar (both
 
 ## Usage notes
 
-- Currently, only StarRocks shared-nothing clusters support Flat JSON. All StarRocks table types support Flat JSON.
-- During data loading, this feature extracts common fields and stores them separately as JSON data. However, type inference is not supported. StarRocks will continuously iterate the Flat JSON feature to support type inference and storage optimization in future versions.
-- Currently, only the top-level JSON fields can be extracted.
-- Both the extracted columns and the original JSON data will be stored. The extracted data is removed when the original data is deleted.
+- Shared-nothing clusters support Flat JSON from v3.3.0 onwards. Shared-data clusters support Flat JSON from v3.3.3 onwards.
+- All table types in StarRocks support Flat JSON.
 - Flat JSON is compatible with historical JSON data. Historical data that have been loaded before will not be overwritten after Flat JSON is enabled. It will coexist with the flattened JSON data.
 - When new data is written, the Flat JSON operation is automatically completed through Compaction.
+
+In v3.3.0, v3.3.1, and v3.3.2:
+
+- During data loading, Flat JSON supports extracting common fields and storing them as a JSON type, but type inference is not supported.
+- Both the extracted columns and the original JSON data will be stored. The extracted data is removed when the original data is deleted.
+
+From v3.3.3 onwards
+
+- The results extracted from Flat JSON are divided into common fields and reserved fields. When all JSON schemas are consistent, no reserved field will be generated.
+- During data loading, common fields will be automatically inferred as BIGINT/LARGEINT/DOUBLE/STRING types. Unrecognized types will be inferred as a JSON type. Reserved fields will be stored as a JSON type.
+- Flat JSON only stores common fields and reserved fields, and does not store the original JSON data.
 
 ## How to use Flat JSON
 
@@ -173,13 +182,11 @@ The `a` and `b` fields exist in most rows and their data types are similar (both
 ## Other optional BE configurations
 
 - [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_internal_column_min_limit](../administration/management/BE_configuration.md#json_flat_internal_column_min_limit)
 - [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
 - [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
 
 ## Cautions
 
-- After Flat JSON is enabled, column extraction will consume additional storage resources.
 - Enabling Flat JSON will increase the time consumption of JSON data loading. The more JSON sub-fields are extracted, the longer the time consumption.
-- Enabling Flat JSON will increase the time consumption and memory usage of Compaction.
 - The system variable `cbo_prune_json_subfield` only works when Flat JSON is hit. Otherwise, there may be negative performance gains.
