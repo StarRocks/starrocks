@@ -366,6 +366,8 @@ public class PlanFragmentBuilder {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
 
+        fragments.forEach(PlanFragment::removeDictMappingProbeRuntimeFilters);
+
         if (useQueryCache(execPlan)) {
             for (PlanFragment fragment : execPlan.getFragments()) {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);

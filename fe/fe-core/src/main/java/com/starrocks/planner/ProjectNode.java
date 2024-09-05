@@ -181,7 +181,15 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
+<<<<<<< HEAD
         return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+=======
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                optProbeExprCandidates,
+>>>>>>> a810948f01 ([BugFix] Clear probe RF whose probe expr contains dict mapping expr (#50690))
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
