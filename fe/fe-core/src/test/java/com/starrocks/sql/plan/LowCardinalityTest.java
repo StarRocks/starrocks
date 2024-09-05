@@ -1950,7 +1950,8 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  output columns:\n" +
-                "  |  12 <-> CASE WHEN DictExpr(38: P_NAME,[<place-holder> = 'a']) THEN 'a1' WHEN DictExpr(39: P_BRAND,[<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  12 <-> CASE WHEN DictExpr(38: P_NAME,[<place-holder> = 'a']) THEN 'a1' WHEN " +
+                "DictExpr(39: P_BRAND,[<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
                 "  |  38 <-> [38: P_NAME, INT, false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
