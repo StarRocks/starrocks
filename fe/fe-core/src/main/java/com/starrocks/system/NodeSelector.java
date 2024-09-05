@@ -109,7 +109,10 @@ public class NodeSelector {
         final List<Backend> candidateBackends =
                 needAvailable ? systemInfoService.getAvailableBackends() : systemInfoService.getBackends();
         if (CollectionUtils.isEmpty(candidateBackends)) {
-            LOG.warn("failed to find any backend, needAvailable={}", needAvailable);
+            // EMR: prevent printing redundant warn logs in shard data mode cluster, which has only got compute nodes
+            if (!RunMode.isSharedDataMode()) {
+                LOG.warn("failed to find any backend, needAvailable={}", needAvailable);
+            }
             return Collections.emptyList();
         }
 
