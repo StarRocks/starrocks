@@ -67,7 +67,7 @@ public class ForeignKeyConstraint extends Constraint {
     public ForeignKeyConstraint(BaseTableInfo parentTableInfo,
                                 BaseTableInfo childTableInfo,
                                 List<Pair<ColumnId, ColumnId>> columnRefPairs) {
-        super(ConstraintType.FOREIGN_KEY, "_TABLE_PROPERTIES_");
+        super(ConstraintType.FOREIGN_KEY, TABLE_PROPERTY_CONSTRAINT);
         this.parentTableInfo = parentTableInfo;
         this.childTableInfo = childTableInfo;
         this.columnRefPairs = columnRefPairs;

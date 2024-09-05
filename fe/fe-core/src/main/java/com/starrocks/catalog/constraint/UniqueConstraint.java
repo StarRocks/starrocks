@@ -47,7 +47,7 @@ public class UniqueConstraint extends Constraint {
     private Table referencedTable;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
-        super(ConstraintType.UNIQUE_KEY, "_TABLE_PROPERTIES_");
+        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
@@ -56,7 +56,7 @@ public class UniqueConstraint extends Constraint {
 
     // Used for primaryKey/uniqueKey table to create default uniqueConstraints.
     public UniqueConstraint(Table referencedTable, List<ColumnId> uniqueColumns) {
-        super(ConstraintType.UNIQUE_KEY, null);
+        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
         this.referencedTable = referencedTable;
         this.uniqueColumns = uniqueColumns;
     }

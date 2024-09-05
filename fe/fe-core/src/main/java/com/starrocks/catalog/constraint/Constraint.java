@@ -20,11 +20,15 @@ import com.starrocks.catalog.Table;
  * Base class for constraints.
  */
 public abstract class Constraint {
+    // NOTE: A constraint may contain a name, but currently starrocks only supports internal constraints.
+    public static final String TABLE_PROPERTY_CONSTRAINT = "_TABLE_PROPERTIES_";
+
+    /**
+     * Type of constraint, unique/foreign key are supported now.
+     */
     public enum ConstraintType {
-        PRIMARY_KEY,
-        UNIQUE_KEY,
-        FOREIGN_KEY,
-        CHECK
+        UNIQUE,
+        FOREIGN_KEY
     }
     private final String name;
     private final ConstraintType type;
