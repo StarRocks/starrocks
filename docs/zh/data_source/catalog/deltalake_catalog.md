@@ -442,18 +442,19 @@ Delta Lake Catalog 从 3.0 版本起支持 Google GCS。
 
 指定缓存元数据更新策略的一组参数。StarRocks 根据该策略更新缓存的 Delta Lake 元数据。此组参数为可选。
 
-StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异步更新策略)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
+自 v3.3.3 起，Delta Lake Catalog 支持 [元数据本地缓存检索方案](#附录元数据本地缓存检索方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
 
 如果 Delta Lake 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
 
-| 参数                                   | 是否必须  | 说明                                                         |
-| -------------------------------------- | -------- | ------------------------------------------------------------ |
-| enable_metastore_cache            | 否       | 指定 StarRocks 是否缓存 Delta Lake 表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-| enable_remote_file_cache               | 否       | 指定 StarRocks 是否缓存 Delta Lake 表或分区的数据文件的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
-| remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
-| metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
-| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+| **参数**                                            | **单位** | **默认值** | **说明**                                             |
+| :------------------------------------------------- | :--- | :----------- | :----------------------------------------------------- |
+| enable_deltalake_table_cache                       | 无   | true         | 是否为 Delta Lake 开启元数据缓存中的 Table Cache。     |
+| enable_deltalake_json_meta_cache                   | 无   | true         | 是否为 Delta Log JSON 文件开启缓存。                   |
+| deltalake_json_meta_cache_ttl_sec                  | 秒   | 48 * 60 * 60 | Delta Log JSON 文件缓存的 Time-To-Live（TTL）。        |
+| deltalake_json_meta_cache_memory_usage_ratio       | 无   | 0.1          | Delta Log JSON 文件缓存占用 JVM 内存的最大比例。       |
+| enable_deltalake_checkpoint_meta_cache             | 无   | true         | 是否为 Delta Log Checkpoint 文件开启缓存。             |
+| deltalake_checkpoint_meta_cache_ttl_sec            | 秒   | 48 * 60 * 60 | Delta Log Checkpoint 文件缓存的 Time-To-Live（TTL）。  |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | 无   | 0.1          | Delta Log Checkpoint 文件缓存占用 JVM 内存的最大比例。 |
 
 ### 示例
 
@@ -849,3 +850,21 @@ DROP Catalog deltalake_catalog_glue;
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
+
+## 配置元数据缓存及刷新策略
+
+自 v3.3.3 起，Delta Lake Catalog 支持 [元数据本地缓存检索方案](#附录元数据本地缓存检索方案)。
+
+您可以通过以下 FE 配置项来设置 Delta Lake 元数据缓存刷新行为：
+
+| **配置项**                                                    | **单位** | **默认值**                  | **含义**                                                    |
+| :----------------------------------------------------------- | :--- | :-------------------------- | :----------------------------------------------------------- |
+| enable_background_refresh_connector_metadata                 | 无   | true | 是否开启 Delta Lake 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Delta Lake 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Delta Lake 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
+| background_refresh_metadata_interval_millis                  | 毫秒 | 600000（10 分钟）           | 接连两次 Delta Lake 元数据缓存刷新之间的间隔。                     |
+| background_refresh_metadata_time_secs_since_last_access_sec  | 秒   | 86400（24 小时）            | Delta Lake 元数据缓存刷新任务过期时间。对于已被访问过的 Delta Lake Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Delta Lake Catalog，StarRocks 不会刷新其元数据缓存。 |
+
+## 附录：元数据本地缓存检索方案
+
+由于反复解压和解析元数据文件会引入不必要的延迟，自 v3.3.3 起，StarRocks 采用了一种不同的元数据缓存策略。StarRocks 会将反序列化后的内存对象缓存下来，以应对延迟问题。通过将这些反序列化的文件缓存在FE内存中，系统可以在后续查询中跳过解压和解析阶段，直接访问所需的元数据。这种缓存机制显著减少了检索时间，使系统响应更快，更能满足高查询需求和物化视图改写的要求。
+
+您可以通过 Catalog 属性 [MetadataUpdateParams](#metadataupdateparams) 和[相关配置项](#配置元数据缓存及刷新策略)调节该行为。

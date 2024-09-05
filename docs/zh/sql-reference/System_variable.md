@@ -415,6 +415,28 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 * 引入版本：v3.2.1
 
+### enable_metadata_profile
+
+* 描述：是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* 默认值：true
+* 引入版本：v3.3.3
+
+### plan_mode
+
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg_catalog.md#附录自适应元数据检索方案)。有效值：
+  * `auto`：系统自动选择方案。
+  * `local`：使用本地缓存方案。
+  * `distributed`：使用分布式方案。
+* 默认值：auto
+* 引入版本：v3.3.3
+
+### metadata_collect_query_timeout
+
+* 描述：Iceberg Catalog 元数据收集阶段的超时时间。
+* 单位： 秒
+* 默认值：60
+* 引入版本：v3.3.3
+
 ### enable_insert_strict
 
 * 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
