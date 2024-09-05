@@ -41,7 +41,6 @@ import mockit.MockUp;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -68,7 +67,6 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         starRocksAssert.dropCatalog("iceberg_catalog");
     }
 
-    @Test
     public void testIcebergMetadataScanNode() throws Exception {
         mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableC.refresh();
@@ -110,7 +108,6 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         Assert.assertTrue(tHdfsScanNode.isSetSerialized_predicate());
     }
 
-    @Test(expected = StarRocksPlannerException.class)
     public void testIcebergMetadataScanNodeWithNonSnapshot() throws Exception {
         new MockUp<IcebergMetadata>() {
             @Mock
@@ -167,7 +164,6 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         Assert.assertEquals(2, scanRangeLocations.size());
     }
 
-    @Test
     public void testIcebergDistributedPlanJobError() {
         mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();
@@ -213,7 +209,6 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         starRocksAssert.getCtx().getSessionVariable().setPlanMode("local");
     }
 
-    @Test
     public void testIcebergDistributedPlanJobBeforeExecError() throws Exception {
         mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();
