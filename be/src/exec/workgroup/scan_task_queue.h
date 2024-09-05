@@ -173,7 +173,7 @@ public:
 
 private:
     /// These methods should be guarded by the outside _global_mutex.
-    WorkGroupScanSchedEntity* _take_next_wg() const;
+    WorkGroupScanSchedEntity* _pick_next_wg() const;
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
     void _enqueue_workgroup(WorkGroupScanSchedEntity* wg_entity);

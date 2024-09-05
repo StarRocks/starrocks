@@ -248,7 +248,11 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
             return Status::Cancelled("Shutdown");
         }
 
-        wg_entity = _take_next_wg();
+        // For driver queue used by exclusive workgroup, driver queue always contains only drivers of this workgroup,
+        // so `_pick_next_wg` will always return this workgroup.
+        // TODO: In the future, we may implement different driver queues for exclusive workgroup and shared workgroup,
+        // since exclusive workgroup does not need two-level queues about workgroup.
+        wg_entity = _pick_next_wg();
         if (wg_entity != nullptr &&
             !ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
             break;
@@ -352,7 +356,7 @@ void WorkGroupDriverQueue::_put_back(const DriverRawPtr driver) {
 }
 
 void WorkGroupDriverQueue::_update_min_wg() {
-    auto* min_wg_entity = _take_next_wg();
+    auto* min_wg_entity = _pick_next_wg();
     if (min_wg_entity == nullptr) {
         _min_wg_entity = nullptr;
     } else {
@@ -360,7 +364,7 @@ void WorkGroupDriverQueue::_update_min_wg() {
     }
 }
 
-workgroup::WorkGroupDriverSchedEntity* WorkGroupDriverQueue::_take_next_wg() const {
+workgroup::WorkGroupDriverSchedEntity* WorkGroupDriverQueue::_pick_next_wg() const {
     if (_wg_entities.empty()) {
         return nullptr;
     }

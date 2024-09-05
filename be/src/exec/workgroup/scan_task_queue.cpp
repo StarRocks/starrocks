@@ -78,7 +78,11 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
             return Status::Cancelled("Shutdown");
         }
 
-        wg_entity = _take_next_wg();
+        // For task queue used by exclusive workgroup, driver queue always contains only tasks of this workgroup,
+        // so `_pick_next_wg` will always return this workgroup.
+        // TODO: In the future, we may implement different task queues for exclusive workgroup and shared workgroup,
+        // since exclusive workgroup does not need two-level queues about workgroup.
+        wg_entity = _pick_next_wg();
         if (wg_entity != nullptr &&
             !ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
             break;
@@ -177,7 +181,7 @@ bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccount
 }
 
 void WorkGroupScanTaskQueue::_update_min_wg() {
-    auto* min_wg_entity = _take_next_wg();
+    auto* min_wg_entity = _pick_next_wg();
     if (min_wg_entity == nullptr) {
         _min_wg_entity = nullptr;
     } else {
@@ -185,7 +189,7 @@ void WorkGroupScanTaskQueue::_update_min_wg() {
     }
 }
 
-WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_take_next_wg() const {
+WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_pick_next_wg() const {
     if (_wg_entities.empty()) {
         return nullptr;
     }
