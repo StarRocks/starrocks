@@ -1948,8 +1948,10 @@ public class LowCardinalityTest extends PlanTestBase {
                 "   JOIN [broadcast] part_v2 t2 ON t1.P_NAME2 = t2.P_NAME AND t1.P_NAME = t2.P_NAME;";
         String plan = getCostExplain(sql);
         assertContains(plan, "  3:Decode\n" +
-                "  |  <dict id 62> : <string id 26>\n" +
+                "  |  <dict id 38> : <string id 2>\n" +
                 "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 1, probe_expr = (2)\n" +
                 "  |  column statistics: \n" +
                 "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                 "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
@@ -1957,10 +1959,12 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  output columns:\n" +
-                "  |  36 <-> CASE WHEN DictExpr(62: P_NAME,[<place-holder> = 'a']) THEN 'a1' WHEN " +
-                "DictExpr(63: P_BRAND,[<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
-                "  |  62 <-> [62: P_NAME, INT, false]\n" +
+                "  |  12 <-> CASE WHEN DictExpr(38: P_NAME,[<place-holder> = 'a']) THEN 'a1' WHEN " +
+                "DictExpr(39: P_BRAND,[<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  38 <-> [38: P_NAME, INT, false]\n" +
                 "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (<slot 12>)\n" +
                 "  |  column statistics: \n" +
                 "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
                 "  |  \n" +
