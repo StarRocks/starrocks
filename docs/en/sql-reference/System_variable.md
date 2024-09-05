@@ -419,6 +419,28 @@ Default value: `true`.
 * **Description**: Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 * **Introduced in**: v3.2.1
 
+### enable_metadata_profile
+
+* **Description**: 是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* **Default**: true
+* **Introduced in**: v3.3.3
+
+### plan_mode
+
+* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
+  * `auto`: The system will automatically select the retrieval plan.
+  * `local`: Use the local cache plan.
+  * `distributed`: Use the distributed plan.
+* **Default**: auto
+* **Introduced in**: v3.3.3
+
+### metadata_collect_query_timeout
+
+* **Description**: The timeout duration for Iceberg Catalog metadata collection queries.
+* **Unit**: Second
+* **Default**: 60
+* **Introduced in**: v3.3.3
+
 ### enable_insert_strict
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
