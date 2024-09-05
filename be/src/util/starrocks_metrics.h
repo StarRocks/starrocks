@@ -347,6 +347,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(segment_flush);
     METRICS_DEFINE_THREAD_POOL(update_apply);
     METRICS_DEFINE_THREAD_POOL(pk_index_compaction);
+    METRICS_DEFINE_THREAD_POOL(stream_load_http);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
