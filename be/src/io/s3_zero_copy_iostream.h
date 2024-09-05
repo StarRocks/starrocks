@@ -25,8 +25,7 @@ namespace starrocks::io {
 class S3ZeroCopyIOStream : public Aws::IOStream {
 public:
     S3ZeroCopyIOStream(char* buf, size_t size)
-            : Aws::IOStream(
-                      new Aws::Utils::Stream::PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(buf), size)),
+            : Aws::IOStream(new Aws::Utils::Stream::PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(buf), size)),
               _buf_size(size) {
         DCHECK(rdbuf());
     }

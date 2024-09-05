@@ -125,17 +125,19 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
                 request.GetContentBody()->clear();
                 request.GetContentBody()->seekg(0);
 
-                // Todo, check this stream copy
+                // Todo, optimize this with zero copy
                 [[maybe_unused]] auto size =
                         Poco::StreamCopier::copyStream(*request.GetContentBody(), request_body_stream);
             }
 
             Poco::Net::HTTPResponse poco_response;
 
-            if (dynamic_cast<starrocks::io::S3ZeroCopyIOStream *>(&(response->GetResponseBody()))) {
-                poco_response.setResponseIOStream(&(response->GetResponseBody()),
-                                                  (static_cast<Aws::Utils::Stream::PreallocatedStreamBuf*>(response->GetResponseBody().rdbuf()))->GetBuffer(),
-                                                  (static_cast<starrocks::io::S3ZeroCopyIOStream&>(response->GetResponseBody())).getSize());
+            if (dynamic_cast<starrocks::io::S3ZeroCopyIOStream*>(&(response->GetResponseBody()))) {
+                poco_response.setResponseIOStream(
+                        &(response->GetResponseBody()),
+                        (static_cast<Aws::Utils::Stream::PreallocatedStreamBuf*>(response->GetResponseBody().rdbuf()))
+                                ->GetBuffer(),
+                        (static_cast<starrocks::io::S3ZeroCopyIOStream&>(response->GetResponseBody())).getSize());
             }
 
             auto& response_body_stream = session->receiveResponse(poco_response);
