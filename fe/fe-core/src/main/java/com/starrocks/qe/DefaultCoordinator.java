@@ -41,6 +41,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -1285,6 +1286,12 @@ public class DefaultCoordinator extends Coordinator {
             return "";
         }
         return connectContext.getSessionVariable().getWarehouseName();
+    }
+
+    @Override
+    public String getResourceGroupName() {
+        return jobSpec.getResourceGroup() == null ? ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME :
+                jobSpec.getResourceGroup().getName();
     }
 
     private void execShortCircuit() throws Exception {
