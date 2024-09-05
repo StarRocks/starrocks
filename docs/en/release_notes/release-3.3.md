@@ -10,6 +10,46 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.3
+
+Release date: September 5, 2024
+
+### New Features
+
+- Supports user-level variables. [#48477](https://github.com/StarRocks/starrocks/pull/48477)
+- Supports Delta Lake Catalog metadata cache with manual and periodic refresh strategies. [#46526](https://github.com/StarRocks/starrocks/pull/46526) [#49069](https://github.com/StarRocks/starrocks/pull/49069)
+- Supports loading JSON types from Parquet files. [#49385](https://github.com/StarRocks/starrocks/pull/49385)
+- JDBC SQL Server Catalog supports queries with LIMIT.  [#48248](https://github.com/StarRocks/starrocks/pull/48248)
+- Shared-data clusters support Partial Updates with INSERT INTO. [#49336](https://github.com/StarRocks/starrocks/pull/49336)
+
+### Improvements
+
+- Optimized error messages for loading:
+  - When memory limits are reached during loading, the IP of the corresponding BE node is returned for easier troubleshooting. [#49335](https://github.com/StarRocks/starrocks/pull/49335)
+  - Detailed messages are provided when CSV data is loaded to target table columns that are not long enough. [#49713](https://github.com/StarRocks/starrocks/pull/49713)
+  - Specific node information is provided when Kerberos authentication fails in Broker Load. [#46085](https://github.com/StarRocks/starrocks/pull/46085)
+- Optimized the partitioning mechanism during data loading to reduce memory usage in the initial stage. [#47976](https://github.com/StarRocks/starrocks/pull/47976)
+- Optimized memory usage for shared-nothing clusters by limiting metadata memory usage to avoid issues when there are too many Tablets or Segment files. [#49170](https://github.com/StarRocks/starrocks/pull/49170)
+- Optimized the performance of queries using `max(partition_column)`. [#49391](https://github.com/StarRocks/starrocks/pull/49391)
+- Partition pruning is used to optimize query performance when the partition column is a generated column (a column that is calculated based on a native column in the table), and the query predicate filter condition includes the native column. [#48692](https://github.com/StarRocks/starrocks/pull/48692)
+- Supports masking authentication information for Files() and PIPE. [#47629](https://github.com/StarRocks/starrocks/pull/47629)
+- Introduced a new statement `show proc '/global_current_queries'` to view queries running on all FE nodes. `show proc '/current_queries'` only shows queries running on the current FE node. [#49826](https://github.com/StarRocks/starrocks/pull/49826)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The source cluster's BE nodes were mistakenly added to the current cluster when exporting data to the destination cluster via StarRocks external tables. [#49323](https://github.com/StarRocks/starrocks/pull/49323)
+- TINYINT data type returned NULL when StarRocks reads ORC files using `select * from files` from clusters deployed on aarch64 machines. [#49517](https://github.com/StarRocks/starrocks/pull/49517)
+- Stream Load fails when loading JSON files containing large Integer types. [#49927](https://github.com/StarRocks/starrocks/pull/49927)
+- Incorrect schema is returned due to improper handling of invisible characters when users load CSV files with Files(). [#49718](https://github.com/StarRocks/starrocks/pull/49718)
+- An issue with temporary partition replacement in tables with multiple partition columns. [#49764](https://github.com/StarRocks/starrocks/pull/49764)
+
+### Behavior Changes
+
+- Introduced a new parameter `object_storage_rename_file_request_timeout_ms` to better accommodate backup scenarios with cloud object storage. This parameter will be used as the backup timeout, with a default value of 30 seconds. [#49706](https://github.com/StarRocks/starrocks/pull/49706)
+- `to_json`, `CAST(AS MAP)`, and `STRUCT AS JSON` will return NULL instead of throwing an error by default when the conversion fails. You can allow errors by setting the system variable `sql_mode` to `ALLOW_THROW_EXCEPTION`. [#50157](https://github.com/StarRocks/starrocks/pull/50157)
+
 ## 3.3.2
 
 Release date: August 8, 2024
