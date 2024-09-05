@@ -242,7 +242,7 @@ void WorkGroupDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
 StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
-    workgroup::WorkGroupDriverSchedEntity* wg_entity;
+    workgroup::WorkGroupDriverSchedEntity* wg_entity = nullptr;
     while (true) {
         if (_is_closed) {
             return Status::Cancelled("Shutdown");

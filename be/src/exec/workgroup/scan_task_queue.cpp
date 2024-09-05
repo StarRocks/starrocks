@@ -72,7 +72,7 @@ void WorkGroupScanTaskQueue::close() {
 StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
-    WorkGroupScanSchedEntity* wg_entity;
+    WorkGroupScanSchedEntity* wg_entity = nullptr;
     while (true) {
         if (_is_closed) {
             return Status::Cancelled("Shutdown");
