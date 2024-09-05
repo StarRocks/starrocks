@@ -75,6 +75,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
@@ -871,5 +872,16 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             count += value.size();
         }
         return ImmutableMap.of("DeleteInfo", count);
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = dbToDeleteInfos.values()
+                .stream()
+                .filter(infos -> !infos.isEmpty())
+                .map(infos -> infos.stream().findAny().get())
+                .collect(Collectors.toList());
+        long size = dbToDeleteInfos.values().stream().mapToInt(List::size).sum();
+        return Lists.newArrayList(Pair.create(samples, size));
     }
 }

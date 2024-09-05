@@ -2859,4 +2859,15 @@ public class OlapTable extends Table {
         }
     }
 
+    public int getPartitionsCount() {
+        return idToPartition.size() + tempPartitions.getPartitionsCount();
+    }
+
+    public Partition getPartitionSample() {
+        if (!idToPartition.isEmpty()) {
+            return idToPartition.values().iterator().next();
+        } else {
+            return null;
+        }
+    }
 }
