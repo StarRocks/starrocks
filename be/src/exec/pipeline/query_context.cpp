@@ -105,7 +105,7 @@ void QueryContext::cancel(const Status& status) {
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
                                     std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
-                                    RuntimeState* runtime_state) {
+                                    RuntimeState* runtime_state, int scan_node_number) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -136,8 +136,8 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (big_query_mem_limit > 0) {
             _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
         }
-        _connector_scan_operator_mem_share_arbitrator =
-                _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit));
+        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
+                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, scan_node_number));
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
