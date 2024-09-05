@@ -75,7 +75,8 @@ public class GlobalFunctionMgr {
         return func;
     }
 
-    private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists) throws UserException {
+    private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
+            throws UserException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (allowExists && createIfNotExists) {
