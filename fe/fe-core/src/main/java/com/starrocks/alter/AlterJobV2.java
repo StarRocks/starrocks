@@ -268,17 +268,17 @@ public abstract class AlterJobV2 implements Writable {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             if (tbl.isOlapTable()) {
                 unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                         GlobalStateMgr.getCurrentState().getTabletScheduler());
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
                 errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
@@ -292,7 +292,7 @@ public abstract class AlterJobV2 implements Writable {
                 return true;
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
     }
 

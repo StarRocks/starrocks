@@ -283,7 +283,7 @@ public class TabletChecker extends FrontendDaemon {
             int partitionBatchNum = Config.tablet_checker_partition_batch_num;
             int partitionChecked = 0;
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             lockStart = System.nanoTime();
             try {
                 List<Long> aliveBeIdsInCluster =
@@ -317,8 +317,8 @@ public class TabletChecker extends FrontendDaemon {
                             LOG.debug("partition checked reached batch value, release lock");
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
-                            locker.unLockDatabase(db, LockType.READ);
-                            locker.lockDatabase(db, LockType.READ);
+                            locker.unLockDatabase(db.getId(), LockType.READ);
+                            locker.lockDatabase(db.getId(), LockType.READ);
                             LOG.debug("checker get lock again");
                             lockStart = System.nanoTime();
                             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
@@ -363,7 +363,7 @@ public class TabletChecker extends FrontendDaemon {
                 } // tables
             } finally {
                 lockTotalTime += System.nanoTime() - lockStart;
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } // end for dbs
 
@@ -514,7 +514,7 @@ public class TabletChecker extends FrontendDaemon {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
                     long tblId = tblEntry.getKey();
@@ -536,7 +536,7 @@ public class TabletChecker extends FrontendDaemon {
                     iter.remove();
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         for (Pair<Long, Long> prio : deletedUrgentTable) {
@@ -618,7 +618,7 @@ public class TabletChecker extends FrontendDaemon {
         long tblId;
         List<Long> partIds = Lists.newArrayList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
@@ -640,7 +640,7 @@ public class TabletChecker extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         Preconditions.checkState(tblId != -1);

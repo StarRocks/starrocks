@@ -157,7 +157,7 @@ public class TableQueryPlanAction extends RestBaseAction {
             }
             // may be should acquire writeLock
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
@@ -173,7 +173,7 @@ public class TableQueryPlanAction extends RestBaseAction {
                 // parse/analysis/plan the sql and acquire tablet distributions
                 handleQuery(ConnectContext.get(), db.getFullName(), tableName, sql, resultMap);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

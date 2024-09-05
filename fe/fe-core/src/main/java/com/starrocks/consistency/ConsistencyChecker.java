@@ -297,7 +297,7 @@ public class ConsistencyChecker extends FrontendDaemon {
             while ((chosenOne = dbQueue.poll()) != null) {
                 Database db = (Database) chosenOne;
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 long startTime = System.currentTimeMillis();
                 try {
                     // sort tables
@@ -392,7 +392,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                     // from time to time, just log the time cost here.
                     LOG.info("choose tablets from db[{}-{}](with read lock held) took {}ms",
                                 db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             } // end while dbQueue
         } finally {
@@ -429,7 +429,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         }
 
         try (AutoCloseableLock ignore
-                    = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                    = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
             Partition partition = table.getPartition(info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);

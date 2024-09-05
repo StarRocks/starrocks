@@ -387,7 +387,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
                 Locker locker = new Locker();
                 try {
-                    locker.lockDatabase(db, LockType.READ);
+                    locker.lockDatabase(db.getId(), LockType.READ);
 
                     // validate table
                     long tableId = tabletMeta.getTableId();
@@ -463,7 +463,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
                     tabletMeta.resetToBeCleanedTime();
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             } // end for tabletIds
         } // end for backendIds

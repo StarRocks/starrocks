@@ -174,12 +174,12 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws UserException {
         Table table;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // init stream load task
@@ -205,12 +205,12 @@ public class StreamLoadMgr implements MemoryTrackable {
                                          int channelId, long warehouseId) throws UserException {
         Table table;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // init stream load task

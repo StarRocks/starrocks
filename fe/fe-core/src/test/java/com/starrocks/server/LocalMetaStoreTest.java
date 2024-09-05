@@ -207,7 +207,7 @@ public class LocalMetaStoreTest {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             Map<String, String> properties = Maps.newHashMap();
             LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
@@ -215,7 +215,7 @@ public class LocalMetaStoreTest {
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 

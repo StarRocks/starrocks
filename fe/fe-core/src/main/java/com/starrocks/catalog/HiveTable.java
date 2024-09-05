@@ -293,7 +293,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             this.fullSchema.clear();
             this.nameToColumn.clear();
@@ -308,7 +308,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 

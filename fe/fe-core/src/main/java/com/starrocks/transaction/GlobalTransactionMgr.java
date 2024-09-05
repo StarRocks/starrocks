@@ -307,7 +307,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         List<Long> tableIdList = transactionState.getTableIdList();
 
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE,
+        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE,
                 timeoutMillis, TimeUnit.MILLISECONDS)) {
             String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
                     transactionId, db.getFullName(), timeoutMillis);
@@ -316,7 +316,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
 
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -442,14 +442,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(
                     "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
         }
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
     }
 

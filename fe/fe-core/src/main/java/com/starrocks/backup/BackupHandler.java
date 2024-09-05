@@ -315,7 +315,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
@@ -367,7 +367,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             }
             curBackupMeta = new BackupMeta(backupTbls);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // Check if label already be used
