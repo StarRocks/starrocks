@@ -327,6 +327,8 @@ struct TQueryOptions {
 struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
+  3: optional bool placeholder = false
+  4: optional bool has_more = false;
 }
 
 // Parameters for a single execution instance of a particular TPlanFragment

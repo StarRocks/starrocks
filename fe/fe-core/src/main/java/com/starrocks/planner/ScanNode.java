@@ -106,6 +106,10 @@ public abstract class ScanNode extends PlanNode {
         return false;
     }
 
+    public boolean hasMoreScanRanges() {
+        return false;
+    }
+
     /**
      * cast expr to SlotDescriptor type
      */

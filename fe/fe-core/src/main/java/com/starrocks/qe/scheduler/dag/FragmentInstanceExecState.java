@@ -95,6 +95,8 @@ public class FragmentInstanceExecState {
     private final TNetworkAddress address;
     private final long lastMissingHeartbeatTime;
 
+    private FragmentInstance fragmentInstance;
+
     /**
      * Create a fake backendExecState, only user for stream load profile.
      */
@@ -127,7 +129,6 @@ public class FragmentInstanceExecState {
                 request,
                 profile,
                 worker, address, worker.getLastMissingHeartbeatTime());
-
     }
 
     private FragmentInstanceExecState(JobSpec jobSpec,
@@ -482,5 +483,21 @@ public class FragmentInstanceExecState {
         public boolean isTerminal() {
             return this == FINISHED || this == FAILED;
         }
+    }
+
+    public FragmentInstance getFragmentInstance() {
+        return fragmentInstance;
+    }
+
+    public void setFragmentInstance(FragmentInstance fragmentInstance) {
+        this.fragmentInstance = fragmentInstance;
+    }
+
+    public TExecPlanFragmentParams getRequestToDeploy() {
+        return requestToDeploy;
+    }
+
+    public void setRequestToDeploy(TExecPlanFragmentParams requestToDeploy) {
+        this.requestToDeploy = requestToDeploy;
     }
 }
