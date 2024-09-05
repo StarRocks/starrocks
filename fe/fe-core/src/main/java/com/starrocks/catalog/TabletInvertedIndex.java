@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.server.GlobalStateMgr;
