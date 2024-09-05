@@ -101,7 +101,6 @@ import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.elasticsearch.EsRepository;
@@ -917,10 +916,6 @@ public class GlobalStateMgr {
 
     public MetadataMgr getMetadataMgr() {
         return metadataMgr;
-    }
-
-    public ConnectorMetadata getMetadata() {
-        return localMetastore;
     }
 
     @VisibleForTesting

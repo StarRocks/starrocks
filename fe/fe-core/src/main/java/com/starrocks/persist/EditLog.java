@@ -175,13 +175,13 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_DB_V2: {
                     CreateDbInfo db = (CreateDbInfo) journal.getData();
-                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+                    LocalMetastore metastore = globalStateMgr.getLocalMetastore();
                     metastore.replayCreateDb(db);
                     break;
                 }
                 case OperationType.OP_DROP_DB: {
                     DropDbInfo dropDbInfo = (DropDbInfo) journal.getData();
-                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+                    LocalMetastore metastore = globalStateMgr.getLocalMetastore();
                     metastore.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
                     break;
                 }

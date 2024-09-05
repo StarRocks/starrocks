@@ -70,7 +70,7 @@ public class StorageMediumInferTest {
         // create database
         String createDbStmtStr = "create database if not exists test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
     }
 
     private static void createTable(String sql) throws Exception {
