@@ -132,7 +132,7 @@ PipelineExecutorSet* ExecutorsManager::create_and_assign_executors(WorkGroup* wg
 
     LOG(INFO) << "[WORKGROUP] assign dedicated executors to workgroup "
               << "[workgroup=" << wg->to_string() << "] ";
-    wg->set_dedicated_executors(std::move(executors));
+    wg->set_exclusive_executors(std::move(executors));
     return wg->executors();
 }
 
@@ -157,8 +157,8 @@ void ExecutorsManager::change_enable_resource_group_cpu_borrowing(bool val) {
 
 void ExecutorsManager::for_each_executors(const ExecutorsConsumer& consumer) const {
     for (const auto& [_, wg] : _parent->_workgroups) {
-        if (wg != nullptr && wg->dedicated_executors() != nullptr) {
-            consumer(*wg->dedicated_executors());
+        if (wg != nullptr && wg->exclusive_executors() != nullptr) {
+            consumer(*wg->exclusive_executors());
         }
     }
     if (_shared_executors) {
@@ -172,7 +172,7 @@ bool ExecutorsManager::should_yield(const WorkGroup* wg) const {
     }
 
     // Only resource groups without dedicated executors can borrow CPU.
-    if (wg->dedicated_executors() != nullptr) {
+    if (wg->exclusive_executors() != nullptr) {
         return false;
     }
 

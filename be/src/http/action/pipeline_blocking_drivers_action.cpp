@@ -162,8 +162,8 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
 
         QueryMap query_map_in_wg;
         _exec_env->workgroup_manager()->for_each_workgroup([&](const workgroup::WorkGroup& wg) {
-            if (wg.dedicated_executors() != nullptr) {
-                wg.dedicated_executors()->driver_executor()->iterate_immutable_blocking_driver(
+            if (wg.exclusive_executors() != nullptr) {
+                wg.exclusive_executors()->driver_executor()->iterate_immutable_blocking_driver(
                         iterate_func_generator(query_map_in_wg));
             }
         });

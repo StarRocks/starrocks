@@ -28,13 +28,13 @@ namespace starrocks::workgroup {
 /// - exclusive_executors: PipelineExecutorSet dedicated to a workgroup (workgroup with exclusive_cpu_cores > 0).
 /// - shared_executors: PipelineExecutorSet shared by other workgroups (workgroup with exclusive_cpu_cores <= 0).
 /// PipelineExecutorSet owner:
-/// - dedicated_executors: owned by workgroup.
+/// - exclusive_executors: owned by workgroup.
 /// - shared_executors: owned by WorkGroupManager.
 /// The timing of creating and starting PipelineExecutorSet:
-/// - dedicated_executors: when creating or updating workgroup.
+/// - exclusive_executors: when creating or updating workgroup.
 /// - shared_executors: when starting BE process.
 /// The timing of stopping PipelineExecutorSet:
-/// - dedicated_executors: when workgroup destructs.
+/// - exclusive_executors: when workgroup destructs.
 /// - shared_executors: when closing BE process.
 ///
 /// ExecutorsManager is owned by WorkGroupManager.

@@ -198,12 +198,12 @@ public:
     int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
 
     void set_executors(PipelineExecutorSet* executors) { _executors = executors; }
-    void set_dedicated_executors(std::unique_ptr<PipelineExecutorSet> executors) {
-        _dedicated_executors = std::move(executors);
-        _executors = _dedicated_executors.get();
+    void set_exclusive_executors(std::unique_ptr<PipelineExecutorSet> executors) {
+        _exclusive_executors = std::move(executors);
+        _executors = _exclusive_executors.get();
     }
 
-    PipelineExecutorSet* dedicated_executors() const { return _dedicated_executors.get(); }
+    PipelineExecutorSet* exclusive_executors() const { return _exclusive_executors.get(); }
     PipelineExecutorSet* executors() const { return _executors; }
 
     static constexpr int64 DEFAULT_WG_ID = 0;
@@ -260,7 +260,7 @@ private:
     /// other threads including Source and Sink threads.
     std::atomic<int64_t> _cpu_runtime_ns = 0;
 
-    std::unique_ptr<PipelineExecutorSet> _dedicated_executors;
+    std::unique_ptr<PipelineExecutorSet> _exclusive_executors;
     PipelineExecutorSet* _executors = nullptr;
 };
 
