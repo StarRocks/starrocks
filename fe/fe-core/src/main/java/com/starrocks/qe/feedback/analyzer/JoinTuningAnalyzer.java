@@ -37,9 +37,9 @@ public class JoinTuningAnalyzer implements PlanTuningAnalyzer.Analyzer {
 
     private static final JoinTuningAnalyzer INSTANCE = new JoinTuningAnalyzer();
 
-    private static final long UNDERESTIMATED_FACTOR = 10000;
+    private static final long UNDERESTIMATED_FACTOR = 1000;
 
-    private static final long LARGE_TABLE_ROWS_THRESHOLD = 10000000;
+    private static final long LARGE_TABLE_ROWS_THRESHOLD = 5000000;
 
     public static JoinTuningAnalyzer getInstance() {
         return INSTANCE;

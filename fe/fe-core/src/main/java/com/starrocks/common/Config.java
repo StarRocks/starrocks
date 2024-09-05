@@ -3169,6 +3169,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double partition_hash_join_min_cardinality_rate = 0.3;
 
+    /**
+     * Analyze query which time cost exceeds *slow_query_analyze_threshold*
+     * unit ms. default value 5000 ms
+     */
     @ConfField(mutable = true)
     public static long slow_query_analyze_threshold = 5000;
 }
