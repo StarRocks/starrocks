@@ -181,7 +181,11 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(
+                exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, optProbeExprCandidates,
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
