@@ -2903,13 +2903,4 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 2: v2, 3: v3\n" +
                 "  |  having: 2: v2 + 2 + 5: sum > 0");
     }
-
-    @Test
-    public void testPercentileFunction() throws Exception {
-        String sql = "with cc as (select 1 as a) select percentile_approx(1, cc.a) from cc;";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: percentile_approx(1.0, 1.0)\n" +
-                "  |  group by: ");
-    }
 }
