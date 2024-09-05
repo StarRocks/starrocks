@@ -2077,7 +2077,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
             "we would use sample statistics instead of full statistics")
-    public static double statistic_sample_collect_ratio_threshold = 0.1;
+    public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
     /**
      * default bucket size of histogram statistics

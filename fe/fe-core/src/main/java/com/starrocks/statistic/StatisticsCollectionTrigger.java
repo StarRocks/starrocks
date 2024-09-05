@@ -272,7 +272,7 @@ public class StatisticsCollectionTrigger {
         long sourceRows = overwriteJobStats.getSourceRows();
         long targetRows = overwriteJobStats.getTargetRows();
         double deltaRatio = 1.0 * (targetRows - sourceRows) / (sourceRows + 1);
-        if (deltaRatio < Config.statistic_sample_collect_ratio_threshold) {
+        if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
             return null;
         } else if (targetRows > Config.statistic_sample_collect_rows) {
             return StatsConstants.AnalyzeType.SAMPLE;
@@ -300,7 +300,7 @@ public class StatisticsCollectionTrigger {
                 .mapToLong(p -> table.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
                 .sum();
         double deltaRatio = 1.0 * loadRows / (totalRows + 1);
-        if (deltaRatio < Config.statistic_sample_collect_ratio_threshold) {
+        if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
             return null;
         } else if (loadRows > Config.statistic_sample_collect_rows) {
             return StatsConstants.AnalyzeType.SAMPLE;
