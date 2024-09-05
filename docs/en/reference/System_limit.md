@@ -19,11 +19,8 @@ This topic describes the rules and limits that apply when you use StarRocks.
   - Column name (column alias), partition name, and index name are **not** case-sensitive. Other names are **case-sensitive**.
 
 - Naming conventions for labels:
-<<<<<<< HEAD:docs/en/reference/System_limit.md
-  You can specify the label of a job when you import data. The label name can consist of underscores (\_), letters (a-z or A-Z), and digits (0-9), and cannot exceed 128 characters in length. The label name has no requirement for the starting character.
-=======
+
   You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (\_), and cannot exceed 128 characters in length. Label names can start with a letter or an underscore (\_).
->>>>>>> a97db920bc ([Doc] Update System_limit.md (#50542)):docs/en/sql-reference/System_limit.md
 
 - When you create a table, the key column cannot be of the FLOAT or DOUBLE type. You can use the DECIMAL type to represent decimals.
 
