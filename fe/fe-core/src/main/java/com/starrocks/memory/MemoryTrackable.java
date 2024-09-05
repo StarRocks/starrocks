@@ -17,10 +17,7 @@ package com.starrocks.memory;
 import com.starrocks.common.Pair;
 import org.apache.spark.util.SizeEstimator;
 
-<<<<<<< HEAD
-=======
 import java.util.List;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import java.util.Map;
 
 public interface MemoryTrackable {
@@ -40,8 +37,6 @@ public interface MemoryTrackable {
 
     Map<String, Long> estimateCount();
 
-<<<<<<< HEAD
-=======
     // Samples for estimateSize() to calculate memory size;
     // Pair.fist is the sample objects, Pair.second is the total size of that module.
     // For example:
@@ -49,5 +44,4 @@ public interface MemoryTrackable {
     // this function should return:
     // Pair<10 A objects, List<A>.size()>, Pair<10 B object, List<B>.size()>
     List<Pair<List<Object>, Long>> getSamples();
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }

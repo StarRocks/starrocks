@@ -16,7 +16,6 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -34,7 +33,6 @@ import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -167,22 +165,4 @@ public class IcebergConnector implements Connector {
             refreshOtherFeExecutor.shutdown();
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Override
-    public boolean supportMemoryTrack() {
-        return icebergCatalogProperties.enableIcebergMetadataCache() && icebergNativeCatalog != null;
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        return icebergNativeCatalog.estimateCount();
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return icebergNativeCatalog.getSamples();
-    }
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }

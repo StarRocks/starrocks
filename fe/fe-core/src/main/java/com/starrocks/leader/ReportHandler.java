@@ -159,11 +159,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             return ImmutableMap.of("PendingTask", count,
                     "ReportQueue", (long) reportQueue.size());
         }
-<<<<<<< HEAD
-        return ImmutableMap.of("PendingTask", count,
-                                "ReportQueue", (long) reportQueue.size());
-=======
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
     }
 
     public enum ReportType {

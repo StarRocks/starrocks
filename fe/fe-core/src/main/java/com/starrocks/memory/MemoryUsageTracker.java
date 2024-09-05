@@ -64,18 +64,12 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Backup", currentState.getBackupHandler());
         registerMemoryTracker("Task", currentState.getTaskManager());
         registerMemoryTracker("Task", currentState.getTaskManager().getTaskRunManager());
-<<<<<<< HEAD
-        registerMemoryTracker("Tablet", currentState.getTabletInvertedIndex());
-        registerMemoryTracker("Profile", ProfileManager.getInstance());
-        registerMemoryTracker("LocalCatalog", new InternalCatalogMemoryTracker());
-=======
         registerMemoryTracker("TabletInvertedIndex", currentState.getTabletInvertedIndex());
         registerMemoryTracker("LocalMetastore", currentState.getLocalMetastore());
 
         registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
         registerMemoryTracker("Agent", new AgentTaskTracker());
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
         if (qeProcessor instanceof QeProcessorImpl) {
@@ -100,14 +94,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
     }
 
     public static void trackMemory() {
-<<<<<<< HEAD
-        long startTime;
-        long endTime;
-        for (Map.Entry<String, Map<String, MemoryTrackable>> entry : REFERENCE.entrySet()) {
-=======
         long totalTracked = trackMemory(REFERENCE);
-        totalTracked += trackMemory(ImmutableMap.of("Connector",
-                GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
 
         LOG.info("total tracked memory: {}, jvm: {}", new ByteSizeValue(totalTracked), getJVMMemory());
     }
@@ -130,16 +117,15 @@ public class MemoryUsageTracker extends FrontendDaemon {
     private static long trackMemory(Map<String, Map<String, MemoryTrackable>> trackers) {
         long totalTracked = 0;
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
             for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
                 String className = statEntry.getKey();
                 MemoryTrackable tracker = statEntry.getValue();
-                startTime = System.currentTimeMillis();
+                long startTime = System.currentTimeMillis();
                 long currentEstimateSize = tracker.estimateSize();
                 Map<String, Long> counterMap = tracker.estimateCount();
-                endTime = System.currentTimeMillis();
+                long endTime = System.currentTimeMillis();
 
                 StringBuilder sb  = new StringBuilder();
                 for (Map.Entry<String, Long> subEntry : counterMap.entrySet()) {

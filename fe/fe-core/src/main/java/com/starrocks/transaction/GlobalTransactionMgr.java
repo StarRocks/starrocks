@@ -872,6 +872,14 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
         return txnNum;
     }
 
+    public int getFinishedTransactionNum() {
+        int txnNum = 0;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            txnNum += dbTransactionMgr.getFinishedTxnNums();
+        }
+        return txnNum;
+    }
+
     public TransactionIdGenerator getTransactionIDGenerator() {
         return this.idGenerator;
     }
@@ -1020,16 +1028,8 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-<<<<<<< HEAD
-        long count = 0;
-        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            count += databaseTransactionMgr.getTransactionNum();
-        }
-        return ImmutableMap.of("Transaction", count);
-=======
         return ImmutableMap.of("Txn", (long) getTransactionNum(),
                 "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
     }
 
     @Override

@@ -19,12 +19,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.Pair;
-import com.starrocks.connector.ConnectorViewDefinition;
-import com.starrocks.connector.PlanMode;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionSpec;
@@ -46,14 +40,6 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
-<<<<<<< HEAD
-=======
-    public static final long NEVER_CACHE = 0;
-    public static final long DEFAULT_CACHE_NUM = 100000;
-    private static final int MEMORY_META_SAMPLES = 10;
-    private static final int MEMORY_FILE_SAMPLES = 100;
-    private final String catalogName;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
     private final IcebergCatalog delegate;
     private final Cache<IcebergTableName, Table> tables;
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
@@ -248,75 +234,4 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             return sb.toString();
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList()),
-                databases.size());
-
-        Pair<List<Object>, Long> tableSamples = Pair.create(tables.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList()),
-                tables.size());
-
-        List<Object> partitions = partitionNames.asMap().values()
-                .stream()
-                .flatMap(List::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long partitionTotal = partitionNames.asMap().values()
-                .stream()
-                .mapToLong(List::size)
-                .sum();
-        Pair<List<Object>, Long> partitionSamples = Pair.create(partitions, partitionTotal);
-
-        List<Object> dataFiles = dataFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long dataFilesTotal = dataFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum();
-        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFiles, dataFilesTotal);
-
-        List<Object> deleteFiles = deleteFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long deleteFilesTotal = deleteFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum();
-        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
-
-        return Lists.newArrayList(dbSamples, tableSamples, partitionSamples, dataFileSamples, deleteFileSamples);
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        Map<String, Long> counter = new HashMap<>();
-        counter.put("Database", databases.size());
-        counter.put("Table", tables.size());
-        counter.put("PartitionNames", partitionNames.asMap().values()
-                .stream()
-                .mapToLong(List::size)
-                .sum());
-        counter.put("ManifestOfDataFile",  dataFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum());
-        counter.put("ManifestOfDeleteFile", deleteFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum());
-        return counter;
-    }
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }

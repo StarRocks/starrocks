@@ -13,7 +13,6 @@
 // limitations under the License.
 
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/jdbc/JDBCTableIdCache.java
 package com.starrocks.connector.jdbc;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,25 +30,5 @@ public class JDBCTableIdCache {
 
     public static Integer getTableId(JDBCTableName tableKey) {
         return tableIdCache.get(tableKey);
-=======
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
-import com.starrocks.qe.QueryDetailQueue;
-
-import java.util.List;
-import java.util.Map;
-
-public class QueryTracker implements MemoryTrackable {
-    @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841)):fe/fe-core/src/main/java/com/starrocks/memory/QueryTracker.java
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return Lists.newArrayList(Pair.create(QueryDetailQueue.getSamplesForMemoryTracker(),
-                QueryDetailQueue.getTotalQueriesCount()));
     }
 }

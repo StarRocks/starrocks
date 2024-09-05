@@ -5271,23 +5271,21 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long totalCount = idToDb.values()
                 .stream()
                 .mapToInt(database -> {
-                    Locker locker = new Locker();
-                    locker.lockDatabase(database, LockType.READ);
+                    database.readLock();
                     try {
                         return database.getOlapPartitionsCount();
                     } finally {
-                        locker.unLockDatabase(database, LockType.READ);
+                        database.readUnlock();
                     }
                 }).sum();
         List<Object> samples = new ArrayList<>();
         // get every olap table's first partition
         for (Database database : idToDb.values()) {
-            Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.READ);
+            database.readLock();
             try {
                 samples.addAll(database.getPartitionSamples());
             } finally {
-                locker.unLockDatabase(database, LockType.READ);
+                database.readUnlock();
             }
         }
         return Lists.newArrayList(Pair.create(samples, totalCount));
@@ -5298,12 +5296,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long totalCount = idToDb.values()
                 .stream()
                 .mapToInt(database -> {
-                    Locker locker = new Locker();
-                    locker.lockDatabase(database, LockType.READ);
+                    database.readLock();
                     try {
                         return database.getOlapPartitionsCount();
                     } finally {
-                        locker.unLockDatabase(database, LockType.READ);
+                        database.readUnlock();
                     }
                 }).sum();
         return ImmutableMap.of("Partition", totalCount);

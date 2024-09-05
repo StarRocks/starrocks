@@ -14,19 +14,9 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.Pair;
 import com.starrocks.connector.config.ConnectorConfig;
 
-<<<<<<< HEAD
 public interface Connector {
-=======
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-public interface Connector extends MemoryTrackable {
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
     /**
      * Get the connector meta of connector
      *
@@ -49,19 +39,4 @@ public interface Connector extends MemoryTrackable {
      */
     default void bindConfig(ConnectorConfig config) {
     }
-<<<<<<< HEAD
-=======
-
-    default boolean supportMemoryTrack() {
-        return false;
-    }
-
-    default Map<String, Long> estimateCount() {
-        return new HashMap<>();
-    }
-
-    default List<Pair<List<Object>, Long>> getSamples() {
-        return new ArrayList<>();
-    }
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }

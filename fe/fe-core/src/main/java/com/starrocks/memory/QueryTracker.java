@@ -12,21 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.memory;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.QueryDetailQueue;
 
-public class WarehouseClusterProcNode implements ProcNodeInterface {
-    private final Warehouse warehouse;
+import java.util.List;
+import java.util.Map;
 
-    public WarehouseClusterProcNode(Warehouse wh) {
-        this.warehouse = wh;
+public class QueryTracker implements MemoryTrackable {
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
     }
 
     @Override
-    public ProcResult fetchResult() throws AnalysisException {
-        return warehouse.getClusterProcData();
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return Lists.newArrayList(Pair.create(QueryDetailQueue.getSamplesForMemoryTracker(),
+                QueryDetailQueue.getTotalQueriesCount()));
     }
 }

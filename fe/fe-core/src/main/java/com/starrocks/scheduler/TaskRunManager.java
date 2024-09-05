@@ -18,12 +18,8 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-import com.starrocks.common.util.QueryableReentrantLock;
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.LogUtil;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
+import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.memory.MemoryTrackable;
@@ -274,8 +270,6 @@ public class TaskRunManager implements MemoryTrackable {
                 "HistoryTaskRun", taskRunHistory.getTaskRunCount());
     }
 
-<<<<<<< HEAD
-=======
     @Override
     public List<Pair<List<Object>, Long>> getSamples() {
         List<Object> taskRunSamples = taskRunHistory.getSamplesForMemoryTracker();
@@ -285,7 +279,6 @@ public class TaskRunManager implements MemoryTrackable {
         return Lists.newArrayList(Pair.create(taskRunSamples, size));
     }
 
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
     /**
      * For diagnosis purpose
      *

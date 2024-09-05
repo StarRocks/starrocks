@@ -26,13 +26,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-<<<<<<< HEAD
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
-=======
-import com.starrocks.common.Pair;
-import com.starrocks.common.util.LogUtil;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.memory.MemoryTrackable;
@@ -74,12 +70,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-<<<<<<< HEAD
-=======
-import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 

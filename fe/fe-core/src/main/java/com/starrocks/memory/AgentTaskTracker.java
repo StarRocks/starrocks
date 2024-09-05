@@ -12,16 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package io.airbyte.integrations.destination.starrocks;
+package com.starrocks.memory;
 
-import io.airbyte.protocol.models.v0.AirbyteRecordMessage;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
+import com.starrocks.task.AgentTaskQueue;
 
 import java.util.List;
+import java.util.Map;
 
-public interface StreamLoader {
+public class AgentTaskTracker implements MemoryTrackable {
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("AgentTask", (long) AgentTaskQueue.getTaskNum());
+    }
 
-    void close();
-
-    StreamLoadResponse send(List<AirbyteRecordMessage> records) throws Exception;
-
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return Lists.newArrayList(Pair.create(AgentTaskQueue.getSamplesForMemoryTracker(),
+                (long) AgentTaskQueue.getTaskNum()));
+    }
 }

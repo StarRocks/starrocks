@@ -86,19 +86,6 @@ public class ProfileManager implements MemoryTrackable {
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
-<<<<<<< HEAD
-    @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(profileMap) + SizeEstimator.estimate(loadProfileMap);
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("Profile", (long) profileMap.size(),
-                               "LoadProfile", (long) loadProfileMap.size());
-    }
-=======
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
@@ -302,6 +289,25 @@ public class ProfileManager implements MemoryTrackable {
             readLock.unlock();
         }
         return result;
+    }
+
+
+    public long getQueryProfileCount() {
+        readLock.lock();
+        try {
+            return profileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public long getLoadProfileCount() {
+        readLock.lock();
+        try {
+            return loadProfileMap.size();
+        } finally {
+            readLock.unlock();
+        }
     }
 
     @Override

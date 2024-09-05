@@ -38,12 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.Status;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;

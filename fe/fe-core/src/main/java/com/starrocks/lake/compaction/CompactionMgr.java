@@ -15,23 +15,12 @@
 package com.starrocks.lake.compaction;
 
 import com.google.common.annotations.VisibleForTesting;
-<<<<<<< HEAD
-=======
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
-=======
-import com.starrocks.common.Pair;
-import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.persist.ImageWriter;
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -275,21 +264,4 @@ public class CompactionMgr {
         LOG.info("Trigger manual compaction, {}", statistics);
         return statistics;
     }
-<<<<<<< HEAD
-=======
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("PartitionStats", (long) partitionStatisticsHashMap.size());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = partitionStatisticsHashMap.values()
-                .stream()
-                .limit(1)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(samples, (long) partitionStatisticsHashMap.size()));
-    }
->>>>>>> f0cb5e97c8 ([Enhancement] Optimize memory tracker (#49841))
 }
