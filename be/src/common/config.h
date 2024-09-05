@@ -1272,11 +1272,12 @@ CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
-// Used by default mv resource group
-CONF_mDouble(default_mv_resource_group_memory_limit, "0.8");
-CONF_mInt32(default_mv_resource_group_cpu_limit, "1");
-CONF_mInt32(default_mv_resource_group_concurrency_limit, "0");
-CONF_mDouble(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
+// Used by default mv resource group.
+// These parameters are deprecated because now FE store and persist default_mv_wg.
+CONF_Double(default_mv_resource_group_memory_limit, "0.8");
+CONF_Int32(default_mv_resource_group_cpu_limit, "1");
+CONF_Int32(default_mv_resource_group_concurrency_limit, "0");
+CONF_Double(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");

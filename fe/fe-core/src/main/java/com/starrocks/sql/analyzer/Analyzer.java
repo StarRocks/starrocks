@@ -86,6 +86,7 @@ import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
@@ -230,6 +231,12 @@ public class Analyzer {
 
         @Override
         public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
+            statement.analyze();
+            return null;
+        }
+
+        @Override
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
             statement.analyze();
             return null;
         }

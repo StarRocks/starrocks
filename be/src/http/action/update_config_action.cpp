@@ -245,34 +245,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
         });
 
-        _config_callback.emplace("default_mv_resource_group_memory_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_memory_limit:"
-                      << config::default_mv_resource_group_memory_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_cpu_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_cpu_limit:" << config::default_mv_resource_group_cpu_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_concurrency_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_concurrency_limit:"
-                      << config::default_mv_resource_group_concurrency_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_spill_mem_limit_threshold", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_spill_mem_limit_threshold:"
-                      << config::default_mv_resource_group_spill_mem_limit_threshold;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_cache_thread_num", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size", value).empty()) {
