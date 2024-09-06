@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -231,12 +232,15 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private int compactionTaskLimit() {
+    @VisibleForTesting
+    protected int compactionTaskLimit() {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }
-        return (systemInfoService.getAliveBackendNumber() +
-                systemInfoService.getAliveComputeNodeNumber()) * 16;
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getCompactionWarehouse();
+        List<ComputeNode> aliveComputeNodes = manager.getAliveComputeNodes(warehouse.getId());
+        return aliveComputeNodes.size() * 16;
     }
 
     private void cleanPartition() {
@@ -252,7 +256,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     private CompactionJob startCompaction(PartitionIdentifier partitionIdentifier) {
-        Database db = stateMgr.getDb(partitionIdentifier.getDbId());
+        Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
             return null;
@@ -265,11 +269,12 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
 
         try {
             // lake table or lake materialized view
-            table = (OlapTable) db.getTable(partitionIdentifier.getTableId());
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), partitionIdentifier.getTableId());
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
             if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -303,7 +308,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
@@ -397,7 +402,7 @@ public class CompactionScheduler extends Daemon {
             throws UserException {
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
-        Database db = stateMgr.getDb(partition.getDbId());
+        Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }
@@ -411,7 +416,7 @@ public class CompactionScheduler extends Daemon {
                 .getTransactionState(db.getId(), job.getTxnId());
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             CompactionTxnCommitAttachment attachment = null;
             if (forceCommit) { // do not write extra info if no need to force commit
@@ -420,7 +425,7 @@ public class CompactionScheduler extends Daemon {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());

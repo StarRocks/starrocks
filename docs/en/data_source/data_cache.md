@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data Cache
@@ -33,13 +33,7 @@ If the query hits the [1 MB, 2 MB) block, StarRocks performs the following opera
 1. Check whether the block exists in the cache.
 2. If the block exists, StarRocks reads the block from the cache. If the block does not exist, StarRocks reads the block from Amazon S3 and caches it on a BE.
 
-After Data Cache is enabled, StarRocks caches data blocks read from external storage systems. If you do not want to cache such data blocks, run the following command:
-
-```SQL
-SET enable_populate_datacache = false;
-```
-
-For more information about `enable_populate_datacache`, see [System variables](../reference/System_variable.md).
+After Data Cache is enabled, StarRocks caches data blocks read from external storage systems.
 
 ## Storage media of blocks
 
@@ -62,7 +56,7 @@ By default, the system caches data in the following ways:
 
 - The system variables `enable_scan_datacache` and the BE parameter `datacache_enable` are set to `true` by default.
 - If the cache disk path, memory size, and disk capacity are not configured, the system will automatically select a path and set memory and disk limits by following these rules:
-  - A **datacache** directory is created as the cache directory under the parent directory of `storage_root_path`. (You can modify this with the BE parameter `datacache_disk_path`.)
+  - A **datacache** directory is created as the cache directory under `storage_root_path`. (You can modify this with the BE parameter `datacache_disk_path`.)
   - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 70%, and dynamically adjusts according to subsequent disk usage. (You can modify this behavior with the BE parameters `datacache_disk_high_level`, `datacache_disk_safe_level`, and `datacache_disk_low_level`.)
   - The default memory limit for Data Cache is `0`. (You can modify this with the BE parameter `datacache_mem_size`.)
 - The system adopts asynchronous cache population by default to minimize its impact on data read operations.
@@ -76,6 +70,37 @@ SET GLOBAL enable_scan_datacache=false;
 
 ## Populate data cache
 
+### Population rules
+
+Since v3.3.2, in order to improve the cache hit rate of Data Cache, StarRocks populates Data Cache according to the following rules:
+
+- The cache will not be populated for statements that are not `SELECT`, for example, `ANALYZE TABLE` and `INSERT INTO SELECT`.
+- Queries that scan all partitions of a table will not populate the cache. However, if the table has only one partition, population is performed by default.
+- Queries that scan all columns of a table will not populate the cache. However, if the table has only one column, population is performed by default.
+- The cache will not be populated for tables that are not Hive, Paimon, Delta Lake, Hudi, or Iceberg.
+
+You can view the population behavior for a specific query with the `EXPLAIN VERBOSE` command.
+
+Example:
+
+```sql
+mysql> explain verbose select col1 from hudi_table;
+|   0:HudiScanNode                        |
+|      TABLE: hudi_table                  |
+|      partitions=3/3                     |
+|      cardinality=9084                   |
+|      avgRowSize=2.0                     |
+|      dataCacheOptions={populate: false} |
+|      cardinality: 9084                  |
++-----------------------------------------+
+```
+
+`dataCacheOptions={populate: false}` indicates that the cache will not be populated because the query will scan all partitions.
+
+You can also fine tune the population behavior of Data Cache via the Session Variable [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode).
+
+### Population mode
+
 StarRocks supports populating Data Cache in synchronous or asynchronous mode.
 
 - Synchronous cache population
@@ -86,7 +111,7 @@ StarRocks supports populating Data Cache in synchronous or asynchronous mode.
 
   In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
 
-From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../reference/System_variable.md).
+From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md).
 
 ## Footer Cache
 
@@ -222,10 +247,10 @@ You can configure Data Cache using the following system variables and BE paramet
 
 ### System variables
 
-- [enable_populate_datacache](../reference/System_variable.md#enable_populate_datacache)
-- [enable_datacache_io_adaptor](../reference/System_variable.md#enable_datacache_io_adaptor)
-- [enable_file_metacache](../reference/System_variable.md#enable_file_metacache)
-- [enable_datacache_async_populate_mode](../reference/System_variable.md)
+- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
 
 ### BE Parameters
 

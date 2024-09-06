@@ -56,6 +56,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
@@ -256,7 +257,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public Database getDb() throws MetaNotFoundException {
         // get db
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + " already has been deleted");
         }
@@ -378,7 +379,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return state == JobState.FINISHED || state == JobState.CANCELLED || state == JobState.UNKNOWN;
     }
 
-    protected void setJobProperties(Map<String, String> properties) throws DdlException {
+    public void setJobProperties(Map<String, String> properties) throws DdlException {
         // resource info
         if (ConnectContext.get() != null) {
             loadMemLimit = ConnectContext.get().getSessionVariable().getLoadMemLimit();
@@ -748,7 +749,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         idToTasks.clear();
     }
 
-    protected boolean checkDataQuality() {
+    public boolean checkDataQuality() {
         Map<String, String> counters = loadingStatus.getCounters();
         if (!counters.containsKey(DPP_NORMAL_ALL) || !counters.containsKey(DPP_ABNORMAL_ALL)) {
             return true;
@@ -935,6 +936,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setTxn_id(transactionId);
             if (!loadIds.isEmpty()) {
                 info.setLoad_id(Joiner.on(", ").join(loadIds));
+
+                List<String> profileIds = Lists.newArrayList();
+                for (String loadId : loadIds) {
+                    if (ProfileManager.getInstance().hasProfile(loadId)) {
+                        profileIds.add(loadId);
+                    }
+                }
+                if (!profileIds.isEmpty()) {
+                    info.setProfile_id(Joiner.on(", ").join(loadIds));
+                }
             }
             try {
                 info.setTable(getTableNames(true).stream().collect(Collectors.joining(",")));

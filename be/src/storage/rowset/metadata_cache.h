@@ -34,6 +34,11 @@ public:
 
     DISALLOW_COPY_AND_MOVE(MetadataCache);
 
+    // Create global instance of this class
+    static void create_cache(size_t capacity);
+
+    static MetadataCache* instance() { return _s_instance; }
+
     // will be called after rowset load metadata.
     void cache_rowset(Rowset* ptr);
 
@@ -47,6 +52,8 @@ private:
     void _insert(const std::string& key, Rowset* ptr, size_t size);
     void _erase(const std::string& key);
     static void _cache_value_deleter(const CacheKey& /*key*/, void* value);
+
+    static MetadataCache* _s_instance;
 
     // LRU cache for metadata
     std::unique_ptr<Cache> _cache;

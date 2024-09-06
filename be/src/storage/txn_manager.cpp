@@ -314,18 +314,7 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
             return st;
         }
     } else {
-        vector<RowsetSharedPtr> origin_rowsets;
-        tablet->pick_candicate_rowset_before_specify_version(&origin_rowsets, version);
-        if (VLOG_IS_ON(2)) {
-            for (auto& rs : origin_rowsets) {
-                VLOG(2) << "delete rowset. txn_id: " << transaction_id << ", partition_id: " << partition_id
-                        << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
-                        << ", rowset_id: " << rs->rowset_id() << ", version: " << rs->version();
-            }
-        }
-        Version rowset_version(0, version);
-        rowset->make_visible(rowset_version);
-        tablet->modify_rowsets({rowset}, origin_rowsets, nullptr);
+        tablet->overwrite_rowset(rowset, version);
         VLOG(1) << "publish overwrite txn. txn_id: " << transaction_id << ", partition_id: " << partition_id
                 << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                 << ", rowset_id: " << rowset->rowset_id() << ", version: " << rowset->version();

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "simd/simd.h"
+#include "util/runtime_profile.h"
 
 #define JOIN_HASH_MAP_TPP
 
@@ -899,7 +900,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     }
 
 #define RETURN_IF_CHUNK_FULL()                                   \
-    if (match_count > state->chunk_size()) {                     \
+    if (UNLIKELY(match_count > state->chunk_size())) {           \
         _probe_state->next[i] = _table_items->next[build_index]; \
         _probe_state->cur_probe_index = i;                       \
         _probe_state->cur_build_index = build_index;             \
@@ -1028,6 +1029,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         }
     }
 
+    [[maybe_unused]] size_t probe_cont = 0;
+
     size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
         if constexpr (first_probe) {
@@ -1047,7 +1050,9 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
                     }
                     RETURN_IF_CHUNK_FULL()
                 }
-                build_index = _table_items->next[build_index];
+                probe_cont++;
+                auto next_index = _table_items->next[build_index];
+                build_index = next_index;
             } while (build_index != 0);
 
             if constexpr (first_probe) {
@@ -1061,6 +1066,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
             _probe_state->cur_row_match_count = 0;
         }
     }
+
+    // COUNTER_UPDATE(_probe_state->probe_counter, probe_cont);
 
     if constexpr (first_probe) {
         CHECK_MATCH()

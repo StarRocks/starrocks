@@ -95,7 +95,6 @@ import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -192,19 +191,9 @@ public class ConnectProcessor {
             return;
         }
 
-        // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
-        String errorCode = "";
-        if (ctx.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
-            // error happens in FE execution.
-            errorCode = ctx.getState().getErrType().name();
-        } else if (StringUtils.isNotEmpty(ctx.getErrorCode())) {
-            // error happens in BE execution.
-            errorCode = ctx.getErrorCode();
-        }
-
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
-                .setErrorCode(errorCode)
+                .setErrorCode(ctx.getNormalizedErrorCode())
                 .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
@@ -226,6 +215,13 @@ public class ConnectProcessor {
                 // err query
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
                 ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+                //represent analysis err
+                if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
+                    MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                } else {
+                    MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+                }
             } else {
                 // ok query
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
@@ -266,18 +262,19 @@ public class ConnectProcessor {
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
-    public String computeStatementDigest(StatementBase queryStmt) {
+    public static String computeStatementDigest(StatementBase queryStmt) {
         if (queryStmt == null) {
             return "";
         }
 
-        String digest = SqlDigestBuilder.build(queryStmt);
         try {
+            String digest = SqlDigestBuilder.build(queryStmt);
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
             md.update(digest.getBytes());
             return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
+        } catch (Exception e) {
+            LOG.warn("Failed to compute statement digest", e);
             return "";
         }
     }
@@ -384,7 +381,7 @@ public class ConnectProcessor {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
-            ctx.getState().setError("Unexpected exception: " + e.getMessage());
+            ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             Tracers.close();
@@ -421,7 +418,7 @@ public class ConnectProcessor {
             return;
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             // we should get table through metadata manager
             Table table = ctx.getGlobalStateMgr().getMetadataMgr().getTable(
@@ -445,7 +442,7 @@ public class ConnectProcessor {
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         ctx.getState().setEof();
     }
@@ -548,7 +545,7 @@ public class ConnectProcessor {
         ctx.setCommand(command);
         ctx.setStartTime();
         ctx.setResourceGroup(null);
-        ctx.setErrorCode("");
+        ctx.resetErrorCode();
 
         switch (command) {
             case COM_INIT_DB:
@@ -831,7 +828,7 @@ public class ConnectProcessor {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
-            ctx.getState().setError("Unexpected exception: " + e.getMessage());
+            ctx.getState().setError(e.getMessage());
         }
 
         // If stmt is also forwarded during execution, just return the forward result.

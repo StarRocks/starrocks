@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['Canshu']
 ---
 
@@ -1536,7 +1536,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用 CPU 核数的一半，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
+- 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用当前节点的 CPU 核数，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
 - 引入版本：-
 
 <!--
@@ -3200,23 +3200,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
 
-##### json_flat_internal_column_min_limit
-
-- 默认值：5
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：控制 Flat JSON 时，JSON 内部字段数量限制，低于该数量的 JSON 不执行 Flat JSON 优化，默认为 5。该参数仅在 `enable_json_flat` 为 `true` 时生效。
-- 引入版本：v3.3.0
-
 ##### json_flat_column_max
 
-- 默认值：20
+- 默认值：100
 - 类型：Int
 - 单位：
 - 是否动态：是
-- 描述：控制 Flat JSON 时，最多提取的子列数量，默认为 20。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 描述：控制 Flat JSON 时，最多提取的子列数量。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
+
+##### enable_compaction_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：控制是否为 Flat Json 数据进行 Compaction。
+- 引入版本：v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当查询在读过程中未命中 Flat JSON Schema 时，是否启用 Lazy Dynamic Flat JSON。当此项设置为 `true` 时，StarRocks 将把 Flat JSON 操作推迟到计算流程，而不是读取流程。
+- 引入版本：v3.3.3
 
 ### 存算分离
 
@@ -3262,6 +3271,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+<!--
 ##### starlet_cache_evict_interval
 
 - 默认值：60
@@ -3270,7 +3280,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：在存算分离模式下启用 file data cache，系统进行缓存淘汰（Cache Eviction）的间隔。
 - 引入版本：v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_low_water
 
 - 默认值：0.1
@@ -3279,7 +3291,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）低于此配置项中指定的值，将会触发缓存淘汰。
 - 引入版本：v3.0
-
+-->
+  
+<!--  
 ##### starlet_cache_evict_high_water
 
 - 默认值：0.2
@@ -3288,7 +3302,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：在存算分离模式下启用 file data cache，如果当前剩余磁盘空间（百分比）高于此配置项中指定的值，将会停止缓存淘汰。
 - 引入版本：v3.0
-
+-->
+  
 <!--
 ##### starlet_cache_dir_allocate_policy
 
@@ -4411,7 +4426,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### get_txn_status_internal_sec
 
-- 默认值：30
+- 默认值：10
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
@@ -4507,61 +4522,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### dictionary_cache_refresh_threadpool_size
 
 - 默认值：8
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_json_flat
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_null_factor
-
-- 默认值：0.3
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- 默认值：0.9
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- 默认值：5
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_column_max
-
-- 默认值：20
 - 类型：Int
 - 单位：
 - 是否动态：是

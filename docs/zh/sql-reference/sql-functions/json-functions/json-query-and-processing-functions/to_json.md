@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # to_json
@@ -67,5 +67,5 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 
 - [Map 数据类型](../../../data-types/semi_structured/Map.md)
 - [Struct 数据类型](../../../data-types/semi_structured/STRUCT.md)
-- [Map 函数](../../function-list.md#map-函数)
-- [Struct 函数](../../function-list.md#struct-函数)
+- [Map 函数](../../README.md#map-函数)
+- [Struct 函数](../../README.md#struct-函数)

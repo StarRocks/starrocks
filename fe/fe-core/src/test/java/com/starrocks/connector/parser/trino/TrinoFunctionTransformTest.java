@@ -110,6 +110,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
 
+        sql = "select from_unixtime(1724049401);";
+        assertPlanContains(sql, "2024-08-19 14:36:41");
+
+        sql = "select from_unixtime(1724049401, 'America/Bogota');";
+        assertPlanContains(sql, "2024-08-19 01:36:41");
+
+        sql = "select from_unixtime(1724049401, 1, 1);";
+        assertPlanContains(sql, "2024-08-19 15:37:41");
+
+        sql = "select at_timezone(TIMESTAMP '2024-08-19 14:36:41', 'America/Bogota');";
+        assertPlanContains(sql, "2024-08-19 01:36:41");
+
         sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
         assertPlanContains(sql, "2022-10-20 05:00:00");
 

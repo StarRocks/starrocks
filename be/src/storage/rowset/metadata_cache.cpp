@@ -19,6 +19,14 @@
 
 namespace starrocks {
 
+MetadataCache* MetadataCache::_s_instance = nullptr;
+
+void MetadataCache::create_cache(size_t capacity) {
+    if (_s_instance == nullptr) {
+        _s_instance = new MetadataCache(capacity);
+    }
+}
+
 MetadataCache::MetadataCache(size_t capacity) {
     _cache.reset(new_lru_cache(capacity));
 }

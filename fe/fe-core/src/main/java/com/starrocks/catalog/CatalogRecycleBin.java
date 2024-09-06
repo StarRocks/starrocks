@@ -51,7 +51,9 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -65,7 +67,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -831,7 +832,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // we need to get olap table to get schema hash info
             // first find it in globalStateMgr. if not found, it should be in recycle bin
             OlapTable olapTable = null;
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 // just log. db should be in recycle bin
                 if (!idToDatabase.containsKey(dbId)) {
@@ -841,7 +842,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     continue;
                 }
             } else {
-                olapTable = (OlapTable) db.getTable(tableId);
+                olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             }
 
             if (olapTable == null) {
@@ -900,6 +901,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute runAfterCatalogReady", e);
         }
+    }
+
+    @VisibleForTesting
+    synchronized boolean isContainedInidToRecycleTime(long id) {
+        return idToRecycleTime.get(id) != null;
     }
 
     @Override
@@ -1020,24 +1026,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return Lists.newArrayList(idToDatabase.keySet());
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
                 + 1 + idToPartition.size() + 1;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
 
-        writer.writeJson(idToDatabase.size());
+        writer.writeInt(idToDatabase.size());
         for (RecycleDatabaseInfo recycleDatabaseInfo : idToDatabase.values()) {
             writer.writeJson(recycleDatabaseInfo);
         }
 
-        writer.writeJson(idToTableInfo.size());
+        writer.writeInt(idToTableInfo.size());
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (RecycleTableInfo recycleTableInfo : tableEntry.values()) {
                 writer.writeJson(recycleTableInfo);
             }
         }
 
-        writer.writeJson(idToPartition.size());
+        writer.writeInt(idToPartition.size());
         for (RecyclePartitionInfo recyclePartitionInfo : idToPartition.values()) {
             if (recyclePartitionInfo instanceof RecyclePartitionInfoV1) {
                 RecyclePartitionInfoV1 recyclePartitionInfoV1 = (RecyclePartitionInfoV1) recyclePartitionInfo;
@@ -1073,8 +1079,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         int idToPartitionSize = reader.readInt();
         for (int i = 0; i < idToPartitionSize; ++i) {
-            RecyclePartitionInfo recycleRangePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
-            idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
+            RecyclePartitionInfo recyclePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
+            if (recyclePartitionInfo instanceof IForwardCompatibleObject) {
+                // Ignore the future unknown subtype derived from RecyclePartitionInfoV2
+                LOG.warn("Ignore unknown partition type(partitionId: {}) from the future version!",
+                        recyclePartitionInfo.getPartition().getId());
+                continue;
+            }
+            idToPartition.put(recyclePartitionInfo.partition.getId(), recyclePartitionInfo);
         }
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {

@@ -92,7 +92,7 @@ public class TableKeeper {
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getDb(databaseName) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
     }
 
     public void createTable() throws UserException {
@@ -102,8 +102,7 @@ public class TableKeeper {
     public void correctTable() {
         int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
-                .mayGetDb(databaseName)
-                .flatMap(db -> db.mayGetTable(tableName))
+                .getLocalMetastore().mayGetTable(databaseName, tableName)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
         if (numBackends < tableReplicas) {
@@ -143,8 +142,7 @@ public class TableKeeper {
 
     private Optional<OlapTable> mayGetTable() {
         return GlobalStateMgr.getCurrentState()
-                .mayGetDb(databaseName)
-                .flatMap(db -> db.mayGetTable(tableName))
+                .getLocalMetastore().mayGetTable(databaseName, tableName)
                 .flatMap(x -> Optional.of((OlapTable) x));
     }
 

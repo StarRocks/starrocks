@@ -22,6 +22,7 @@ import java.util.List;
 public class GetRemoteFilesParams {
     private List<PartitionKey> partitionKeys;
     private List<String> partitionNames;
+    private List<Object> partitionAttachments;
     private TableVersionRange tableVersionRange;
     private ScalarOperator predicate;
     private List<String> fieldNames;
@@ -32,12 +33,27 @@ public class GetRemoteFilesParams {
     private GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
         this.partitionNames = builder.partitionNames;
+        this.partitionAttachments = builder.partitionAttachments;
         this.tableVersionRange = builder.tableVersionRange;
         this.predicate = builder.predicate;
         this.fieldNames = builder.fieldNames;
         this.limit = builder.limit;
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
+    }
+
+    public GetRemoteFilesParams copy() {
+        return GetRemoteFilesParams.newBuilder()
+                .setPartitionKeys(partitionKeys)
+                .setPartitionNames(partitionNames)
+                .setPartitionAttachments(partitionAttachments)
+                .setTableVersionRange(tableVersionRange)
+                .setPredicate(predicate)
+                .setFieldNames(fieldNames)
+                .setLimit(limit)
+                .setUseCache(useCache)
+                .setCheckPartitionExistence(checkPartitionExistence)
+                .build();
     }
 
     // Getters
@@ -47,6 +63,10 @@ public class GetRemoteFilesParams {
 
     public List<String> getPartitionNames() {
         return partitionNames;
+    }
+
+    public List<Object> getPartitionAttachments() {
+        return partitionAttachments;
     }
 
     public TableVersionRange getTableVersionRange() {
@@ -69,6 +89,10 @@ public class GetRemoteFilesParams {
         return useCache;
     }
 
+    public void setUseCache(boolean useCache) {
+        this.useCache = useCache;
+    }
+
     public boolean isCheckPartitionExistence() {
         return checkPartitionExistence;
     }
@@ -76,6 +100,7 @@ public class GetRemoteFilesParams {
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
+        private List<Object> partitionAttachments;
         private TableVersionRange tableVersionRange;
         private ScalarOperator predicate;
         private List<String> fieldNames;
@@ -85,6 +110,11 @@ public class GetRemoteFilesParams {
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
+            return this;
+        }
+
+        public Builder setPartitionAttachments(List partitionAttachments) {
+            this.partitionAttachments = partitionAttachments;
             return this;
         }
 

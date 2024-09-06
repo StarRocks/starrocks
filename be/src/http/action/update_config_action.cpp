@@ -165,6 +165,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             (void)thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
+        _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+            (void)thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                           config::transaction_publish_version_thread_pool_num_min));
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
@@ -192,6 +197,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
         });
+        _config_callback.emplace("transaction_apply_thread_pool_num_min", [&]() {
+            int min_thread_cnt = config::transaction_apply_thread_pool_num_min;
+            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
+        });
         _config_callback.emplace("get_pindex_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
             if (config::get_pindex_worker_count > 0) {
@@ -215,8 +224,15 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("pipeline_connector_scan_thread_num_per_cpu", [&]() {
             LOG(INFO) << "set pipeline_connector_scan_thread_num_per_cpu:"
                       << config::pipeline_connector_scan_thread_num_per_cpu;
-            ExecEnv::GetInstance()->connector_scan_executor()->change_num_threads(
-                    config::pipeline_connector_scan_thread_num_per_cpu);
+            if (config::pipeline_connector_scan_thread_num_per_cpu > 0) {
+                ExecEnv::GetInstance()->workgroup_manager()->change_num_connector_scan_threads(
+                        config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+            }
+        });
+        _config_callback.emplace("enable_resource_group_cpu_borrowing", [&]() {
+            LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;
+            ExecEnv::GetInstance()->workgroup_manager()->change_enable_resource_group_cpu_borrowing(
+                    config::enable_resource_group_cpu_borrowing);
         });
         _config_callback.emplace("create_tablet_worker_count", [&]() {
             LOG(INFO) << "set create_tablet_worker_count:" << config::create_tablet_worker_count;
@@ -234,34 +250,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (tablet_manager != nullptr) {
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
-        });
-
-        _config_callback.emplace("default_mv_resource_group_memory_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_memory_limit:"
-                      << config::default_mv_resource_group_memory_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_cpu_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_cpu_limit:" << config::default_mv_resource_group_cpu_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_concurrency_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_concurrency_limit:"
-                      << config::default_mv_resource_group_concurrency_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_spill_mem_limit_threshold", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_spill_mem_limit_threshold:"
-                      << config::default_mv_resource_group_spill_mem_limit_threshold;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
         });
 
 #ifdef USE_STAROS

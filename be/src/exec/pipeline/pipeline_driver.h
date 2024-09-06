@@ -48,8 +48,8 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
-using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
-using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+using ConstDriverPredicator = std::function<bool(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {
@@ -525,6 +525,8 @@ protected:
     // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
+
+    std::atomic<bool> _has_log_cancelled{false};
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

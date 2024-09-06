@@ -121,7 +121,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -190,13 +190,13 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             } else {
                 sv = getDefaultStorageVolume();
                 if (sv == null) {
-                    ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                    throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
-                ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
+                throw ErrorReportException.report(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME);
             }
         } else {
             sv = getStorageVolumeByName(svName);
@@ -330,7 +330,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
@@ -344,7 +344,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         bindings.add(dbBindings);

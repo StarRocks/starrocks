@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
@@ -11,7 +11,7 @@ toc_max_heading_level: 4
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)。需要注意的是，一个导入作业通常都会分布在多个 BE（或 CN）上执行，这些内存参数限制的是一个导入作业在单个 BE（或 CN）上的内存使用，而不是在整个集群上的内存使用总和。
+不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)。需要注意的是，一个导入作业通常都会分布在多个 BE（或 CN）上执行，这些内存参数限制的是一个导入作业在单个 BE（或 CN）上的内存使用，而不是在整个集群上的内存使用总和。
 
 您还可以通过设置一些参数来限制在单个 BE（或 CN）上运行的所有导入作业的总的内存使用上限。可参考下面的“[系统配置](#系统配置)”章节。
 
@@ -68,7 +68,7 @@ toc_max_heading_level: 4
 
 ### 会话变量
 
-您可以设置如下[会话变量](../../reference/System_variable.md)：
+您可以设置如下[会话变量](../../sql-reference/System_variable.md)：
 
 - `query_timeout`
 

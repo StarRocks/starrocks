@@ -21,6 +21,7 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
@@ -123,8 +124,6 @@ public:
 
     [[nodiscard]] bool append_nulls(size_t count __attribute__((unused))) override { return false; }
 
-    [[nodiscard]] bool append_strings(const Buffer<Slice>& slices __attribute__((unused))) override { return false; }
-
     [[nodiscard]] bool contain_value(size_t start, size_t end, T value) const {
         DCHECK_LE(start, end);
         DCHECK_LE(start, _data.size());
@@ -157,11 +156,11 @@ public:
         _data.resize(_data.size() + count, DefaultValueGenerator<ValueType>::next_value());
     }
 
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
-    Status fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter);
+    Status fill_range(const std::vector<T>& ids, const Filter& filter);
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
@@ -236,15 +235,13 @@ public:
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use index of uint32_t to
     // access the item, so we should use 2^32 as the limit
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+    Status capacity_limit_reached() const override {
         if (_data.size() > Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("row count of fixed length column exceend the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(
+                    strings::Substitute("row count of fixed length column exceend the limit: $0",
+                                        std::to_string(Column::MAX_CAPACITY_LIMIT)));
         }
-        return false;
+        return Status::OK();
     }
 
     void check_or_die() const override {}

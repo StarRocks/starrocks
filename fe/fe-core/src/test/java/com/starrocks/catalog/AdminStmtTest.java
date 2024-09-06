@@ -69,7 +69,7 @@ public class AdminStmtTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
 
         String sql = "CREATE TABLE test.tbl1 (\n" +
                 "  `id` int(11) NULL COMMENT \"\",\n" +
@@ -86,9 +86,9 @@ public class AdminStmtTest {
 
     @Test
     public void testAdminSetReplicaStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable("tbl1");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         Assert.assertNotNull(tbl);
         // tablet id, backend id
         List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();

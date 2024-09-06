@@ -89,6 +89,8 @@ public:
     static void reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk);
     // Reorder columns of `chunk` according to the order of |slots|.
     static void reorder_chunk(const std::vector<SlotDescriptor*>& slots, Chunk* chunk);
+
+    static ChunkPtr createDummyChunk();
 };
 
 // Accumulate small chunk into desired size

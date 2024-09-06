@@ -56,6 +56,7 @@ import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -74,6 +75,7 @@ import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
+import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -82,6 +84,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryType;
@@ -101,6 +104,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -478,6 +482,12 @@ public class DefaultCoordinator extends Coordinator {
             jobSpec.getFragments().forEach(fragment -> fragment.limitMaxPipelineDop(slot.getPipelineDop()));
         }
 
+        if (connectContext != null) {
+            if (connectContext.getSessionVariable().isEnableConnectorIncrementalScanRanges()) {
+                jobSpec.setIncrementalScanRanges(true);
+            }
+        }
+
         coordinatorPreprocessor.prepareExec();
 
         prepareResultSink();
@@ -636,12 +646,67 @@ public class DefaultCoordinator extends Coordinator {
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution, needDeploy);
-            schedule.prepareSchedule(deployer, executionDAG);
+            schedule.prepareSchedule(this, deployer, executionDAG);
             this.schedule.schedule();
             queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
         } finally {
             unlock();
         }
+    }
+
+    @Override
+    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+            throws UserException {
+        List<DeployState> updatedStates = new ArrayList<>();
+        if (!jobSpec.isIncrementalScanRanges()) {
+            return updatedStates;
+        }
+        for (DeployState state : deployStates) {
+
+            Set<PlanFragmentId> planFragmentIds = new HashSet<>();
+            for (List<FragmentInstanceExecState> fragmentInstanceExecStates : state.getThreeStageExecutionsToDeploy()) {
+                for (FragmentInstanceExecState execState : fragmentInstanceExecStates) {
+                    planFragmentIds.add(execState.getFragmentId());
+                }
+            }
+
+            Set<PlanFragmentId> updatedPlanFragmentIds = new HashSet<>();
+            for (PlanFragmentId fragmentId : planFragmentIds) {
+                boolean hasMoreScanRanges = false;
+                ExecutionFragment fragment = executionDAG.getFragment(fragmentId);
+                for (ScanNode scanNode : fragment.getScanNodes()) {
+                    if (scanNode.hasMoreScanRanges()) {
+                        hasMoreScanRanges = true;
+                    }
+                }
+                if (hasMoreScanRanges) {
+                    coordinatorPreprocessor.assignIncrementalScanRangesToFragmentInstances(fragment);
+                    updatedPlanFragmentIds.add(fragmentId);
+                }
+            }
+
+            if (updatedPlanFragmentIds.isEmpty()) {
+                continue;
+            }
+
+            DeployState newState = new DeployState();
+            updatedStates.add(newState);
+            int index = 0;
+            for (List<FragmentInstanceExecState> fragmentInstanceExecStates : state.getThreeStageExecutionsToDeploy()) {
+                List<FragmentInstanceExecState> res = newState.getThreeStageExecutionsToDeploy().get(index);
+                index += 1;
+                for (FragmentInstanceExecState execState : fragmentInstanceExecStates) {
+                    if (!updatedPlanFragmentIds.contains(execState.getFragmentId())) {
+                        continue;
+                    }
+                    FragmentInstance instance = execState.getFragmentInstance();
+                    TExecPlanFragmentParams request = deployer.createIncrementalScanRangesRequest(instance);
+                    execState.setRequestToDeploy(request);
+                    res.add(execState);
+                }
+            }
+        }
+        return updatedStates;
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
@@ -855,10 +920,13 @@ public class DefaultCoordinator extends Coordinator {
             // if this query is a block query do not cancel.
             long numLimitRows = executionDAG.getRootFragment().getPlanFragment().getPlanRoot().getLimit();
             boolean hasLimit = numLimitRows > 0;
-            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1 && hasLimit &&
-                    numReceivedRows >= numLimitRows) {
-                LOG.debug("no block query, return num >= limit rows, need cancel");
-                cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
+            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1) {
+                if (hasLimit && numReceivedRows >= numLimitRows) {
+                    LOG.debug("no block query, return num >= limit rows, need cancel");
+                    cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
+                } else {
+                    cancelInternal(PPlanFragmentCancelReason.QUERY_FINISHED);
+                }
             }
         } else {
             numReceivedRows += resultBatch.getBatch().getRowsSize();
@@ -899,9 +967,14 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    private boolean isInternalCancel(PPlanFragmentCancelReason cancelReason) {
+        return cancelReason.equals(PPlanFragmentCancelReason.LIMIT_REACH) ||
+                cancelReason.equals(PPlanFragmentCancelReason.QUERY_FINISHED);
+    }
+
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
-        if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
+        if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             connectContext.getState().setError(cancelReason.toString());
         }
         if (null != receiver) {
@@ -912,7 +985,7 @@ public class DefaultCoordinator extends Coordinator {
         } else {
             cancelRemoteFragmentsAsync(cancelReason);
         }
-        if (cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
+        if (!isInternalCancel(cancelReason)) {
             // count down to zero to notify all objects waiting for this
             if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);

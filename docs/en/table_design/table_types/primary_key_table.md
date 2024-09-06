@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 # Primary Key table
 
@@ -209,7 +209,7 @@ During data loading, the data is stored after being sorted according to the sort
 ## What's more
 
 - To load data into the table created, you can refer to [Loading overview](../../loading/loading_introduction/Loading_intro.md) to choose an appropriate load options.
-- If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md), [UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)).
+- If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md), [UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)).
 - If you want to further accelerate queries, you can refer to [Query Acceleration](../../cover_pages/query_acceleration.mdx).
-- If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+- If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 - An [AUTO_INCREMENT](../../sql-reference/sql-statements/generated_columns.md) column can be used as the Primary Key.

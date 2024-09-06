@@ -253,8 +253,9 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
     TRY_CATCH_ALLOC_SCOPE_START()
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
     auto builder = _builders[idx];
+    auto prober = _probers[idx];
     bool finish = false;
-    int64_t hash_table_mem_usage = builder->hash_table_mem_usage();
+    int64_t hash_table_mem_usage = builder->ht_mem_usage();
     enum SpillLoadPartitionStage { BEGIN = 0, FINISH = 1 };
     ctx.total_yield_point_cnt = FINISH;
     auto wg = ctx.wg;
@@ -272,10 +273,11 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
             if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
                 int64_t old_mem_usage = hash_table_mem_usage;
                 RETURN_IF_ERROR(builder->append_chunk(std::move(chunk_st.value())));
-                hash_table_mem_usage = builder->hash_table_mem_usage();
+                hash_table_mem_usage = builder->ht_mem_usage();
                 COUNTER_ADD(metrics.build_partition_peak_memory_usage, hash_table_mem_usage - old_mem_usage);
             } else if (chunk_st.status().is_end_of_file()) {
                 RETURN_IF_ERROR(builder->build(state));
+                prober->attach(builder, _join_prober->probe_metrics());
                 finish = true;
             } else if (!chunk_st.ok()) {
                 return chunk_st.status();
@@ -414,7 +416,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     // probe chunk
     for (size_t i = 0; i < _probers.size(); ++i) {
         if (!_probers[i]->probe_chunk_empty()) {
-            ASSIGN_OR_RETURN(auto res, _probers[i]->probe_chunk(state, &_builders[i]->hash_table()));
+            ASSIGN_OR_RETURN(auto res, _probers[i]->probe_chunk(state));
             return res;
         }
     }
@@ -426,8 +428,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
             for (size_t i = 0; i < _probers.size(); ++i) {
                 if (!_probe_post_eofs[i] && _probe_read_eofs[i]) {
                     bool has_remain = false;
-                    ASSIGN_OR_RETURN(auto res,
-                                     _probers[i]->probe_remain(state, &_builders[i]->hash_table(), &has_remain));
+                    ASSIGN_OR_RETURN(auto res, _probers[i]->probe_remain(state, &has_remain));
                     _probe_post_eofs[i] = !has_remain;
                     if (res && !res->is_empty()) {
                         return res;

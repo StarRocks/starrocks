@@ -115,6 +115,7 @@ private:
 
     bool _is_push_down = false;
     bool _enable_late_materialization = false;
+    bool _enable_partition_hash_join = false;
 
     JoinHashTable _ht;
 
@@ -143,6 +144,7 @@ private:
     RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
     RuntimeProfile::Counter* _probe_timer = nullptr;
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
+    RuntimeProfile::Counter* _probe_counter = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* _build_rows_counter = nullptr;

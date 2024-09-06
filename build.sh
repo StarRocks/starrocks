@@ -100,7 +100,9 @@ Usage: $0 <options>
                         Turning this option on automatically disables ccache.
      --without-tenann
                         build without vector index tenann library
-
+     --with-compress-debug-symbol {ON|OFF}
+                        build with compressing debug symbol. (default: $WITH_COMPRESS)
+     -h,--help          Show this help message
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
@@ -115,8 +117,7 @@ Usage: $0 <options>
 
 OPTS=$(getopt \
   -n $0 \
-  -o '' \
-  -o 'h' \
+  -o 'hj:' \
   -l 'be' \
   -l 'fe' \
   -l 'spark-dpp' \
@@ -133,7 +134,7 @@ OPTS=$(getopt \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
   -l 'without-tenann' \
-  -o 'j:' \
+  -l 'with-compress-debug-symbol:' \
   -l 'help' \
   -- "$@")
 
@@ -152,6 +153,7 @@ RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
+WITH_COMPRESS=ON
 WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
@@ -241,6 +243,7 @@ else
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
+            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -261,29 +264,30 @@ if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${B
 fi
 
 echo "Get params:
-    BUILD_BE            -- $BUILD_BE
-    BE_CMAKE_TYPE       -- $BUILD_TYPE
-    BUILD_FE            -- $BUILD_FE
-    BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
-    BUILD_HIVE_UDF      -- $BUILD_HIVE_UDF
-    CCACHE              -- ${CCACHE}
-    CLEAN               -- $CLEAN
-    RUN_UT              -- $RUN_UT
-    WITH_GCOV           -- $WITH_GCOV
-    WITH_BENCH          -- $WITH_BENCH
-    WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
-    WITH_STARCACHE      -- $WITH_STARCACHE
-    ENABLE_SHARED_DATA  -- $USE_STAROS
-    USE_AVX2            -- $USE_AVX2
-    USE_AVX512          -- $USE_AVX512
-    USE_SSE4_2          -- $USE_SSE4_2
-    JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
-    PARALLEL            -- $PARALLEL
-    ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
-    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
-    OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
-    WITH_TENANN   -- $WITH_TENANN
+    BUILD_BE                    -- $BUILD_BE
+    BE_CMAKE_TYPE               -- $BUILD_TYPE
+    BUILD_FE                    -- $BUILD_FE
+    BUILD_SPARK_DPP             -- $BUILD_SPARK_DPP
+    BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
+    CCACHE                      -- ${CCACHE}
+    CLEAN                       -- $CLEAN
+    RUN_UT                      -- $RUN_UT
+    WITH_GCOV                   -- $WITH_GCOV
+    WITH_BENCH                  -- $WITH_BENCH
+    WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
+    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+    WITH_STARCACHE              -- $WITH_STARCACHE
+    ENABLE_SHARED_DATA          -- $USE_STAROS
+    USE_AVX2                    -- $USE_AVX2
+    USE_AVX512                  -- $USE_AVX512
+    USE_SSE4_2                  -- $USE_SSE4_2
+    JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
+    PARALLEL                    -- $PARALLEL
+    ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
+    ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
+    WITH_TENANN                 -- $WITH_TENANN
 "
 
 check_tool()
@@ -362,6 +366,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     else
         CXX_COMPILER_LAUNCHER=${CCACHE}
     fi
+    if [ "${WITH_CLANG_TIDY}" == "ON" ];then
+        # this option cannot work with clang-14
+        WITH_COMPRESS=OFF
+    fi
+
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
@@ -548,6 +557,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     # remove zookeeper
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
 
     cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
 

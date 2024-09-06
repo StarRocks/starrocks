@@ -45,6 +45,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -288,12 +290,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         fullSchemaTemp.addAll(updatedTable.fullSchema);
         dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             this.fullSchema.clear();
             this.nameToColumn.clear();
@@ -308,7 +310,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 

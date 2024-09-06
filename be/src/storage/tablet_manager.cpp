@@ -50,7 +50,6 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -89,13 +88,6 @@ TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
           _last_update_stat_ms(0) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
-#ifndef BE_TEST
-    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
-    const int32_t lru_cache_limit = process_limit * config::metadata_cache_memory_limit_percent / 100;
-    _metadata_cache = std::make_unique<MetadataCache>(lru_cache_limit);
-    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
-                                    [this]() { return _metadata_cache->get_memory_usage(); });
-#endif
 }
 
 Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bool update_meta, bool force) {

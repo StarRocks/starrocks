@@ -30,7 +30,7 @@ public class GroupingSetsTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         Config.alter_scheduler_interval_millisecond = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, NUM_TABLE0_ROWS);
         FeConstants.runningUnitTest = true;
     }
@@ -347,6 +347,24 @@ public class GroupingSetsTest extends PlanTestBase {
             assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
                     "  |  aggregate: sum[([17: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +
                     "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingID() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select * from (" +
+                    "   select grouping(t1b, t1c) as aa, t1b, t1c, t1d, sum(id_decimal) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)) tt" +
+                    "   where aa = 'aa';";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  6:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [15], [16, 15]]\n" +
+                    "  |  PREDICATES: CAST(18: GROUPING AS VARCHAR(1048576)) = 'aa'");
+            assertNotContains(plan, "UNION");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }

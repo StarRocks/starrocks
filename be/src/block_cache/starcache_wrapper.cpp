@@ -125,6 +125,10 @@ Status StarCacheWrapper::read_object(const std::string& key, DataCacheHandle* ha
     return st;
 }
 
+bool StarCacheWrapper::exist(const std::string& key) const {
+    return _cache->exist(key);
+}
+
 Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();

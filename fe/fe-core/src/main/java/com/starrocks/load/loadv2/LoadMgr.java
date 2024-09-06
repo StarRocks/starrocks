@@ -46,6 +46,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
@@ -57,6 +58,7 @@ import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -107,6 +109,7 @@ import java.util.stream.Collectors;
  */
 public class LoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
     private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
@@ -153,7 +156,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void alterLoadJob(AlterLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -231,14 +234,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long registerLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
-                                EtlJobType jobType, long createTimestamp, long estimateScanRows,
-                                int estimateFileNum, long estimateFileSize,
-                                TLoadJobType type, long timeout, Coordinator coordinator)
-            throws UserException {
-
+    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
+                                               EtlJobType jobType, long createTimestamp, long estimateScanRows,
+                                               int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
+                                               Coordinator coordinator) throws UserException {
         // get db id
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
@@ -259,11 +260,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
-        return loadJob.getId();
+        return loadJob;
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -663,7 +664,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     private Database checkDb(String dbName) throws DdlException {
         // get db
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new DdlException("Database[" + dbName + "] does not exist");
@@ -806,12 +807,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public void saveLoadJobsV2JsonFormat(DataOutputStream out) throws IOException, SRMetaBlockException {
+    public void saveLoadJobsV2JsonFormat(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
         // 1 json for number of jobs, size of idToLoadJob for jobs
         final int cnt = 1 + loadJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.LOAD_MGR, cnt);
-        writer.writeJson(loadJobs.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.LOAD_MGR, cnt);
+        writer.writeInt(loadJobs.size());
         for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);
         }
@@ -821,5 +822,14 @@ public class LoadMgr implements Writable, MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("LoadJob", (long) idToLoadJob.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = idToLoadJob.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) idToLoadJob.size()));
     }
 }

@@ -1,0 +1,497 @@
+-- name: test_transparent_mv_olap_part2 @slow
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_transparent_union_rewrite = true;
+-- result:
+-- !result
+CREATE TABLE t1 (
+  num int,
+  dt date
+)
+DUPLICATE KEY(`num`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p20200615 VALUES [("2020-06-15 00:00:00"), ("2020-06-16 00:00:00")),
+  PARTITION p20200618 VALUES [("2020-06-18 00:00:00"), ("2020-06-19 00:00:00")),
+  PARTITION p20200621 VALUES [("2020-06-21 00:00:00"), ("2020-06-22 00:00:00")),
+  PARTITION p20200624 VALUES [("2020-06-24 00:00:00"), ("2020-06-25 00:00:00")),
+  PARTITION p20200702 VALUES [("2020-07-02 00:00:00"), ("2020-07-03 00:00:00")),
+  PARTITION p20200705 VALUES [("2020-07-05 00:00:00"), ("2020-07-06 00:00:00")),
+  PARTITION p20200708 VALUES [("2020-07-08 00:00:00"), ("2020-07-09 00:00:00")),
+  PARTITION p20200716 VALUES [("2020-07-16 00:00:00"), ("2020-07-17 00:00:00")),
+  PARTITION p20200719 VALUES [("2020-07-19 00:00:00"), ("2020-07-20 00:00:00")),
+  PARTITION p20200722 VALUES [("2020-07-22 00:00:00"), ("2020-07-23 00:00:00")),
+  PARTITION p20200725 VALUES [("2020-07-25 00:00:00"), ("2020-07-26 00:00:00")),
+  PARTITION p20200711 VALUES [("2020-07-11 00:00:00"), ("2020-07-12 00:00:00"))
+)
+DISTRIBUTED BY HASH(`num`);
+-- result:
+-- !result
+INSERT INTO t1 VALUES 
+  (1,"2020-06-15"),(2,"2020-06-18"),(3,"2020-06-21"),(4,"2020-06-24"),
+  (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+  (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+  (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+  (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
+-- result:
+-- !result
+CREATE TABLE t2 (
+  num int,
+  dt date
+)
+DUPLICATE KEY(`num`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p20200615 VALUES [("2020-06-15 00:00:00"), ("2020-06-16 00:00:00")),
+  PARTITION p20200618 VALUES [("2020-06-18 00:00:00"), ("2020-06-19 00:00:00")),
+  PARTITION p20200621 VALUES [("2020-06-21 00:00:00"), ("2020-06-22 00:00:00")),
+  PARTITION p20200624 VALUES [("2020-06-24 00:00:00"), ("2020-06-25 00:00:00")),
+  PARTITION p20200702 VALUES [("2020-07-02 00:00:00"), ("2020-07-03 00:00:00")),
+  PARTITION p20200705 VALUES [("2020-07-05 00:00:00"), ("2020-07-06 00:00:00")),
+  PARTITION p20200708 VALUES [("2020-07-08 00:00:00"), ("2020-07-09 00:00:00")),
+  PARTITION p20200716 VALUES [("2020-07-16 00:00:00"), ("2020-07-17 00:00:00")),
+  PARTITION p20200719 VALUES [("2020-07-19 00:00:00"), ("2020-07-20 00:00:00")),
+  PARTITION p20200722 VALUES [("2020-07-22 00:00:00"), ("2020-07-23 00:00:00")),
+  PARTITION p20200725 VALUES [("2020-07-25 00:00:00"), ("2020-07-26 00:00:00")),
+  PARTITION p20200711 VALUES [("2020-07-11 00:00:00"), ("2020-07-12 00:00:00"))
+)
+DISTRIBUTED BY HASH(`num`);
+-- result:
+-- !result
+INSERT INTO t2 VALUES 
+  (1,"2020-06-15"),(2,"2020-06-18"),(3,"2020-06-21"),(4,"2020-06-24"),
+  (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+  (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+  (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+  (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
+-- result:
+-- !result
+CREATE TABLE t3 (
+  num int,
+  dt datetime
+)
+DUPLICATE KEY(`num`)
+PARTITION BY  date_trunc('day', dt) 
+DISTRIBUTED BY HASH(`num`);
+-- result:
+-- !result
+INSERT INTO t3 VALUES 
+  (1,"2020-06-15"),(2,"2020-06-18"),(3,"2020-06-21"),(4,"2020-06-24"),
+  (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+  (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+  (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+  (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY date_trunc('day', dt)
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+AS  select * from (
+SELECT dt, sum(num) as num FROM t1 GROUP BY dt 
+UNION ALL
+SELECT dt, sum(num) as num FROM t3 GROUP BY dt) t order by 1, 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	3
+2020-06-18 00:00:00	5
+-- !result
+INSERT INTO t2 VALUES (3, "2020-06-15");
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	3
+2020-06-18 00:00:00	5
+-- !result
+SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	3
+-- !result
+SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+-- !result
+SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	3
+2020-06-18 00:00:00	5
+-- !result
+SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;
+-- result:
+-- !result
+SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	3
+2020-06-18 00:00:00	5
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-07-02 00:00:00	6
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-07-02 00:00:00	6
+2020-07-05 00:00:00	10
+2020-07-08 00:00:00	14
+-- !result
+SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv10
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+AS 
+  SELECT dt, date_trunc('day', dt) as format_dt, sum(num) as num FROM t2 GROUP BY dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv12
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+AS 
+  SELECT dt,sum(num) as num FROM t3 GROUP BY dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv10 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW test_mv12 WITH SYNC MODE;
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+AS  select * from (SELECT dt, num FROM test_mv10 UNION ALL SELECT dt, num FROM test_mv12)as t order by 1, 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	5
+-- !result
+INSERT INTO t2 VALUES (3, "2020-06-15");
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	5
+-- !result
+SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	6
+-- !result
+SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+-- !result
+SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	5
+-- !result
+SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;
+-- result:
+-- !result
+SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	5
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	9
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-06-24 00:00:00	18
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+2020-07-02 00:00:00	6
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	9
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-07-02 00:00:00	6
+2020-07-05 00:00:00	10
+2020-07-08 00:00:00	14
+-- !result
+SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	9
+2020-06-18 00:00:00	10
+2020-06-21 00:00:00	14
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv10;
+-- result:
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv12;
+-- result:
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+drop table t2 force;
+-- result:
+-- !result
+drop table t3 force;
+-- result:
+-- !result

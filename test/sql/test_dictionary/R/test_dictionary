@@ -1154,7 +1154,7 @@ function: wait_refresh_dictionary_finish("test_dictionary_common_expression", "F
 -- result:
 None
 -- !result
-explain SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+[UC]explain select dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
 -- result:
 [REGEX]*common*
 -- !result
@@ -1298,7 +1298,7 @@ SHOW CREATE TABLE t_dictionary_show_create_table_gen_col_2;
 -- result:
 t_dictionary_show_create_table_gen_col_2	CREATE TABLE `t_dictionary_show_create_table_gen_col_2` (
   `k` bigint(20) NOT NULL COMMENT "",
-  `v` bigint(20) NULL AS DICTIONARY_GET('test_dictionary_show_create_table_gen_col', k)[1] COMMENT ""
+  `v` bigint(20) NULL AS DICTIONARY_GET('test_dictionary_show_create_table_gen_col', k, false)[1] COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
@@ -1317,5 +1317,323 @@ DROP TABLE t_dictionary_show_create_table_gen_col_2;
 -- result:
 -- !result
 DROP DICTIONARY test_dictionary_show_create_table_gen_col;
+-- result:
+-- !result
+-- name: test_dictionary_null_if_not_exist
+CREATE TABLE `t_dictionary_null_if_not_exist` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_null_if_not_exist VALUES (1,1),(3,3),(5,5);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_null_if_not_exist;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_null_if_not_exist USING t_dictionary_null_if_not_exist (k KEY, v VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "FINISHED")
+-- result:
+None
+-- !result
+INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
+-- result:
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'key not found in dictionary cache')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, false) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'key not found in dictionary cache')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, true) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+1	{"v":1}
+2	None
+3	{"v":3}
+4	None
+5	{"v":5}
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, tRuE) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+1	{"v":1}
+2	None
+3	{"v":3}
+4	None
+5	{"v":5}
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, FaLsE) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'key not found in dictionary cache')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, xxxx) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'xxxx' cannot be resolved.")
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "true") FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "false") FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 1) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 0) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, -1) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: SlotRef{id=null, type=BIGINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+CREATE TABLE `t_dictionary_null_if_not_exist_gen_column` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS dictionary_get("test_dictionary_null_if_not_exist", k)[1]
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_null_if_not_exist_gen_column VALUES (1),(2),(3),(4),(5);
+-- result:
+E: (5025, 'key not found in dictionary cache')
+-- !result
+SELECT * FROM t_dictionary_null_if_not_exist_gen_column;
+-- result:
+-- !result
+SHOW CREATE TABLE t_dictionary_null_if_not_exist_gen_column;
+-- result:
+t_dictionary_null_if_not_exist_gen_column	CREATE TABLE `t_dictionary_null_if_not_exist_gen_column` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` bigint(20) NULL AS DICTIONARY_GET('test_dictionary_null_if_not_exist', k, false)[1] COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "false",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+-- name: test_dictionary_null_if_not_exist
+CREATE TABLE `t_dictionary_null_if_not_exist` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_null_if_not_exist VALUES (1,1),(3,3),(5,5);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_null_if_not_exist;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_null_if_not_exist USING t_dictionary_null_if_not_exist (k KEY, v VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "FINISHED")
+-- result:
+None
+-- !result
+INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
+-- result:
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'key not found in dictionary cache')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, false) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'key not found in dictionary cache')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, true) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+1	{"v":1}
+2	None
+3	{"v":3}
+4	None
+5	{"v":5}
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, tRuE) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+1	{"v":1}
+2	None
+3	{"v":3}
+4	None
+5	{"v":5}
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, FaLsE) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'key not found in dictionary cache')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, xxxx) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'xxxx' cannot be resolved.")
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "true") FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "false") FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 1) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 0) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, -1) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: SlotRef{id=null, type=BIGINT, sel=-1.0, #distinct=-1, scale=-1}.')
+-- !result
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has expected keys size: 1 keys: [k] plus null_if_not_exist flag(optional) but param given: 3.')
+-- !result
+CREATE TABLE `t_dictionary_null_if_not_exist_gen_column` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS dictionary_get("test_dictionary_null_if_not_exist", k)[1]
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_null_if_not_exist_gen_column VALUES (1),(2),(3),(4),(5);
+-- result:
+E: (5025, 'key not found in dictionary cache')
+-- !result
+SELECT * FROM t_dictionary_null_if_not_exist_gen_column;
+-- result:
+-- !result
+SHOW CREATE TABLE t_dictionary_null_if_not_exist_gen_column;
+-- result:
+t_dictionary_null_if_not_exist_gen_column	CREATE TABLE `t_dictionary_null_if_not_exist_gen_column` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` bigint(20) NULL AS DICTIONARY_GET('test_dictionary_null_if_not_exist', k, false)[1] COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "false",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+TRUNCATE TABLE t_dictionary_null_if_not_exist;
+-- result:
+-- !result
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series from Table(generate_series(1, 1000));
+-- result:
+-- !result
+REFRESH DICTIONARY test_dictionary_null_if_not_exist;
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "FINISHED")
+-- result:
+None
+-- !result
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series from Table(generate_series(1001, 2000));
+-- result:
+-- !result
+SELECT SUM(dictionary_get("test_dictionary_null_if_not_exist", k, true) IS NOT NULL) from t_dictionary_null_if_not_exist;
+-- result:
+1000
+-- !result
+[UC]DROP DICTIONARY test_dictionary_null_if_not_exist;
+-- result:
+-- !result
+DROP TABLE t_dictionary_null_if_not_exist;
+-- result:
+-- !result
+CREATE TABLE `t_dictionary_null_if_not_exist` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT NOT NULL COMMENT "",
+  `v2` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series, generate_series from Table(generate_series(1, 1000));
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_null_if_not_exist USING t_dictionary_null_if_not_exist (k KEY, v1 VALUE, v2 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "FINISHED")
+-- result:
+None
+-- !result
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series, generate_series from Table(generate_series(1001, 2000));
+-- result:
+-- !result
+SELECT SUM(dictionary_get("test_dictionary_null_if_not_exist", k, true) IS NOT NULL) from t_dictionary_null_if_not_exist;
+-- result:
+1000
+-- !result
+[UC]DROP DICTIONARY test_dictionary_null_if_not_exist;
+-- result:
+-- !result
+DROP TABLE t_dictionary_null_if_not_exist;
 -- result:
 -- !result

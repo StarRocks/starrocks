@@ -84,7 +84,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-        long finishedSQLNum = 0;
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
         List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
         long totalCollectSQL = collectSQLList.size();
@@ -100,6 +99,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         // dop will be set to 1 to meet the requirements of the degree of parallelism.
         // If the number of unions is less than the degree of parallelism,
         // dop should be adjusted appropriately to use enough cpu cores
+        long finishedSQLNum = 0;
+        long failedNum = 0;
+        Exception lastFailure = null;
         for (List<String> sqlUnion : collectSQLList) {
             if (sqlUnion.size() < parallelism) {
                 context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
@@ -109,10 +111,38 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
             String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
 
-            collectStatisticSync(sql, context);
+            try {
+                collectStatisticSync(sql, context);
+            } catch (Exception e) {
+                failedNum++;
+                LOG.warn("collect statistics task failed in job: {}, {}", this, sql, e);
+
+                double failureRatio = 1.0 * failedNum / collectSQLList.size();
+                if (collectSQLList.size() < 100) {
+                    // too few tasks, just fail this job
+                    throw e;
+                } else if (failureRatio > Config.statistic_full_statistics_failure_tolerance_ratio) {
+                    // many tasks, tolerate partial failure
+                    String message = String.format("collect statistic job failed due to " +
+                                    "too many failed tasks: %d/%d, the last failure is %s",
+                            failedNum, collectSQLList.size(), e);
+                    LOG.warn(message, e);
+                    throw new RuntimeException(message, e);
+                } else {
+                    lastFailure = e;
+                    continue;
+                }
+            }
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        }
+
+        if (lastFailure != null) {
+            String message = String.format("collect statistic job partially failed but tolerated %d/%d, " +
+                    "last error is %s", failedNum, collectSQLList.size(), lastFailure);
+            analyzeStatus.setReason(message);
+            LOG.warn(message);
         }
 
         flushInsertStatisticsData(context, true);
@@ -136,7 +166,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
+            Partition partition = table.getPartition(data.getPartitionId());
+            if (partition == null) {
+                continue;
+            }
+            String partitionName = StringEscapeUtils.escapeSql(partition.getName());
 
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
@@ -279,5 +313,19 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
+    }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("FullStatisticsCollectJob{");
+        sb.append("type=").append(type);
+        sb.append(", scheduleType=").append(scheduleType);
+        sb.append(", db=").append(db);
+        sb.append(", table=").append(table);
+        sb.append(", partitionIdList=").append(partitionIdList);
+        sb.append(", columnNames=").append(columnNames);
+        sb.append(", properties=").append(properties);
+        sb.append('}');
+        return sb.toString();
     }
 }

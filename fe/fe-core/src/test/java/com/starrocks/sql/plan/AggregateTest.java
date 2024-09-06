@@ -1960,6 +1960,15 @@ public class AggregateTest extends PlanTestBase {
                 "bitmap_union(to_bitmap(CAST(10: id_decimal AS VARCHAR)))\n" +
                 "  |  group by: ");
 
+        sql = "select bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v2, -999)))) as c1, \n" +
+                "bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v3, -999)))) as c2,\n" +
+                "bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v2, -999)))) - " +
+                "bitmap_count(bitmap_union(to_bitmap(if(v1 = 1, v3, -999))))\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 8> : 11: bitmap_count\n" +
+                "  |  <slot 9> : 12: bitmap_count\n" +
+                "  |  <slot 10> : 11: bitmap_count - 12: bitmap_count");
     }
 
     @Test
@@ -2626,6 +2635,58 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testMannWhitneyUTest() throws Exception {
+        {
+            String sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 'two-sided') from lineitem";
+            getFragmentPlan(sql);
+            sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 'greater') from lineitem";
+            getFragmentPlan(sql);
+            sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 'less') from lineitem";
+            getFragmentPlan(sql);
+            sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 'two-sided', 0) from lineitem";
+            getFragmentPlan(sql);
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 3) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "third parameter should be a string literal";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 'two_sided') from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "third parameter should be one of ['two-sided', 'greater', 'less']";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 'two-sided', -1) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "mann_whitney_u_test's fourth parameter should be a non-negative int literal.";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select mann_whitney_u_test(L_LINENUMBER, L_LINENUMBER, 'two-sided', 0.1) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "mann_whitney_u_test's fourth parameter should be a non-negative int literal.";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+    }
+
+    @Test
     public void testTableAliasCountDistinctHaving() throws Exception {
         String sql = "select " +
                 "   count(distinct xx.v2) as j1, " +
@@ -2773,8 +2834,8 @@ public class AggregateTest extends PlanTestBase {
         sql = "select max(a), a from (select v1, abs(1) as a, abs(2) as b from t0) t group by a, v1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:Project\n" +
-                "  |  <slot 4> : abs(1)\n" +
-                "  |  <slot 6> : 6: max\n" +
+                "  |  <slot 7> : abs(1)\n" +
+                "  |  <slot 8> : 8: max\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(abs(1))\n" +

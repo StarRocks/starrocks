@@ -28,6 +28,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
@@ -115,6 +116,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     private ConnectorMetadata metadataOfTable(Table table) {
         Table.TableType type = getTableType(table);
+        if (table.isHiveView()) {
+            type = HIVE;
+        }
         return metadataMap.get(type);
     }
 
@@ -162,14 +166,19 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.tableExists(dbName, tblName);
+        return hiveMetadata.tableExists(dbName, tblName);
     }
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFilesAsync(table, params);
     }
 
     @Override

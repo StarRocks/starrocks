@@ -747,14 +747,17 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     auto schema_id1 = next_id();
     auto& schema_pb1 = (*tablet_metadata->mutable_historical_schemas())[schema_id1];
     schema_pb1.set_id(schema_id1);
+    schema_pb1.set_schema_version(0);
 
     auto schema_id2 = next_id();
     auto& schema_pb2 = (*tablet_metadata->mutable_historical_schemas())[schema_id2];
     schema_pb2.set_id(schema_id2);
+    schema_pb2.set_schema_version(1);
 
     auto schema_id3 = tablet_metadata->schema().id();
     auto& schema_pb3 = (*tablet_metadata->mutable_historical_schemas())[schema_id3];
     schema_pb3.set_id(schema_id3);
+    schema_pb3.set_schema_version(2);
 
     (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(0).id()] = schema_id3;
     (*tablet_metadata->mutable_rowset_to_schema())[tablet_metadata->rowsets(1).id()] = schema_id1;
@@ -774,11 +777,11 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
         }
     }
 
-    auto rs1 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 0);
-    auto rs2 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 1);
-    auto rs3 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 2);
-    auto rs4 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 3);
-    auto rs5 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 4);
+    auto rs1 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    auto rs2 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 1, 0 /* compaction_segment_limit */);
+    auto rs3 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 2, 0 /* compaction_segment_limit */);
+    auto rs4 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 3, 0 /* compaction_segment_limit */);
+    auto rs5 = std::make_shared<lake::Rowset>(_tablet_manager, tablet_metadata, 4, 0 /* compaction_segment_limit */);
 
     {
         std::vector<uint32_t> input_rowsets;
@@ -786,12 +789,19 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
         input_rowsets.emplace_back(tablet_metadata->rowsets(1).id());
         auto res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
         ASSERT_TRUE(res.ok());
-        ASSERT_EQ(res.value()->id(), schema_id1);
+        ASSERT_EQ(res.value()->id(), schema_id3);
 
         input_rowsets.emplace_back(tablet_metadata->rowsets(2).id());
         res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
         ASSERT_TRUE(res.ok());
-        ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
+        ASSERT_EQ(res.value()->id(), schema_id3);
+
+        input_rowsets.clear();
+        input_rowsets.emplace_back(tablet_metadata->rowsets(3).id());
+        input_rowsets.emplace_back(tablet_metadata->rowsets(1).id());
+        res = _tablet_manager->get_output_rowset_schema(input_rowsets, tablet_metadata.get());
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(res.value()->id(), schema_id2);
     }
 
     {

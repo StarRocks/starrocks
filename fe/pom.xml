@@ -57,7 +57,7 @@ under the License.
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-        <odps.version>0.48.3-public</odps.version>
+        <odps.version>0.48.7-public</odps.version>
         <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
@@ -299,7 +299,7 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starrocks-bdb-je</artifactId>
-                <version>18.3.18</version>
+                <version>18.3.19</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -594,14 +594,6 @@ under the License.
                         <artifactId>slf4j-reload4j</artifactId>
                     </exclusion>
                 </exclusions>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
-            <dependency>
-                <groupId>org.apache.parquet</groupId>
-                <artifactId>parquet-column</artifactId>
-                <version>${parquet.version}</version>
-                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->

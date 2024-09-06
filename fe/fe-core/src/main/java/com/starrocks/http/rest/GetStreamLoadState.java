@@ -76,7 +76,7 @@ public class GetStreamLoadState extends RestBaseAction {
         // FIXME(cmy)
         // checkReadPriv(authInfo.fullUserName, fullDbName);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("unknown database, database=" + dbName);
         }

@@ -869,7 +869,7 @@ std::string BitmapValue::to_string() const {
 }
 
 // Append values to array
-void BitmapValue::to_array(std::vector<int64_t>* array) const {
+void BitmapValue::to_array(Buffer<int64_t>* array) const {
     switch (_type) {
     case EMPTY:
         break;

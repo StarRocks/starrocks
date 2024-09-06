@@ -267,7 +267,7 @@ public class PlanFragmentBuilder {
         // Create a fake table sink here, replaced it after created the MV
         PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
-        long dbId = GlobalStateMgr.getCurrentState().getDb(createStmt.getTableName().getDb()).getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createStmt.getTableName().getDb()).getId();
         MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
                 .createSinkTable(createStmt, partitionInfo, mvId, dbId);
         TupleDescriptor tupleDesc = buildTupleDesc(execPlan, view);
@@ -386,6 +386,8 @@ public class PlanFragmentBuilder {
         for (PlanFragment fragment : fragments) {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
+
+        fragments.forEach(PlanFragment::removeDictMappingProbeRuntimeFilters);
 
         if (useQueryCache(execPlan)) {
             for (PlanFragment fragment : execPlan.getFragments()) {
@@ -1676,7 +1678,8 @@ public class PlanFragmentBuilder {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                    || scanNode.getTableName().equalsIgnoreCase("loads")) {
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
@@ -3739,7 +3742,7 @@ public class PlanFragmentBuilder {
             prepareContextSlots(node, context, tupleDesc);
 
             int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
-            scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, false, dop);
+            scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);
             scanNode.setUseVectorizedLoad(true);
             // table function enable flexible column mapping by default.
             scanNode.setFlexibleColumnMapping(true);

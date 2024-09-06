@@ -51,6 +51,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.lake_io_opts = {false, config::lake_compaction_stream_buffer_size_bytes};
+    reader_params.column_access_paths = &_column_access_paths;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     ASSIGN_OR_RETURN(auto writer,
@@ -121,19 +122,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     auto op_compaction = txn_log->mutable_op_compaction();
     txn_log->set_tablet_id(_tablet.id());
     txn_log->set_txn_id(_txn_id);
-    for (auto& rowset : _input_rowsets) {
-        op_compaction->add_input_rowsets(rowset->id());
-    }
-
-    for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file.path);
-        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-        op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
-    }
-
-    op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
-    op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
-    op_compaction->mutable_output_rowset()->set_overlapped(false);
+    RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
     op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
@@ -150,6 +139,12 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
+    if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
+        // can not call `get_read_chunk_size`, for example, if `total_input_segs` is shrinked to half,
+        // read_chunk_size might be doubled, in this case, this optimization will not take effect
+        return config::lake_compaction_chunk_size;
+    }
+
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
@@ -171,8 +166,10 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
             }
         }
     }
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
-                                                total_num_rows, total_mem_footprint, total_input_segs);
+
+    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+                                                config::lake_compaction_chunk_size, total_num_rows, total_mem_footprint,
+                                                total_input_segs);
 }
 
 } // namespace starrocks::lake

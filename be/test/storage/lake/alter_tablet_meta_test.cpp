@@ -219,6 +219,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_schema_pb = update_info->mutable_tablet_schema();
         tablet_schema_pb->CopyFrom(tablet_metadata->schema());
         tablet_schema_pb->set_id(next_id());
+        tablet_schema_pb->set_schema_version(tablet_schema_pb->schema_version() + 1);
 
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
@@ -273,6 +274,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto tablet_schema_pb = update_info->mutable_tablet_schema();
         tablet_schema_pb->CopyFrom(tablet_metadata->schema());
         tablet_schema_pb->set_id(next_id());
+        tablet_schema_pb->set_schema_version(tablet_schema_pb->schema_version() + 1);
 
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
@@ -297,8 +299,13 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
     {
         TxnLogPB log;
         auto op_compaction_meta = log.mutable_op_compaction();
-        op_compaction_meta->add_input_rowsets(tablet_metadata->rowsets(1).id());
-        op_compaction_meta->add_input_rowsets(tablet_metadata->rowsets(2).id());
+        if (keys_type == PRIMARY_KEYS) {
+            op_compaction_meta->add_input_rowsets(tablet_metadata->rowsets(2).id());
+            op_compaction_meta->add_input_rowsets(tablet_metadata->rowsets(1).id());
+        } else {
+            op_compaction_meta->add_input_rowsets(tablet_metadata->rowsets(1).id());
+            op_compaction_meta->add_input_rowsets(tablet_metadata->rowsets(2).id());
+        }
         auto rs_meta = op_compaction_meta->mutable_output_rowset();
         auto rs_id = next_id();
         rs_meta->set_id(rs_id);

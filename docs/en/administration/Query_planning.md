@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Query analysis
@@ -16,7 +16,7 @@ Query performance in StarRocks is determined by query planning and query executi
 
 A query plan provides the DBA with a macro perspective to access query information. A query plan is the key to query performance and a good resource for the DBA to reference. The following code snippet uses `TPCDS query96` as an example to show how to view a query plan.
 
-Use the [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) statement to view the plan of a query.
+Use the [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) statement to view the plan of a query.
 
 ~~~SQL
 EXPLAIN select  count(*)
@@ -204,9 +204,9 @@ Query hints are directives or comments that explicitly suggest the query optimiz
 
 ### System variable hint
 
-You can use a `SET_VAR` hint to set one or more [system variables](../reference/System_variable.md) in SELECT and SUBMIT TASK statements, and then execute the statements. You can also use a `SET_VAR` hint in the SELECT clause included in other statements, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT. Note that if the `SET_VAR` hint is used in the SELECT clause of CTE, the `SET_VAR` hint does not take effect even if the statement is executed successfully.
+You can use a `SET_VAR` hint to set one or more [system variables](../sql-reference/System_variable.md) in SELECT and SUBMIT TASK statements, and then execute the statements. You can also use a `SET_VAR` hint in the SELECT clause included in other statements, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT. Note that if the `SET_VAR` hint is used in the SELECT clause of CTE, the `SET_VAR` hint does not take effect even if the statement is executed successfully.
 
-Compared with [the general usage of system variables](../reference/System_variable.md) which takes effect at the session level, the `SET_VAR` hint takes effect at the statement level and does not impact the entire session.
+Compared with [the general usage of system variables](../sql-reference/System_variable.md) which takes effect at the session level, the `SET_VAR` hint takes effect at the statement level and does not impact the entire session.
 
 #### Syntax
 
@@ -243,9 +243,9 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### User-defined variable hint
 
-You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in the SELECT statements or INSERT statements. If other statements contain a SELECT clause, you can also use the `SET_USER_VARIABLE` hint in that SELECT clause. Other statements can be SELECT statements and INSERT statements, but cannot be CREATE MATERIALIZED VIEW AS SELECT statements and CREATE VIEW AS SELECT statements. Note that if the `SET_USER_VARIABLE` hint is used in the SELECT clause of CTE, the `SET_USER_VARIABLE` hint does not take effect even if the statement is executed successfully. Since v3.2.4, StarRocks supports the user-defined variable hint.
+You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../sql-reference/user_defined_variables.md) in the SELECT statements or INSERT statements. If other statements contain a SELECT clause, you can also use the `SET_USER_VARIABLE` hint in that SELECT clause. Other statements can be SELECT statements and INSERT statements, but cannot be CREATE MATERIALIZED VIEW AS SELECT statements and CREATE VIEW AS SELECT statements. Note that if the `SET_USER_VARIABLE` hint is used in the SELECT clause of CTE, the `SET_USER_VARIABLE` hint does not take effect even if the statement is executed successfully. Since v3.2.4, StarRocks supports the user-defined variable hint.
 
-Compared with [the general usage of user-defined variables](../reference/user_defined_variables.md) which takes effect at the session level, the `SET_USER_VARIABLE` hint takes effect at the statement level and does not impact the entire session.
+Compared with [the general usage of user-defined variables](../sql-reference/user_defined_variables.md) which takes effect at the session level, the `SET_USER_VARIABLE` hint takes effect at the statement level and does not impact the entire session.
 
 #### Syntax
 

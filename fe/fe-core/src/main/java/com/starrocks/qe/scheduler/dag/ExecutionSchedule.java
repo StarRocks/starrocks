@@ -15,12 +15,13 @@
 package com.starrocks.qe.scheduler.dag;
 
 import com.starrocks.common.UserException;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TUniqueId;
 
 public interface ExecutionSchedule {
-    void prepareSchedule(Deployer deployer, ExecutionDAG dag);
+    void prepareSchedule(Coordinator coordinator, Deployer deployer, ExecutionDAG dag);
 
     void schedule() throws RpcException, UserException;
 

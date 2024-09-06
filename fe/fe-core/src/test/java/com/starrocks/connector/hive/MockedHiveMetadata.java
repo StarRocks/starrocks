@@ -41,6 +41,8 @@ import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -216,6 +218,25 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).remoteFileInfos.subList(0, size);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(com.starrocks.catalog.Table table, GetRemoteFilesParams params) {
+        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
+        int size = params.getPartitionKeys().size();
+        readLock();
+        try {
+            List<RemoteFileInfo> remoteFileInfos =
+                    MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).remoteFileInfos.subList(0, size);
+            if (params.getPartitionAttachments() != null) {
+                for (int i = 0; i < size; i++) {
+                    remoteFileInfos.get(i).setAttachment(params.getPartitionAttachments().get(i));
+                }
+            }
+            return new RemoteFileInfoDefaultSource(remoteFileInfos);
         } finally {
             readUnlock();
         }

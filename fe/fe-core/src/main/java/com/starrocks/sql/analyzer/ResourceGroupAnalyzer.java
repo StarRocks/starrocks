@@ -84,7 +84,7 @@ public class ResourceGroupAnalyzer {
 
                     List<Long> databaseIds = new ArrayList<>();
                     for (String name : databases) {
-                        Database db = GlobalStateMgr.getCurrentState().getDb(name);
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(name);
                         if (db == null) {
                             throw new SemanticException(String.format("Specified database not exists: %s", name));
                         }
@@ -152,27 +152,39 @@ public class ResourceGroupAnalyzer {
     }
 
     // Property format:
-    // ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
-    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties) throws SemanticException {
+    // ('cpu_weight'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
+    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties)
+            throws SemanticException {
+        final int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
-            if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT)) {
-                int cpuCoreLimit = Integer.parseInt(value);
-                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
-                if (cpuCoreLimit <= 0 || cpuCoreLimit > avgCoreNum) {
-                    throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
+            if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT) || key.equalsIgnoreCase(ResourceGroup.CPU_WEIGHT)) {
+                int cpuWeight = Integer.parseInt(value);
+                if (cpuWeight > avgCoreNum) {
+                    throw new SemanticException(
+                            String.format("%s should range from 0 to %d", ResourceGroup.CPU_WEIGHT, avgCoreNum));
                 }
-                resourceGroup.setCpuCoreLimit(Integer.parseInt(value));
+                resourceGroup.setCpuWeight(cpuWeight);
+                continue;
+            }
+            if (key.equalsIgnoreCase(ResourceGroup.EXCLUSIVE_CPU_CORES)) {
+                final int exclusiveCpuCores = Integer.parseInt(value);
+                final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
+                if (exclusiveCpuCores >= minCoreNum) {
+                    throw new SemanticException(String.format(
+                            "%s cannot exceed the minimum number of CPU cores available on the backends minus one [%d]",
+                            ResourceGroup.EXCLUSIVE_CPU_CORES, minCoreNum - 1));
+                }
+                resourceGroup.setExclusiveCpuCores(exclusiveCpuCores);
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
                 int maxCpuCores = Integer.parseInt(value);
-                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
                 if (maxCpuCores > avgCoreNum) {
                     throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
                 }
-                resourceGroup.setMaxCpuCores(Integer.parseInt(value));
+                resourceGroup.setMaxCpuCores(maxCpuCores);
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {
@@ -183,8 +195,8 @@ public class ResourceGroupAnalyzer {
                 } else {
                     memLimit = Double.parseDouble(value);
                 }
-                if (memLimit <= 0.0 || memLimit >= 1.0) {
-                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(exclude)");
+                if (memLimit <= 0.0 || memLimit > 1.0) {
+                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(include)");
                 }
                 resourceGroup.setMemLimit(memLimit);
                 continue;

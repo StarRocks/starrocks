@@ -1,0 +1,554 @@
+{
+  "version.label": {
+    "message": "current",
+    "description": "The label for version current"
+  },
+  "sidebar.docs.category.Introduction to StarRocks": {
+    "message": "产品简介",
+    "description": "The label for category Introduction to StarRocks in sidebar docs"
+  },
+  "sidebar.docs.category.Quick Start": {
+    "message": "快速开始",
+    "description": "The label for category Quick Start in sidebar docs"
+  },
+  "sidebar.docs.category.Project Help": {
+    "message": "技术支持",
+    "description": "The label for category Project Help in sidebar docs"
+  },
+  "sidebar.docs.category.Deployment": {
+    "message": "部署 StarRocks",
+    "description": "The label for category Deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Preparation": {
+    "message": "前期准备",
+    "description": "The label for category Preparation in sidebar docs"
+  },
+  "sidebar.docs.category.Shared-nothing deployment": {
+    "message": "存算一体模式部署",
+    "description": "The label for category Shared-nothing deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Shared-data deployment": {
+    "message": "存算分离模式部署",
+    "description": "The label for category Shared-data deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Manage your deployment": {
+    "message": "后期管理",
+    "description": "The label for category Manage your deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Table Design": {
+    "message": "表设计",
+    "description": "The label for category Table Design in sidebar docs"
+  },
+  "sidebar.docs.category.Table types": {
+    "message": "表类型",
+    "description": "The label for category Table types in sidebar docs"
+  },
+  "sidebar.docs.category.Data distribution": {
+    "message": "数据分布",
+    "description": "The label for category Data distribution in sidebar docs"
+  },
+  "sidebar.docs.category.Indexes": {
+    "message": "索引",
+    "description": "The label for category Indexes in sidebar docs"
+  },
+  "sidebar.docs.category.Data Loading": {
+    "message": "导入数据",
+    "description": "The label for category Data Loading in sidebar docs"
+  },
+  "sidebar.docs.category.Loading overview": {
+    "message": "导入概览",
+    "description": "The label for category Loading overview in sidebar docs"
+  },
+  "sidebar.docs.category.Load from Object Storage": {
+    "message": "从对象存储导入",
+    "description": "The label for category Load from Object Storage in sidebar docs"
+  },
+  "sidebar.docs.category.Load data from Apache Kafka": {
+    "message": "从 Apache Kafka® 导入",
+    "description": "The label for category Load data from Apache Kafka in sidebar docs"
+  },
+  "sidebar.docs.category.Load data from Apache Spark": {
+    "message": "从 Apache Spark™ 导入",
+    "description": "The label for category Load data from Apache Spark in sidebar docs"
+  },
+  "sidebar.docs.category.Data Unloading": {
+    "message": "导出数据",
+    "description": "The label for category Data Unloading in sidebar docs"
+  },
+  "sidebar.docs.category.Data Lakes": {
+    "message": "数据湖",
+    "description": "The label for category Data Lakes in sidebar docs"
+  },
+  "sidebar.docs.category.Catalog": {
+    "message": "数据目录",
+    "description": "The label for category Catalog in sidebar docs"
+  },
+  "sidebar.docs.category.Data cache": {
+    "message": "Data cache",
+    "description": "The label for category Data cache in sidebar docs"
+  },
+  "sidebar.docs.category.Query Acceleration": {
+    "message": "查询加速",
+    "description": "The label for category Query Acceleration in sidebar docs"
+  },
+  "sidebar.docs.category.Asynchronous materialized views": {
+    "message": "异步物化视图",
+    "description": "The label for category Asynchronous materialized views in sidebar docs"
+  },
+  "sidebar.docs.category.Use cases": {
+    "message": "使用场景",
+    "description": "The label for category Use cases in sidebar docs"
+  },
+  "sidebar.docs.category.Computing the number of distinct values": {
+    "message": "数据去重",
+    "description": "The label for category Computing the number of distinct values in sidebar docs"
+  },
+  "sidebar.docs.category.Integrations": {
+    "message": "外部系统集成",
+    "description": "The label for category Integrations in sidebar docs"
+  },
+  "sidebar.docs.category.Cloud Authentication": {
+    "message": "CSP 认证鉴权",
+    "description": "The label for category Cloud Authentication in sidebar docs"
+  },
+  "sidebar.docs.category.Streaming Data": {
+    "message": "实时导入",
+    "description": "The label for category Streaming Data in sidebar docs"
+  },
+  "sidebar.docs.category.Apache Kafka": {
+    "message": "Apache Kafka",
+    "description": "The label for category Apache Kafka in sidebar docs"
+  },
+  "sidebar.docs.category.StarRocks Pipe": {
+    "message": "StarRocks Pipe",
+    "description": "The label for category StarRocks Pipe in sidebar docs"
+  },
+  "sidebar.docs.category.Batch Loading Data": {
+    "message": "批量导入",
+    "description": "The label for category Batch Loading Data in sidebar docs"
+  },
+  "sidebar.docs.category.Loading Tools": {
+    "message": "导入工具",
+    "description": "The label for category Loading Tools in sidebar docs"
+  },
+  "sidebar.docs.category.BI Tools": {
+    "message": "BI 工具",
+    "description": "The label for category BI Tools in sidebar docs"
+  },
+  "sidebar.docs.category.IDE Tools": {
+    "message": "IDE 工具",
+    "description": "The label for category IDE Tools in sidebar docs"
+  },
+  "sidebar.docs.category.Administration": {
+    "message": "管理手册",
+    "description": "The label for category Administration in sidebar docs"
+  },
+  "sidebar.docs.category.Configuration": {
+    "message": "配置项",
+    "description": "The label for category Configuration in sidebar docs"
+  },
+  "sidebar.docs.category.Management": {
+    "message": "运维集群",
+    "description": "The label for category Management in sidebar docs"
+  },
+  "sidebar.docs.category.Monitor and Alert": {
+    "message": "监控报警",
+    "description": "The label for category Monitor and Alert in sidebar docs"
+  },
+  "sidebar.docs.category.Resource management": {
+    "message": "管理资源",
+    "description": "The label for category Resource management in sidebar docs"
+  },
+  "sidebar.docs.category.User Privileges and Authentication": {
+    "message": "管理用户权限",
+    "description": "The label for category User Privileges and Authentication in sidebar docs"
+  },
+  "sidebar.docs.category.Performance Tuning": {
+    "message": "性能调优",
+    "description": "The label for category Performance Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.Query Profile": {
+    "message": "Query Profile",
+    "description": "The label for category Query Profile in sidebar docs"
+  },
+  "sidebar.docs.category.Reference": {
+    "message": "参考手册",
+    "description": "The label for category Reference in sidebar docs"
+  },
+  "sidebar.docs.category.Data Types": {
+    "message": "数据类型",
+    "description": "The label for category Data Types in sidebar docs"
+  },
+  "sidebar.docs.category.Numeric": {
+    "message": "数值类型",
+    "description": "The label for category Numeric in sidebar docs"
+  },
+  "sidebar.docs.category.String": {
+    "message": "字符串类型",
+    "description": "The label for category String in sidebar docs"
+  },
+  "sidebar.docs.category.Date and Time": {
+    "message": "日期类型",
+    "description": "The label for category Date and Time in sidebar docs"
+  },
+  "sidebar.docs.category.Semi-structured": {
+    "message": "半结构化类型",
+    "description": "The label for category Semi-structured in sidebar docs"
+  },
+  "sidebar.docs.category.Other": {
+    "message": "其他类型",
+    "description": "The label for category Other in sidebar docs"
+  },
+  "sidebar.docs.category.SQL Statements": {
+    "message": "SQL 参考",
+    "description": "The label for category SQL Statements in sidebar docs"
+  },
+  "sidebar.docs.category.SQL Statements.link.generated-index.title": {
+    "message": "SQL Statements",
+    "description": "The generated-index page title for category SQL Statements in sidebar docs"
+  },
+  "sidebar.docs.category.User account management": {
+    "message": "用户账户管理",
+    "description": "The label for category User account management in sidebar docs"
+  },
+  "sidebar.docs.category.Cluster management": {
+    "message": "集群管理",
+    "description": "The label for category Cluster management in sidebar docs"
+  },
+  "sidebar.docs.category.Nodes and processes": {
+    "message": "节点和进程",
+    "description": "The label for category Nodes and processes in sidebar docs"
+  },
+  "sidebar.docs.category.Configuration variables": {
+    "message": "系统配置和变量",
+    "description": "The label for category Configuration variables in sidebar docs"
+  },
+  "sidebar.docs.category.Resource group": {
+    "message": "资源组",
+    "description": "The label for category Resource group in sidebar docs"
+  },
+  "sidebar.docs.category.Storage volume": {
+    "message": "存储卷",
+    "description": "The label for category Storage volume in sidebar docs"
+  },
+  "sidebar.docs.category.Tablet and replica": {
+    "message": "Tablet，Replica 检查修复",
+    "description": "The label for category Tablet and replica in sidebar docs"
+  },
+  "sidebar.docs.category.File": {
+    "message": "文件",
+    "description": "The label for category File in sidebar docs"
+  },
+  "sidebar.docs.category.SQL blacklist": {
+    "message": "SQL 黑名单",
+    "description": "The label for category SQL blacklist in sidebar docs"
+  },
+  "sidebar.docs.category.Plugin": {
+    "message": "插件",
+    "description": "The label for category Plugin in sidebar docs"
+  },
+  "sidebar.docs.category.Execution plan and profile": {
+    "message": "执行计划和 Profile",
+    "description": "The label for category Execution plan and profile in sidebar docs"
+  },
+  "sidebar.docs.category.Loading and unloading": {
+    "message": "导入导出",
+    "description": "The label for category Loading and unloading in sidebar docs"
+  },
+  "sidebar.docs.category.ETL": {
+    "message": "ETL",
+    "description": "The label for category ETL in sidebar docs"
+  },
+  "sidebar.docs.category.pipe": {
+    "message": "pipe",
+    "description": "The label for category pipe in sidebar docs"
+  },
+  "sidebar.docs.category.routine_load": {
+    "message": "routine_load",
+    "description": "The label for category routine_load in sidebar docs"
+  },
+  "sidebar.docs.category.unloading": {
+    "message": "导入导出",
+    "description": "The label for category unloading in sidebar docs"
+  },
+  "sidebar.docs.category.Database": {
+    "message": "Database",
+    "description": "The label for category Database in sidebar docs"
+  },
+  "sidebar.docs.category.Resource": {
+    "message": "资源",
+    "description": "The label for category Resource in sidebar docs"
+  },
+  "sidebar.docs.category.Table, bucket, partition, and index": {
+    "message": "表，分区，分桶，索引",
+    "description": "The label for category Table, bucket, partition, and index in sidebar docs"
+  },
+  "sidebar.docs.category.View": {
+    "message": "视图",
+    "description": "The label for category View in sidebar docs"
+  },
+  "sidebar.docs.category.Materialized View": {
+    "message": "物化视图",
+    "description": "The label for category Materialized View in sidebar docs"
+  },
+  "sidebar.docs.category.Function": {
+    "message": "函数",
+    "description": "The label for category Function in sidebar docs"
+  },
+  "sidebar.docs.category.CBO statistics": {
+    "message": "CBO 统计信息",
+    "description": "The label for category CBO statistics in sidebar docs"
+  },
+  "sidebar.docs.category.Backup and restore": {
+    "message": "备份与恢复",
+    "description": "The label for category Backup and restore in sidebar docs"
+  },
+  "sidebar.docs.category.SQL Functions": {
+    "message": "函数参考",
+    "description": "The label for category SQL Functions in sidebar docs"
+  },
+  "sidebar.docs.category.aggregate-functions": {
+    "message": "聚合函数",
+    "description": "The label for category aggregate-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.array-functions": {
+    "message": "Array 函数",
+    "description": "The label for category array-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.binary-functions": {
+    "message": "Binary 函数",
+    "description": "The label for category binary-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.bit-functions": {
+    "message": "Bit 函数",
+    "description": "The label for category bit-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.bitmap-functions": {
+    "message": "Bitmap 函数",
+    "description": "The label for category bitmap-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.condition-functions": {
+    "message": "条件函数",
+    "description": "The label for category condition-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.crytographic-functions": {
+    "message": "加密函数",
+    "description": "The label for category crytographic-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.date-time-functions": {
+    "message": "时间日期函数",
+    "description": "The label for category date-time-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.dict-functions": {
+    "message": "字典函数",
+    "description": "The label for category dict-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.hash-functions": {
+    "message": "Hash 函数",
+    "description": "The label for category hash-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.json-functions": {
+    "message": "JSON 函数",
+    "description": "The label for category json-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.json-constructor-functions": {
+    "message": "JSON 构造函数",
+    "description": "The label for category json-constructor-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.json-query-and-processing-functions": {
+    "message": "JSON 查询和处理函数",
+    "description": "The label for category json-query-and-processing-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.like-predicate-functions": {
+    "message": "模糊/正则匹配函数",
+    "description": "The label for category like-predicate-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.map-functions": {
+    "message": "Map 函数",
+    "description": "The label for category map-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.math-functions": {
+    "message": "数学函数",
+    "description": "The label for category math-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.percentile-functions": {
+    "message": "百分位函数",
+    "description": "The label for category percentile-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.scalar-functions": {
+    "message": "标量函数",
+    "description": "The label for category scalar-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.spatial-functions": {
+    "message": "地理位置函数",
+    "description": "The label for category spatial-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.string-functions": {
+    "message": "字符串函数",
+    "description": "The label for category string-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.struct-functions": {
+    "message": "Struct 函数",
+    "description": "The label for category struct-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.table-functions": {
+    "message": "table-functions",
+    "description": "The label for category table-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.utility-functions": {
+    "message": "工具函数",
+    "description": "The label for category utility-functions in sidebar.docs"
+  },
+  "sidebar.docs.category.Information Schema": {
+    "message": "Information Schema",
+    "description": "The label for category Information Schema in sidebar docs"
+  },
+  "sidebar.docs.category.System Metadatabase": {
+    "message": "System Metadatabase",
+    "description": "The label for category System Metadatabase in sidebar docs"
+  },
+  "sidebar.docs.category.HTTP API": {
+    "message": "HTTP API",
+    "description": "The label for category HTTP API in sidebar docs"
+  },
+  "sidebar.docs.category.FAQ": {
+    "message": "常见问题解答",
+    "description": "The label for category FAQ in sidebar docs"
+  },
+  "sidebar.docs.category.Data Migration": {
+    "message": "Data Migration",
+    "description": "The label for category Data Migration in sidebar docs"
+  },
+  "sidebar.docs.category.Benchmarks": {
+    "message": "性能测试",
+    "description": "The label for category Benchmarks in sidebar docs"
+  },
+  "sidebar.docs.category.Developers": {
+    "message": "开发指南",
+    "description": "The label for category Developers in sidebar docs"
+  },
+  "sidebar.docs.category.build-starrocks": {
+    "message": "build-starrocks",
+    "description": "The label for category build-starrocks in sidebar docs"
+  },
+  "sidebar.docs.category.code-style-guides": {
+    "message": "code-style-guides",
+    "description": "The label for category code-style-guides in sidebar docs"
+  },
+  "sidebar.docs.category.development-environment": {
+    "message": "development-environment",
+    "description": "The label for category development-environment in sidebar docs"
+  },
+  "sidebar.docs.category.trace-tools": {
+    "message": "trace-tools",
+    "description": "The label for category trace-tools in sidebar docs"
+  },
+  "sidebar.docs.link.Kettle connector": {
+    "message": "Kettle connector",
+    "description": "The label for link Kettle connector in sidebar docs, linking to https://github.com/StarRocks/starrocks-connector-for-kettle"
+  },
+  "sidebar.docs.link.DBT": {
+    "message": "DBT",
+    "description": "The label for link DBT in sidebar docs, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
+  },
+  "sidebar.docs.category.Aggregate": {
+    "message": "聚合函数",
+    "description": "The label for category Aggregate in sidebar docs"
+  },
+  "sidebar.docs.category.Array": {
+    "message": "Array 函数",
+    "description": "The label for category Array in sidebar docs"
+  },
+  "sidebar.docs.category.Binary": {
+    "message": "Binary 函数",
+    "description": "The label for category Binary in sidebar docs"
+  },
+  "sidebar.docs.category.Bit": {
+    "message": "Bit 函数",
+    "description": "The label for category Bit in sidebar docs"
+  },
+  "sidebar.docs.category.Bitmap": {
+    "message": "Bitmap 函数",
+    "description": "The label for category Bitmap in sidebar docs"
+  },
+  "sidebar.docs.category.Condition": {
+    "message": "条件函数",
+    "description": "The label for category Condition in sidebar docs"
+  },
+  "sidebar.docs.category.Cryptographic": {
+    "message": "加密函数",
+    "description": "The label for category Cryptographic in sidebar docs"
+  },
+  "sidebar.docs.category.Date and time": {
+    "message": "时间日期函数",
+    "description": "The label for category Date and time in sidebar docs"
+  },
+  "sidebar.docs.category.Dictionary": {
+    "message": "字典函数",
+    "description": "The label for category Dictionary in sidebar docs"
+  },
+  "sidebar.docs.category.Hash": {
+    "message": "Hash 函数",
+    "description": "The label for category Hash in sidebar docs"
+  },
+  "sidebar.docs.category.JSON": {
+    "message": "JSON 函数",
+    "description": "The label for category JSON in sidebar docs"
+  },
+  "sidebar.docs.category.JSON Constructor": {
+    "message": "JSON 构造函数",
+    "description": "The label for category JSON Constructor in sidebar docs"
+  },
+  "sidebar.docs.category.JSON query and processing": {
+    "message": "JSON 查询和处理函数",
+    "description": "The label for category JSON query and processing in sidebar docs"
+  },
+  "sidebar.docs.category.Pattern matching": {
+    "message": "模糊/正则匹配函数",
+    "description": "The label for category Pattern matching in sidebar docs"
+  },
+  "sidebar.docs.category.Map": {
+    "message": "Map 函数",
+    "description": "The label for category Map in sidebar docs"
+  },
+  "sidebar.docs.category.Math": {
+    "message": "数学函数",
+    "description": "The label for category Math in sidebar docs"
+  },
+  "sidebar.docs.category.Percentile": {
+    "message": "百分位函数",
+    "description": "The label for category Percentile in sidebar docs"
+  },
+  "sidebar.docs.category.Scalar": {
+    "message": "标量函数",
+    "description": "The label for category Scalar in sidebar docs"
+  },
+  "sidebar.docs.category.Spatial": {
+    "message": "地理位置函数",
+    "description": "The label for category Spatial in sidebar docs"
+  },
+  "sidebar.docs.category.Struct": {
+    "message": "Struct 函数",
+    "description": "The label for category Struct in sidebar docs"
+  },
+  "sidebar.docs.category.Table": {
+    "message": "Table",
+    "description": "The label for category Table in sidebar docs"
+  },
+  "sidebar.docs.category.Utility": {
+    "message": "工具函数",
+    "description": "The label for category Utility in sidebar docs"
+  },
+  "sidebar.docs.category.Data types": {
+    "message": "数据类型",
+    "description": "The label for category Data types in sidebar docs"
+  },
+  "sidebar.docs.category.SQL statements": {
+    "message": "SQL 参考",
+    "description": "The label for category SQL statements in sidebar docs"
+  },
+  "sidebar.docs.category.系统元数据库": {
+    "message": "系统元数据库",
+    "description": "The label for category 系统元数据库 in sidebar docs"
+  }
+}

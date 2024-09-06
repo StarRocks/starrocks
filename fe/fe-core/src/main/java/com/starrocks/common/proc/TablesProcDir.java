@@ -52,6 +52,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -92,15 +93,15 @@ public class TablesProcDir implements ProcDirInterface {
 
         Table table;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             try {
-                table = db.getTable(Long.parseLong(tableIdOrName));
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
             } catch (NumberFormatException e) {
-                table = db.getTable(tableIdOrName);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableIdOrName);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         if (table == null) {
@@ -117,9 +118,9 @@ public class TablesProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> tableInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            for (Table table : db.getTables()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 List<Comparable> tableInfo = new ArrayList<Comparable>();
                 TableType tableType = table.getType();
                 tableInfo.add(table.getId());
@@ -136,7 +137,7 @@ public class TablesProcDir implements ProcDirInterface {
                 tableInfos.add(tableInfo);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // sort by table id

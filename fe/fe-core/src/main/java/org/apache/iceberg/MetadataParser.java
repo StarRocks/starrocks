@@ -22,6 +22,7 @@ import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.thrift.TIcebergMetadata;
 import com.starrocks.thrift.TMetadataEntry;
 import com.starrocks.thrift.TResultBatch;
@@ -176,7 +177,7 @@ public class MetadataParser {
 
     private List<DataFile> buildIcebergDataFile(TResultBatch resultBatch) throws TTransportException {
         List<DataFile> dataFiles = new ArrayList<>();
-        TDeserializer deserializer = new TDeserializer();
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
         for (ByteBuffer bb : resultBatch.rows) {
             TMetadataEntry metadataEntry = deserializeToMetadataThrift(deserializer, bb);
             DataFile baseFile = (DataFile) parseThriftToIcebergDataFile(metadataEntry);

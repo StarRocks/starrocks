@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
@@ -8,8 +8,8 @@ toc_max_heading_level: 5
 A Hive catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards. Within Hive catalogs, you can:
 
 - Directly query data stored in Hive without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive and load the data into StarRocks.
-- Perform operations on StarRocks to create or drop Hive databases and tables, or sink data from StarRocks tables to Parquet-formatted (supported from v3.2 onwards) and ORC- or Textfile-formatted (supported from v3.3 onwards) Hive tables by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md).
+- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive and load the data into StarRocks.
+- Perform operations on StarRocks to create or drop Hive databases and tables, or sink data from StarRocks tables to Parquet-formatted (supported from v3.2 onwards) and ORC- or Textfile-formatted (supported from v3.3 onwards) Hive tables by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster must be able to access the storage system and metastore of your Hive cluster. StarRocks supports the following storage systems and metastores:
 
@@ -38,7 +38,7 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - Parquet and ORC files support the following compression formats: NO_COMPRESSION, SNAPPY, LZ4, ZSTD, and GZIP.
   - Textfile files support the NO_COMPRESSION compression format.
 
-  You can use the session variable [`connector_sink_compression_codec`](../../reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+  You can use the session variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
 
 ## Integration preparations
 
@@ -795,13 +795,13 @@ PROPERTIES
 
 ## View Hive catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hive catalog named `hive_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hive catalog named `hive_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG hive_catalog_glue;
@@ -811,7 +811,7 @@ SHOW CREATE CATALOG hive_catalog_glue;
 
 You can use one of the following methods to switch to a Hive catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Hive catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify a Hive catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -820,7 +820,7 @@ You can use one of the following methods to switch to a Hive catalog and a datab
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Hive catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to a Hive catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -828,7 +828,7 @@ You can use one of the following methods to switch to a Hive catalog and a datab
 
 ## Drop a Hive catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Hive catalog named `hive_catalog_glue`:
 
@@ -854,7 +854,7 @@ You can use one of the following syntaxes to view the schema of a Hive table:
 
 ## Query a Hive table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Hive cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Hive cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -862,7 +862,7 @@ You can use one of the following syntaxes to view the schema of a Hive table:
 
 2. [Switch to a Hive Catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -899,7 +899,7 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 ## Create a Hive database
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) privilege on a Hive catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create a database in that Hive catalog. This feature is supported from v3.2 onwards.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) privilege on a Hive catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create a database in that Hive catalog. This feature is supported from v3.2 onwards.
 
 :::note
 
@@ -932,7 +932,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop a Hive database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#database) privilege on a Hive database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that Hive database. This feature is supported from v3.2 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#database) privilege on a Hive database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Hive database. This feature is supported from v3.2 onwards. You can only drop empty databases.
 
 :::note
 
@@ -950,7 +950,7 @@ DROP DATABASE <database_name>
 
 ## Create a Hive table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md), [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md), or [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) statement to create a managed table in that Hive database.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md), or [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) statement to create a managed table in that Hive database.
 
 This feature is supported since v3.2 in which version StarRocks only supports creating Parquet-formatted Hive tables. From v3.3 onwards, StarRocks also supports creating ORC- and Textfile-formatted Hive tables.
 
@@ -1020,7 +1020,7 @@ The following table describes a few key properties.
 | ----------------- | ------------------------------------------------------------ |
 | location          | The file path in which you want to create the managed table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
 | file_format       | The file format of the managed table. Supported file formats are Parquet, ORC, and Textfile. ORC and Textfile formats are supported from v3.3 onwards. Valid values: `parquet`, `orc`, and `textfile`. Default value: `parquet`. |
-| compression_codec | The compression algorithm used for the managed table. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Hive tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec). |
+| compression_codec | The compression algorithm used for the managed table. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Hive tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec). |
 
 ### Examples
 
@@ -1058,16 +1058,16 @@ The following DDLs use the default file format Parquet as an example.
 
 ## Sink data to a Hive table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Hive table.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Hive table.
 
 This feature is supported since v3.2 in which version data can be sunk only to Parquet-formatted Hive tables. From v3.3 onwards, StarRocks also supports sinking data to ORC- and Textfile-formatted Hive tables.
 
-Note that sinking data to external tables is disabled by default. To sink data to external tables, you must set the [system variable `ENABLE_WRITE_HIVE_EXTERNAL_TABLE`](../../reference/System_variable.md) to `true`.
+Note that sinking data to external tables is disabled by default. To sink data to external tables, you must set the [system variable `ENABLE_WRITE_HIVE_EXTERNAL_TABLE`](../../sql-reference/System_variable.md) to `true`.
 
 :::note
 
 - You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-- You can use the session variable [connector_sink_compression_codec](../../reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+- You can use the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
 
 :::
 
@@ -1156,7 +1156,7 @@ The following DMLs use the default file format Parquet as an example.
 
 ## Drop a Hive table
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that Hive table. This feature is supported from v3.1 onwards. Note that currently StarRocks supports dropping only managed tables of Hive.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table, you can use the [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Hive table. This feature is supported from v3.1 onwards. Note that currently StarRocks supports dropping only managed tables of Hive.
 
 :::note
 
@@ -1176,7 +1176,7 @@ DROP TABLE <table_name> FORCE
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
@@ -1277,9 +1277,9 @@ From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of t
 
 | Configuration item                                           | Default                              | Description                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) command. |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
 
 Using the periodic Hive metadata cache refresh feature and the metadata automatic asynchronous update policy together significantly accelerates data access, reduces the read load from external data sources, and improves query performance.
 

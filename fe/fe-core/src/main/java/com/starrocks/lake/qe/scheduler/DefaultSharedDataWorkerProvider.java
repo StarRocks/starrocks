@@ -85,7 +85,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
             ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
             if (availableComputeNodes.isEmpty()) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
-                ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
             return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);

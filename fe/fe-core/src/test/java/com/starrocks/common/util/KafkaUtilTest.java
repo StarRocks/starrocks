@@ -256,8 +256,7 @@ public class KafkaUtilTest {
         new MockUp<WarehouseManager>() {
             @Mock
             public List<Long> getAllComputeNodeIds(long warehouseId) {
-                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", 1L));
-                return null;
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", 1L));
             }
         };
 

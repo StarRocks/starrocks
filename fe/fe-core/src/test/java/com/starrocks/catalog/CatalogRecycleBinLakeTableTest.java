@@ -57,8 +57,8 @@ public class CatalogRecycleBinLakeTableTest {
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return db.getTable(createTableStmt.getTableName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void dropTable(ConnectContext connectContext, String sql) throws Exception {
@@ -120,8 +120,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = "create database recycle_bin_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb("recycle_bin_test");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("recycle_bin_test");
 
         Table table1 = createTable(connectContext, "create table recycle_bin_test.t0" +
                 "(key1 int," +
@@ -215,7 +215,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         // Recover table2
         Assert.assertTrue(recycleBin.recoverTable(db, "t0"));
-        Assert.assertSame(table2, db.getTable("t0"));
+        Assert.assertSame(table2, GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0"));
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
         checkTableTablet(table2, true);
 
@@ -234,8 +234,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format("create table %s.t0" +
                 "(key1 int," +
@@ -259,8 +259,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format("create table %s.t1" +
                 "(key1 int," +
@@ -321,8 +321,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -472,8 +472,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +

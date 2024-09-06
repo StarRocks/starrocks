@@ -43,7 +43,7 @@ private:
 
     ChunkPtr _key_chunk = nullptr;
     ChunkPtr _value_chunk = nullptr;
-    ColumnPtr _struct_column = nullptr;
+    ColumnPtr _nullable_struct_column = nullptr;
 };
 
 } // namespace starrocks

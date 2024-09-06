@@ -14,7 +14,6 @@
 
 package com.starrocks.task;
 
-import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TSnapshotInfo;
 import com.starrocks.thrift.TTabletType;
@@ -35,11 +34,12 @@ public class ReplicateSnapshotTask extends AgentTask {
     private final int srcSchemaHash;
     private final long srcVisibleVersion;
     private final List<TSnapshotInfo> srcSnapshotInfos;
+    private final byte[] encryptionMeta;
 
     public ReplicateSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
-            TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion,
-            String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
-            long srcVisibleVersion, List<TSnapshotInfo> srcSnapshotInfos) {
+                                 TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion, String srcToken,
+                                 long srcTabletId, TTabletType srcTabletType, int srcSchemaHash, long srcVisibleVersion,
+                                 List<TSnapshotInfo> srcSnapshotInfos, byte[] encryptionMeta) {
         super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
                 System.currentTimeMillis());
         this.transactionId = transactionId;
@@ -52,6 +52,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         this.srcSchemaHash = srcSchemaHash;
         this.srcVisibleVersion = srcVisibleVersion;
         this.srcSnapshotInfos = srcSnapshotInfos;
+        this.encryptionMeta = encryptionMeta;
     }
 
     public TReplicateSnapshotRequest toThrift() {
@@ -71,6 +72,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         request.setSrc_schema_hash(srcSchemaHash);
         request.setSrc_visible_version(srcVisibleVersion);
         request.setSrc_snapshot_infos(srcSnapshotInfos);
+        request.setEncryption_meta(encryptionMeta);
 
         return request;
     }

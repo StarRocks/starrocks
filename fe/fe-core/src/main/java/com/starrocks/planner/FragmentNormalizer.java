@@ -35,11 +35,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
@@ -49,7 +49,6 @@ import com.starrocks.thrift.TNormalPlanNode;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.protocol.TSimpleJSONProtocol;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -65,6 +64,8 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static com.starrocks.rpc.ConfigurableSerDesFactory.Protocol.SIMPLE_JSON;
 
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
 // is normalized, FragmentNormalizer draws out required information as follows from the fragment.
@@ -232,7 +233,7 @@ public class FragmentNormalizer {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
         try {
-            TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
