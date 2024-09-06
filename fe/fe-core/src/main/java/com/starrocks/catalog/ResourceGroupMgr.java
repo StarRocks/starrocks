@@ -148,6 +148,10 @@ public class ResourceGroupMgr implements Writable {
                 dropResourceGroupUnlocked(wg.getName());
             }
 
+            if (wg.getCpuWeight() == null) {
+                wg.setCpuWeight(0);
+            }
+
             if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
                 wg.setId(ResourceGroup.DEFAULT_WG_ID);
             } else if (ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME.equals(wg.getName())) {
