@@ -12,6 +12,6 @@ function: assert_explain_verbose_contains('select col_tinyint from delta_test_${
 -- result:
 None
 -- !result
-drop catalog delta_test_${uuid0}
+drop catalog delta_test_${uuid0};
 -- result:
 -- !result
