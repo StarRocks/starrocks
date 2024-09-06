@@ -523,4 +523,46 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("tbl1");
     }
+
+    @Test
+    public void testWrongMVRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` varchar(255)\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH ASYNC\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "AS SELECT 1, count(distinct k1) from tbl1");
+            sql("select count(distinct k1) from tbl1").contains("mv1");
+            sql("select count(1) from tbl1").notContain("mv1");
+            sql("select count(*) from tbl1").notContain("mv1");
+            starRocksAssert.dropMaterializedView("mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH ASYNC\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "AS SELECT 1, count(1) from tbl1");
+            sql("select count(distinct k1) from tbl1").notContain("mv1");
+            sql("select count(1) from tbl1").contains("mv1");
+            sql("select count(*) from tbl1").contains("mv1");
+            starRocksAssert.dropMaterializedView("mv1");
+        }
+        starRocksAssert.dropTable("tbl1");
+    }
 }
