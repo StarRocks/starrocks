@@ -173,7 +173,7 @@ public:
 
 private:
     /// These methods should be guarded by the outside _global_mutex.
-    WorkGroupScanSchedEntity* _take_next_wg() const;
+    WorkGroupScanSchedEntity* _pick_next_wg() const;
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
     void _enqueue_workgroup(WorkGroupScanSchedEntity* wg_entity);
@@ -198,6 +198,7 @@ private:
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+    std::condition_variable _cv_for_borrowed_cpus;
     bool _is_closed = false;
 
     // Contains the workgroups which include the tasks ready to be run.
