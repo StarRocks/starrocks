@@ -13,7 +13,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.system.BackendResourceStat;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -175,7 +175,7 @@ public class ResourceGroupStmtTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
 
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
