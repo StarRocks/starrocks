@@ -128,6 +128,154 @@ public class QueryAnalyzer {
         new Visitor().process(node, parent);
     }
 
+    private class GeneratedColumnExprMappingCollector implements AstVisitor<Void, Scope> {
+        public GeneratedColumnExprMappingCollector() {
+        }
+
+        public Void process(ParseNode node, Scope scope) {
+            return node.accept(this, scope);
+        }
+
+        private void reAnalyzeExpressionBasedOnCurrentScope(SelectRelation childSelectRelation, Scope scope,
+                                                            Map<Expr, SlotRef> resultGeneratedExprToColumnRef) {
+            if (childSelectRelation.getGeneratedExprToColumnRef() == null ||
+                    childSelectRelation.getGeneratedExprToColumnRef().isEmpty()) {
+                return;
+            }
+            // 1. get all available generated column from child selectRelation
+            // available means that:
+            // a. generated column output from child selectRelation directly.
+            // b. all reference column of generated column output from child selectRelation directly.
+            List<SlotRef> outputSlotRef = childSelectRelation.getOutputExpression()
+                                            .stream().filter(e -> e instanceof SlotRef)
+                                            .map(e -> (SlotRef) e).collect(Collectors.toList());
+            boolean hasStar = childSelectRelation.getSelectList()
+                                        .getItems().stream().anyMatch(SelectListItem::isStar);
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            for (Map.Entry<Expr, SlotRef> entry : childSelectRelation.getGeneratedExprToColumnRef().entrySet()) {
+                List<SlotRef> allRefColumns = Lists.newArrayList();
+                entry.getKey().collect(SlotRef.class, allRefColumns);
+                allRefColumns.add(entry.getValue());
+                if (hasStar || outputSlotRef.containsAll(allRefColumns)) {
+                    generatedExprToColumnRef.put(entry.getKey().clone(), (SlotRef) entry.getValue().clone());
+                }
+            }
+
+            // 2. rewrite(rename slotRef) generated column expression(unAnalyzed) using alias in current scope
+            Map<String, String> slotRefToAlias = new HashMap<>();
+            for (SelectListItem item : childSelectRelation.getSelectList().getItems()) {
+                if (item.isStar()) {
+                    slotRefToAlias.clear();
+                    break;
+                }
+
+                if (!(item.getExpr() instanceof SlotRef) || (item.getAlias() == null || item.getAlias().isEmpty())) {
+                    continue;
+                }
+
+                slotRefToAlias.put(((SlotRef) item.getExpr()).toSql(), item.getAlias());
+            }
+            List<SlotRef> allRefSlotRefs = new ArrayList<>();
+            for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
+                List<SlotRef> refColumns = Lists.newArrayList();
+                entry.getKey().collect(SlotRef.class, refColumns);
+
+                allRefSlotRefs.addAll(refColumns);
+                allRefSlotRefs.add(entry.getValue());
+            }
+            for (SlotRef slotRef : allRefSlotRefs) {
+                if (!slotRefToAlias.isEmpty()) {
+                    String alias = slotRefToAlias.get(slotRef.toSql());
+                    if (alias != null) {
+                        slotRef.setColumnName(alias);
+                    }
+                }
+                slotRef.setTblName(null);
+            }
+
+            // 3. analyze generated column expression based on current scope
+            for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
+                entry.getKey().reset();
+                entry.getValue().reset();
+                
+                try {
+                    ExpressionAnalyzer.analyzeExpression(entry.getKey(), new AnalyzeState(), scope, session);
+                    ExpressionAnalyzer.analyzeExpression(entry.getValue(), new AnalyzeState(), scope, session);
+                } catch (Exception ignore) {
+                    // ignore generated column rewrite if hit any exception
+                    generatedExprToColumnRef.clear();
+                }
+            }
+            resultGeneratedExprToColumnRef.putAll(generatedExprToColumnRef);
+        }
+
+        @Override
+        public Void visitTable(TableRelation tableRelation, Scope scope) {
+            Table table = tableRelation.getTable();
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            for (Column column : table.getBaseSchema()) {
+                Expr generatedColumnExpression = column.getGeneratedColumnExpr(table.getIdToColumn());
+                if (generatedColumnExpression != null) {
+                    SlotRef slotRef = new SlotRef(null, column.getName());
+                    ExpressionAnalyzer.analyzeExpression(generatedColumnExpression, new AnalyzeState(), scope, session);
+                    ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
+                    generatedExprToColumnRef.put(generatedColumnExpression, slotRef);
+                }
+            }
+            tableRelation.setGeneratedExprToColumnRef(generatedExprToColumnRef);
+            return null;
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation selectRelation, Scope scope) {
+            selectRelation.setGeneratedExprToColumnRef(selectRelation.getRelation().getGeneratedExprToColumnRef());
+            return null;
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation subquery, Scope scope) {
+            QueryRelation queryRelation = subquery.getQueryStatement().getQueryRelation();
+            if (queryRelation instanceof SelectRelation) {
+                SelectRelation childSelectRelation = (SelectRelation) queryRelation;
+                reAnalyzeExpressionBasedOnCurrentScope(childSelectRelation, scope, subquery.getGeneratedExprToColumnRef());
+            }
+            return null;
+        } 
+
+        @Override
+        public Void visitJoin(JoinRelation joinRelation, Scope scope) {
+            Relation leftRelation = joinRelation.getLeft();
+            Relation rightRelation = joinRelation.getRight();
+            joinRelation.getGeneratedExprToColumnRef().putAll(leftRelation.getGeneratedExprToColumnRef());
+            joinRelation.getGeneratedExprToColumnRef().putAll(rightRelation.getGeneratedExprToColumnRef());
+            return null;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Scope scope) {
+            QueryRelation queryRelation = node.getQueryStatement().getQueryRelation();
+            if (queryRelation instanceof SubqueryRelation) {
+                node.setGeneratedExprToColumnRef(queryRelation.getGeneratedExprToColumnRef());
+            } else if (queryRelation instanceof SelectRelation) {
+                SelectRelation childSelectRelation = (SelectRelation) queryRelation;
+                reAnalyzeExpressionBasedOnCurrentScope(childSelectRelation, scope, node.getGeneratedExprToColumnRef());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation cteRelation, Scope scope) {
+            QueryRelation queryRelation = cteRelation.getCteQueryStatement().getQueryRelation();
+            if (queryRelation instanceof SubqueryRelation) {
+                cteRelation.setGeneratedExprToColumnRef(queryRelation.getGeneratedExprToColumnRef());
+            } else if (queryRelation instanceof SelectRelation) {
+                SelectRelation childSelectRelation = (SelectRelation) queryRelation;
+                reAnalyzeExpressionBasedOnCurrentScope(childSelectRelation, scope, cteRelation.getGeneratedExprToColumnRef());
+            }
+            return null;
+        }
+    }
+
     private class Visitor implements AstVisitor<Scope, Scope> {
         public Visitor() {
         }
@@ -218,108 +366,6 @@ public class QueryAnalyzer {
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
 
-            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            new AstVisitor<Void, Void>() {
-                @Override
-                public Void visitTable(TableRelation tableRelation, Void context) {
-                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
-                    return null;
-                }
-
-                @Override
-                public Void visitSubquery(SubqueryRelation subquery, Void context) {
-                    QueryRelation queryRelation = subquery.getQueryStatement().getQueryRelation();
-                    if (queryRelation instanceof SelectRelation) {
-                        SelectRelation childSelectRelation = (SelectRelation) queryRelation;
-                        if (childSelectRelation.getGeneratedExprToColumnRef() == null ||
-                                childSelectRelation.getGeneratedExprToColumnRef().isEmpty()) {
-                            return null;
-                        }
-                        // 1. get all available generated column from subquery
-                        // available means that:
-                        // a. generated column output from subquery directly.
-                        // b. all reference column of generated column output from subquery directly.
-                        List<SlotRef> outputSlotRef = childSelectRelation.getOutputExpression()
-                                                      .stream().filter(e -> e instanceof SlotRef)
-                                                      .map(e -> (SlotRef) e).collect(Collectors.toList());
-                        boolean hasStar = childSelectRelation.getSelectList()
-                                                    .getItems().stream().anyMatch(SelectListItem::isStar);
-
-                        for (Map.Entry<Expr, SlotRef> entry : childSelectRelation.getGeneratedExprToColumnRef().entrySet()) {
-                            List<SlotRef> allRefColumns = Lists.newArrayList();
-                            entry.getKey().collect(SlotRef.class, allRefColumns);
-                            allRefColumns.add(entry.getValue());
-                            if (hasStar || outputSlotRef.containsAll(allRefColumns)) {
-                                generatedExprToColumnRef.put(entry.getKey().clone(), (SlotRef) entry.getValue().clone());
-                            }
-                        }
-
-                        // 2. rewrite(rename slotRef) generated column expression(unAnalyzed) using alias in current scope
-                        Map<String, String> slotRefToAlias = new HashMap<>();
-                        for (SelectListItem item : childSelectRelation.getSelectList().getItems()) {
-                            if (item.isStar()) {
-                                slotRefToAlias.clear();
-                                break;
-                            }
-
-                            if (!(item.getExpr() instanceof SlotRef) || (item.getAlias() == null || item.getAlias().isEmpty())) {
-                                continue;
-                            }
-
-                            slotRefToAlias.put(((SlotRef) item.getExpr()).toSql(), item.getAlias());
-                        }
-                        List<SlotRef> allRefSlotRefs = new ArrayList<>();
-                        for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
-                            List<SlotRef> refColumns = Lists.newArrayList();
-                            entry.getKey().collect(SlotRef.class, refColumns);
-
-                            allRefSlotRefs.addAll(refColumns);
-                            allRefSlotRefs.add(entry.getValue());
-                        }
-                        for (SlotRef slotRef : allRefSlotRefs) {
-                            if (!slotRefToAlias.isEmpty()) {
-                                String alias = slotRefToAlias.get(slotRef.toSql());
-                                if (alias != null) {
-                                    slotRef.setColumnName(alias);
-                                }
-                            }
-                            slotRef.setTblName(null);
-                        }
-
-                        // 3. analyze generated column expression based on current scope
-                        for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
-                            entry.getKey().reset();
-                            entry.getValue().reset();
-                            
-                            try {
-                                ExpressionAnalyzer.analyzeExpression(entry.getKey(), new AnalyzeState(), sourceScope, session);
-                                ExpressionAnalyzer.analyzeExpression(entry.getValue(), new AnalyzeState(), sourceScope, session);
-                            } catch (Exception ignore) {
-                                // ignore generated column rewrite if hit any exception
-                                generatedExprToColumnRef.clear();
-                            }
-                        }
-                    }
-                    return null;
-                }
-
-                // Do not support rewrite like JOIN wiht {left: Subquery, right: Relation}
-                @Override
-                public Void visitJoin(JoinRelation joinRelation, Void context) {
-                    Relation leftRelation = joinRelation.getLeft();
-                    Relation rightRelation = joinRelation.getRight();
-                    if (leftRelation instanceof TableRelation && rightRelation instanceof TableRelation) {
-                        TableRelation leftTableRelation = (TableRelation) leftRelation;
-                        TableRelation rightTableRelation = (TableRelation) rightRelation;
-
-                        generatedExprToColumnRef.putAll(leftTableRelation.getGeneratedExprToColumnRef());
-                        generatedExprToColumnRef.putAll(rightTableRelation.getGeneratedExprToColumnRef());
-                    }
-                    return null;
-                }
-            }.visit(resolvedRelation);
-            analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
-
             selectRelation.accept(new RewriteAliasVisitor(sourceScope, session), null);
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(
@@ -334,6 +380,8 @@ public class QueryAnalyzer {
                     selectRelation.getLimit());
 
             selectRelation.fillResolvedAST(analyzeState);
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(selectRelation, sourceScope);
             return analyzeState.getOutputScope();
         }
 
@@ -595,17 +643,8 @@ public class QueryAnalyzer {
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
 
-            Map<Expr, SlotRef> getGeneratedExprToColumnRef = new HashMap<>();
-            for (Column column : table.getBaseSchema()) {
-                Expr generatedColumnExpression = column.getGeneratedColumnExpr(table.getIdToColumn());
-                if (generatedColumnExpression != null) {
-                    SlotRef slotRef = new SlotRef(null, column.getName());
-                    ExpressionAnalyzer.analyzeExpression(generatedColumnExpression, new AnalyzeState(), scope, session);
-                    ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
-                    getGeneratedExprToColumnRef.put(generatedColumnExpression, slotRef);
-                }
-            }
-            node.setGeneratedExprToColumnRef(getGeneratedExprToColumnRef);
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(node, scope);
 
             return scope;
         }
@@ -656,6 +695,10 @@ public class QueryAnalyzer {
             }
             Scope scope = new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build()));
             cteRelation.setScope(scope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(cteRelation, scope);
+
             return scope;
         }
 
@@ -760,6 +803,10 @@ public class QueryAnalyzer {
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
             }
             join.setScope(scope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(join, scope);
+
             return scope;
         }
 
@@ -881,6 +928,10 @@ public class QueryAnalyzer {
 
             analyzeOrderByClause(subquery, scope);
             subquery.setScope(scope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(subquery, scope);
+
             return scope;
         }
 
@@ -958,6 +1009,10 @@ public class QueryAnalyzer {
 
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
+
+            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+            collector.process(node, viewScope);
+
             return viewScope;
         }
 
