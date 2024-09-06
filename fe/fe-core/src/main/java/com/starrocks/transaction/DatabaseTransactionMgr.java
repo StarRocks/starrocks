@@ -111,6 +111,7 @@ import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 public class DatabaseTransactionMgr {
     public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
+    private static final int MEMORY_TXN_SAMPLES = 10;
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
     private final GlobalStateMgr globalStateMgr;
@@ -2029,5 +2030,26 @@ public class DatabaseTransactionMgr {
 
     public void updateDatabaseUsedQuotaData(long usedQuotaDataBytes) {
         this.usedQuotaDataBytes = usedQuotaDataBytes;
+    }
+
+    public List<Object> getSamplesForMemoryTracker() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.size() > 0) {
+                return idToRunningTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            if (idToFinalStatusTransactionState.size() > 0) {
+                return idToFinalStatusTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            return new ArrayList<>();
+        } finally {
+            readUnlock();
+        }
     }
 }
