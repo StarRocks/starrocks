@@ -126,7 +126,7 @@ diff --git a/Net/src/HTTPResponse.cpp b/Net/src/HTTPResponse.cpp
 +
 +bool HTTPResponse::isPreAllocated()
 +{
-+	return _size >= getContentLength64();
++	return _size > 0 && _size >= getContentLength64();
 +}
 +
 +void HTTPResponse::setBodyFilled(bool bodyFilled)
