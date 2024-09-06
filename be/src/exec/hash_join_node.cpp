@@ -271,7 +271,7 @@ Status HashJoinNode::open(RuntimeState* state) {
         {
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
-            TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
+            _ht.append_chunk(state, chunk, _key_columns);
         }
     }
 
@@ -580,7 +580,7 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 Status HashJoinNode::_build(RuntimeState* state) {
     // build hash table
     SCOPED_TIMER(_build_ht_timer);
-    TRY_CATCH_BAD_ALLOC(_ht.build(state));
+    _ht.build(state);
     return Status::OK();
 }
 
@@ -701,7 +701,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain)));
+        RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
@@ -739,7 +739,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
     while (_right_table_has_remain) {
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain)));
+        RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain));
 
         eval_join_runtime_filters(chunk);
         if (!_conjunct_ctxs.empty()) {

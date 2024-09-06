@@ -121,7 +121,7 @@ Status StreamAggregator::process_chunk(StreamChunk* chunk) {
 
     {
         SCOPED_TIMER(agg_compute_timer());
-        TRY_CATCH_BAD_ALLOC(build_hash_map_with_selection_and_allocation(chunk_size));
+        build_hash_map_with_selection_and_allocation(chunk_size);
     }
     DCHECK_EQ(_streaming_selection.size(), chunk_size);
 

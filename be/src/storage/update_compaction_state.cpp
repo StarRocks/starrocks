@@ -95,7 +95,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
+    chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = itrs[segment_id].get();
@@ -115,14 +115,14 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
             }
         }
         itr->close();
         CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
     }
     dest = std::move(col);
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
+    dest->raw_data();
     _memory_usage += dest->memory_usage();
     tracker->consume(dest->memory_usage());
 

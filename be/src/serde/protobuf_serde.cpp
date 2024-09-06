@@ -155,7 +155,7 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, c
     int64_t deserialized_size = 0;
     ProtobufChunkDeserializer deserializer(*res, &chunk_pb, encode_level);
     StatusOr<Chunk> chunk = Status::OK();
-    TRY_CATCH_BAD_ALLOC(chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size));
+    chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size);
     if (!chunk.ok()) return chunk;
 
     // The logic is a bit confusing here.

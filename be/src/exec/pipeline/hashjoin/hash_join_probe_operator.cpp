@@ -109,9 +109,7 @@ Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
         return Status::OK();
     }
 
-    TRY_CATCH_ALLOC_SCOPE_START()
     _join_prober->reference_hash_table(_join_builder.get());
-    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

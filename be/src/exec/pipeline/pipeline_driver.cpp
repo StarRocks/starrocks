@@ -285,7 +285,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
@@ -306,7 +305,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
-                    SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(curr_op);
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
@@ -337,10 +335,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                         total_rows_moved += row_num;
                         {
-                            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
-                            _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
                             RELEASE_RESERVED_GUARD();
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
@@ -373,7 +369,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
@@ -550,49 +545,6 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     check_operator_close_states("closing pipeline drivers");
 }
 
-void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
-                                          const ChunkPtr& chunk) {
-    auto& mem_resource_mgr = op->mem_resource_manager();
-
-    if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
-
-    // try to release buffer if memusage > mid level threhold
-    _try_to_release_buffer(state, op);
-
-    // force mark operator to low memory mode
-    if (state->spill_revocable_max_bytes() > 0 && op->revocable_mem_bytes() > state->spill_revocable_max_bytes()) {
-        mem_resource_mgr.to_low_memory_mode();
-        return;
-    }
-
-    // convert to low-memory mode if reserve memory failed
-    if (mem_resource_mgr.releaseable() && op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
-        int64_t request_reserved = 0;
-        if (chunk == nullptr) {
-            request_reserved = op->estimated_memory_reserved();
-        } else {
-            request_reserved = op->estimated_memory_reserved(chunk);
-        }
-        request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
-
-        bool need_spill = false;
-        if (!tls_thread_status.try_mem_reserve(request_reserved)) {
-            need_spill = true;
-            mem_resource_mgr.to_low_memory_mode();
-        }
-
-        auto query_mem_tracker = _query_ctx->mem_tracker();
-        auto query_consumption = query_mem_tracker->consumption();
-        auto limited = query_mem_tracker->limit();
-        auto reserved_limit = query_mem_tracker->reserve_limit();
-
-        TRACE_SPILL_LOG << "adjust memory spill:" << op->get_name() << " request: " << request_reserved
-                        << " revocable: " << op->revocable_mem_bytes() << " set finishing: " << (chunk == nullptr)
-                        << " need_spill:" << need_spill << " query_consumption:" << query_consumption
-                        << " limit:" << limited << "query reserved limit:" << reserved_limit;
-    }
-}
-
 const double release_buffer_mem_ratio = 0.8;
 
 void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
@@ -739,7 +691,6 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
@@ -757,7 +708,6 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
@@ -781,7 +731,6 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         op_state = OperatorStage::CANCELLED;
         return op->set_cancelled(state);
     }
@@ -803,7 +752,6 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
 
     VLOG_ROW << msg;
     {
-        SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
         QUERY_TRACE_SCOPED(op->get_name(), "close");

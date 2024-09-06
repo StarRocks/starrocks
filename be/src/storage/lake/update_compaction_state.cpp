@@ -91,13 +91,13 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
             }
         }
         itr->close();
     }
     dest = std::move(col);
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
+    dest->raw_data();
     _memory_usage += dest->memory_usage();
     _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();

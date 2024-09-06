@@ -806,7 +806,7 @@ public:
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -821,13 +821,13 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
                   size_t* num_found, const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -843,13 +843,13 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
                   const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -864,12 +864,12 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status insert(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             for (const auto idx : idxes) {
                 const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
                 const auto value = values[idx];
@@ -888,13 +888,13 @@ public:
                     return Status::AlreadyExist(msg);
                 }
             }
-        });
+        };
         return Status::OK();
     }
 
     Status erase(const Slice* keys, IndexValue* old_values, KeysInfo* not_found, size_t* num_found,
                  const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -909,12 +909,12 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             for (unsigned long replace_idxe : replace_idxes) {
                 const auto& key = *reinterpret_cast<const KeyType*>(keys[replace_idxe].data);
                 const auto value = values[replace_idxe];
@@ -923,15 +923,15 @@ public:
                     it->second = value;
                 }
             }
-        });
+        };
         return Status::OK();
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
                       std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) override {
         faststring fixed_buf;
-        TRY_CATCH_BAD_ALLOC(
-                fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue))));
+
+        fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue)));
         put_fixed32_le(&fixed_buf, KeySize);
         put_fixed32_le(&fixed_buf, idxes.size());
         for (const auto idx : idxes) {
@@ -947,7 +947,7 @@ public:
     }
 
     Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             for (size_t i = 0; i < n; i++) {
                 const auto& key = *reinterpret_cast<const KeyType*>(keys[i].data);
                 const auto value = values[i];
@@ -956,7 +956,7 @@ public:
                     it->second = value;
                 }
             }
-        });
+        };
         return Status::OK();
     }
 
@@ -965,7 +965,7 @@ public:
     Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         size_t kv_header_size = 8;
         std::string buff;
-        TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&buff, kv_header_size));
+        raw::stl_string_resize_uninitialized(&buff, kv_header_size);
         RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
         uint32_t key_size = UNALIGNED_LOAD32(buff.data());
         DCHECK(key_size == KeySize);
@@ -974,7 +974,7 @@ public:
         const size_t kv_pair_size = KeySize + sizeof(IndexValue);
         while (nums > 0) {
             const size_t batch_num = (nums > 4096) ? 4096 : nums;
-            TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size));
+            raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size);
             RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
             std::vector<Slice> keys;
             keys.reserve(batch_num);
@@ -1114,7 +1114,7 @@ public:
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 std::string composite_key;
@@ -1136,13 +1136,13 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
                   size_t* num_found, const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 std::string composite_key;
@@ -1166,13 +1166,13 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
                   const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 std::string composite_key;
@@ -1196,12 +1196,12 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status insert(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             for (const auto idx : idxes) {
                 std::string composite_key;
                 const auto& skey = keys[idx];
@@ -1228,13 +1228,13 @@ public:
                     return Status::AlreadyExist(msg);
                 }
             }
-        });
+        };
         return Status::OK();
     }
 
     Status erase(const Slice* keys, IndexValue* old_values, KeysInfo* not_found, size_t* num_found,
                  const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             size_t nfound = 0;
             for (const auto idx : idxes) {
                 std::string composite_key;
@@ -1260,12 +1260,12 @@ public:
                 }
             }
             *num_found = nfound;
-        });
+        };
         return Status::OK();
     }
 
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             for (const auto idx : idxes) {
                 std::string composite_key;
                 const auto& skey = keys[idx];
@@ -1282,7 +1282,7 @@ public:
                     _set.emplace_with_hash(hash, composite_key);
                 }
             }
-        });
+        };
         return Status::OK();
     }
 
@@ -1294,7 +1294,7 @@ public:
         for (const auto idx : idxes) {
             keys_size += keys[idx].size;
         }
-        TRY_CATCH_BAD_ALLOC(fixed_buf.reserve(keys_size + n * (kWALKVSize + kIndexValueSize)));
+        fixed_buf.reserve(keys_size + n * (kWALKVSize + kIndexValueSize));
         put_fixed32_le(&fixed_buf, kKeySizeMagicNum);
         put_fixed32_le(&fixed_buf, idxes.size());
         for (const auto idx : idxes) {
@@ -1313,7 +1313,7 @@ public:
     }
 
     Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
-        TRY_CATCH_BAD_ALLOC({
+        {
             for (size_t i = 0; i < n; i++) {
                 std::string composite_key;
                 const auto& skey = keys[i];
@@ -1330,7 +1330,7 @@ public:
                     _set.emplace_with_hash(hash, composite_key);
                 }
             }
-        });
+        };
         return Status::OK();
     }
 
@@ -3365,9 +3365,9 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                                         std::unique_ptr<Column> pk_column) {
     CHECK_MEM_LIMIT("PersistentIndex::_insert_rowsets");
     std::vector<uint32_t> rowids;
-    TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
+    rowids.reserve(4096);
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
                                                              uint32_t rowset_id) {
@@ -3388,8 +3388,8 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
-                        TRY_CATCH_BAD_ALLOC(
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
@@ -3407,7 +3407,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                         st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(), false);
                     } else {
                         std::vector<Slice> keys;
-                        TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
+                        keys.reserve(pkc->size());
                         const auto* fkeys = pkc->continuous_data();
                         for (size_t i = 0; i < pkc->size(); ++i) {
                             keys.emplace_back(fkeys, _key_size);

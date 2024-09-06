@@ -250,11 +250,11 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
             auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
                                                                                  _sort_exec_exprs, _order_by_types);
             RETURN_IF_ERROR(materialize_chunk);
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
+            RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value()));
         }
     } while (!eos);
 
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->done(state)));
+    RETURN_IF_ERROR(_chunks_sorter->done(state));
     return Status::OK();
 }
 

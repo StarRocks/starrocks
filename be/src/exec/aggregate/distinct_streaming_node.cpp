@@ -78,7 +78,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
                 RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
-                TRY_CATCH_ALLOC_SCOPE_START()
 
                 _aggregator->build_hash_set(input_chunk_size);
 
@@ -86,7 +85,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
                 _aggregator->try_convert_to_two_level_set();
 
-                TRY_CATCH_ALLOC_SCOPE_END()
                 continue;
             } else {
                 // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
@@ -102,19 +100,17 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
-                    TRY_CATCH_ALLOC_SCOPE_START()
                     _aggregator->build_hash_set(input_chunk_size);
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
                     _aggregator->try_convert_to_two_level_set();
-                    TRY_CATCH_ALLOC_SCOPE_END()
 
                     continue;
                 } else {
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection(input_chunk_size));
+                        _aggregator->build_hash_set_with_selection(input_chunk_size);
                     }
 
                     {

@@ -471,7 +471,6 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
 
 Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
                                                           Columns& agg_result_columns) {
-    TRY_CATCH_ALLOC_SCOPE_START()
     auto use_intermediate = _use_intermediate_as_output();
     SCOPED_TIMER(_agg_stat->get_results_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
@@ -493,7 +492,6 @@ Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, con
                                                              selector);
         }
     }
-    TRY_CATCH_ALLOC_SCOPE_END();
     return Status::OK();
 }
 
@@ -535,9 +533,9 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     auto agg_result_columns = _create_agg_result_columns(1, use_intermediate);
     auto group_by_columns = _last_columns;
     if (use_intermediate) {
-        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_last_state, agg_result_columns));
+        _serialize_to_chunk(_last_state, agg_result_columns);
     } else {
-        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_last_state, agg_result_columns));
+        _finalize_to_chunk(_last_state, agg_result_columns);
     }
     _destroy_state(_last_state);
     _last_state = nullptr;

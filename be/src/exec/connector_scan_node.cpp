@@ -263,7 +263,7 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     concurrency = std::min<int>(concurrency, config::max_hdfs_scanner_num);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
+    _fill_chunk_pool(chunks);
 
     // start scanner
     std::lock_guard<std::mutex> l(_mtx);
@@ -330,7 +330,7 @@ Status ConnectorScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
     }
 
     if (_result_chunks.blocking_get(chunk)) {
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
+        _fill_chunk_pool(1);
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);

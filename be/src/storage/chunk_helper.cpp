@@ -462,11 +462,11 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
         size_t need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
-            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            _tmp_chunk->append(*chunk, start, need_rows);
         } else {
             need_rows = std::min(_desired_size, remain_rows);
             _tmp_chunk = chunk->clone_empty(_desired_size);
-            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            _tmp_chunk->append(*chunk, start, need_rows);
         }
 
         if (_tmp_chunk->num_rows() >= _desired_size) {

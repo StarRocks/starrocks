@@ -262,7 +262,6 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
         ChunkPtr cur_chunk = nullptr;
 
         RETURN_IF_ERROR(specific_get_next(state, &cur_chunk, &cur_eos));
-        TRY_CATCH_ALLOC_SCOPE_START()
         if (cur_eos) {
             if (pre_output_chunk != nullptr) {
                 *eos = false;
@@ -306,7 +305,6 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                 }
             }
         }
-        TRY_CATCH_ALLOC_SCOPE_END()
     }
 }
 
@@ -656,7 +654,6 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* ch
     // but here for simplicity, we just check columns numbers absolute value.
     // TO BE NOTED, that there is no storng evidence that this has better performance.
     // It's just by intuition.
-    TRY_CATCH_ALLOC_SCOPE_START()
     const int eager_prune_max_column_number = 5;
     if (filter_ptr == nullptr && chunk->num_columns() <= eager_prune_max_column_number) {
         return eager_prune_eval_conjuncts(ctxs, chunk);
@@ -703,7 +700,6 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* ch
     if (apply_filter) {
         chunk->filter(*raw_filter);
     }
-    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

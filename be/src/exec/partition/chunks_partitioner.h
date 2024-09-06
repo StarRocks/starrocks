@@ -74,11 +74,11 @@ public:
             }
         }
 
-        TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
+        _hash_map_variant.visit([&](auto& hash_map_with_key) {
             _split_chunk_by_partition<EnablePassthrough>(
                     *hash_map_with_key, chunk, std::forward<NewPartitionCallback>(new_partition_cb),
                     std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
-        }));
+        });
 
         return Status::OK();
     }
@@ -111,7 +111,7 @@ public:
             return Status::OK();
         }
 
-        TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
+        _hash_map_variant.visit([&](auto& hash_map_with_key) {
             // First, fetch chunks from hash map
             bool continue_consume;
             _fetch_chunks_from_hash_map(*hash_map_with_key, consumer, continue_consume);
@@ -121,7 +121,7 @@ public:
                     _fetch_chunks_from_null_key_value(*hash_map_with_key, consumer);
                 }
             }
-        }));
+        });
 
         if (is_hash_map_eos()) {
             _hash_map_variant.reset();

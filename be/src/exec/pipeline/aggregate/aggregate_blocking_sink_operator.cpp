@@ -97,8 +97,8 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     // try to build hash table if has group by keys
     if (!_aggregator->is_none_group_by_exprs()) {
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _shared_limit_countdown, _agg_group_by_with_limit));
-        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+        _aggregator->build_hash_map(chunk_size, _shared_limit_countdown, _agg_group_by_with_limit);
+        _aggregator->try_convert_to_two_level_map();
     }
 
     // batch compute aggregate states

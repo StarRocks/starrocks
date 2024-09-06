@@ -303,7 +303,6 @@ inline Status DeltaWriterImpl::flush() {
 // To developers: Do NOT perform any I/O in this method, because this method may be invoked
 // in a bthread.
 Status DeltaWriterImpl::open() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     _flush_token = StorageEngine::instance()->lake_memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
@@ -327,8 +326,6 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
 }
 
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
@@ -407,7 +404,6 @@ Status DeltaWriterImpl::init_write_schema() {
 }
 
 Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
@@ -565,8 +561,6 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
 }
 
 void DeltaWriterImpl::close() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-
     if (_flush_token != nullptr) {
         auto st = _flush_token->wait();
         LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;

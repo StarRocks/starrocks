@@ -302,8 +302,6 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
 
-        TRY_CATCH_ALLOC_SCOPE_START()
-
         for (auto slot : _query_slots) {
             size_t column_index = chunk_ptr->schema()->get_field_index_by_name(slot->col_name());
             chunk_ptr->set_slot_id_to_index(slot->id(), column_index);
@@ -322,7 +320,6 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk_ptr));
             DCHECK_CHUNK(chunk_ptr);
         }
-        TRY_CATCH_ALLOC_SCOPE_END()
     } while (chunk_ptr->num_rows() == 0);
     update_realtime_counter(chunk_ptr);
     return Status::OK();

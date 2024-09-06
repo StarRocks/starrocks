@@ -248,7 +248,7 @@ Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int
         request.add_values_columns(value_column);
     }
     StatusOr<ChunkPB> keys_pb;
-    TRY_CATCH_BAD_ALLOC(keys_pb = serde::ProtobufChunkSerde::serialize(keys, nullptr));
+    keys_pb = serde::ProtobufChunkSerde::serialize(keys, nullptr);
     RETURN_IF_ERROR(keys_pb);
     request.mutable_keys()->Swap(&keys_pb.value());
     RefCountClosure<PTabletReaderMultiGetResult>* closure = new RefCountClosure<PTabletReaderMultiGetResult>();
@@ -279,11 +279,11 @@ Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int
         found[i] = result.found(i);
     }
     auto& values_pb = result.values();
-    TRY_CATCH_BAD_ALLOC({
+    {
         StatusOr<Chunk> res = serde::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
         if (!res.ok()) return res.status();
         values.columns().swap(res.value().columns());
-    });
+    };
     return Status::OK();
 }
 

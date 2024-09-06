@@ -24,18 +24,11 @@
 #include "util/defer_op.h"
 #include "util/uid_util.h"
 
-#define SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, check)                             \
-    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker); \
-    auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check);
-
 #define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
 
 #define SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(mem_tracker) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadSingletonCheckMemTrackerSetter(mem_tracker)
-
-#define SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(operator) \
-    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadOperatorMemTrackerSetter(operator->mem_tracker())
 
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
@@ -80,76 +73,6 @@ private:
             if (_cache_size >= BATCH_SIZE) {
                 commit(false);
             }
-        }
-
-        bool try_mem_consume(int64_t size) {
-            MemTracker* cur_tracker = _loader();
-            int64_t prev_reserved = _reserved_bytes;
-            size = _consume_from_reserved(size);
-            _cache_size += size;
-            _allocated_cache_size += size;
-            _total_consumed_bytes += size;
-            auto failure_handler = [&]() {
-                _reserved_bytes = prev_reserved;
-                _cache_size -= size;
-                _allocated_cache_size -= size;
-                _total_consumed_bytes -= size;
-                _try_consume_mem_size = size;
-            };
-            if (_cache_size >= BATCH_SIZE) {
-                if (tls_singleton_check_mem_tracker != nullptr) {
-                    // check singleton tracker first.
-                    if (UNLIKELY(tls_singleton_check_mem_tracker->any_limit_exceeded_precheck(_cache_size))) {
-                        failure_handler();
-                        tls_exceed_mem_tracker = tls_singleton_check_mem_tracker;
-                        return false;
-                    }
-                }
-                if (cur_tracker != nullptr) {
-                    MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
-                    if (LIKELY(limit_tracker == nullptr)) {
-                        _cache_size = 0;
-                        return true;
-                    } else {
-                        failure_handler();
-                        tls_exceed_mem_tracker = limit_tracker;
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        bool try_mem_consume_with_limited_tracker(int64_t size) {
-            MemTracker* cur_tracker = _loader();
-            _cache_size += size;
-            _allocated_cache_size += size;
-            _total_consumed_bytes += size;
-            if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size);
-                if (LIKELY(limit_tracker == nullptr)) {
-                    _cache_size = 0;
-                    return true;
-                } else {
-                    _cache_size -= size;
-                    _allocated_cache_size -= size;
-                    _total_consumed_bytes -= size;
-                    _try_consume_mem_size = size;
-                    tls_exceed_mem_tracker = limit_tracker;
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        bool try_mem_reserve(int64_t reserve_bytes) {
-            DCHECK(_reserved_bytes == 0);
-            DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes)) {
-                _reserved_bytes = reserve_bytes;
-                return true;
-            }
-            return false;
         }
 
         void release_reserved() {
@@ -294,34 +217,11 @@ public:
         _operator_mem_cache_manager.consume(size);
     }
 
-    bool try_mem_consume(int64_t size) {
-        if (_mem_cache_manager.try_mem_consume(size)) {
-            _operator_mem_cache_manager.consume(size);
-            return true;
-        }
-        return false;
-    }
-
-    bool try_mem_reserve(int64_t size) {
-        if (_mem_cache_manager.try_mem_reserve(size)) {
-            _reserve_mod = true;
-            return true;
-        }
-        return false;
-    }
-
-    void release_reserved() {
-        _reserve_mod = false;
-        _mem_cache_manager.release_reserved();
-    }
+    void release_reserved() { _mem_cache_manager.release_reserved(); }
 
     void mem_release(int64_t size) {
-        if (_reserve_mod) {
-            _mem_cache_manager.release_to_reserved(size);
-        } else {
-            _mem_cache_manager.release(size);
-            _operator_mem_cache_manager.release(size);
-        }
+        _mem_cache_manager.release(size);
+        _operator_mem_cache_manager.release(size);
     }
 
     static void mem_consume_without_cache(int64_t size) {
@@ -329,19 +229,6 @@ public:
         if (cur_tracker != nullptr && size != 0) {
             cur_tracker->consume(size);
         }
-    }
-
-    static bool try_mem_consume_without_cache(int64_t size) {
-        MemTracker* cur_tracker = mem_tracker();
-        if (cur_tracker != nullptr && size != 0) {
-            MemTracker* limit_tracker = cur_tracker->try_consume(size);
-            if (LIKELY(limit_tracker == nullptr)) {
-                return true;
-            } else {
-                return false;
-            }
-        }
-        return true;
     }
 
     static void mem_release_without_cache(int64_t size) {
@@ -371,7 +258,6 @@ private:
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
-    bool _reserve_mod = false;
 };
 
 inline thread_local CurrentThread tls_thread_status;
@@ -395,34 +281,6 @@ public:
     CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
     void operator=(const CurrentThreadMemTrackerSetter&) = delete;
     CurrentThreadMemTrackerSetter(CurrentThreadMemTrackerSetter&&) = delete;
-    void operator=(CurrentThreadMemTrackerSetter&&) = delete;
-
-private:
-    MemTracker* _old_mem_tracker;
-    bool _is_same;
-};
-
-class CurrentThreadOperatorMemTrackerSetter {
-public:
-    explicit CurrentThreadOperatorMemTrackerSetter(MemTracker* new_mem_tracker) {
-        // operator's mem tracker must have no parent
-        DCHECK(new_mem_tracker == nullptr || new_mem_tracker->parent() == nullptr);
-        _old_mem_tracker = tls_thread_status.operator_mem_tracker();
-        _is_same = (_old_mem_tracker == new_mem_tracker);
-        if (!_is_same) {
-            tls_thread_status.set_operator_mem_tracker(new_mem_tracker);
-        }
-    }
-
-    ~CurrentThreadOperatorMemTrackerSetter() {
-        if (!_is_same) {
-            (void)tls_thread_status.set_operator_mem_tracker(_old_mem_tracker);
-        }
-    }
-
-    CurrentThreadOperatorMemTrackerSetter(const CurrentThreadOperatorMemTrackerSetter&) = delete;
-    void operator=(const CurrentThreadOperatorMemTrackerSetter&) = delete;
-    CurrentThreadOperatorMemTrackerSetter(CurrentThreadOperatorMemTrackerSetter&&) = delete;
     void operator=(CurrentThreadMemTrackerSetter&&) = delete;
 
 private:
@@ -506,37 +364,6 @@ private:
 #define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
     SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
     auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
-
-#define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)                \
-    CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg); \
-    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().set_custom_coredump_msg({}); });
-
-#define TRY_CATCH_ALLOC_SCOPE_START() \
-    try {                             \
-        SCOPED_SET_CATCHED(true);
-
-#define TRY_CATCH_ALLOC_SCOPE_END()                                                                                    \
-    }                                                                                                                  \
-    catch (std::bad_alloc const&) {                                                                                    \
-        MemTracker* exceed_tracker = tls_exceed_mem_tracker;                                                           \
-        tls_exceed_mem_tracker = nullptr;                                                                              \
-        tls_thread_status.set_is_catched(false);                                                                       \
-        if (LIKELY(exceed_tracker != nullptr)) {                                                                       \
-            return Status::MemoryLimitExceeded(                                                                        \
-                    exceed_tracker->err_msg(fmt::format("try consume:{}", tls_thread_status.try_consume_mem_size()))); \
-        } else {                                                                                                       \
-            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");                                \
-        }                                                                                                              \
-    }                                                                                                                  \
-    catch (std::runtime_error const& e) {                                                                              \
-        return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));                                       \
-    }
-
-#define TRY_CATCH_BAD_ALLOC(stmt)               \
-    do {                                        \
-        TRY_CATCH_ALLOC_SCOPE_START() { stmt; } \
-        TRY_CATCH_ALLOC_SCOPE_END()             \
-    } while (0)
 
 // TRY_CATCH_ALL will not set catched=true, only used for catch unexpected crash,
 // cannot be used to control memory usage.

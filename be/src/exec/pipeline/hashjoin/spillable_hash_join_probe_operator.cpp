@@ -246,7 +246,6 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
 Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* state,
                                                                   const std::shared_ptr<spill::SpillerReader>& reader,
                                                                   size_t idx) {
-    TRY_CATCH_ALLOC_SCOPE_START()
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
     auto builder = _builders[idx];
     bool finish = false;
@@ -274,7 +273,6 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
     if (finish) {
         DCHECK_EQ(builder->hash_table_row_count(), _processing_partitions[idx]->num_rows);
     }
-    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

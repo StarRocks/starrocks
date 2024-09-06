@@ -100,10 +100,10 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, C
                                                         faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(metrics.deserialize_chunk_timer);
-        TRY_CATCH_BAD_ALLOC({
+        {
             serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
             ASSIGN_OR_RETURN(*chunk, des.deserialize(pchunk.data()));
-        });
+        };
     } else {
         size_t uncompressed_size = 0;
         {
@@ -111,17 +111,17 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, C
             const BlockCompressionCodec* codec = nullptr;
             RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
             uncompressed_size = pchunk.uncompressed_size();
-            TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
+            uncompressed_buffer->resize(uncompressed_size);
             Slice output{uncompressed_buffer->data(), uncompressed_size};
             RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
         }
         {
             SCOPED_TIMER(metrics.deserialize_chunk_timer);
-            TRY_CATCH_BAD_ALLOC({
+            {
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
                 ASSIGN_OR_RETURN(*chunk, des.deserialize(buff));
-            });
+            };
         }
     }
     return Status::OK();

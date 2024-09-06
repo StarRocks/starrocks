@@ -1488,7 +1488,7 @@ public:
             InputCppType temp;
             for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
                  cur_element += step) {
-                TRY_CATCH_BAD_ALLOC(elements->append_numbers(&cur_element, sizeof(InputCppType)));
+                elements->append_numbers(&cur_element, sizeof(InputCppType));
                 total_elements_num++;
                 if (__builtin_add_overflow(cur_element, step, &temp)) break;
             }
