@@ -92,6 +92,16 @@ public class ExplainAnalyzer {
     }
 
     public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile, List<Integer> planNodeIds) {
+        LOG.debug("plan {} profile {} planNodeIds {}", plan, profile, planNodeIds);
+        if (plan == null && profile.getChild("Summary") != null) {
+            String loadType = profile.getChild("Summary").getInfoString(ProfileManager.LOAD_TYPE);
+            if (loadType != null && (loadType.equals(ProfileManager.LOAD_TYPE_STREAM_LOAD)
+                    || loadType.equals(ProfileManager.LOAD_TYPE_ROUTINE_LOAD))) {
+                StringBuilder builder = new StringBuilder();
+                profile.prettyPrint(builder, "");
+                return builder.toString();
+            }
+        }
         ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds);
         return analyzer.analyze();
     }

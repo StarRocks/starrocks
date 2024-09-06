@@ -83,6 +83,13 @@ public class StreamLoadTaskTest {
 
     @Test
     public void testAfterAborted() throws UserException {
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.isProfileAlreadyReported();
+                result = false;
+            }
+        };
         TransactionState txnState = new TransactionState();
         boolean txnOperated = true;
 
@@ -161,5 +168,29 @@ public class StreamLoadTaskTest {
         Assert.assertEquals(10L, loadInfo.getNum_unselected_rows());
         Assert.assertEquals("http://error.log.rl", loadInfo.getUrl());
         Assert.assertEquals("Another error message", loadInfo.getError_msg());
+    }
+
+    @Test
+    public void testBuildProfile() throws UserException {
+        streamLoadTask.setCoordinator(coord);
+        streamLoadTask.setIsSyncStreamLoad(true);
+        new Expectations() {
+            {
+                coord.isProfileAlreadyReported();
+                result = true;
+                coord.getQueryProfile();
+                result = null;
+            }
+        };
+        TUniqueId labelId = new TUniqueId(4, 5);
+        streamLoadTask.setTUniqueId(labelId);
+        QeProcessorImpl.INSTANCE.registerQuery(streamLoadTask.getTUniqueId(), coord);
+        Assert.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+
+        TransactionState txnState = new TransactionState();
+        boolean txnOperated = true;
+        streamLoadTask.afterCommitted(txnState, txnOperated);
+        Assert.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+
     }
 }
