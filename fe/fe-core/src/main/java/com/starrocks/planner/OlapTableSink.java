@@ -384,9 +384,10 @@ public class OlapTableSink extends DataSink {
             TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
                     indexMeta.getShortKeyColumnCount());
             TOlapTableIndexSchema indexSchema = new TOlapTableIndexSchema(pair.getKey(), columns,
-                    indexMeta.getSchemaHash(), columnToExprValue);
+                    indexMeta.getSchemaHash());
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
+            indexSchema.setColumn_to_expr_value(columnToExprValue);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 String dbName = MetaUtils.getDatabase(dbId).getFullName();
