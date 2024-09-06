@@ -58,7 +58,7 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -118,8 +118,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testAddSchemaChange() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -131,8 +132,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testSchemaChange1() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
@@ -185,8 +187,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
@@ -254,14 +257,14 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         olapTable.setUseFastSchemaEvolution(false);
 
-        new MockUp<MetadataMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(String dbName) {
                 return db;
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(String dbName, String tblName) {
                 return olapTable;
             }
         };
@@ -322,7 +325,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     }
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
-            throws UserException {
+                throws UserException {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
@@ -332,14 +335,14 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
 
-        new MockUp<MetadataMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(String dbName) {
                 return db;
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(String dbName, String tblName) {
                 return olapTable;
             }
         };
@@ -353,14 +356,14 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testModifyDynamicPartitionWithoutTableProperty() throws AlterJobException, UserException {
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.ENABLE, "false",
-                "not a dynamic partition table");
+                    "not a dynamic partition table");
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.TIME_UNIT, "day",
-                DynamicPartitionProperty.ENABLE);
+                    DynamicPartitionProperty.ENABLE);
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.END, "3", DynamicPartitionProperty.ENABLE);
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.PREFIX, "p",
-                DynamicPartitionProperty.ENABLE);
+                    DynamicPartitionProperty.ENABLE);
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.BUCKETS, "30",
-                DynamicPartitionProperty.ENABLE);
+                    DynamicPartitionProperty.ENABLE);
     }
 
     @Test
@@ -411,7 +414,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
 
             @Mock
@@ -424,19 +427,19 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         ReorderColumnsClause clause = (ReorderColumnsClause) alterTableStmt.getAlterClauseList().get(0);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
 
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         AlterJobV2 alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
         Assert.assertEquals(0L, alterJobV2.warehouseId);
 
-
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
 
             @Mock
@@ -456,8 +459,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testCancelPendingJobWithFlag() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 

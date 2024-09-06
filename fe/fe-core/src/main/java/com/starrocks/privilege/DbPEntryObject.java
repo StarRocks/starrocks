@@ -199,7 +199,7 @@ public class DbPEntryObject implements PEntryObject {
             return "ALL DATABASES";
         } else {
             if (CatalogMgr.isInternalCatalog(catalogId)) {
-                Database database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(uuid));
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(Long.parseLong(uuid));
                 if (database == null) {
                     throw new MetaNotFoundException("Can't find database : " + uuid);
                 }

@@ -73,6 +73,8 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
+    // temporary data does not allow caching
+    bool temporary_data = false;
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     ReaderType reader_type = READER_QUERY;
@@ -80,8 +82,6 @@ public:
 
     const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
-
-    bool has_delete_pred = false;
 
     /// Mark whether this is the first split of a segment.
     /// A segment may be divided into multiple split to scan concurrently.

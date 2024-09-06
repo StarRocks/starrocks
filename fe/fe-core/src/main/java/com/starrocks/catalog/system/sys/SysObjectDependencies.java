@@ -85,7 +85,7 @@ public class SysObjectDependencies {
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             locker.lockDatabase(db, LockType.READ);
             try {
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     // If it is not a materialized view, we do not need to verify permissions
                     if (!table.isMaterializedView()) {
                         continue;

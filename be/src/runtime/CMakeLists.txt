@@ -43,6 +43,7 @@ set(RUNTIME_FILES
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
     types.cpp
+    agg_state_desc.cpp
     mem_tracker.cpp
     data_stream_recvr.cpp
     export_sink.cpp
@@ -74,6 +75,7 @@ set(RUNTIME_FILES
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
+    memory/column_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp

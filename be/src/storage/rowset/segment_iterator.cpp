@@ -498,7 +498,7 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         // cols file index -> column index in corresponding file
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first >= 0) {
-            auto column_file = dcg->column_files(parent_name(_segment->file_name()))[idx.first];
+            ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
             if (_dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
@@ -544,6 +544,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
+    iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
@@ -1816,27 +1817,28 @@ Status SegmentIterator::_apply_bitmap_index() {
             cid_2_ucid[field->id()] = field->uid();
         }
 
-        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
-                                                      this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
-            const ColumnUID ucid = cid_2_ucid[cid];
-            // the column's index in this segment file
-            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
-            if (segment_ptr == nullptr) {
-                // find segment from delta column group failed, using main segment
-                segment_ptr = _segment;
-            }
+        RETURN_IF_ERROR(
+                _bitmap_index_evaluator.init([&cid_2_ucid, this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+                    const ColumnUID ucid = cid_2_ucid[cid];
+                    // the column's index in this segment file
+                    ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+                    if (segment_ptr == nullptr) {
+                        // find segment from delta column group failed, using main segment
+                        segment_ptr = _segment;
+                    }
 
-            IndexReadOptions opts;
-            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            opts.lake_io_opts = _opts.lake_io_opts;
-            opts.read_file = _column_files[cid].get();
-            opts.stats = _opts.stats;
+                    IndexReadOptions opts;
+                    opts.use_page_cache = !_opts.temporary_data && (config::enable_bitmap_index_memory_page_cache ||
+                                                                    !config::disable_storage_page_cache);
+                    opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
+                    opts.lake_io_opts = _opts.lake_io_opts;
+                    opts.read_file = _column_files[cid].get();
+                    opts.stats = _opts.stats;
 
-            BitmapIndexIterator* bitmap_iter = nullptr;
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
-            return bitmap_iter;
-        }));
+                    BitmapIndexIterator* bitmap_iter = nullptr;
+                    RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+                    return bitmap_iter;
+                }));
 
         RETURN_IF(!_bitmap_index_evaluator.has_bitmap_index(), Status::OK());
     }

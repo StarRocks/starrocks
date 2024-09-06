@@ -31,10 +31,6 @@ public:
                                          std::vector<uint32_t>& column_ids,
                                          std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
                                          const FooterPointerPB& partial_rowset_footer);
-    // this funciton will append write_column to src_file and rebuild segment footer
-    static Status rewrite(const std::string& src, const FileEncryptionInfo& einfo, const TabletSchemaCSPtr& tschema,
-                          std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
-                          uint32_t segment_id, const FooterPointerPB& partial_rowseet_footer);
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,

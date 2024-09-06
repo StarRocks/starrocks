@@ -100,7 +100,7 @@ public class LoadJobMVListener implements LoadJobListener {
             return;
         }
         for (long tableId : transactionState.getTableIdList()) {
-            Table table = db.getTable(tableId);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
@@ -141,7 +141,8 @@ public class LoadJobMVListener implements LoadJobListener {
         while (mvIdIterator.hasNext()) {
             MvId mvId = mvIdIterator.next();
             Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-            MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+            MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(mvId.getDbId(), mvId.getId());
             if (materializedView == null) {
                 LOG.warn("materialized view {} does not exists.", mvId.getId());
                 mvIdIterator.remove();
@@ -153,7 +154,7 @@ public class LoadJobMVListener implements LoadJobListener {
                                 "db:{}, mv:{}", table.getName(), mvDb.getFullName(),
                         materializedView.getName());
                 GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                        mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
+                        mvDb.getFullName(), materializedView.getName(), false, null,
                         Constants.TaskRunPriority.NORMAL.value(), true, false);
             }
         }

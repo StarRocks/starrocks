@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Manage BE Blacklist
@@ -19,7 +19,7 @@ By default, StarRocks can automatically manage the BE Blacklist, adding the BE n
 
 ## Add a BE to the blacklist
 
-You can manually add a BE node to the BE Blacklist using [ADD BACKEND BLACKLIST](../../sql-reference/sql-statements/Administration/ADD_BACKEND_BLACKLIST.md). In this statement, you must specify the ID of the BE node to be blacklisted. You can obtain the BE ID by executing [SHOW BACKENDS](../../sql-reference/sql-statements/Administration/SHOW_BACKENDS.md).
+You can manually add a BE node to the BE Blacklist using [ADD BACKEND BLACKLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/ADD_BACKEND_BLACKLIST.md). In this statement, you must specify the ID of the BE node to be blacklisted. You can obtain the BE ID by executing [SHOW BACKENDS](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKENDS.md).
 
 Example:
 
@@ -36,7 +36,7 @@ ADD BACKEND BLACKLIST 10001;
 
 ## Remove a BE from blacklist
 
-You can manually remove a BE node from the BE Blacklist using [DELETE BACKEND BLACKLIST](../../sql-reference/sql-statements/Administration/DELETE_BACKEND_BLACKLIST.md). In this statement, you must also specify the ID of the BE node.
+You can manually remove a BE node from the BE Blacklist using [DELETE BACKEND BLACKLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/DELETE_BACKEND_BLACKLIST.md). In this statement, you must also specify the ID of the BE node.
 
 Example:
 
@@ -46,7 +46,7 @@ DELETE BACKEND BLACKLIST 10001;
 
 ## View BE Blacklist
 
-You can view the BE nodes in the BE Blacklist using [SHOW BACKEND BLACKLIST](../../sql-reference/sql-statements/Administration/SHOW_BACKEND_BLACKLIST.md).
+You can view the BE nodes in the BE Blacklist using [SHOW BACKEND BLACKLIST](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKEND_BLACKLIST.md).
 
 Example:
 

@@ -240,7 +240,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     public void setJob(ExportStmt stmt) throws UserException {
         String dbName = stmt.getTblName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -266,7 +266,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.columnNames = stmt.getColumnNames();
 
         this.dbId = db.getId();
-        this.exportTable = db.getTable(stmt.getTblName().getTbl());
+        this.exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), stmt.getTblName().getTbl());
         if (exportTable == null) {
             throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
         }
@@ -993,10 +994,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
         if (stateMgr.getMetadata() != null) {
-            db = stateMgr.getDb(dbId);
+            db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {
-            exportTable = db.getTable(tableId);
+            exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
 
         int count = in.readInt();
@@ -1086,10 +1087,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
         if (stateMgr.getMetadata() != null) {
-            db = stateMgr.getDb(dbId);
+            db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {
-            exportTable = db.getTable(tableId);
+            exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
     }
 

@@ -93,6 +93,8 @@ public class JobSpec {
     private boolean needQueued = false;
     private boolean enableGroupLevelQueue = false;
 
+    private boolean incrementalScanRanges = false;
+
     public static class Factory {
         private Factory() {
         }
@@ -110,6 +112,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setScan_node_number(scanNodes.size());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -139,6 +142,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setScan_node_number(scanNodes.size());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -488,6 +492,14 @@ public class JobSpec {
         return planProtocol;
     }
 
+    public boolean isIncrementalScanRanges() {
+        return incrementalScanRanges;
+    }
+
+    public void setIncrementalScanRanges(boolean v) {
+        incrementalScanRanges = v;
+    }
+
     public void reset() {
         fragments.forEach(PlanFragment::reset);
     }
@@ -499,6 +511,7 @@ public class JobSpec {
             return GlobalStateMgr.getCurrentState().getGlobalSlotProvider();
         }
     }
+
     public boolean hasOlapTableSink() {
         for (PlanFragment fragment : fragments) {
             if (fragment.hasOlapTableSink()) {
@@ -507,6 +520,7 @@ public class JobSpec {
         }
         return false;
     }
+
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 

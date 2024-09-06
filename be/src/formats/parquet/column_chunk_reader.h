@@ -116,7 +116,7 @@ public:
         return _cur_decoder->get_dict_values(column);
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
         RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }

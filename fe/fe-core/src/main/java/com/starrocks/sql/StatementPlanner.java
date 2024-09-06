@@ -27,6 +27,8 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -430,12 +432,15 @@ public class StatementPlanner {
             }
         }
 
-        MetaUtils.normalizationTableName(session, stmt.getTableName());
+        stmt.getTableName().normalization(session);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
-        Database db = MetaUtils.getDatabase(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
         if (targetTable == null) {
             throw new SemanticException("Table %s is not found", tableName);
@@ -521,10 +526,13 @@ public class StatementPlanner {
             return;
         }
 
-        MetaUtils.normalizationTableName(session, stmt.getTableName());
+        stmt.getTableName().normalization(session);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
-        Database db = MetaUtils.getDatabase(catalogName, dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
         try {
             if (targetTable instanceof ExternalOlapTable) {

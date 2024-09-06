@@ -111,9 +111,10 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::Column& src, 
 }
 
 template <typename T>
-bool ObjectColumn<T>::append_strings(const Buffer<starrocks::Slice>& strs) {
-    _pool.reserve(_pool.size() + strs.size());
-    for (const Slice& s : strs) {
+bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
+    _pool.reserve(_pool.size() + size);
+    for (size_t i = 0; i < size; i++) {
+        const auto& s = data[i];
         _pool.emplace_back(s);
     }
 
@@ -328,9 +329,7 @@ std::string ObjectColumn<BitmapValue>::debug_item(size_t idx) const {
 
 template <typename T>
 StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
-    if (capacity_limit_reached()) {
-        return Status::InternalError("Size of ObjectColumn exceed the limit");
-    }
+    RETURN_IF_ERROR(capacity_limit_reached());
     return nullptr;
 }
 

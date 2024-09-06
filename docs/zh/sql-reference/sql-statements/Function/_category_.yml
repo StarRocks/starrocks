@@ -1,0 +1,6 @@
+position: 110 # float position is supported
+label: '函数'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

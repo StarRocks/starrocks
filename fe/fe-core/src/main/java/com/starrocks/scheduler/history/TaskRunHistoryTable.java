@@ -21,6 +21,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TGetTasksParams;
@@ -33,7 +35,9 @@ import org.apache.logging.log4j.util.Strings;
 
 import java.text.MessageFormat;
 import java.time.ZoneId;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -119,6 +123,11 @@ public class TaskRunHistoryTable {
                         Strings.quote(DateUtils.formatTimeStampInMill(status.getFinishTime(), ZoneId.systemDefault()));
                 String expireTime =
                         Strings.quote(DateUtils.formatTimeStampInMill(status.getExpireTime(), ZoneId.systemDefault()));
+
+                // To be compatible with old task runs, filter out unnecessary properties to avoid json content too large
+                // and deserialize error.
+                removeUnnecessaryProperties(status);
+
                 // Since the content is stored in JSON format and insert into the starrocks olap table, we need to escape the
                 // content to make it safer in deserializing the json.
                 return MessageFormat.format(INSERT_SQL_VALUE,
@@ -134,6 +143,40 @@ public class TaskRunHistoryTable {
 
             String sql = insert + values;
             RepoExecutor.getInstance().executeDML(sql);
+        }
+    }
+
+    /**
+     * Normalize the task run status, remove unnecessary properties
+     * @param status
+     */
+    private void removeUnnecessaryProperties(TaskRunStatus status) {
+        //  remove unnecessary properties
+        if (status.getProperties() != null) {
+            removeUnnecessaryProperties(status.getProperties());
+        }
+        // remove unnecessary properties in mvTaskRunExtraMessage
+        if (status.getMvTaskRunExtraMessage() != null) {
+            ExecuteOption executeOption = status.getMvTaskRunExtraMessage().getExecuteOption();
+            if (executeOption != null) {
+                removeUnnecessaryProperties(executeOption.getTaskRunProperties());
+            }
+        }
+    }
+
+    /**
+     * Only keep the properties that are necessary for task run
+     * @param properties
+     */
+    private void removeUnnecessaryProperties(Map<String, String> properties) {
+        if (properties == null) {
+            return;
+        }
+        Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
+        while (iterator.hasNext()) {
+            if (!TaskRun.TASK_RUN_PROPERTIES.contains(iterator.next().getKey())) {
+                iterator.remove();
+            }
         }
     }
 

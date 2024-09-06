@@ -967,7 +967,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
     public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {
-            Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb);
             for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
                 if (startTime > 0 && mv.getCreateTime() > startTime) {
                     starRocksAssert.dropMaterializedView(mv.getName());

@@ -405,6 +405,8 @@ struct TMaterializedViewStatus {
 
     26: optional string extra_message
     27: optional string query_rewrite_status
+
+    28: optional string creator
 }
 
 struct TListPipesParams {
@@ -496,6 +498,7 @@ struct TTaskInfo {
     6: optional i64 expire_time
     7: optional string properties
     8: optional string catalog
+    9: optional string creator
 }
 
 struct TGetTaskInfoResult {

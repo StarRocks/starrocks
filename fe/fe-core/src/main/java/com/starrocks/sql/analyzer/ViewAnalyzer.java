@@ -20,6 +20,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -28,7 +29,6 @@ import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.MetaUtils;
 
 import java.util.HashSet;
 import java.util.List;
@@ -67,7 +67,11 @@ public class ViewAnalyzer {
             final String tableName = stmt.getTableName().getTbl();
             FeNameFormat.checkTableName(tableName);
 
-            Table table = MetaUtils.getTable(stmt.getTableName());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(stmt.getTableName().getCatalog(),
+                    stmt.getTableName().getDb(), stmt.getTableName().getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName);
+            }
             if (table.isConnectorView()) {
                 throw new SemanticException("cannot alter connector view");
             }

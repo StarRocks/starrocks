@@ -91,6 +91,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -262,7 +263,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
         // check if db exist
         String dbName = stmt.getDbName();
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -319,7 +320,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
                 String tblName = tblRef.getName().getTbl();
-                Table tbl = db.getTable(tblName);
+                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
@@ -519,7 +520,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -744,6 +745,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
     }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> jobSamples = new ArrayList<>(dbIdToBackupOrRestoreJob.values());
+        return Lists.newArrayList(Pair.create(jobSamples, (long) dbIdToBackupOrRestoreJob.size()));
+    }
 }
-
-

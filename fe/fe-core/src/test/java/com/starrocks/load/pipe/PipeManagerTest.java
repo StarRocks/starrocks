@@ -132,7 +132,7 @@ public class PipeManagerTest {
 
     @After
     public void after() {
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
     }
@@ -229,7 +229,7 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -835,7 +835,7 @@ public class PipeManagerTest {
         sql = "create pipe p_crud1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
         Assert.assertEquals(0, pm.getPipesUnlock().size());
     }
@@ -1030,7 +1030,7 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1

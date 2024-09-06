@@ -15,6 +15,7 @@
 #pragma once
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -24,7 +25,7 @@ class DiskRange {
 public:
     DiskRange(const int64_t off, const int64_t len) : _offset(off), _length(len) {
         DCHECK(off >= 0);
-        DCHECK(len > 0);
+        DCHECK(len >= 0);
     }
 
     /**

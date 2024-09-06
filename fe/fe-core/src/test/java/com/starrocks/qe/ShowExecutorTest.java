@@ -82,6 +82,7 @@ import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -253,7 +254,7 @@ public class ShowExecutorTest {
         };
 
         BaseTableInfo baseTableInfo = new BaseTableInfo(
-                "default_catalog", "testDb", "testTbl", null);
+                    "default_catalog", "testDb", "testTbl", null);
 
         // mock materialized view
         MaterializedView mv = new MaterializedView();
@@ -302,10 +303,10 @@ public class ShowExecutorTest {
                 mv.getPartitionInfo();
                 minTimes = 0;
                 result = new ExpressionRangePartitionInfo(
-                        Collections.singletonList(
-                                ColumnIdExpr.create(new SlotRef(
-                                        new TableName("test", "testMv"), column1.getName()))),
-                        Collections.singletonList(column1), PartitionType.RANGE);
+                            Collections.singletonList(
+                                        ColumnIdExpr.create(new SlotRef(
+                                                    new TableName("test", "testMv"), column1.getName()))),
+                            Collections.singletonList(column1), PartitionType.RANGE);
 
                 mv.getDefaultDistributionInfo();
                 minTimes = 0;
@@ -326,7 +327,7 @@ public class ShowExecutorTest {
                 mv.getTableProperty();
                 minTimes = 0;
                 result = new TableProperty(
-                        Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
+                            Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
 
                 mv.getIdToColumn();
                 minTimes = 0;
@@ -366,19 +367,28 @@ public class ShowExecutorTest {
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb("testDb");
+                /*
+                globalStateMgr.getLocalMetastore().getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb("emptyDb");
+
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
+
+                 */
 
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
 
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
@@ -397,9 +407,29 @@ public class ShowExecutorTest {
                 result = null;
 
                 metadataMgr.getTable("default_catalog", "testDb",
-                        "testTbl");
+                            "testTbl");
                 minTimes = 0;
                 result = table;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                if (dbName.equalsIgnoreCase("emptyDb")) {
+                    return null;
+                }
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return db.getTables();
             }
         };
 
@@ -473,6 +503,7 @@ public class ShowExecutorTest {
         OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
         Database db = new Database();
 
+        /*
         new Expectations(db) {
             {
                 db.getTable(anyString);
@@ -485,6 +516,8 @@ public class ShowExecutorTest {
             }
         };
 
+         */
+
         new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext ctx, Database db, TableName tableName) {
@@ -494,15 +527,19 @@ public class ShowExecutorTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(0);
+                globalStateMgr.getLocalMetastore().getDb(0);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = olapTable;
             }
         };
 
         // Ok to test
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
-                null, null, null, false);
+                    null, null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
@@ -549,7 +586,7 @@ public class ShowExecutorTest {
         ctx.setQualifiedUser("testUser");
 
         DescribeStmt stmt = (DescribeStmt) com.starrocks.sql.parser.SqlParser.parse("desc testTbl",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                    ctx.getSessionVariable().getSqlMode()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet;
@@ -655,7 +692,7 @@ public class ShowExecutorTest {
     @Test(expected = SemanticException.class)
     public void testShowCreateTableEmptyDb() throws SemanticException, DdlException {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("emptyDb", "testTable"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+                    ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
@@ -668,7 +705,7 @@ public class ShowExecutorTest {
         ctx.setQualifiedUser("testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
-                ctx.getSessionVariable()).get(0);
+                    ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
@@ -682,7 +719,7 @@ public class ShowExecutorTest {
 
         // verbose
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
-                ctx.getSessionVariable()).get(0);
+                    ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         resultSet = ShowExecutor.execute(stmt, ctx);
@@ -697,7 +734,7 @@ public class ShowExecutorTest {
 
         // show full fields
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full fields from testTbl in testDb",
-                ctx.getSessionVariable()).get(0);
+                    ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         resultSet = ShowExecutor.execute(stmt, ctx);
@@ -712,7 +749,7 @@ public class ShowExecutorTest {
 
         // pattern
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb like \"%1\"",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                    ctx.getSessionVariable().getSqlMode()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         resultSet = ShowExecutor.execute(stmt, ctx);
@@ -895,10 +932,10 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(),
-                resultSet.getMetaData().getColumnCount());
+                    resultSet.getMetaData().getColumnCount());
         for (int i = 0; i < ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(); ++i) {
             Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.get(i),
-                    resultSet.getMetaData().getColumn(i).getName());
+                        resultSet.getMetaData().getColumn(i).getName());
         }
 
         Assert.assertTrue(resultSet.next());
@@ -1003,15 +1040,15 @@ public class ShowExecutorTest {
 
     private void verifyShowMaterializedViewResult(ShowResultSet resultSet) throws AnalysisException, DdlException {
         String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv` (`col1`, `col2`)\n" +
-                "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
-                "PARTITION BY (`col1`)\n" +
-                "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
-                "REFRESH ASYNC\n" +
-                "PROPERTIES (\n" +
-                "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\",\n" +
-                "\"storage_medium\" = \"SSD\"\n" +
-                ")\n" +
-                "AS select col1, col2 from table1;";
+                    "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
+                    "PARTITION BY (`col1`)\n" +
+                    "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
+                    "REFRESH ASYNC\n" +
+                    "PROPERTIES (\n" +
+                    "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\",\n" +
+                    "\"storage_medium\" = \"SSD\"\n" +
+                    ")\n" +
+                    "AS select col1, col2 from table1;";
 
         Assert.assertTrue(resultSet.next());
         List<Column> mvSchemaTable = MaterializedViewsSystemTable.create().getFullSchema();
@@ -1030,14 +1067,15 @@ public class ShowExecutorTest {
         Assert.assertEquals("", resultSet.getString(12));
         Assert.assertEquals("false", resultSet.getString(13));
         System.out.println(resultSet.getResultRows());
-        for (int i = 14; i < mvSchemaTable.size() - 4; i++) {
+        for (int i = 14; i < mvSchemaTable.size() - 5; i++) {
             System.out.println(i);
             Assert.assertEquals("", resultSet.getString(i));
         }
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 4));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 3));
-        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 5));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 4));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 3));
+        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 
@@ -1052,7 +1090,8 @@ public class ShowExecutorTest {
     @Test
     public void testShowAlterTable() throws AnalysisException, DdlException {
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
-        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), globalStateMgr.getDb("testDb")));
+        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(),
+                    globalStateMgr.getLocalMetastore().getDb("testDb")));
 
         ShowExecutor.execute(stmt, ctx);
     }
@@ -1081,34 +1120,34 @@ public class ShowExecutorTest {
                 partitions.add("year");
                 partitions.add("dt");
                 HiveTable.Builder tableBuilder = HiveTable.builder()
-                        .setId(1)
-                        .setTableName("test_table")
-                        .setCatalogName("hive_catalog")
-                        .setResourceName(toResourceName("hive_catalog", "hive"))
-                        .setHiveDbName("hive_db")
-                        .setHiveTableName("test_table")
-                        .setPartitionColumnNames(partitions)
-                        .setFullSchema(fullSchema)
-                        .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
-                        .setCreateTime(10000);
+                            .setId(1)
+                            .setTableName("test_table")
+                            .setCatalogName("hive_catalog")
+                            .setResourceName(toResourceName("hive_catalog", "hive"))
+                            .setHiveDbName("hive_db")
+                            .setHiveTableName("test_table")
+                            .setPartitionColumnNames(partitions)
+                            .setFullSchema(fullSchema)
+                            .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                            .setCreateTime(10000);
                 return tableBuilder.build();
             }
         };
 
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+                    ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
-                        "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
-                        "  `name` varchar DEFAULT NULL,\n" +
-                        "  `year` int(11) DEFAULT NULL,\n" +
-                        "  `dt` int(11) DEFAULT NULL\n" +
-                        ")\n" +
-                        "PARTITION BY (year, dt)\n" +
-                        "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
-                resultSet.getResultRows().get(0).get(1));
+                                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                                "  `name` varchar DEFAULT NULL,\n" +
+                                "  `year` int(11) DEFAULT NULL,\n" +
+                                "  `dt` int(11) DEFAULT NULL\n" +
+                                ")\n" +
+                                "PARTITION BY (year, dt)\n" +
+                                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                    resultSet.getResultRows().get(0).get(1));
     }
 
     @Test
@@ -1135,35 +1174,35 @@ public class ShowExecutorTest {
                 partitions.add("year");
                 partitions.add("dt");
                 HiveTable.Builder tableBuilder = HiveTable.builder()
-                        .setId(1)
-                        .setTableName("test_table")
-                        .setCatalogName("hive_catalog")
-                        .setResourceName(toResourceName("hive_catalog", "hive"))
-                        .setHiveDbName("hive_db")
-                        .setHiveTableName("test_table")
-                        .setPartitionColumnNames(partitions)
-                        .setFullSchema(fullSchema)
-                        .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
-                        .setCreateTime(10000)
-                        .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE);
+                            .setId(1)
+                            .setTableName("test_table")
+                            .setCatalogName("hive_catalog")
+                            .setResourceName(toResourceName("hive_catalog", "hive"))
+                            .setHiveDbName("hive_db")
+                            .setHiveTableName("test_table")
+                            .setPartitionColumnNames(partitions)
+                            .setFullSchema(fullSchema)
+                            .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                            .setCreateTime(10000)
+                            .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE);
                 return tableBuilder.build();
             }
         };
 
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+                    ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL TABLE `test_table` (\n" +
-                        "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
-                        "  `name` varchar DEFAULT NULL,\n" +
-                        "  `year` int(11) DEFAULT NULL,\n" +
-                        "  `dt` int(11) DEFAULT NULL\n" +
-                        ")\n" +
-                        "PARTITION BY (year, dt)\n" +
-                        "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
-                resultSet.getResultRows().get(0).get(1));
+                                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                                "  `name` varchar DEFAULT NULL,\n" +
+                                "  `year` int(11) DEFAULT NULL,\n" +
+                                "  `dt` int(11) DEFAULT NULL\n" +
+                                ")\n" +
+                                "PARTITION BY (year, dt)\n" +
+                                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                    resultSet.getResultRows().get(0).get(1));
     }
 
     @Test
@@ -1184,10 +1223,10 @@ public class ShowExecutorTest {
 
         Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
-                "comment \"hive_test\"\n" +
-                "PROPERTIES (\"type\"  =  \"hive\",\n" +
-                "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
-                ")", resultSet.getResultRows().get(0).get(1));
+                    "comment \"hive_test\"\n" +
+                    "PROPERTIES (\"type\"  =  \"hive\",\n" +
+                    "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
+                    ")", resultSet.getResultRows().get(0).get(1));
     }
 
     @Test
@@ -1202,7 +1241,7 @@ public class ShowExecutorTest {
         ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("catalog_not_exist");
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Unknown catalog 'catalog_not_exist'",
-                () -> ShowExecutor.execute(stmt, ctx));
+                    () -> ShowExecutor.execute(stmt, ctx));
     }
 
     @Test
@@ -1212,8 +1251,8 @@ public class ShowExecutorTest {
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> map = new HashMap<>();
                 map.put(new AnalyzeMgr.StatsMetaKey("hive0", "testDb", "testTable"),
-                        new ExternalBasicStatsMeta("hive0", "testDb", "testTable", null,
-                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap()));
+                            new ExternalBasicStatsMeta("hive0", "testDb", "testTable", null,
+                                        StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap()));
                 return map;
             }
         };
@@ -1234,13 +1273,13 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         resultSet.getResultRows().forEach(System.out::println);
         String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
-                "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
+                    "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
-                l.toString().contains(expectString1)));
+                    l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
-                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+                    "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
-                l.toString().contains(expectString2)));
+                    l.toString().contains(expectString2)));
     }
 
     @Test
@@ -1263,12 +1302,12 @@ public class ShowExecutorTest {
 
         Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
-                "comment \"hive_test\"\n" +
-                "PROPERTIES (\"aws.s3.access_key\"  =  \"ia******ey\",\n" +
-                "\"aws.s3.secret_key\"  =  \"ia******ey\",\n" +
-                "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
-                "\"type\"  =  \"hive\"\n" +
-                ")", resultSet.getResultRows().get(0).get(1));
+                    "comment \"hive_test\"\n" +
+                    "PROPERTIES (\"aws.s3.access_key\"  =  \"ia******ey\",\n" +
+                    "\"aws.s3.secret_key\"  =  \"ia******ey\",\n" +
+                    "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
+                    "\"type\"  =  \"hive\"\n" +
+                    ")", resultSet.getResultRows().get(0).get(1));
     }
 
     @Test
@@ -1281,7 +1320,7 @@ public class ShowExecutorTest {
         properties.put("ni", "hao");
         StringLiteral stringLiteral = new StringLiteral("hello");
         dataCacheMgr.createCacheRule(QualifiedName.of(ImmutableList.of("test2", "test2", "test2")),
-                stringLiteral, -1, properties);
+                    stringLiteral, -1, properties);
 
         ShowDataCacheRulesStmt stmt = new ShowDataCacheRulesStmt(NodePosition.ZERO);
 

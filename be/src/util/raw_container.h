@@ -20,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include "runtime/memory/column_allocator.h"
+
 namespace starrocks::raw {
 
 // RawAllocator allocates `trailing` more object(not bytes) than caller required,
@@ -154,11 +156,14 @@ using RawVector = std::vector<T, RawAllocator<T, 0>>;
 template <class T>
 using RawVectorPad16 = std::vector<T, RawAllocator<T, 16>>;
 
-template <class T>
-inline void make_room(std::vector<T>* v, size_t n) {
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+make_room(Container* v, size_t n) {
     RawVector<T> rv;
     rv.resize(n);
-    v->swap(reinterpret_cast<std::vector<T>&>(rv));
+    v->swap(reinterpret_cast<Container&>(rv));
 }
 
 inline void make_room(std::string* s, size_t n) {
@@ -167,8 +172,11 @@ inline void make_room(std::string* s, size_t n) {
     s->swap(reinterpret_cast<std::string&>(rs));
 }
 
-template <typename T>
-inline void stl_vector_resize_uninitialized(std::vector<T>* vec, size_t new_size) {
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
     ((RawVector<T>*)vec)->resize(new_size);
 }
 

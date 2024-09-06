@@ -31,10 +31,11 @@ class HashJoinProberImpl {
 public:
     virtual ~HashJoinProberImpl() = default;
     virtual bool probe_chunk_empty() const = 0;
+    virtual Status on_input_finished(RuntimeState* state) = 0;
     virtual Status push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) = 0;
     virtual StatusOr<ChunkPtr> probe_chunk(RuntimeState* state) = 0;
     virtual StatusOr<ChunkPtr> probe_remain(RuntimeState* state, bool* has_remain) = 0;
-    virtual void reset() = 0;
+    virtual void reset(RuntimeState* runtime_state) = 0;
 
 protected:
     HashJoinProberImpl(HashJoiner& hash_joiner) : _hash_joiner(hash_joiner) {}
@@ -51,6 +52,13 @@ public:
         return _impl->push_probe_chunk(state, std::move(chunk));
     }
 
+    Status on_input_finished(RuntimeState* state) {
+        if (_impl == nullptr) {
+            return Status::OK();
+        }
+        return _impl->on_input_finished(state);
+    }
+
     // probe hash table
     StatusOr<ChunkPtr> probe_chunk(RuntimeState* state) { return _impl->probe_chunk(state); }
 
@@ -58,7 +66,7 @@ public:
         return _impl->probe_remain(state, has_remain);
     }
 
-    void reset() { return _impl->reset(); }
+    void reset(RuntimeState* runtime_state) { return _impl->reset(runtime_state); }
 
     HashJoinProber* clone_empty(ObjectPool* pool) { return pool->add(new HashJoinProber(_hash_joiner)); }
 
@@ -96,10 +104,6 @@ public:
 
     virtual void reset(const HashTableParam& param) = 0;
 
-    virtual void reset_probe(RuntimeState* state) = 0;
-
-    virtual HashJoinBuilder* clone_empty(ObjectPool* pool) = 0;
-
     virtual int64_t ht_mem_usage() const = 0;
 
     // used for check NULL_AWARE_LEFT_ANTI_JOIN build side has null
@@ -118,6 +122,7 @@ public:
 
     virtual std::unique_ptr<HashJoinProberImpl> create_prober() = 0;
 
+    // clone readable to to builder
     virtual void clone_readable(HashJoinBuilder* builder) = 0;
 
     virtual ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const = 0;
@@ -148,12 +153,6 @@ public:
 
     Status build(RuntimeState* state) override;
 
-    void reset_probe(RuntimeState* state) override;
-
-    SingleHashJoinBuilder* clone_empty(ObjectPool* pool) override {
-        return pool->add(new SingleHashJoinBuilder(_hash_joiner));
-    }
-
     bool anti_join_key_column_has_null() const override;
 
     int64_t ht_mem_usage() const override { return _ht.mem_usage(); }
@@ -179,4 +178,12 @@ private:
     Columns _key_columns;
 };
 
+struct HashJoinBuildOptions {
+    bool enable_partitioned_hash_join = false;
+};
+
+class HashJoinBuilderFactory {
+public:
+    static HashJoinBuilder* create(ObjectPool* pool, const HashJoinBuildOptions& options, HashJoiner& hash_joiner);
+};
 } // namespace starrocks

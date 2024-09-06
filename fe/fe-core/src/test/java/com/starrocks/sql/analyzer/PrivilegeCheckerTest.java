@@ -787,7 +787,7 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db3.tbl1 from test");
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db1 = globalStateMgr.getDb("db1");
+        Database db1 = globalStateMgr.getLocalMetastore().getDb("db1");
         nativeAnalyzeJob = new NativeAnalyzeJob(db1.getId(), -1, Lists.newArrayList(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
@@ -832,7 +832,7 @@ public class PrivilegeCheckerTest {
         new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
-        Database db2 = globalStateMgr.getDb("db2");
+        Database db2 = globalStateMgr.getLocalMetastore().getDb("db2");
         tbl1 = db2.getTable("tbl1");
         nativeAnalyzeJob = new NativeAnalyzeJob(db2.getId(), tbl1.getId(), Lists.newArrayList(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
@@ -854,7 +854,7 @@ public class PrivilegeCheckerTest {
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db1 = globalStateMgr.getDb("db1");
+        Database db1 = globalStateMgr.getLocalMetastore().getDb("db1");
         Table tbl1 = db1.getTable("tbl1");
 
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, db1.getId(), tbl1.getId(),
@@ -898,7 +898,7 @@ public class PrivilegeCheckerTest {
         // can show result for stats on table that user has any privilege on
         Assert.assertNotNull(showResult);
 
-        Database db2 = globalStateMgr.getDb("db2");
+        Database db2 = globalStateMgr.getLocalMetastore().getDb("db2");
         tbl1 = db2.getTable("tbl1");
         analyzeStatus = new NativeAnalyzeStatus(1, db2.getId(), tbl1.getId(),
                 Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
@@ -1674,7 +1674,7 @@ public class PrivilegeCheckerTest {
                 "Access denied");
 
         // Test `use database` : check any privilege on any function in db
-        Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -1861,7 +1861,7 @@ public class PrivilegeCheckerTest {
         List<Replica> replicas =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
-        Table table = db.getTable("tbl1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         ReplicasProcNode replicasProcNode = new ReplicasProcNode(db, (OlapTable) table, tabletId, replicas);
         try {
             replicasProcNode.fetchResult();
@@ -1892,7 +1892,7 @@ public class PrivilegeCheckerTest {
 
         // test user has `OPERATE` privilege
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
-        Table table = db.getTable("tbl1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         tabletSchedCtx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
                 db.getId(), table.getId(), 3, 4, 1000, System.currentTimeMillis());
         result = tabletSchedCtx.checkPrivForCurrUser(testUser);
@@ -2787,7 +2787,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testFunc() throws Exception {
-        Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -2900,7 +2900,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowFunc() throws Exception {
 
-        Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {

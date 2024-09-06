@@ -1016,11 +1016,11 @@ public class OlapTable extends Table {
             if (localMvId == null) {
                 continue;
             }
-            Database mvDb = GlobalStateMgr.getCurrentState().getDb(localMvId.getDbId());
+            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(localMvId.getDbId());
             if (mvDb == null) {
                 continue;
             }
-            Table mvTable = mvDb.getTable(localMvId.getId());
+            Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvDb.getId(), localMvId.getId());
             if (mvTable == null) {
                 continue;
             }
@@ -2104,6 +2104,15 @@ public class OlapTable extends Table {
      */
     public Partition replacePartition(Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
+
+        // For cloud native table, add partition into recycle Bin after truncate table.
+        // It is no necessary for share nothing mode because file will be deleted throught
+        // tablet report in this case.
+        if (this.isCloudNativeTableOrMaterializedView()) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
+            recyclePartitionInfo.setRecoverable(false);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        }
 
         oldPartition.getSubPartitions().forEach(physicalPartition -> {
             physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
@@ -3520,4 +3529,15 @@ public class OlapTable extends Table {
         }
     }
 
+    public int getPartitionsCount() {
+        return physicalPartitionIdToPartitionId.size();
+    }
+
+    public PhysicalPartition getPartitionSample() {
+        if (!idToPartition.isEmpty()) {
+            return idToPartition.values().iterator().next().getSubPartitions().iterator().next();
+        } else {
+            return null;
+        }
+    }
 }

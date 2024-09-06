@@ -85,22 +85,22 @@ public class ReportHandlerTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
-                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
-                .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
-                        "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1', " +
-                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
-                .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
-                        "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
-                        "'primary_index_cache_expire_sec' = '3600');")
-                .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
-                        "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
-                        "'primary_index_cache_expire_sec' = '3600');");
+                    .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
+                    .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
+                                "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1', " +
+                                "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
+                    .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                                "'primary_index_cache_expire_sec' = '3600');")
+                    .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                                "'primary_index_cache_expire_sec' = '3600');");
     }
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
@@ -124,9 +124,10 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetPrimaryIndexCacheExpireSec() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) db.getTable("primary_index_cache_expire_sec_test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
@@ -149,21 +150,22 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleUpdateTableSchema() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) db.getTable("update_schema");
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "update_schema");
 
         String stmt = "alter table update_schema add column add_v int default '1'";
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         AlterTableStmt alterTableStmt =
-                (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+                    (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
 
         long backendId = 10001L;
         List<Long> tabletIds =
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
@@ -184,9 +186,10 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletBinlogConfig() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) db.getTable("binlog_report_handler_test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "binlog_report_handler_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
@@ -375,7 +378,7 @@ public class ReportHandlerTest {
         for (int i = 0; i < tabletMetaList.size(); i++) {
             long tabletId = tabletIds.get(i);
             TabletMeta tabletMeta = tabletMetaList.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             if (db == null) {
                 continue;
             }
@@ -383,7 +386,8 @@ public class ReportHandlerTest {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tabletMeta.getTableId());
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
             }
@@ -413,11 +417,11 @@ public class ReportHandlerTest {
         };
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getDb("test").getTable("binlog_report_handler_test");
+                    .getLocalMetastore().getDb("test").getTable("binlog_report_handler_test");
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
                 allTablets.add(tablet.getId());

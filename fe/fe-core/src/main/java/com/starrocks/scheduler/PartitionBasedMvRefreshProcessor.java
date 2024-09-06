@@ -103,6 +103,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
+import static com.starrocks.scheduler.TaskRun.MV_ID;
 
 /**
  * Core logic of materialized view refresh task run
@@ -113,7 +114,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
-    public static final String MV_ID = "mvId";
     // session.enable_spill
     public static final String MV_SESSION_ENABLE_SPILL =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.ENABLE_SPILL;
@@ -580,9 +580,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setQueryTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
         }
 
-        // set enable_insert_strict by default
-        if (!isMVPropertyContains(SessionVariable.ENABLE_INSERT_STRICT)) {
-            mvSessionVariable.setEnableInsertStrict(Config.enable_mv_refresh_insert_strict);
+        // set insert_max_filter_ratio by default
+        if (!isMVPropertyContains(SessionVariable.INSERT_MAX_FILTER_RATIO)) {
+            mvSessionVariable.setInsertMaxFilterRatio(Config.mv_refresh_fail_on_filter_data ? 0 : 1);
         }
         // enable profile by default for mv refresh task
         if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
@@ -792,7 +792,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         LOG.info("start to update meta for mv:{}", materializedView.getName());
 
         // check
-        Table mv = db.getTable(materializedView.getId());
+        Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
         if (mv == null) {
             throw new DmlException(
                     "update meta failed. materialized view:" + materializedView.getName() + " not exist");
@@ -849,12 +849,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> properties = context.getProperties();
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
-        db = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(context.ctx.getDatabase());
         if (db == null) {
             LOG.warn("database {} do not exist when refreshing materialized view:{}", context.ctx.getDatabase(), mvId);
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
-        Table table = db.getTable(mvId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId);
         if (table == null) {
             LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                     context.ctx.getDatabase());

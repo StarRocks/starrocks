@@ -312,7 +312,7 @@ public:
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
-    const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
+    const Filter& streaming_selection() { return _streaming_selection; }
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
     RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
     RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
@@ -399,6 +399,9 @@ public:
     void set_streaming_all_states(bool streaming_all_states) { _streaming_all_states = streaming_all_states; }
 
     bool is_streaming_all_states() const { return _streaming_all_states; }
+
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
 
     HashTableKeyAllocator _state_allocator;
 
@@ -495,7 +498,7 @@ protected:
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
     bool _is_pending_reset_state = false;
-    std::vector<uint8_t> _streaming_selection;
+    Filter _streaming_selection;
 
     bool _has_udaf = false;
 

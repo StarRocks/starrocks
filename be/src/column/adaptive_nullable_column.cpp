@@ -140,38 +140,38 @@ bool AdaptiveNullableColumn::append_nulls(size_t count) {
     return true;
 }
 
-bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
+bool AdaptiveNullableColumn::append_strings(const Slice* data, size_t size) {
     if (_data_column->is_binary()) {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
-            std::ignore = _data_column->append_strings(strs);
-            _size = strs.size();
+            std::ignore = _data_column->append_strings(data, size);
+            _size = size;
             break;
         }
         case State::kNotConstant: {
-            std::ignore = _data_column->append_strings(strs);
-            _size += strs.size();
+            std::ignore = _data_column->append_strings(data, size);
+            _size += size;
             break;
         }
         case State::kMaterialized: {
-            std::ignore = _data_column->append_strings(strs);
-            null_column_data().resize(_null_column->size() + strs.size(), 0);
+            std::ignore = _data_column->append_strings(data, size);
+            null_column_data().resize(_null_column->size() + size, 0);
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;
         }
         default: {
             materialized_nullable();
-            std::ignore = _data_column->append_strings(strs);
-            null_column_data().resize(_null_column->size() + strs.size(), 0);
+            std::ignore = _data_column->append_strings(data, size);
+            null_column_data().resize(_null_column->size() + size, 0);
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;
         }
         }
     } else {
         materialized_nullable();
-        if (_data_column->append_strings(strs)) {
-            null_column_data().resize(_null_column->size() + strs.size(), 0);
+        if (_data_column->append_strings(data, size)) {
+            null_column_data().resize(_null_column->size() + size, 0);
             return true;
         }
         DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -180,20 +180,20 @@ bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
     return true;
 }
 
-bool AdaptiveNullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
+bool AdaptiveNullableColumn::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
     materialized_nullable();
-    if (_data_column->append_strings_overflow(strs, max_length)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+    if (_data_column->append_strings_overflow(data, size, max_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
-bool AdaptiveNullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
+bool AdaptiveNullableColumn::append_continuous_strings(const Slice* data, size_t size) {
     materialized_nullable();
-    if (_data_column->append_continuous_strings(strs)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+    if (_data_column->append_continuous_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());

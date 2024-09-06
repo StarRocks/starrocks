@@ -54,11 +54,11 @@ public class CreateTableAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 "create table test_table1 (pk bigint NOT NULL, v0 string not null) primary KEY (pk) DISTRIBUTED BY HASH(pk) PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
-        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
-        OlapTable table = (OlapTable) db.getTable("test_table1");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
         if (table == null) {
             return;
         }
@@ -100,12 +100,12 @@ public class CreateTableAutoTabletTest {
                         " PARTITION BY RANGE(pk2) (START (\"2022-08-01\") END (\"2022-08-10\") EVERY (INTERVAL 1 day))" +
                         " DISTRIBUTED BY HASH(pk1)" +
                         " PROPERTIES (\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
-        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
 
-        OlapTable table = (OlapTable) db.getTable("test_table2");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table2");
         if (table == null) {
             return;
         }
@@ -150,12 +150,12 @@ public class CreateTableAutoTabletTest {
                         "   'dynamic_partition.end' = '3'," +
                         "   'dynamic_partition.prefix' = 'p');");
         Thread.sleep(1000); // wait for the dynamic partition created
-        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
 
-        OlapTable table = (OlapTable) db.getTable("test_auto_tablets_of_dynamic_partition");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_auto_tablets_of_dynamic_partition");
         if (table == null) {
             return;
         }
@@ -197,12 +197,12 @@ public class CreateTableAutoTabletTest {
                         "   'dynamic_partition.buckets' = '3'," +
                         "   'dynamic_partition.prefix' = 'p');");
         Thread.sleep(1000); // wait for the dynamic partition created
-        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
 
-        OlapTable table = (OlapTable) db.getTable("test_modify_dynamic_partition_property");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_modify_dynamic_partition_property");
         if (table == null) {
             return;
         }
@@ -244,12 +244,12 @@ public class CreateTableAutoTabletTest {
                         "  PROPERTIES (" +
                         "   'replication_num' = '1'," +
                         "   'colocate_with' = 'g1');");
-        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
         }
 
-        OlapTable table = (OlapTable) db.getTable("colocate_partition");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "colocate_partition");
         if (table == null) {
             return;
         }

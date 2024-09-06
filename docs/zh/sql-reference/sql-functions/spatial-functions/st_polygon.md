@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ST_Polygon, ST_PolyFromText, ST_PolygonFromText

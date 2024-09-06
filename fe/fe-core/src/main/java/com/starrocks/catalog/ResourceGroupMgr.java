@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -35,10 +36,12 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
@@ -54,7 +57,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,6 +67,13 @@ import java.util.stream.Collectors;
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
+
+    private static final String EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG =
+            "the sum of %s of all the resource groups cannot exceed %d";
+    public static final String SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG =
+            "'short_query' ResourceGroup cannot set 'dedicated_cpu_cores', " +
+                    "since it use 'cpu_weight' as 'dedicated_cpu_cores'";
+
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
 
     // Record the current short_query resource group.
@@ -76,6 +86,7 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private int sumDedicatedCpuCores = 0;
 
     private void readLock() {
         lock.readLock().lock();
@@ -97,10 +108,10 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             ResourceGroup wg = stmt.getResourceGroup();
+            boolean needReplace = false;
             if (resourceGroupMap.containsKey(wg.getName())) {
-                // create resource_group or replace <name> ...
                 if (stmt.isReplaceIfExists()) {
-                    dropResourceGroupUnlocked(wg.getName());
+                    needReplace = true;
                 } else if (!stmt.isIfNotExists()) {
                     throw new DdlException(String.format("RESOURCE_GROUP(%s) already exists", wg.getName()));
                 } else {
@@ -119,12 +130,31 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("MV Resource Group not support classifiers.");
             }
 
-            if (wg.getClassifiers() == null || wg.getClassifiers().isEmpty() &&
+            if ((wg.getClassifiers() == null || wg.getClassifiers().isEmpty()) &&
+                    !ResourceGroup.BUILTIN_WG_NAMES.contains(wg.getName()) &&
                     !wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
                 throw new DdlException("This type Resource Group need define classifiers.");
             }
 
-            wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+            if (wg.getNormalizedDedicatedCpuCores() > 0 && sumDedicatedCpuCores + wg.getNormalizedDedicatedCpuCores() >=
+                    BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
+                throw new DdlException(String.format(EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG,
+                        ResourceGroup.DEDICATED_CPU_CORES,
+                        BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
+            }
+
+            if (needReplace) {
+                dropResourceGroupUnlocked(wg.getName());
+            }
+
+            if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+                wg.setId(ResourceGroup.DEFAULT_WG_ID);
+            } else if (ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+                wg.setId(ResourceGroup.DEFAULT_MV_WG_ID);
+            } else {
+                wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+            }
+
             wg.setVersion(wg.getId());
             for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
                 classifier.setResourceGroupId(wg.getId());
@@ -147,10 +177,9 @@ public class ResourceGroupMgr implements Writable {
 
         List<List<String>> rows;
         if (stmt.getName() != null) {
-            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showOneResourceGroup(stmt.getName());
+            rows = showOneResourceGroup(stmt.getName(), stmt.isVerbose());
         } else {
-            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                    .showAllResourceGroups(ConnectContext.get(), stmt.isListAll());
+            rows = showAllResourceGroups(ConnectContext.get(), stmt.isVerbose(), stmt.isListAll());
         }
         return rows;
     }
@@ -200,33 +229,37 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {
+    public List<List<String>> showAllResourceGroups(ConnectContext ctx, boolean verbose, boolean isListAll) {
         readLock();
         try {
             List<ResourceGroup> resourceGroupList = new ArrayList<>(resourceGroupMap.values());
             if (isListAll || ConnectContext.get() == null) {
                 resourceGroupList.sort(Comparator.comparing(ResourceGroup::getName));
-                return resourceGroupList.stream().map(ResourceGroup::show)
-                        .flatMap(Collection::stream).collect(Collectors.toList());
+                return resourceGroupList.stream()
+                        .map(rg -> rg.show(verbose))
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toList());
             } else {
                 String user = getUnqualifiedUser(ctx);
                 List<String> activeRoles = getUnqualifiedRole(ctx);
                 String remoteIp = ctx.getRemoteIP();
-                return resourceGroupList.stream().map(rg -> rg.showVisible(user, activeRoles, remoteIp))
-                        .flatMap(Collection::stream).collect(Collectors.toList());
+                return resourceGroupList.stream()
+                        .map(rg -> rg.showVisible(user, activeRoles, remoteIp, verbose))
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toList());
             }
         } finally {
             readUnlock();
         }
     }
 
-    public List<List<String>> showOneResourceGroup(String name) {
+    public List<List<String>> showOneResourceGroup(String name, boolean verbose) {
         readLock();
         try {
             if (!resourceGroupMap.containsKey(name)) {
                 return Collections.emptyList();
             } else {
-                return resourceGroupMap.get(name).show();
+                return resourceGroupMap.get(name).show(verbose);
             }
         } finally {
             readUnlock();
@@ -272,11 +305,7 @@ public class ResourceGroupMgr implements Writable {
     public ResourceGroup getResourceGroup(String name) {
         readLock();
         try {
-            if (resourceGroupMap.containsKey(name)) {
-                return resourceGroupMap.get(name);
-            } else {
-                return null;
-            }
+            return resourceGroupMap.getOrDefault(name, null);
         } finally {
             readUnlock();
         }
@@ -289,23 +318,6 @@ public class ResourceGroupMgr implements Writable {
         } finally {
             readUnlock();
         }
-    }
-
-    public ResourceGroup getResourceGroupIncludingDefault(long id) {
-        ResourceGroup group = getResourceGroup(id);
-        if (group != null) {
-            return group;
-        }
-
-        if (id == ResourceGroup.DEFAULT_WG_ID) {
-            return ResourceGroup.DEFAULT_WG;
-        }
-
-        if (id == ResourceGroup.DEFAULT_MV_WG_ID) {
-            return ResourceGroup.DEFAULT_MV_WG;
-        }
-
-        return null;
     }
 
     public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
@@ -321,6 +333,7 @@ public class ResourceGroupMgr implements Writable {
                     !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
                 throw new DdlException("MV Resource Group not support classifiers.");
             }
+
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
                 List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
@@ -331,10 +344,41 @@ public class ResourceGroupMgr implements Writable {
                 wg.getClassifiers().addAll(newAddedClassifiers);
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 ResourceGroup changedProperties = stmt.getChangedProperties();
-                Integer cpuCoreLimit = changedProperties.getCpuCoreLimit();
-                if (cpuCoreLimit != null) {
-                    wg.setCpuCoreLimit(cpuCoreLimit);
+
+                Integer cpuWeight = changedProperties.getCpuWeight();
+                if (cpuWeight == null) {
+                    cpuWeight = wg.getCpuWeight();
                 }
+                Integer dedicatedCpuCores = changedProperties.getDedicatedCpuCores();
+                if (dedicatedCpuCores == null) {
+                    dedicatedCpuCores = wg.getDedicatedCpuCores();
+                }
+
+                ResourceGroup.validateCpuParameters(cpuWeight, dedicatedCpuCores);
+
+                if (dedicatedCpuCores != null && dedicatedCpuCores > 0) {
+                    if (sumDedicatedCpuCores + dedicatedCpuCores - wg.getNormalizedDedicatedCpuCores() >=
+                            BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
+                        throw new DdlException(String.format(EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG,
+                                ResourceGroup.DEDICATED_CPU_CORES,
+                                BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
+                    }
+                    if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+                        throw new SemanticException(SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG);
+                    }
+                }
+                // NOTE that validate cpu parameters should be called before setting properties.
+
+                if (cpuWeight != null) {
+                    wg.setCpuWeight(cpuWeight);
+                }
+
+                if (dedicatedCpuCores != null) {
+                    sumDedicatedCpuCores -= wg.getNormalizedDedicatedCpuCores();
+                    wg.setDedicatedCpuCores(dedicatedCpuCores);
+                    sumDedicatedCpuCores += wg.getNormalizedDedicatedCpuCores();
+                }
+
                 Integer maxCpuCores = changedProperties.getMaxCpuCores();
                 if (maxCpuCores != null) {
                     wg.setMaxCpuCores(maxCpuCores);
@@ -373,13 +417,8 @@ public class ResourceGroupMgr implements Writable {
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);
             } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers) {
-                Set<Long> classifierToDrop = stmt.getClassifiersToDrop().stream().collect(Collectors.toSet());
-                Iterator<ResourceGroupClassifier> classifierIterator = wg.getClassifiers().iterator();
-                while (classifierIterator.hasNext()) {
-                    if (classifierToDrop.contains(classifierIterator.next().getId())) {
-                        classifierIterator.remove();
-                    }
-                }
+                Set<Long> classifierToDrop = new HashSet<>(stmt.getClassifiersToDrop());
+                wg.getClassifiers().removeIf(classifier -> classifierToDrop.contains(classifier.getId()));
                 for (Long classifierId : classifierToDrop) {
                     classifierMap.remove(classifierId);
                 }
@@ -390,6 +429,7 @@ public class ResourceGroupMgr implements Writable {
                 }
                 classifierList.clear();
             }
+
             // only when changing properties, version is required to update. because changing classifiers needs not
             // propagate to BE.
             if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
@@ -457,6 +497,7 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = null;
         }
+        sumDedicatedCpuCores -= wg.getNormalizedDedicatedCpuCores();
     }
 
     private void addResourceGroupInternal(ResourceGroup wg) {
@@ -468,6 +509,7 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
         }
+        sumDedicatedCpuCores += wg.getNormalizedDedicatedCpuCores();
     }
 
     public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
@@ -580,6 +622,38 @@ public class ResourceGroupMgr implements Writable {
             }
         } finally {
             readUnlock();
+        }
+    }
+
+    public void createBuiltinResourceGroupsIfNotExist() {
+        try {
+            ResourceGroup defaultWg = getResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+            if (defaultWg != null) {
+                return;
+            }
+
+            final int avgCpuCores = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
+
+            Map<String, String> defaultWgProperties = ImmutableMap.of(
+                    ResourceGroup.CPU_WEIGHT, Integer.toString(avgCpuCores),
+                    ResourceGroup.MEM_LIMIT, "1.0"
+            );
+            CreateResourceGroupStmt defaultWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME,
+                    true, false, Collections.emptyList(), defaultWgProperties);
+            defaultWgStmt.analyze();
+            createResourceGroup(defaultWgStmt);
+
+            Map<String, String> defaultMvWgProperties = ImmutableMap.of(
+                    ResourceGroup.CPU_WEIGHT, "1",
+                    ResourceGroup.MEM_LIMIT, "0.8",
+                    ResourceGroup.SPILL_MEM_LIMIT_THRESHOLD, "0.8"
+            );
+            CreateResourceGroupStmt defaultMvWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME,
+                    true, false, Collections.emptyList(), defaultMvWgProperties);
+            defaultMvWgStmt.analyze();
+            createResourceGroup(defaultMvWgStmt);
+        } catch (Exception e) {
+            LOG.warn("failed to create builtin resource groups", e);
         }
     }
 

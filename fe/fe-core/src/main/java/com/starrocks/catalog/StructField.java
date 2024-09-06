@@ -73,6 +73,10 @@ public class StructField {
         return position;
     }
 
+    public int getFieldId() {
+        return fieldId;
+    }
+
     public void setPosition(int position) {
         this.position = position;
     }

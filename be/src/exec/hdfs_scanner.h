@@ -158,8 +158,8 @@ struct HdfsScannerParams {
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
-    // all conjuncts except `conjunct_ctxs_by_slot`
-    std::vector<ExprContext*> conjunct_ctxs;
+    // all conjuncts except `conjunct_ctxs_by_slot`, like compound predicates
+    std::vector<ExprContext*> scanner_conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
     std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;

@@ -284,6 +284,7 @@ public class FunctionSet {
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -512,6 +513,8 @@ public class FunctionSet {
 
     public static final String USER = "user";
 
+    public static final String SESSION_USER = "session_user";
+
     public static final String CURRENT_USER = "current_user";
 
     public static final String CURRENT_ROLE = "current_role";
@@ -720,6 +723,7 @@ public class FunctionSet {
             .add(DATABASE)
             .add(SCHEMA)
             .add(USER)
+            .add(SESSION_USER)
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
             .build();
@@ -1227,6 +1231,22 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
+
+        // causal inference functions.
+        registerBuiltinHypothesisTestingFunctions();
+    }
+
+    private void registerBuiltinHypothesisTestingFunctions() {
+        // mann_whitney_u_test
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR, Type.BIGINT), Type.JSON,
+                Type.VARBINARY, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR), Type.JSON,
+                Type.VARBINARY, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN), Type.JSON,
+                Type.VARBINARY, false, false, false));
     }
 
     private void registerBuiltinSumAggFunction(String name) {

@@ -150,12 +150,12 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    List<Table> allTables = db.getTables();
+                    List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
@@ -257,11 +257,11 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 continue;
             }
-            List<Table> allTables = db.getTables();
+            List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table table : allTables) {
                 try {
                     Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
@@ -529,7 +529,7 @@ public class InformationSchemaDataSource {
                     for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
                         UUID sessionId = entry.getValue();
                         Long tableId = entry.getKey();
-                        Table table = db.getTable(tableId);
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                         if (table != null) {
                             TTableInfo info = new TTableInfo();
 

@@ -227,6 +227,37 @@ public class SelectUsingAliasTest extends PlanTestBase {
                 "FROM test.t0");
     }
 
+    @Test
+    public void testAliasSameAsColumnName() throws Exception {
+        // test duplicate alias is same as column name
+        String sql = "select v1 v1, v2 + 1 v1, abs(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 2: v2 + 1\n" +
+                "  |  <slot 5> : abs(1: v1)");
+
+        sql = "select v1 v1, v1 v1, abs(v1) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : abs(1: v1)");
+
+        Exception exception = Assert.assertThrows(SemanticException.class, () -> {
+            // test duplicate alias is different from column name
+            String duplicateAlias = "select v1 v1, v2 v1, abs(v1) from t0 order by v1";
+            getFragmentPlan(duplicateAlias);
+        });
+        Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("Column 'v1' is ambiguous."));
+
+        exception = Assert.assertThrows(SemanticException.class, () -> {
+            // test duplicate alias is different from column name
+            String duplicateAlias = "select v1 v4, v2 + 1 v4, abs(v4) from t0";
+            getFragmentPlan(duplicateAlias);
+        });
+        Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("Column v4 is ambiguous"));
+    }
+
     private void testSqlRewrite(String sql, String expected) {
         testSqlRewrite(sql, expected, true);
     }

@@ -91,6 +91,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
+import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -1252,7 +1253,11 @@ public class StmtExecutor {
 
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
-        Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
+        TableName tableName = analyzeStmt.getTableName();
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
         Table table = MetaUtils.getSessionAwareTable(context, db, analyzeStmt.getTableName());
         if (StatisticUtils.isEmptyTable(table)) {
             return;
@@ -1410,12 +1415,17 @@ public class StmtExecutor {
 
     private void handleDropStatsStmt() {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
-        Table table = MetaUtils.getTable(context, dropStatsStmt.getTableName());
+        TableName tableName = dropStatsStmt.getTableName();
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+
         if (dropStatsStmt.isExternal()) {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
-            TableName tableName = dropStatsStmt.getTableName();
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(tableName.getCatalog(),
                     tableName.getDb(), tableName.getTbl());
             List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
@@ -1433,7 +1443,13 @@ public class StmtExecutor {
 
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
-        Table table = MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+        TableName tableName = dropHistogramStmt.getTableName();
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+
         if (dropHistogramStmt.isExternal()) {
             List<String> columns = dropHistogramStmt.getColumnNames();
 
@@ -1464,8 +1480,15 @@ public class StmtExecutor {
 
     private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
                                                      String tableName) {
-        MetaUtils.getDatabase(catalogName, dbName);
-        MetaUtils.getTable(catalogName, dbName, tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
         Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(catalogName, dbName, tableName));
     }
@@ -1943,7 +1966,12 @@ public class StmtExecutor {
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
-        Database db = MetaUtils.getDatabase(context, insertStmt.getTableName());
+        TableName tableName = insertStmt.getTableName();
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
+
         Locker locker = new Locker();
         Table table = insertStmt.getTargetTable();
         if (!(table instanceof OlapTable)) {
@@ -2034,7 +2062,7 @@ public class StmtExecutor {
             return;
         }
 
-        MetaUtils.normalizationTableName(context, stmt.getTableName());
+        stmt.getTableName().normalization(context);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
@@ -2122,9 +2150,11 @@ public class StmtExecutor {
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
+            InsertLoadJob loadJob = null;
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                     targetTable.isBlackHoleTable())) {
-                jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
+                // insert, update and delete job
+                loadJob = context.getGlobalStateMgr().getLoadMgr().registerInsertLoadJob(
                         label,
                         database.getFullName(),
                         targetTable.getId(),
@@ -2139,6 +2169,8 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         coord);
+                loadJob.setJobProperties(stmt.getProperties());
+                jobId = loadJob.getId();
                 if (txnState != null) {
                     txnState.setCallbackId(jobId);
                 }
@@ -2218,37 +2250,32 @@ public class StmtExecutor {
                 loadedBytes = Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES));
             }
 
-            // if in strict mode, insert will fail if there are filtered rows
-            if (context.getSessionVariable().getEnableInsertStrict()) {
-                if (filteredRows > 0) {
-                    if (targetTable instanceof ExternalOlapTable) {
-                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                        RemoteTransactionMgr.abortRemoteTransaction(
-                                externalTable.getSourceTableDbId(), transactionId,
-                                externalTable.getSourceTableHost(),
-                                externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                        trackingSql,
-                                coord == null ? Collections.emptyList() : coord.getCommitInfos(),
-                                coord == null ? Collections.emptyList() : coord.getFailInfos()
-                        );
-                    } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
-                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable() ||
-                            targetTable.isBlackHoleTable()) {
-                        // schema table does not need txn
-                    } else {
-                        transactionMgr.abortTransaction(
-                                database.getId(),
-                                transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                        trackingSql,
-                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
-                    }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
-                            " tracking sql = " + trackingSql);
-                    insertError = true;
-                    return;
+            if (loadJob != null) {
+                loadJob.updateLoadingStatus(coord.getLoadCounters());
+            }
+
+            // insert will fail if 'filtered rows / total rows' exceeds max_filter_ratio
+            if (loadJob != null && !loadJob.checkDataQuality()) {
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                    RemoteTransactionMgr.abortRemoteTransaction(externalTable.getSourceTableDbId(), transactionId,
+                            externalTable.getSourceTableHost(), externalTable.getSourceTablePort(),
+                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
+                            coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                            coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() || targetTable.isIcebergTable() ||
+                        targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+                    // schema table does not need txn
+                } else {
+                    transactionMgr.abortTransaction(database.getId(), transactionId,
+                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
+                            Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 }
+                context.getState().setError(
+                        TransactionCommitFailedException.FILTER_DATA_ERR + ", txn_id = " + transactionId +
+                                ", tracking sql = " + trackingSql);
+                insertError = true;
+                return;
             }
 
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt

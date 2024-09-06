@@ -21,6 +21,7 @@ from cup import log
 
 from lib import close_conn
 
+
 class TrinoLib(object):
     """TrinoLib class"""
 

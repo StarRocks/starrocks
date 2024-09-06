@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -60,6 +61,7 @@ import java.util.stream.Collectors;
 
 public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     // label -> streamLoadTask
     private Map<String, StreamLoadTask> idToStreamLoadTask;
@@ -175,7 +177,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
-            table = db.getTable(tableName);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -192,7 +194,8 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws UserException {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
-        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) db.getTable(tableName),
+        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db,
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
                 label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
         return streamLoadTask;
     }
@@ -205,7 +208,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
-            table = db.getTable(tableName);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -223,7 +226,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
         }
 
-        Table table = db.getTable(tblName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
         }
@@ -248,7 +251,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public Database checkDbName(String dbName) throws UserException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new UserException("Database[" + dbName + "] does not exist");
@@ -502,7 +505,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 }
 
                 long dbId = 0L;
-                Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
@@ -670,5 +673,14 @@ public class StreamLoadMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("StreamLoad", (long) idToStreamLoadTask.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = idToStreamLoadTask.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) idToStreamLoadTask.size()));
     }
 }

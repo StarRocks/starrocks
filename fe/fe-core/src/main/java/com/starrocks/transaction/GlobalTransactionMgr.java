@@ -283,7 +283,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
             throws UserException {
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbId);
             throw new UserException("Database[" + dbId + "] does not exist");
@@ -697,7 +697,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         for (long dbId : dbIds) {
             List<Comparable> info = new ArrayList<Comparable>();
             info.add(dbId);
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -743,14 +743,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         int txnNum = 0;
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             txnNum += dbTransactionMgr.getTransactionNum();
-        }
-        return txnNum;
-    }
-
-    public int getFinishedTransactionNum() {
-        int txnNum = 0;
-        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            txnNum += dbTransactionMgr.getFinishedTxnNums();
         }
         return txnNum;
     }
@@ -865,7 +857,24 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("Txn", (long) getFinishedTransactionNum(),
+        return ImmutableMap.of("Txn", (long) getTransactionNum(),
                 "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> txnSamples = new ArrayList<>();
+        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
+            List<Object> samples = mgr.getSamplesForMemoryTracker();
+            if (samples.size() > 0) {
+                txnSamples.addAll(samples);
+                break;
+            }
+        }
+
+        List<Object> callbackSamples = callbackFactory.getSamplesForMemoryTracker();
+
+        return Lists.newArrayList(Pair.create(txnSamples, (long) getTransactionNum()),
+                Pair.create(callbackSamples, callbackFactory.getCallBackCnt()));
     }
 }

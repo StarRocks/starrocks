@@ -188,6 +188,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
+    public static final String INSERT_MAX_FILTER_RATIO = "insert_max_filter_ratio";
     public static final String ENABLE_SPILL = "enable_spill";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
@@ -292,6 +293,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_filter_unused_columns_in_scan_stage";
 
     public static final String JOIN_LATE_MATERIALIZATION = "join_late_materialization";
+    public static final String ENABLE_PARTITION_HASH_JOIN = "enable_partition_hash_join";
 
     public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
             "enable_prune_column_after_index_filter";
@@ -782,6 +784,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
+    public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
+    public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1119,6 +1123,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
+    @VariableMgr.VarAttr(name = INSERT_MAX_FILTER_RATIO)
+    private double insertMaxFilterRatio = 0;
+
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
 
@@ -1238,6 +1245,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = JOIN_LATE_MATERIALIZATION)
     private boolean joinLateMaterialization = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_PARTITION_HASH_JOIN)
+    private boolean enablePartitionHashJoin = false;
 
     @VariableMgr.VarAttr(name = ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enablePruneColumnAfterIndexFilter = true;
@@ -2127,6 +2137,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE, flag = VariableMgr.INVISIBLE)
     private int connectorRemoteFileAsyncTaskSize = 4;
 
+    @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
+    private boolean enableConnectorIncrementalScanRanges = false;
+
+    @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
+    private int connectorIncrementalScanRangeSize = 1000;
+
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
                         StringUtils.upperCase(chooseExecuteInstancesMode))
@@ -2707,6 +2723,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
+    public double getInsertMaxFilterRatio() {
+        return insertMaxFilterRatio;
+    }
+
+    public void setInsertMaxFilterRatio(double insertMaxFilterRatio) {
+        this.insertMaxFilterRatio = insertMaxFilterRatio;
+    }
+
     public boolean isEnableSpill() {
         return enableSpill;
     }
@@ -2865,6 +2889,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isJoinLateMaterialization() {
         return joinLateMaterialization;
+    }
+
+    public boolean enablePartitionHashJoin() {
+        return enablePartitionHashJoin;
     }
 
     public void disableTrimOnlyFilteredColumnsInScanStage() {
@@ -4112,6 +4140,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getConnectorRemoteFileAsyncTaskSize() {
         return connectorRemoteFileAsyncTaskSize;
+    }
+
+    public int getConnectorIncrementalScanRangeNumber() {
+        return connectorIncrementalScanRangeSize;
+    }
+
+    public void setConnectorIncrementalScanRangeNumber(int v) {
+        connectorIncrementalScanRangeSize = v;
+    }
+
+    public boolean isEnableConnectorIncrementalScanRanges() {
+        return enableConnectorIncrementalScanRanges;
+    }
+
+    public void setEnableConnectorIncrementalScanRanges(boolean v) {
+        enableConnectorIncrementalScanRanges = v;
     }
 
     // Serialize to thrift object

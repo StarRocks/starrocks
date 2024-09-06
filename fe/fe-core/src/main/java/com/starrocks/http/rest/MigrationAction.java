@@ -96,7 +96,7 @@ public class MigrationAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name");
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -106,7 +106,7 @@ public class MigrationAction extends RestBaseAction {
         locker.lockDatabase(db, LockType.READ);
         try {
             if (!Strings.isNullOrEmpty(tableName)) {
-                Table table = db.getTable(tableName);
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
                     throw new DdlException("Table[" + tableName + "] does not exist");
                 }
@@ -135,7 +135,7 @@ public class MigrationAction extends RestBaseAction {
                 }
             } else {
                 // get all olap table
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     if (table.getType() != TableType.OLAP) {
                         continue;
                     }

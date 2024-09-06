@@ -127,10 +127,13 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testMVOnMV2() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        // TODO: How to remove the join reorder noise?
+        connectContext.getSessionVariable().disableJoinReorder();
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().enableJoinReorder();
         assertContains(replayPair.second, "test_mv2");
     }
 

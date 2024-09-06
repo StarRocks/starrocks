@@ -262,7 +262,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public void syncTableMetaAndColocationInfo() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -270,7 +270,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 continue;
             }
 
-            List<Table> tables = db.getTables();
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table table : tables) {
                 if (!table.isCloudNativeTableOrMaterializedView()) {
                     continue;
@@ -293,7 +293,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            if (db.getTable(table.getId()) == null) {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
                 return false; // table might be dropped
             }
             GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -375,10 +375,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         locker.lockDatabase(db, LockType.WRITE);
         try {
             // check db and table again
-            if (GlobalStateMgr.getCurrentState().getDb(db.getId()) == null) {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId()) == null) {
                 return;
             }
-            if (db.getTable(table.getId()) == null) {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
                 return;
             }
             GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true /* isJoin */,
@@ -407,12 +407,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     public void syncTableMeta(String dbName, String tableName, boolean forceDeleteData) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException(String.format("db %s does not exist.", dbName));
         }
 
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException(String.format("table %s does not exist.", tableName));
         }

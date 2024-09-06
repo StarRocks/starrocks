@@ -373,7 +373,7 @@ createTableStatement
 
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
+    : identifier type? charsetName? KEY? aggDesc? columnNullable?
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     comment?
     ;
@@ -416,6 +416,19 @@ orderByDesc
     : ORDER BY identifierList
     ;
 
+columnNullable
+    : NULL
+    | NOT NULL
+    ;
+
+typeWithNullable
+    : type columnNullable?
+    ;
+
+aggStateDesc
+    : identifier '(' typeWithNullable (',' typeWithNullable)* ')'
+    ;
+
 aggDesc
     : SUM
     | MAX
@@ -425,6 +438,7 @@ aggDesc
     | BITMAP_UNION
     | PERCENTILE_UNION
     | REPLACE_IF_NOT_NULL
+    | aggStateDesc
     ;
 
 rollupDesc
@@ -1120,8 +1134,14 @@ partitionRenameClause
 
 insertStatement
     : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName writeBranch? partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
-        (WITH LABEL label=identifier)? columnAliases?
+        insertLabelOrColumnAliases* properties?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
+    ;
+
+// for compatibility with the case 'LABEL before columnAliases'
+insertLabelOrColumnAliases
+    : WITH LABEL label=identifier
+    | columnAliases
     ;
 
 updateStatement
@@ -1294,8 +1314,8 @@ alterResourceGroupStatement
     ;
 
 showResourceGroupStatement
-    : SHOW RESOURCE GROUP identifier
-    | SHOW RESOURCE GROUPS ALL?
+    : SHOW VERBOSE? RESOURCE GROUP identifier
+    | SHOW VERBOSE? RESOURCE GROUPS ALL?
     ;
 
 showResourceGroupUsageStatement
@@ -1330,11 +1350,11 @@ showFunctionsStatement
     ;
 
 dropFunctionStatement
-    : DROP GLOBAL? FUNCTION qualifiedName '(' typeList ')'
+    : DROP GLOBAL? FUNCTION (IF EXISTS)?  qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
     ;
 inlineFunction
     : AS ATTACHMENT

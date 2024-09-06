@@ -464,7 +464,7 @@ public class Load {
         if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 Database db = entry.getValue();
-                if (db.getTable(tbl.getId()) != null) {
+                if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tbl.getId()) != null) {
                     dbName = db.getFullName();
                 }
             }

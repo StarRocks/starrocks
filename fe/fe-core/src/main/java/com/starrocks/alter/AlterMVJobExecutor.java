@@ -73,7 +73,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String newMvName = clause.getNewTableName();
         String oldMvName = table.getName();
 
-        if (db.getTable(newMvName) != null) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newMvName) != null) {
             throw new SemanticException("Materialized view [" + newMvName + "] is already used");
         }
         table.setName(newMvName);
@@ -349,7 +349,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
             try {
                 // check
-                Table mv = db.getTable(materializedView.getId());
+                Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
                 if (mv == null) {
                     throw new DmlException(
                             "update meta failed. materialized view:" + materializedView.getName() + " not exist");
