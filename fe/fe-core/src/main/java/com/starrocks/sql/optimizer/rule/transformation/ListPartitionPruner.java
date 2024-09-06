@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -218,6 +219,62 @@ public class ListPartitionPruner implements PartitionPruner {
                 return new ArrayList<>(matches);
             }
         }
+    }
+
+    /**
+     * TODO: support more cases
+     * Only some simple conjuncts can be pruned
+     */
+    public static boolean canPruneWithConjunct(ScalarOperator conjunct) {
+        if (conjunct instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator bop = conjunct.cast();
+            return bop.getBinaryType().isEqualOrRange() && evaluateConstant(bop.getChild(1)) != null;
+        } else if (conjunct instanceof InPredicateOperator) {
+            InPredicateOperator inOp = conjunct.cast();
+            return !inOp.isNotIn() && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant);
+        }
+        return false;
+    }
+
+    /**
+     * Can we use this conjunct to deduce extract pruneable-conjuncts
+     * Example:
+     * - conjunct: dt >= '2024-01-01'
+     * - generate-expr: month=date_trunc('MONTH', dt)
+     */
+    public static List<String> deduceGenerateColumns(LogicalScanOperator scanOperator) {
+        List<String> partitionColumnNames = scanOperator.getTable().getPartitionColumnNames();
+        if (CollectionUtils.isEmpty(partitionColumnNames)) {
+            return Lists.newArrayList();
+        }
+        List<String> result = Lists.newArrayList(partitionColumnNames);
+
+        java.util.function.Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+            return scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
+        };
+        Consumer<SlotRef> slotRefConsumer = (slot) -> {
+            ColumnRefOperator ref = scanOperator.getColumnNameToColRefMap().get(slot.getColumnName());
+            slot.setType(ref.getType());
+        };
+        for (String partitionColumn : partitionColumnNames) {
+            Column column = scanOperator.getTable().getColumn(partitionColumn);
+            if (column != null && column.isGeneratedColumn()) {
+                Expr generatedExpr = column.getGeneratedColumnExpr(scanOperator.getTable().getBaseSchema());
+                ExpressionAnalyzer.analyzeExpressionResolveSlot(generatedExpr, ConnectContext.get(), slotRefConsumer);
+                ScalarOperator call =
+                        SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
+
+                if (call instanceof CallOperator &&
+                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                    List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
+                    for (ColumnRefOperator ref : columnRefOperatorList) {
+                        result.add(ref.getName());
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     public void prepareDeduceExtraConjuncts(LogicalScanOperator scanOperator) {
@@ -393,6 +450,11 @@ public class ListPartitionPruner implements PartitionPruner {
     }
 
     private boolean isSinglePartitionColumn(ScalarOperator predicate) {
+        return isSinglePartitionColumn(predicate, partitionColumnRefs);
+    }
+
+    private static boolean isSinglePartitionColumn(ScalarOperator predicate,
+                                                   List<ColumnRefOperator> partitionColumnRefs) {
         List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(predicate);
         if (columnRefOperatorList.size() == 1 && partitionColumnRefs.contains(columnRefOperatorList.get(0))) {
             // such int_part_column + 1 = 11 can't prune partition
@@ -405,7 +467,7 @@ public class ListPartitionPruner implements PartitionPruner {
         return false;
     }
 
-    private LiteralExpr castLiteralExpr(LiteralExpr literalExpr, Type type) {
+    private static LiteralExpr castLiteralExpr(LiteralExpr literalExpr, Type type) {
         LiteralExpr result = null;
         String value = literalExpr.getStringValue();
         if (literalExpr.getType() == Type.DATE && type.isNumericType()) {
@@ -441,7 +503,7 @@ public class ListPartitionPruner implements PartitionPruner {
         return newPartitionValueMap;
     }
 
-    private ConstantOperator evaluateConstant(ScalarOperator operator) {
+    private static ConstantOperator evaluateConstant(ScalarOperator operator) {
         if (operator.isConstantRef()) {
             return (ConstantOperator) operator;
         }
