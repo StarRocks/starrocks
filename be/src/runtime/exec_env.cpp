@@ -49,6 +49,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/dir_manager.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
@@ -303,6 +304,14 @@ int64_t GlobalEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t perc
     return process_mem_limit * percent / 100;
 }
 
+ExecEnv* ExecEnv::GetInstance() {
+    static ExecEnv s_exec_env;
+    return &s_exec_env;
+}
+
+ExecEnv::ExecEnv() = default;
+ExecEnv::~ExecEnv() = default;
+
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
@@ -395,7 +404,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_dictionary_cache_pool));
 
-    std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
@@ -410,18 +418,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
     });
 
-    std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
-                            .set_min_threads(0)
-                            .set_max_threads(_max_executor_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&wg_driver_executor_thread_pool));
-    _wg_driver_executor =
-            new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
-    _wg_driver_executor->initialize(_max_executor_threads);
+    const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                       ? CpuInfo::num_cores()
+                                       : config::pipeline_scan_thread_pool_thread_num;
 
-    int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+    const int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     if (config::hdfs_client_enable_hedged_read) {
@@ -432,17 +433,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                 << "hdfs_client_hedged_read_threadpool_size should greater than 0";
     }
 
-    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
-    RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
-                            .set_min_threads(0)
-                            .set_max_threads(connector_num_io_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&connector_scan_worker_thread_pool_with_workgroup));
-    _connector_scan_executor = new workgroup::ScanExecutor(
-            std::move(connector_scan_worker_thread_pool_with_workgroup),
-            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::CONNECTOR));
-    _connector_scan_executor->initialize(connector_num_io_threads);
+    // Disable bind cpus when cgroup has cpu quota but no cpuset.
+    const bool enable_bind_cpus = config::enable_resource_group_bind_cpus &&
+                                  (!CpuInfo::is_cgroup_with_cpu_quota() || CpuInfo::is_cgroup_with_cpuset());
+    workgroup::PipelineExecutorSetConfig executors_manager_opts(
+            CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
+            CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing);
+    _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
+    RETURN_IF_ERROR(_workgroup_manager->start());
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
@@ -502,21 +500,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
     RETURN_IF_ERROR(_result_mgr->init());
 
-    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
-                                 ? CpuInfo::num_cores()
-                                 : config::pipeline_scan_thread_pool_thread_num;
-
-    std::unique_ptr<ThreadPool> scan_worker_thread_pool_with_workgroup;
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_scan_io")
-                            .set_min_threads(0)
-                            .set_max_threads(num_io_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&scan_worker_thread_pool_with_workgroup));
-    _scan_executor = new workgroup::ScanExecutor(
-            std::move(scan_worker_thread_pool_with_workgroup),
-            std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::OLAP));
-    _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
     if (!status.ok()) {
@@ -612,10 +595,6 @@ void ExecEnv::stop() {
         _pipeline_sink_io_pool->shutdown();
     }
 
-    if (_wg_driver_executor) {
-        _wg_driver_executor->close();
-    }
-
     if (_agent_server) {
         _agent_server->stop();
     }
@@ -640,12 +619,8 @@ void ExecEnv::stop() {
         _load_rpc_pool->shutdown();
     }
 
-    if (_scan_executor) {
-        _scan_executor->close();
-    }
-
-    if (_connector_scan_executor) {
-        _connector_scan_executor->close();
+    if (_workgroup_manager) {
+        _workgroup_manager->close();
     }
 
     if (_thread_pool) {
@@ -695,15 +670,14 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
-    SAFE_DELETE(_wg_driver_executor);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
     _load_rpc_pool.reset();
-    SAFE_DELETE(_scan_executor);
-    SAFE_DELETE(_connector_scan_executor);
+    _workgroup_manager->destroy();
+    _workgroup_manager.reset();
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_streaming_load_thread_pool);
     SAFE_DELETE(_load_segment_thread_pool);
@@ -715,7 +689,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_query_context_mgr);
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
     // _query_pool_mem_tracker.
-    workgroup::WorkGroupManager::instance()->destroy();
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
     SAFE_DELETE(_broker_client_cache);
@@ -810,12 +783,12 @@ void ExecEnv::try_release_resource_before_core_dump() {
         return release_all || modules.contains(name);
     };
 
-    if (_connector_scan_executor != nullptr && need_release("connector_scan_executor")) {
-        _connector_scan_executor->close();
+    if (_workgroup_manager != nullptr && need_release("connector_scan_executor")) {
+        _workgroup_manager->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
         LOG(INFO) << "close connector scan executor";
     }
-    if (_scan_executor != nullptr && need_release("olap_scan_executor")) {
-        _scan_executor->close();
+    if (_workgroup_manager != nullptr && need_release("olap_scan_executor")) {
+        _workgroup_manager->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
         LOG(INFO) << "close olap scan executor";
     }
     if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
@@ -838,8 +811,8 @@ void ExecEnv::try_release_resource_before_core_dump() {
         _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
         LOG(INFO) << "stop task worker pool for publish version";
     }
-    if (_wg_driver_executor != nullptr && need_release("wg_driver_executor")) {
-        _wg_driver_executor->close();
+    if (_workgroup_manager != nullptr && need_release("wg_driver_executor")) {
+        _workgroup_manager->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
         LOG(INFO) << "stop worker group driver executor";
     }
     auto* storage_page_cache = StoragePageCache::instance();
@@ -853,6 +826,16 @@ void ExecEnv::try_release_resource_before_core_dump() {
         (void)_block_cache->update_mem_quota(0, false);
         LOG(INFO) << "release block cache";
     }
+}
+
+pipeline::DriverExecutor* ExecEnv::wg_driver_executor() {
+    return _workgroup_manager->shared_executors()->driver_executor();
+}
+workgroup::ScanExecutor* ExecEnv::scan_executor() {
+    return _workgroup_manager->shared_executors()->scan_executor();
+}
+workgroup::ScanExecutor* ExecEnv::connector_scan_executor() {
+    return _workgroup_manager->shared_executors()->connector_scan_executor();
 }
 
 } // namespace starrocks
