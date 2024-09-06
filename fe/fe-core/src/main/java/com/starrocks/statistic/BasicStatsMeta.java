@@ -205,6 +205,10 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
         }
     }
 
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
     }

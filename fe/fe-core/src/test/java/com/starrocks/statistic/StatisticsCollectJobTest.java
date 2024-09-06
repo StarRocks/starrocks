@@ -891,8 +891,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
-                Maps.newHashMap(),
-                false);
+                Maps.newHashMap()
+        );
 
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
@@ -1258,7 +1258,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         SampleStatisticsCollectJob sampleStatisticsCollectJob = new SampleStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v1", "count"),
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
-                Maps.newHashMap(), false);
+                Maps.newHashMap());
 
         FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(
                 db, olapTable,
@@ -1266,8 +1266,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "count"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
-                Maps.newHashMap(),
-                false);
+                Maps.newHashMap()
+        );
         String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
                 olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");

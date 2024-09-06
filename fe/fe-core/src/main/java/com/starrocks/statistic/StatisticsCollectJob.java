@@ -54,7 +54,6 @@ public abstract class StatisticsCollectJob {
     protected final Table table;
     protected final List<String> columnNames;
     protected final List<Type> columnTypes;
-    protected final boolean allColumns;
 
     protected final StatsConstants.AnalyzeType type;
     protected final StatsConstants.ScheduleType scheduleType;
@@ -62,7 +61,7 @@ public abstract class StatisticsCollectJob {
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                   Map<String, String> properties, boolean allColumns) {
+                                   Map<String, String> properties) {
         this.db = db;
         this.table = table;
         this.columnNames = columnNames;
@@ -70,12 +69,11 @@ public abstract class StatisticsCollectJob {
         this.type = type;
         this.scheduleType = scheduleType;
         this.properties = properties;
-        this.allColumns = allColumns;
     }
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                   Map<String, String> properties, boolean allColumns) {
+                                   Map<String, String> properties) {
         this.db = db;
         this.table = table;
         this.columnNames = columnNames;
@@ -83,7 +81,6 @@ public abstract class StatisticsCollectJob {
         this.type = type;
         this.scheduleType = scheduleType;
         this.properties = properties;
-        this.allColumns = allColumns;
     }
 
     protected static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -114,10 +111,6 @@ public abstract class StatisticsCollectJob {
 
     public List<String> getColumnNames() {
         return columnNames;
-    }
-
-    public boolean isAllColumns() {
-        return allColumns;
     }
 
     public StatsConstants.AnalyzeType getType() {

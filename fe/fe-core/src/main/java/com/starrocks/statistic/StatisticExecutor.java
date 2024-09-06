@@ -44,6 +44,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -380,9 +381,11 @@ public class StatisticExecutor {
                             statsJob.getProperties(), existUpdateRows);
                 } else {
                     basicStatsMeta = basicStatsMeta.clone();
+                    basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
+                    basicStatsMeta.setProperties(statsJob.getProperties());
                 }
 
-                for (String column : statsJob.getColumnNames()) {
+                for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
                     ColumnStatsMeta meta =
                             new ColumnStatsMeta(column, statsJob.getType(), analyzeStatus.getEndTime());
                     basicStatsMeta.addColumnStatsMeta(meta);

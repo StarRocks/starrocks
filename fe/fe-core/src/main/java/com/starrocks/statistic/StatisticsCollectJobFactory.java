@@ -100,11 +100,9 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties) {
-        boolean allColumns = false;
         if (columnNames == null || columnNames.isEmpty()) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
-            allColumns = true;
         }
         // for compatibility, if columnTypes is null, we will get column types from table
         if (columnTypes == null || columnTypes.isEmpty()) {
@@ -114,14 +112,14 @@ public class StatisticsCollectJobFactory {
         LOG.debug("statistics job work on table: {}, type: {}", table.getName(), analyzeType.name());
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
             return new SampleStatisticsCollectJob(db, table, columnNames, columnTypes,
-                    StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties, allColumns);
+                    StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
         } else {
             if (partitionIdList == null) {
                 partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
                         .map(Partition::getId).collect(Collectors.toList());
             }
             return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
-                    StatsConstants.AnalyzeType.FULL, scheduleType, properties, allColumns);
+                    StatsConstants.AnalyzeType.FULL, scheduleType, properties);
         }
     }
 
@@ -210,11 +208,9 @@ public class StatisticsCollectJobFactory {
         GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(catalogName,
                 db.getFullName(), table, Lists.newArrayList(), true);
 
-        boolean allColumns = false;
         if (columnNames == null || columnNames.isEmpty()) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
-            allColumns = true;
         }
         // for compatibility, if columnTypes is null, we will get column types from table
         if (columnTypes == null || columnTypes.isEmpty()) {
@@ -230,7 +226,7 @@ public class StatisticsCollectJobFactory {
             }
         }
         return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
-                analyzeType, scheduleType, properties, allColumns);
+                analyzeType, scheduleType, properties);
     }
 
     private static void createExternalAnalyzeJob(List<StatisticsCollectJob> allTableJobMap, ExternalAnalyzeJob job,
