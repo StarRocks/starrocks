@@ -60,7 +60,7 @@ class RoutineLoadTaskExecutor {
 public:
     typedef std::function<void(StreamLoadContext*)> ExecFinishCallback;
 
-    RoutineLoadTaskExecutor(ExecEnv* exec_env) : _exec_env(exec_env), _data_consumer_pool(10) {}
+    RoutineLoadTaskExecutor(ExecEnv* exec_env) : _exec_env(exec_env), _data_consumer_pool(0) {}
 
     ~RoutineLoadTaskExecutor() noexcept = default;
 
