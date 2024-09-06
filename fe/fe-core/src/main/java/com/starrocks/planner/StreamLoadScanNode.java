@@ -394,6 +394,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             rangeDesc.setSize(-1);
             rangeDesc.setNum_of_columns_from_file(paramCreateContext.tupleDescriptor.getSlots().size());
             rangeDesc.setCompression_type(streamLoadInfo.getPayloadCompressionType());
+            rangeDesc.setDiscard_unknown_fields(streamLoadInfo.isDiscardUnknownFields());
             brokerScanRange.addToRanges(rangeDesc);
             brokerScanRange.setBroker_addresses(Lists.newArrayList());
             if (needAssignBE) {

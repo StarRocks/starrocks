@@ -185,6 +185,7 @@ Status CSVScanner::open() {
     }
 
     _num_fields_in_csv = first_range.num_of_columns_from_file;
+    _discard_unknown_fields = first_range.discard_unknown_fields;
 
     for (int i = _num_fields_in_csv; i < _src_slot_descriptors.size(); i++) {
         if (_src_slot_descriptors[i] != nullptr && _src_slot_descriptors[i]->type().type != TYPE_VARCHAR) {
@@ -352,7 +353,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
         CSVReader::Record record(data, row.parsed_end - row.parsed_start);
-        if (row.columns.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
+        if ((row.columns.size() < _num_fields_in_csv || (!_discard_unknown_fields && row.columns.size() > _num_fields_in_csv))
+            && !_scan_range.params.flexible_column_mapping) {
             if (status.is_end_of_file()) {
                 break;
             }
@@ -474,7 +476,8 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         fields.clear();
         _curr_reader->split_record(record, &fields);
 
-        if (fields.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
+        if ((fields.size() < _num_fields_in_csv || (!_discard_unknown_fields && fields.size() > _num_fields_in_csv))
+            && !_scan_range.params.flexible_column_mapping) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 std::string error_msg =
                         make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
