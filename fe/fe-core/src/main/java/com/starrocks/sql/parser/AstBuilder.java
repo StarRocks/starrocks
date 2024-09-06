@@ -5770,17 +5770,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
-<<<<<<< HEAD
-=======
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_USER)) {
             return new InformationFunction(FunctionSet.SESSION_USER.toUpperCase());
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_ID)) {
-            return new InformationFunction(FunctionSet.SESSION_ID.toUpperCase());
-        }
-
->>>>>>> 1def993fb6 ([Enhancement] Starrocks to support function SESSION_USER() (#50513))
         if (functionName.equals(FunctionSet.MAP)) {
             List<Expr> exprs;
             if (context.expression() != null) {
