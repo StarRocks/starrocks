@@ -44,14 +44,19 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 
 ## 使用说明
 
-StarRocks 当前对 Flat JSON 的支持情况：
-
-- 当前仅 StarRocks 存算一体集群支持 Flat JSON。StarRocks 所有表类型都支持 Flat JSON。
-- 导入数据时，支持提取公共字段、单独存储为 JSON 类型，暂未实现类型推导。StarRocks 会逐步迭代 Flat JSON 功能，在后续版本中支持类型推导和存储优化。
-- 目前只支持最顶层 JSON 字段的提取。
-- 目前会同时存储提取的列和原始 JSON 数据。提取的数据会在原始数据删除时一起删除。
+- StarRocks 存算一体集群自 v3.3.0 起支持 Flat JSON，存算分离集群自 v3.3.3 起支持。
+- StarRocks 所有表类型都支持 Flat JSON。
 - 兼容历史数据，无须重新导入。历史数据会和 Flat JSON 打平的数据共存。
 - 向历史表导入新数据时，自动通过 Compaction 完成 Flat JSON 操作。
+
+在 v3.3.0、v3.3.1、v3.3.2 版本中：
+- 导入数据时，支持提取公共字段、单独存储为 JSON 类型，未实现类型推导。
+- 会同时存储提取的列和原始 JSON 数据。提取的数据会在原始数据删除时一起删除。
+
+自 v3.3.3 版本起：
+- Flat JSON 提取的结果分为公共的列和保留字段列，当所有 JSON Schema 一致时，不会生成保留字段列。
+- Flat JSON 仅存储公共字段列和保留字段列，不会再额外存储原始 JSON 数据。
+- 导入数据时，公共字段会自动推导类型为 BIGINT/LARGEINT/DOUBLE/STRING,不能识别的类型推导为 JSON 类型，保留字段列会存储为 JSON 类型。
 
 ## 使用 Flat JSON
 
@@ -174,14 +179,11 @@ SET cbo_prune_json_subfield = true;
 ## 其他可选 BE 配置
 
 - [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_internal_column_min_limit](../administration/management/BE_configuration.md#json_flat_internal_column_min_limit)
 - [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
 - [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
 
 ## 注意事项
 
-- 开启 Flat JSON 后：
-  - 提取列会占用额外的存储资源。
-  - 会加大导入 JSON 的耗时，提取的 JSON 越多，耗时越长。
-  - Compaction 的耗时和内存使用量会增高。
-- 系统变量 `cbo_prune_json_subfield` 只有在命中 Flat JSON 时才有效果，其他情况下可能存在性能负优化，不建议打开。
+- 开启 Flat JSON 后会加大导入 JSON 的耗时，提取的 JSON 越多，耗时越长。
