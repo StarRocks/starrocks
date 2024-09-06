@@ -53,7 +53,8 @@ enum PICT_OP {
     UPSERT_WITH_BATCH_PUB = 5,
     PARTIAL_UPDATE_ROW = 6,
     PARTIAL_UPDATE_COLUMN = 7,
-    MAX = 8,
+    CONDITION_UPDATE = 8,
+    MAX = 9,
 };
 
 static const std::string kTestGroupPath = "./test_lake_primary_key_consistency";
@@ -70,14 +71,32 @@ public:
         ERASE,
         PARTIAL_UPSERT,
         PARTIAL_UPDATE,
+        CONDITION_UPDATE,
     };
-    void upsert(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::UPSERT, chunk); }
 
-    void erase(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::ERASE, chunk); }
+    class ReplayEntry {
+    public:
+        ReplayEntry(const ReplayerOP& o, const ChunkPtr& cp, const string& cc)
+                : op(o), chunk_ptr(cp), condition_col(cc) {}
+        // Operation type
+        ReplayerOP op;
+        // Replay data
+        ChunkPtr chunk_ptr;
+        // for condition update
+        string condition_col;
+    };
 
-    void partial_upsert(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::PARTIAL_UPSERT, chunk); }
+    void upsert(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::UPSERT, chunk, ""); }
 
-    void partial_update(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::PARTIAL_UPDATE, chunk); }
+    void erase(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::ERASE, chunk, ""); }
+
+    void partial_upsert(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::PARTIAL_UPSERT, chunk, ""); }
+
+    void partial_update(const ChunkPtr& chunk) { _redo_logs.emplace_back(ReplayerOP::PARTIAL_UPDATE, chunk, ""); }
+
+    void condition_update(const ChunkPtr& chunk, const std::string& condition_col) {
+        _redo_logs.emplace_back(ReplayerOP::CONDITION_UPDATE, chunk, condition_col);
+    }
 
     bool check(const ChunkPtr& chunk) {
         std::map<int, std::pair<int, int>> tmp_chunk;
@@ -123,31 +142,56 @@ public:
 
     void commit() {
         for (const auto& log : _redo_logs) {
-            auto chunk = log.second;
-            if (log.first == ReplayerOP::UPSERT) {
+            auto chunk = log.chunk_ptr;
+            if (log.op == ReplayerOP::UPSERT) {
                 // Upsert
                 for (int i = 0; i < chunk->num_rows(); i++) {
                     _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
                             chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
                 }
-            } else if (log.first == ReplayerOP::ERASE) {
+            } else if (log.op == ReplayerOP::ERASE) {
                 // Delete
                 for (int i = 0; i < chunk->num_rows(); i++) {
                     _replayer_index.erase(chunk->columns()[0]->get(i).get_int32());
                 }
-            } else if (log.first == ReplayerOP::PARTIAL_UPSERT || log.first == ReplayerOP::PARTIAL_UPDATE) {
+            } else if (log.op == ReplayerOP::PARTIAL_UPSERT || log.op == ReplayerOP::PARTIAL_UPDATE) {
                 // Partial update
                 for (int i = 0; i < chunk->num_rows(); i++) {
                     auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_int32());
                     if (iter != _replayer_index.end()) {
                         _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
                                 chunk->columns()[1]->get(i).get_int32(), iter->second.second};
-                    } else if (log.first == ReplayerOP::PARTIAL_UPSERT) {
+                    } else if (log.op == ReplayerOP::PARTIAL_UPSERT) {
                         // insert new record with default val
                         _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
                                 chunk->columns()[1]->get(i).get_int32(), 0};
                     } else {
                         // do nothing
+                    }
+                }
+            } else if (log.op == ReplayerOP::CONDITION_UPDATE) {
+                // condition update
+                auto is_condition_meet_fn = [&](const std::pair<int, int>& current, int index) {
+                    if (log.condition_col == "c1") {
+                        if (chunk->columns()[1]->get(index).get_int32() >= current.first) {
+                            return true;
+                        }
+                    } else if (log.condition_col == "c2") {
+                        if (chunk->columns()[2]->get(index).get_int32() >= current.second) {
+                            return true;
+                        }
+                    } else {
+                        // do nothing
+                    }
+                    return false;
+                };
+                for (int i = 0; i < chunk->num_rows(); i++) {
+                    auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_int32());
+                    if (iter == _replayer_index.end() || is_condition_meet_fn(iter->second, i)) {
+                        // update if condition meet or not found
+                        // insert new record
+                        _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
+                                chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
                     }
                 }
             } else {
@@ -159,7 +203,9 @@ public:
     void abort() { _redo_logs.clear(); }
 
 private:
-    std::vector<std::pair<ReplayerOP, ChunkPtr>> _redo_logs;
+    // logs for replay.
+    std::vector<ReplayEntry> _redo_logs;
+    // c0 -> <c1, c2>
     std::map<int, std::pair<int, int>> _replayer_index;
 };
 
@@ -194,14 +240,15 @@ public:
 
         _random_generator = std::make_unique<DeterRandomGenerator<int, PICT_OP>>(MaxNumber, MaxN, _seed, 0, INT64_MAX);
         std::vector<WeightedItem<PICT_OP>> items;
-        items.emplace_back(PICT_OP::UPSERT, 30);
+        items.emplace_back(PICT_OP::UPSERT, 28);
         items.emplace_back(PICT_OP::DELETE, 15);
         items.emplace_back(PICT_OP::GET, 5);
         items.emplace_back(PICT_OP::COMPACT, 10);
         items.emplace_back(PICT_OP::RELOAD, 10);
-        items.emplace_back(PICT_OP::UPSERT_WITH_BATCH_PUB, 20);
+        items.emplace_back(PICT_OP::UPSERT_WITH_BATCH_PUB, 17);
         items.emplace_back(PICT_OP::PARTIAL_UPDATE_ROW, 5);
         items.emplace_back(PICT_OP::PARTIAL_UPDATE_COLUMN, 5);
+        items.emplace_back(PICT_OP::CONDITION_UPDATE, 5);
         _random_op_selector = std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), items);
         _io_failure_generator =
                 std::make_unique<IOFailureGenerator<int, PICT_OP>>(_random_generator.get(), io_failure_percent);
@@ -394,6 +441,36 @@ public:
         return Status::OK();
     }
 
+    Status condition_update() {
+        auto txn_id = next_id();
+        // c2 as merge_condition
+        std::string merge_condition = "c2";
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(_tablet_metadata->id())
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_merge_condition(merge_condition)
+                                                   .build());
+        RETURN_IF_ERROR(delta_writer->open());
+        size_t upsert_size = _random_generator->random() % MaxUpsert;
+        for (int i = 0; i < upsert_size; i++) {
+            auto chunk_index = gen_upsert_data(true);
+            RETURN_IF_ERROR(
+                    delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
+            _replayer->condition_update(chunk_index.first, merge_condition);
+        }
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
+        _version++;
+        return Status::OK();
+    }
+
     Status upsert_with_batch_pub_op() {
         size_t batch_cnt = std::max(_random_generator->random() % MaxBatchCnt, (size_t)1);
         std::vector<int64_t> txn_ids;
@@ -508,6 +585,9 @@ public:
             case PARTIAL_UPDATE_COLUMN:
                 st = partial_update_op(PartialUpdateMode::COLUMN_UPDATE_MODE);
                 break;
+            case CONDITION_UPDATE:
+                st = condition_update();
+                break;
             default:
                 break;
             }
@@ -559,8 +639,18 @@ protected:
 };
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
-    _seed = 1719499276; //time(nullptr);
+    _seed = 1719499276; // seed
     _run_second = 50;   // 50 second
+    LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
+    auto st = run_random_tests();
+    if (!st.ok()) {
+        LOG(FATAL) << "run_random_tests fail, st : " << st << " seed : " << _seed;
+    }
+}
+
+TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
+    _seed = time(nullptr); // use current ts as seed
+    _run_second = 50;      // 50 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
