@@ -79,6 +79,10 @@ public class ProfileManager implements MemoryTrackable {
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
+    public static final String LOAD_TYPE = "Load Type";
+
+    public static final String LOAD_TYPE_STREAM_LOAD = "STREAM_LOAD";
+    public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
 
     private static final int MEMORY_PROFILE_SAMPLES = 10;
 
