@@ -211,7 +211,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
 
     // Configure keepalive.
-    brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
+    // brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
 
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
