@@ -37,6 +37,7 @@ public final class QueryStatisticsItem {
     private final RuntimeProfile queryProfile;
     private final TUniqueId executionId;
     private final String warehouseName;
+    private final String resourceGroupName;
 
     private QueryStatisticsItem(Builder builder) {
         this.queryId = builder.queryId;
@@ -49,6 +50,7 @@ public final class QueryStatisticsItem {
         this.queryProfile = builder.queryProfile;
         this.executionId = builder.executionId;
         this.warehouseName = builder.warehouseName;
+        this.resourceGroupName = builder.resourceGroupName;
     }
 
     public String getDb() {
@@ -96,6 +98,10 @@ public final class QueryStatisticsItem {
         return warehouseName;
     }
 
+    public String getResourceGroupName() {
+        return resourceGroupName;
+    }
+
     public static final class Builder {
         private String queryId;
         private String db;
@@ -107,6 +113,7 @@ public final class QueryStatisticsItem {
         private RuntimeProfile queryProfile;
         private TUniqueId executionId;
         private String warehouseName;
+        private String resourceGroupName;
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
@@ -159,6 +166,11 @@ public final class QueryStatisticsItem {
 
         public Builder warehouseName(String warehouseName) {
             this.warehouseName = warehouseName;
+            return this;
+        }
+
+        public Builder resourceGroupName(String resourceGroupName) {
+            this.resourceGroupName = resourceGroupName;
             return this;
         }
 

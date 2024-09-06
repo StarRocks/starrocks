@@ -1534,6 +1534,7 @@ struct TQueryStatisticsInfo {
     11: optional i64 spillBytes
     12: optional i64 execTime
     13: optional string wareHouseName
+    15: optional string resourceGroupName
 }
 
 struct TGetQueryStatisticsResponse {
