@@ -60,7 +60,7 @@ public class CompactionHandler  {
         CompactionClause compactionClause = (CompactionClause) alterClause;
         if (RunMode.isSharedDataMode()) {
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
                 for (Partition partition : allPartitions) {
@@ -72,14 +72,14 @@ public class CompactionHandler  {
                     }
                 }
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
         } else {
             ArrayListMultimap<Long, Long> backendToTablets = ArrayListMultimap.create();
             AgentBatchTask batchTask = new AgentBatchTask();
 
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
                 for (Partition partition : allPartitions) {
@@ -97,7 +97,7 @@ public class CompactionHandler  {
             } catch (Exception e) {
                 throw new UserException(e.getMessage());
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
 
             for (Long backendId : backendToTablets.keySet()) {

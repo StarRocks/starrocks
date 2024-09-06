@@ -64,7 +64,7 @@ public class CreateTableAutoTabletTest {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         int bucketNum = 0;
         try {
 
@@ -72,7 +72,7 @@ public class CreateTableAutoTabletTest {
                 bucketNum += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         Assert.assertEquals(bucketNum, 20);
     }
@@ -115,12 +115,12 @@ public class CreateTableAutoTabletTest {
 
         int bucketNum = 0;
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             Partition partition = table.getPartition("p20220811");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size(), 10);
         Assert.assertEquals(bucketNum, 20);
@@ -162,12 +162,12 @@ public class CreateTableAutoTabletTest {
 
         int bucketNum = 0;
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             List<Partition> partitions = (List<Partition>) table.getRecentPartitions(3);
             bucketNum = partitions.get(0).getDistributionInfo().getBucketNum();
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         Assert.assertEquals(bucketNum, 10);
     }
@@ -216,12 +216,12 @@ public class CreateTableAutoTabletTest {
 
         int bucketNum = 0;
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             Partition partition = table.getPartition("p20230306");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         Assert.assertEquals(bucketNum, 10);
     }
@@ -260,12 +260,12 @@ public class CreateTableAutoTabletTest {
 
         int bucketNum = 0;
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             Partition partition = table.getPartition("p20230312");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         Assert.assertEquals(bucketNum, 10);
 

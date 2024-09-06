@@ -103,7 +103,7 @@ public class MigrationAction extends RestBaseAction {
 
         List<List<Comparable>> rows = Lists.newArrayList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             if (!Strings.isNullOrEmpty(tableName)) {
                 Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
@@ -163,7 +163,7 @@ public class MigrationAction extends RestBaseAction {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2);

@@ -116,7 +116,7 @@ public class DbsProcDir implements ProcDirInterface {
             }
             List<Comparable> dbInfo = new ArrayList<Comparable>();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 int tableNum = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).size();
                 dbInfo.add(db.getId());
@@ -135,7 +135,7 @@ public class DbsProcDir implements ProcDirInterface {
                 dbInfo.add(replicaQuota);
 
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
             dbInfos.add(dbInfo);
         }

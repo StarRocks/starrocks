@@ -90,7 +90,7 @@ public class BinlogManager {
             Locker locker = new Locker();
             try {
                 // check if partitions has changed
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 Set<Long> partitions = tableIdToPartitions.computeIfAbsent(table.getId(), key -> new HashSet<>());
                 boolean isPartitionChanged = false;
                 // if partitions is empty indicates that the tablet is
@@ -138,11 +138,11 @@ public class BinlogManager {
                     allBeIds.add(beId);
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             if (tableIdToReportedNum.get(table.getId()).equals(tableIdToReplicaCount.get(table.getId()))) {
-                locker.lockDatabase(db, LockType.WRITE);
+                locker.lockDatabase(db.getId(), LockType.WRITE);
                 try {
                     // check again if all replicas have been reported
                     long totalReplicaCount = table.getAllPhysicalPartitions().stream().
@@ -185,7 +185,7 @@ public class BinlogManager {
                 } catch (AnalysisException e) {
                     LOG.warn("Failed to execute", e);
                 } finally {
-                    locker.unLockDatabase(db, LockType.WRITE);
+                    locker.unLockDatabase(db.getId(), LockType.WRITE);
                 }
             }
         } finally {
@@ -229,7 +229,7 @@ public class BinlogManager {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getId(), tableId);
@@ -237,7 +237,7 @@ public class BinlogManager {
                     return olapTable.getBinlogAvailableVersion().size() != 0;
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return false;
@@ -250,7 +250,7 @@ public class BinlogManager {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getId(), tableId);
@@ -258,7 +258,7 @@ public class BinlogManager {
                     return olapTable.getBinlogAvailableVersion();
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return null;
@@ -273,7 +273,7 @@ public class BinlogManager {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : tables) {
@@ -282,7 +282,7 @@ public class BinlogManager {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }
