@@ -358,7 +358,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                                 IMaterializedViewMetricsEntity mvEntity) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = getMaxRefreshMaterializedViewRetryNum(taskRunContext.getCtx());
-        LOG.info("Start to refresh mv:{} with retry times:{}, try lock failure retry times:{}",
+        LOG.info("Start to refresh mv:{} with retry times:{}",
                 materializedView.getName(), maxRefreshMaterializedViewRetryNum);
 
         Throwable lastException = null;
