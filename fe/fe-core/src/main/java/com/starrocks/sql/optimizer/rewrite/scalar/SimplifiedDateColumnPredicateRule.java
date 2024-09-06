@@ -26,8 +26,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.time.DateTimeException;
 import java.util.regex.Pattern;
 
 /**
@@ -43,6 +45,10 @@ import java.util.regex.Pattern;
  * date_format(t, '%Y-%m-%d') <= '2023-03-27' -> t < days_add('2023-03-27', 1)
  */
 public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRewriteRule {
+    private static final String DATE_PATTERN1 = "%Y%m%d";
+    private static final String DATE_PATTERN2 = "%Y-%m-%d";
+    private static final Pattern DATE_PATTERN_REG = Pattern.compile("\\d{8}");
+    private static final Pattern DATE_PATTERN_REG2 = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
 
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
@@ -94,29 +100,36 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(call.getFnName())) {
             return new DateFormatExtractor(call, value);
         } else if (isSubstrFn(call)) {
-            return new SubstrExtractor(call, value, 10);
+            return new SubstrExtractor(call, value, DATE_PATTERN2);
         } else if (FunctionSet.REPLACE.equalsIgnoreCase(call.getFnName())) {
             return new ReplaceAndSubstrExtractor(call, value);
         }
         return null;
     }
 
+    private static boolean isDatePattern(String datePattern, ConstantOperator date) {
+        if (DATE_PATTERN1.equalsIgnoreCase(datePattern) && DATE_PATTERN_REG.matcher(date.getVarchar()).matches()) {
+            return verifyDate(datePattern, date);
+        }
+        if (DATE_PATTERN2.equalsIgnoreCase(datePattern) && DATE_PATTERN_REG2.matcher(date.getVarchar()).matches()) {
+            return verifyDate(datePattern, date);
+        }
+        return false;
+    }
+
+    private static boolean verifyDate(String datePattern, ConstantOperator date) {
+        try {
+            ScalarOperatorFunctions.str2Date(date, ConstantOperator.createVarchar(datePattern));
+        } catch (DateTimeException ignore) {
+            return false;
+        }
+        return true;
+    }
+
     private interface Extractor {
         ScalarOperator extractColumn();
 
         boolean check();
-
-        Pattern DATE_PATTERN1 = Pattern.compile("\\d{8}");
-        Pattern DATE_PATTERN2 = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
-
-        static boolean isDatePattern(int expectedLength, String date) {
-            if (expectedLength == 8 && DATE_PATTERN1.matcher(date).matches()) {
-                return true;
-            } else if (expectedLength == 10 && DATE_PATTERN2.matcher(date).matches()) {
-                return true;
-            }
-            return false;
-        }
     }
 
     /**
@@ -145,11 +158,8 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         public ScalarOperator extractColumn() {
             ScalarOperator dateColumn = call.getChild(0);
             String pattern = ((ConstantOperator) call.getChild(1)).getVarchar();
-            if ("%Y%m%d".equalsIgnoreCase(pattern) || "%Y-%m-%d".equalsIgnoreCase(pattern)) {
-                // %Y%m%d(6) -> yyyyMMdd(8), %Y-%m-%d(8) -> yyyy-MM-dd(10), the length diff is 2
-                if (Extractor.isDatePattern(pattern.length() + 2, value.getVarchar())) {
-                    return dateColumn;
-                }
+            if (isDatePattern(pattern, value)) {
+                return dateColumn;
             }
             return null;
         }
@@ -161,12 +171,12 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
     private static class SubstrExtractor implements Extractor {
         private final CallOperator call;
         private final ConstantOperator value;
-        private final int expectedLength;
+        private final String datePattern;
 
-        public SubstrExtractor(CallOperator call, ConstantOperator value, int expectedLength) {
+        public SubstrExtractor(CallOperator call, ConstantOperator value, String datePattern) {
             this.call = call;
             this.value = value;
-            this.expectedLength = expectedLength;
+            this.datePattern = datePattern;
         }
 
         @Override
@@ -187,7 +197,7 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         public ScalarOperator extractColumn() {
             CastOperator castOperator = call.getChild(0).cast();
             ScalarOperator dateColumn = castOperator.getChild(0);
-            if (Extractor.isDatePattern(expectedLength, value.getVarchar())) {
+            if (isDatePattern(datePattern, value)) {
                 return dateColumn;
             }
             return null;
@@ -221,12 +231,12 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
             if (value.getVarchar().length() != 8) {
                 return false;
             }
-            return new SubstrExtractor((CallOperator) call.getChild(0), value, 8).check();
+            return new SubstrExtractor((CallOperator) call.getChild(0), value, DATE_PATTERN1).check();
         }
 
         @Override
         public ScalarOperator extractColumn() {
-            return new SubstrExtractor((CallOperator) call.getChild(0), value, 8).extractColumn();
+            return new SubstrExtractor((CallOperator) call.getChild(0), value, DATE_PATTERN1).extractColumn();
         }
     }
 }

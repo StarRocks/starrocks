@@ -49,6 +49,10 @@ public class SimplifiedDateColumnPredicateRuleTest {
             verifyNotDate(new BinaryPredicateOperator(BinaryType.EQ, call, DATE_BEGIN2));
             verifyNotDate(
                     new BinaryPredicateOperator(BinaryType.GT, call, ConstantOperator.createVarchar("2024050600")));
+            verifyNotDate(
+                    new BinaryPredicateOperator(BinaryType.GT, call, ConstantOperator.createVarchar("20240500")));
+            verifyNotDate(
+                    new BinaryPredicateOperator(BinaryType.GT, call, ConstantOperator.createVarchar(" 20240506 ")));
         }
         {
             // dt is date
