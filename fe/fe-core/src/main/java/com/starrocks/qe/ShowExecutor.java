@@ -83,10 +83,10 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
@@ -881,16 +881,12 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowEnginesStatement(ShowEnginesStmt statement, ConnectContext context) {
             List<List<String>> rowSet = Lists.newArrayList();
-            rowSet.add(Lists.newArrayList("OLAP", FeConstants.YES, "Default storage engine of StarRocks", FeConstants.NO,
-                    FeConstants.NO, FeConstants.NO));
-            rowSet.add(Lists.newArrayList("MySQL", FeConstants.YES, "MySQL server which data is in it", FeConstants.NO,
-                    FeConstants.NO, FeConstants.NO));
-            rowSet.add(Lists.newArrayList("ELASTICSEARCH", FeConstants.YES, "ELASTICSEARCH cluster which data is in it",
-                    FeConstants.NO, FeConstants.NO, FeConstants.NO));
-            rowSet.add(Lists.newArrayList("HIVE", FeConstants.YES, "HIVE database which data is in it", FeConstants.NO,
-                    FeConstants.NO, FeConstants.NO));
-            rowSet.add(Lists.newArrayList("ICEBERG", FeConstants.YES, "ICEBERG data lake which data is in it", FeConstants.NO,
-                    FeConstants.NO, FeConstants.NO));
+            rowSet.add(Lists.newArrayList("OLAP", "YES", "Default storage engine of StarRocks", "NO", "NO", "NO"));
+            rowSet.add(Lists.newArrayList("MySQL", "YES", "MySQL server which data is in it", "NO", "NO", "NO"));
+            rowSet.add(Lists.newArrayList("ELASTICSEARCH", "YES", "ELASTICSEARCH cluster which data is in it", "NO", "NO",
+                    "NO"));
+            rowSet.add(Lists.newArrayList("HIVE", "YES", "HIVE database which data is in it", "NO", "NO", "NO"));
+            rowSet.add(Lists.newArrayList("ICEBERG", "YES", "ICEBERG data lake which data is in it", "NO", "NO", "NO"));
 
             // Only success
             return new ShowResultSet(statement.getMetaData(), rowSet);
@@ -1007,8 +1003,8 @@ public class ShowExecutor {
                     }
                     final String columnName = col.getName();
                     final String columnType = col.getType().canonicalName().toLowerCase();
-                    final String isAllowNull = col.isAllowNull() ? FeConstants.YES : FeConstants.NO;
-                    final String isKey = col.isKey() ? FeConstants.YES : FeConstants.NO;
+                    final String isAllowNull = col.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO;
+                    final String isKey = col.isKey() ? SchemaConstants.YES : SchemaConstants.NO;
                     String defaultValue = null;
                     if (!col.getType().isOnlyMetricType()) {
                         defaultValue = col.getMetaDefaultValue(Lists.newArrayList());

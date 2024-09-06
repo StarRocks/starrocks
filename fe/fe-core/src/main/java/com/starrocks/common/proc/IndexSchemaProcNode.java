@@ -39,7 +39,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.SchemaConstants;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Arrays;
@@ -95,7 +95,7 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
 
             List<String> rowList = Arrays.asList(column.getName(),
                     column.getType().canonicalName().toLowerCase(),
-                    column.isAllowNull() ? FeConstants.YES : FeConstants.NO,
+                    column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
                     ((Boolean) column.isKey()).toString(),
                     defaultStr,
                     extraStr);

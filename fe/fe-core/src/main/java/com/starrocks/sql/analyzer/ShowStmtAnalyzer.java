@@ -40,7 +40,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -352,7 +352,7 @@ public class ShowStmtAnalyzer {
                 List<String> row = Arrays.asList(
                         column.getName(),
                         column.getType().canonicalName().toLowerCase(),
-                        column.isAllowNull() ? FeConstants.YES : FeConstants.NO);
+                        column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO);
                 node.getTotalRows().add(row);
             }
         }
@@ -395,7 +395,7 @@ public class ShowStmtAnalyzer {
                                                 // If you do not follow this specification, it may cause the BI system,
                                                 // such as superset, to fail to recognize the column type.
                                                 column.getType().canonicalName().toLowerCase(),
-                                                column.isAllowNull() ? FeConstants.YES : FeConstants.NO,
+                                                column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
                                                 ((Boolean) column.isKey()).toString(),
                                                 defaultStr,
                                                 extraStr);
@@ -474,7 +474,7 @@ public class ShowStmtAnalyzer {
                                         // If you do not follow this specification, it may cause the BI system,
                                         // such as superset, to fail to recognize the column type.
                                         column.getType().canonicalName().toLowerCase(),
-                                        column.isAllowNull() ? FeConstants.YES : FeConstants.NO,
+                                        column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
                                         ((Boolean) column.isKey()).toString(),
                                         defaultStr,
                                         extraStr);

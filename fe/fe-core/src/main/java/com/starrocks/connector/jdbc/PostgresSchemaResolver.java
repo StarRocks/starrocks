@@ -23,7 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
 
 import java.sql.Connection;
@@ -62,7 +62,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 columnName = "\"" + columnName + "\"";
             }
             fullSchema.add(new Column(columnName, type,
-                    columnSet.getString("IS_NULLABLE").equals(FeConstants.YES)));
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
         }
         return fullSchema;
     }
