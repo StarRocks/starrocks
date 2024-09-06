@@ -164,7 +164,7 @@ public class StatisticUtils {
         Set<Long> collectPartitionIds = Sets.newHashSet();
         Locker locker = new Locker();
         if (useLock) {
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
         }
         try {
             for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
@@ -180,7 +180,7 @@ public class StatisticUtils {
             }
         } finally {
             if (useLock) {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         if (collectPartitionIds.isEmpty()) {

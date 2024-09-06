@@ -146,7 +146,7 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 

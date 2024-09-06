@@ -77,7 +77,7 @@ public class MVMetaVersionRepairer {
             try {
                 repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
             } finally {
-                locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
             }
         }
     }

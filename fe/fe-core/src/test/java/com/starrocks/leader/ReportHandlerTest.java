@@ -384,12 +384,12 @@ public class ReportHandlerTest {
             }
             OlapTable table = null;
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getId(), tabletMeta.getTableId());
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             Partition partition = table.getPartition(tabletMeta.getPartitionId());

@@ -741,7 +741,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         int partitionBatchNum = Config.tablet_checker_partition_batch_num;
         int partitionChecked = 0;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         long lockStart = System.nanoTime();
         try {
             TABLE:
@@ -768,8 +768,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     if (partitionChecked % partitionBatchNum == 0) {
                         lockTotalTime += System.nanoTime() - lockStart;
                         // release lock, so that lock can be acquired by other threads.
-                        locker.unLockDatabase(db, LockType.READ);
-                        locker.lockDatabase(db, LockType.READ);
+                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.lockDatabase(db.getId(), LockType.READ);
                         lockStart = System.nanoTime();
                         if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
@@ -885,7 +885,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
 
         } finally {
             lockTotalTime += System.nanoTime() - lockStart;
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return new ColocateMatchResult(lockTotalTime - waitTotalTimeMs * 1000000,

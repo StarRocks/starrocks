@@ -277,7 +277,7 @@ public abstract class MVPCTRefreshPartitioner {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     db.getFullName(), materializedView.getName());
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db, materializedView, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
         }
     }
 }

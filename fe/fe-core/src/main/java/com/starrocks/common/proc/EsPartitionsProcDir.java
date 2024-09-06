@@ -81,7 +81,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Joiner joiner = Joiner.on(", ");
             Map<String, EsShardPartitions> unPartitionedIndices =
@@ -121,7 +121,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // set result
@@ -147,11 +147,11 @@ public class EsPartitionsProcDir implements ProcDirInterface {
     public ProcNodeInterface lookup(String indexName) throws AnalysisException {
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             return new EsShardProcDir(db, esTable, indexName);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

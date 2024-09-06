@@ -629,7 +629,7 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), request.table_id);
             if (table == null) {
@@ -663,7 +663,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return new TableInfo(request.table_id, tableType, Table.TableType.OLAP, tableDataSize,

@@ -123,7 +123,7 @@ public class OlapDeleteJob extends DeleteJob {
         List<Predicate> conditions = getDeleteConditions();
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
             // count total replica num

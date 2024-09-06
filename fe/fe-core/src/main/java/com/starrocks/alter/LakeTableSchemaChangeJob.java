@@ -1105,12 +1105,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         @Override
         void lock(Database db) {
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
         }
 
         @Override
         void unlock(Database db) {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -1121,12 +1121,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         @Override
         void lock(Database db) {
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
         }
 
         @Override
         void unlock(Database db) {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 

@@ -143,7 +143,7 @@ public class CheckConsistencyJob {
         LocalTablet tablet = null;
 
         AgentBatchTask batchTask = new AgentBatchTask();
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                     LockType.READ)) {
             OlapTable olapTable = (OlapTable) table;
 
@@ -218,7 +218,7 @@ public class CheckConsistencyJob {
 
         if (state != JobState.RUNNING) {
             // failed to send task. set tablet's checked version to avoid choosing it again
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                         LockType.WRITE)) {
                 tablet.setCheckedVersion(checkedVersion);
             }
@@ -269,7 +269,7 @@ public class CheckConsistencyJob {
         boolean isConsistent = true;
         JournalTask journalTask;
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) table;
 
             Partition partition = olapTable.getPartition(tabletMeta.getPartitionId());

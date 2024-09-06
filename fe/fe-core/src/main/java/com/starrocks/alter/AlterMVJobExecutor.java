@@ -380,7 +380,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
                 GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
             LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                     newRefreshType, materializedView.getId());

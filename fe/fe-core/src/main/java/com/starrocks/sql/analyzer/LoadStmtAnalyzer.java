@@ -129,7 +129,7 @@ public class LoadStmtAnalyzer {
                             continue;
                         }
                         Locker locker = new Locker();
-                        locker.lockDatabase(db, LockType.READ);
+                        locker.lockDatabase(db.getId(), LockType.READ);
                         try {
                             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                                         .getTable(db.getFullName(), tableName);
@@ -144,7 +144,7 @@ public class LoadStmtAnalyzer {
                                 }
                             }
                         } finally {
-                            locker.unLockDatabase(db, LockType.READ);
+                            locker.unLockDatabase(db.getId(), LockType.READ);
                         }
                     }
                 }

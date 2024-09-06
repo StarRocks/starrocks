@@ -274,7 +274,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.tableId = exportTable.getId();
         this.tableName = stmt.getTblName();
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(this.tableId),
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
                     LockType.READ)) {
             genExecFragment(stmt);
         }

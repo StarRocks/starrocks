@@ -188,7 +188,7 @@ public class ExportStmt extends StatementBase {
         }
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:

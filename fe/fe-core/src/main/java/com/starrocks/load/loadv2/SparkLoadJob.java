@@ -477,7 +477,7 @@ public class SparkLoadJob extends BulkLoadJob {
         boolean hasLoadPartitions = false;
         Set<Long> totalTablets = Sets.newHashSet();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             writeLock();
             try {
@@ -601,7 +601,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 writeUnlock();
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -749,7 +749,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
         Database db = getDb();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(
                     dbId, transactionId, commitInfos, Lists.newArrayList(),
@@ -759,7 +759,7 @@ public class SparkLoadJob extends BulkLoadJob {
             // retry in next loop
             LOG.info("Failed commit for txn {}, will retry. Error: {}", transactionId, e.getMessage());
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
     }
 

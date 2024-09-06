@@ -100,7 +100,7 @@ public class TableSchemaAction extends RestBaseAction {
                         "Database [" + dbName + "] " + "does not exists");
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
@@ -138,7 +138,7 @@ public class TableSchemaAction extends RestBaseAction {
                             e.getMessage() == null ? "Null Pointer Exception" : e.getMessage());
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

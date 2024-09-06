@@ -163,7 +163,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
         Map<Long, EtlTable> tables = Maps.newHashMap();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Map<Long, Set<Long>> tableIdToPartitionIds = Maps.newHashMap();
             Set<Long> allPartitionsTableIds = Sets.newHashSet();
@@ -205,7 +205,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         String outputFilePattern = EtlJobConfig.getOutputFilePattern(loadLabel, FilePatternVersion.V1);

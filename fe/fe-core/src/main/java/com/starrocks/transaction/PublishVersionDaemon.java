@@ -478,7 +478,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Set<Tablet> normalTablets = null;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         try {
@@ -523,7 +523,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -766,7 +766,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<Tablet> shadowTablets = null;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         try {
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
@@ -800,7 +800,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);

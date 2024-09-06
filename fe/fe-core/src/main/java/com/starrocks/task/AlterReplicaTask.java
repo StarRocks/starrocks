@@ -312,7 +312,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             PhysicalPartition partition = tbl.getPhysicalPartition(getPartitionId());
             if (partition == null) {
@@ -353,7 +353,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
         setFinished(true);
     }

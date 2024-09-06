@@ -421,7 +421,7 @@ public class RestoreJob extends AbstractJob {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (IdChain idChain : fileMapping.getMapping().keySet()) {
                 OlapTable tbl = (OlapTable) globalStateMgr.getLocalMetastore()
@@ -443,7 +443,7 @@ public class RestoreJob extends AbstractJob {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -486,7 +486,7 @@ public class RestoreJob extends AbstractJob {
         // Set all restored tbls' state to RESTORE
         // Table's origin state must be NORMAL and does not have unfinished load job.
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table tbl = globalStateMgr.getLocalMetastore()
@@ -515,12 +515,12 @@ public class RestoreJob extends AbstractJob {
                 olapTbl.setState(OlapTableState.RESTORE);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         // Check and prepare meta objects.
         batchTask = new AgentBatchTask();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
@@ -761,7 +761,7 @@ public class RestoreJob extends AbstractJob {
 
             LOG.debug("finished to generate create replica tasks. {}", this);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // Send create replica task to BE outside the db lock
@@ -835,7 +835,7 @@ public class RestoreJob extends AbstractJob {
 
     protected void addRestorePartitionsAndTables(Database db) {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             // add restored partitions.
             // table should be in State RESTORE, so no other partitions can be
@@ -851,7 +851,7 @@ public class RestoreJob extends AbstractJob {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -863,7 +863,7 @@ public class RestoreJob extends AbstractJob {
         Multimap<Long, Long> bePathsMap = HashMultimap.create();
         batchTask = new AgentBatchTask();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (IdChain idChain : fileMapping.getMapping().keySet()) {
                 OlapTable tbl = (OlapTable) globalStateMgr.getLocalMetastore()
@@ -884,7 +884,7 @@ public class RestoreJob extends AbstractJob {
                 bePathsMap.put(replica.getBackendId(), replica.getPathHash());
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // check disk capacity
@@ -1094,7 +1094,7 @@ public class RestoreJob extends AbstractJob {
     private void replayCheckAndPrepareMeta() {
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             // replay set all existing tables's state to RESTORE
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
@@ -1119,7 +1119,7 @@ public class RestoreJob extends AbstractJob {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         LOG.info("replay check and prepare meta. {}", this);
@@ -1211,7 +1211,7 @@ public class RestoreJob extends AbstractJob {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Long beId : beToSnapshots.keySet()) {
                     List<SnapshotInfo> beSnapshotInfos = beToSnapshots.get(beId);
@@ -1240,7 +1240,7 @@ public class RestoreJob extends AbstractJob {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
@@ -1430,7 +1430,7 @@ public class RestoreJob extends AbstractJob {
 
         // set all restored partition version
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             // set all tables' state to NORMAL
             setTableStateToNormal(db);
@@ -1462,7 +1462,7 @@ public class RestoreJob extends AbstractJob {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         if (!isReplay) {
@@ -1479,7 +1479,7 @@ public class RestoreJob extends AbstractJob {
 
             globalStateMgr.getEditLog().logRestoreJob(this);
 
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                     Table tbl = globalStateMgr.getLocalMetastore()
@@ -1527,7 +1527,7 @@ public class RestoreJob extends AbstractJob {
                 LOG.warn("Do post actions after restore success failed: ", e);
                 throw e;
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
@@ -1654,7 +1654,7 @@ public class RestoreJob extends AbstractJob {
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 // rollback table's state to NORMAL
                 setTableStateToNormal(db);
@@ -1685,7 +1685,7 @@ public class RestoreJob extends AbstractJob {
                     restoreTbl.dropPartition(dbId, entry.second.getName(), true /* is restore */);
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
 

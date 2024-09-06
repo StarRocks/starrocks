@@ -61,7 +61,7 @@ public class CTASAutoTabletTest {
         int bucketNum2 = 0;
         int bucketNum3 = 0;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
             if (table == null) {
@@ -89,7 +89,7 @@ public class CTASAutoTabletTest {
                 bucketNum3 += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         Assert.assertEquals(bucketNum1, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
         Assert.assertEquals(bucketNum2, 3);

@@ -171,7 +171,7 @@ public abstract class BulkLoadJob extends LoadJob {
     private void checkAndSetDataSourceInfo(Database db, List<DataDescription> dataDescriptions) throws DdlException {
         // check data source info
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (DataDescription dataDescription : dataDescriptions) {
                 BrokerFileGroup fileGroup = new BrokerFileGroup(dataDescription);
@@ -179,7 +179,7 @@ public abstract class BulkLoadJob extends LoadJob {
                 fileGroupAggInfo.addFileGroup(fileGroup);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

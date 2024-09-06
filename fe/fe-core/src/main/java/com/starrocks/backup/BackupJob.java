@@ -459,7 +459,7 @@ public class BackupJob extends AbstractJob {
         jobId = globalStateMgr.getNextId();
         batchTask = new AgentBatchTask();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             // check all backup tables again
             checkBackupTables(db);
@@ -528,7 +528,7 @@ public class BackupJob extends AbstractJob {
             }
             backupMeta = new BackupMeta(copiedTables);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // send tasks

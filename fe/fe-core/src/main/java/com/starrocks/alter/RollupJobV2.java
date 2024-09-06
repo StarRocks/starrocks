@@ -277,7 +277,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.READ)) {
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
@@ -386,7 +387,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             addRollupIndexToCatalog(tbl);
         }
 
@@ -487,7 +488,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.READ)) {
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
@@ -667,7 +669,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
          * we just check whether all rollup replicas are healthy.
          */
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
@@ -781,7 +783,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl != null) {
                 try (AutoCloseableLock ignore =
-                            new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
                     for (Long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                         MaterializedIndex rollupIndex = physicalPartitionIdToRollupIndex.get(partitionId);
                         for (Tablet rollupTablet : rollupIndex.getTablets()) {
@@ -820,7 +822,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()),
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()),
                     LockType.WRITE)) {
             addTabletToInvertedIndex(tbl);
         }
@@ -868,7 +870,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             addRollupIndexToCatalog(tbl);
         }
 
@@ -890,7 +892,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             if (tbl != null) {
                 Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
                 try (AutoCloseableLock ignore
-                            = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                            = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
                     onFinished(tbl);
                 }
             }

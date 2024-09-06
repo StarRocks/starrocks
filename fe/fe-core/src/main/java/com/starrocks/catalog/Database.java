@@ -223,7 +223,7 @@ public class Database extends MetaObject implements Writable {
     public long getUsedDataQuotaWithLock() {
         long usedDataQuota = 0;
         Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.READ);
+        locker.lockDatabase(id, LockType.READ);
         try {
             for (Table table : this.idToTable.values()) {
                 if (!table.isOlapTableOrMaterializedView()) {
@@ -235,7 +235,7 @@ public class Database extends MetaObject implements Writable {
             }
             return usedDataQuota;
         } finally {
-            locker.unLockDatabase(this, LockType.READ);
+            locker.unLockDatabase(id, LockType.READ);
         }
     }
 
@@ -262,7 +262,7 @@ public class Database extends MetaObject implements Writable {
     public void checkReplicaQuota() throws DdlException {
         long usedReplicaQuota = 0;
         Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.READ);
+        locker.lockDatabase(id, LockType.READ);
         try {
             for (Table table : this.idToTable.values()) {
                 if (!table.isOlapTableOrMaterializedView()) {
@@ -273,7 +273,7 @@ public class Database extends MetaObject implements Writable {
                 usedReplicaQuota = usedReplicaQuota + olapTable.getReplicaCount();
             }
         } finally {
-            locker.unLockDatabase(this, LockType.READ);
+            locker.unLockDatabase(id, LockType.READ);
         }
 
         long leftReplicaQuota = Math.max(replicaQuotaSize - usedReplicaQuota, 0L);
@@ -315,7 +315,7 @@ public class Database extends MetaObject implements Writable {
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
         Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.WRITE);
+        locker.lockDatabase(id, LockType.WRITE);
         try {
             table = nameToTable.get(tableName);
             if (table == null && isSetIfExists) {
@@ -336,7 +336,7 @@ public class Database extends MetaObject implements Writable {
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
             GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
         } finally {
-            locker.unLockDatabase(this, LockType.WRITE);
+            locker.unLockDatabase(id, LockType.WRITE);
         }
 
         if (isForce) {
@@ -350,7 +350,7 @@ public class Database extends MetaObject implements Writable {
     public void dropTemporaryTable(long tableId, String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
         Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.WRITE);
+        locker.lockDatabase(id, LockType.WRITE);
         try {
             table = idToTable.get(tableId);
             if (table == null) {
@@ -363,7 +363,7 @@ public class Database extends MetaObject implements Writable {
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
             GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
         } finally {
-            locker.unLockDatabase(this, LockType.WRITE);
+            locker.unLockDatabase(id, LockType.WRITE);
         }
     }
 
@@ -461,11 +461,11 @@ public class Database extends MetaObject implements Writable {
 
     public Set<String> getTableNamesViewWithLock() {
         Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.READ);
+        locker.lockDatabase(id, LockType.READ);
         try {
             return Collections.unmodifiableSet(this.nameToTable.keySet());
         } finally {
-            locker.unLockDatabase(this, LockType.READ);
+            locker.unLockDatabase(id, LockType.READ);
         }
     }
 

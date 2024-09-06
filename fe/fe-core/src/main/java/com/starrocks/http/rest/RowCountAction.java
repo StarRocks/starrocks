@@ -105,7 +105,7 @@ public class RowCountAction extends RestBaseAction {
         }
 
         try (AutoCloseableLock ignore
-                    = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                    = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) table;
             for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
                 long version = partition.getVisibleVersion();

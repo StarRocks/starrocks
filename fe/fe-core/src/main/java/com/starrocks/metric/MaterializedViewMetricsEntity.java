@@ -225,7 +225,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 MaterializedView mv = (MaterializedView) table;
-                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                             LockType.READ)) {
                     return mv.getRowCount();
                 } catch (Exception e) {
@@ -250,7 +250,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
                 MaterializedView mv = (MaterializedView) table;
                 try (AutoCloseableLock ignore =
-                            new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
                     return mv.getDataSize();
                 } catch (Exception e) {
                     return 0L;
@@ -299,7 +299,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 try (AutoCloseableLock ignore =
-                            new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
                     return mv.getPartitions().size();
                 } catch (Exception e) {
                     return 0;

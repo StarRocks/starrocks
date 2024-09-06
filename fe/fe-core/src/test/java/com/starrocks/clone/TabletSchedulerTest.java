@@ -223,10 +223,10 @@ public class TabletSchedulerTest {
                 Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
-                    locker.lockDatabase(goodDB, LockType.READ);
+                    locker.lockDatabase(goodDB.getId(), LockType.READ);
                     tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
                 } finally {
-                    locker.unLockDatabase(goodDB, LockType.READ);
+                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
                 }
             }
         }, "testAddCtx").start();
