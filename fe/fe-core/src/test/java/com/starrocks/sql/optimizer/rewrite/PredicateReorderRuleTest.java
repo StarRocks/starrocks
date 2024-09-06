@@ -107,7 +107,7 @@ public class PredicateReorderRuleTest {
                         ");");
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }

@@ -50,7 +50,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
     }
 
