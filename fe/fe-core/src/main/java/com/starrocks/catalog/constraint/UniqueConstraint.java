@@ -12,12 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.catalog;
+package com.starrocks.catalog.constraint;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/UniqueConstraint.java
+=======
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+>>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737)):fe/fe-core/src/main/java/com/starrocks/catalog/constraint/UniqueConstraint.java
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
@@ -28,12 +35,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// unique constraint is used to guide optimizer rewrite for now,
-// and is not enforced during ingestion.
-// the unique property of data should be guaranteed by user.
-//
-// a table may have multi unique constraints.
-public class UniqueConstraint {
+// Unique constraint is used to guide optimizer rewrite for now, and is not enforced during ingestion.
+// User should guarantee the unique property of data.
+// A table may have multi unique constraints.
+public class UniqueConstraint extends Constraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
@@ -43,14 +48,54 @@ public class UniqueConstraint {
     private final String dbName;
     private final String tableName;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/UniqueConstraint.java
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<String> uniqueColumns) {
+=======
+    private Table referencedTable;
+
+    public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
+        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
+>>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737)):fe/fe-core/src/main/java/com/starrocks/catalog/constraint/UniqueConstraint.java
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
         this.uniqueColumns = uniqueColumns;
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/UniqueConstraint.java
     public List<String> getUniqueColumns() {
+=======
+    // Used for primaryKey/uniqueKey table to create default uniqueConstraints.
+    public UniqueConstraint(Table referencedTable, List<ColumnId> uniqueColumns) {
+        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
+        this.referencedTable = referencedTable;
+        this.uniqueColumns = uniqueColumns;
+    }
+
+    public List<String> getUniqueColumnNames() {
+        Table targetTable;
+        if (referencedTable != null) {
+            targetTable = referencedTable;
+        } else {
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            if (targetTable == null) {
+                throw new SemanticException("Table %s is not found", tableName);
+            }
+        }
+        List<String> result = new ArrayList<>(uniqueColumns.size());
+        for (ColumnId columnId : uniqueColumns) {
+            Column column = targetTable.getColumn(columnId);
+            if (column == null) {
+                LOG.warn("Can not find column by column id: {}, the column may have been dropped", columnId);
+                continue;
+            }
+            result.add(column.getName());
+        }
+        return result;
+    }
+
+    public List<ColumnId> getUniqueColumns() {
+>>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737)):fe/fe-core/src/main/java/com/starrocks/catalog/constraint/UniqueConstraint.java
         return uniqueColumns;
     }
 
@@ -173,5 +218,15 @@ public class UniqueConstraint {
         }
 
         uniqueConstraints.add(new UniqueConstraint(catalogName, dbName, tableName, uniqueConstraintColumns));
+    }
+
+    public void onTableRename(Table newTable, String oldTableName) {
+        LOG.info("UniqueConstraint onTableRename: {} -> {}", oldTableName, newTable.getName());
+        if (this.tableName.equals(oldTableName)) {
+            this.tableName = newTable.getName();
+        } else {
+            LOG.warn("UniqueConstraint onTableRename: old table name not match, old: {}, new: {}",
+                    oldTableName, newTable.getName());
+        }
     }
 }

@@ -34,6 +34,11 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.AlterJobException;
+import com.starrocks.catalog.constraint.UniqueConstraint;
+>>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
