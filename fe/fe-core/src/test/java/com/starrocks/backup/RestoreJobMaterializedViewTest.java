@@ -146,7 +146,7 @@ public class RestoreJobMaterializedViewTest {
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
-                new BlobStorage("broker", Maps.newHashMap()));
+            new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
 
@@ -267,7 +267,7 @@ public class RestoreJobMaterializedViewTest {
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
         systemInfoService = new SystemInfoService();
         db = UnitTestUtil.createDbWithMaterializedView(dbId, tblId, partId, idxId, tabletId,
-                    backendId, version, KeysType.DUP_KEYS);
+                backendId, version, KeysType.DUP_KEYS);
         mvRestoreContext = new MvRestoreContext();
         setUpMocker();
     }
@@ -283,7 +283,8 @@ public class RestoreJobMaterializedViewTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = olapTable.getIndexNameById(index.getId());
@@ -323,8 +324,8 @@ public class RestoreJobMaterializedViewTest {
         }
 
         RestoreJob job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                    jobInfo, false, 3, 100000,
-                    globalStateMgr, repo.getId(), backupMeta, mvRestoreContext);
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, mvRestoreContext);
         job.setRepo(repo);
 
         // add job into mvRestoreContext
@@ -366,7 +367,7 @@ public class RestoreJobMaterializedViewTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                        task.getSignature(), taskStatus);
+                    task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
@@ -399,7 +400,7 @@ public class RestoreJobMaterializedViewTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                        agentTask.getSignature(), taskStatus);
+                    agentTask.getSignature(), taskStatus);
             request.setDownloaded_tablet_ids(downloadedTabletIds);
             Assert.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
         }
@@ -431,7 +432,7 @@ public class RestoreJobMaterializedViewTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                        agentTask.getSignature(), taskStatus);
+                    agentTask.getSignature(), taskStatus);
             job.finishDirMoveTask((DirMoveTask) agentTask, request);
         }
 

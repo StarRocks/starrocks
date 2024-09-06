@@ -364,7 +364,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 if (tabletMeta.isLakeTablet()) {
                     Partition partition = exportTable.getPartition(tabletMeta.getPartitionId());
                     if (partition != null) {
-                        MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                        MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tabletMeta.getIndexId());
                         if (index != null) {
                             Tablet tablet = index.getTablet(tabletId);
                             if (tablet != null) {

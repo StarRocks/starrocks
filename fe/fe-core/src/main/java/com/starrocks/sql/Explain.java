@@ -204,7 +204,8 @@ public class Explain {
             int totalTabletsNum = 0;
             for (Long partitionId : scan.getSelectedPartitionId()) {
                 final Partition partition = ((OlapTable) scan.getTable()).getPartition(partitionId);
-                final MaterializedIndex selectedTable = partition.getIndex(scan.getSelectedIndexId());
+                final MaterializedIndex selectedTable =
+                        partition.getDefaultPhysicalPartition().getIndex(scan.getSelectedIndexId());
                 totalTabletsNum += selectedTable.getTablets().size();
             }
             String partitionAndBucketInfo = "partitionRatio: " +

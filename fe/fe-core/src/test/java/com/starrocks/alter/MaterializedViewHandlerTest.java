@@ -43,6 +43,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -149,10 +150,13 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexId;
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
-                partition.getIndex(baseIndexId);
-                result = materializedIndex;
-                materializedIndex.getState();
-                result = MaterializedIndex.IndexState.SHADOW;
+
+                //partition.getDefaultPhysicalPartition().getIndex(baseIndexId);
+                //result = materializedIndex;
+                //minTimes = 0;
+
+                //materializedIndex.getState();
+                //result = MaterializedIndex.IndexState.SHADOW;
             }
         };
         MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
@@ -319,7 +323,9 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void testCheckDropMaterializedView(@Injectable OlapTable olapTable, @Injectable Partition partition,
+    public void testCheckDropMaterializedView(@Injectable OlapTable olapTable,
+                                              @Injectable Partition partition,
+                                              @Injectable PhysicalPartition physicalPartition,
                                               @Injectable MaterializedIndex materializedIndex,
                                               @Injectable Database db) {
         String mvName = "mv_1";
@@ -335,10 +341,12 @@ public class MaterializedViewHandlerTest {
                 result = 1L;
                 olapTable.getSchemaHashByIndexId(1L);
                 result = 1;
+
                 olapTable.getPhysicalPartitions();
-                result = Lists.newArrayList(partition);
-                partition.getIndex(1L);
-                result = materializedIndex;
+                result = Lists.newArrayList(physicalPartition);
+
+                //partition.getDefaultPhysicalPartition().getIndex(1L);
+                //result = materializedIndex;
             }
         };
         MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();

@@ -175,8 +175,8 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         Partition partition = table.getPartition("t3");
         long baseIndexId = table.getBaseIndexId();
-        long initVisibleVersion = partition.getVisibleVersion();
-        long initNextVersion = partition.getNextVersion();
+        long initVisibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
+        long initNextVersion = partition.getDefaultPhysicalPartition().getNextVersion();
         Assert.assertEquals(initVisibleVersion + 1, initNextVersion);
 
         LakeTableAsyncFastSchemaChangeJob replaySourceJob = new LakeTableAsyncFastSchemaChangeJob(job);
@@ -186,10 +186,11 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
         replaySourceJob.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
         replaySourceJob.getCommitVersionMap().put(partition.getId(), initNextVersion);
-        replaySourceJob.addDirtyPartitionIndex(partition.getId(), baseIndexId, partition.getIndex(baseIndexId));
+        replaySourceJob.addDirtyPartitionIndex(partition.getId(), baseIndexId,
+                partition.getDefaultPhysicalPartition().getIndex(baseIndexId));
         job.replay(replaySourceJob);
-        Assert.assertEquals(initNextVersion + 1, partition.getNextVersion());
-        Assert.assertEquals(initVisibleVersion, partition.getVisibleVersion());
+        Assert.assertEquals(initNextVersion + 1, partition.getDefaultPhysicalPartition().getNextVersion());
+        Assert.assertEquals(initVisibleVersion, partition.getDefaultPhysicalPartition().getVisibleVersion());
 
         replaySourceJob.setJobState(AlterJobV2.JobState.FINISHED);
         replaySourceJob.setFinishedTimeMs(System.currentTimeMillis());
@@ -197,8 +198,9 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         job.replay(replaySourceJob);
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
         Assert.assertEquals(replaySourceJob.getFinishedTimeMs(), job.getFinishedTimeMs());
-        Assert.assertEquals(initVisibleVersion + 1, partition.getVisibleVersion());
-        Assert.assertEquals(partition.getVisibleVersion() + 1, partition.getNextVersion());
+        Assert.assertEquals(initVisibleVersion + 1, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
+                partition.getDefaultPhysicalPartition().getNextVersion());
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         Assert.assertEquals(2, table.getBaseSchema().size());
         Assert.assertEquals(0, table.getBaseSchema().get(0).getUniqueId());

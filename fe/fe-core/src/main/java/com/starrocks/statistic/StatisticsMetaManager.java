@@ -103,7 +103,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         boolean check = true;
         for (Partition partition : table.getPartitions()) {
             // check replicate miss
-            if (partition.getBaseIndex().getTablets().stream()
+            if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                     .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                 check = false;
                 break;

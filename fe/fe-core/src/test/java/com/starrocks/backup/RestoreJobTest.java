@@ -60,6 +60,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.privilege.IdGenerator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.SystemInfoService;
@@ -85,7 +86,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.Adler32;
 
 public class RestoreJobTest {
@@ -95,7 +95,7 @@ public class RestoreJobTest {
     private RestoreJob job;
     private String label = "test_label";
 
-    private AtomicLong id = new AtomicLong(50000);
+    private final IdGenerator idGenerator = new IdGenerator();
 
     private OlapTable expectedRestoreTbl;
 
@@ -174,10 +174,6 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = id.getAndIncrement();
-
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -185,6 +181,13 @@ public class RestoreJobTest {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return idGenerator.getNextId();
             }
         };
 
@@ -316,13 +319,13 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assert.assertEquals(6, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assert.assertEquals(12, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -330,7 +333,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(4, agentTasks.size());
+        Assert.assertEquals(12, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -356,6 +359,8 @@ public class RestoreJobTest {
             job.getInfo();
         } catch (Exception ignore) {
         }
+
+        AgentTaskQueue.clearAllTasks();
     }
 
     @Test
@@ -366,10 +371,6 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = id.getAndIncrement();
-
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -379,6 +380,14 @@ public class RestoreJobTest {
                 result = systemInfoService;
             }
         };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return idGenerator.getNextId();
+            }
+        };
+
 
         List<Long> beIds = Lists.newArrayList();
         beIds.add(CatalogMocker.BACKEND1_ID);
@@ -454,7 +463,8 @@ public class RestoreJobTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
@@ -500,13 +510,13 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assert.assertEquals(12, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assert.assertEquals(24, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -514,7 +524,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(4, agentTasks.size());
+        Assert.assertEquals(24, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -534,6 +544,8 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+
+        AgentTaskQueue.clearAllTasks();
     }
 
     @Test

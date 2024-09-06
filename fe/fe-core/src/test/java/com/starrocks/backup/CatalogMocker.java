@@ -54,7 +54,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -376,7 +375,7 @@ public class CatalogMocker {
         rollupTabletP1.addReplica(replica10);
         rollupTabletP1.addReplica(replica11);
 
-        partition1.createRollupIndex(rollupIndexP1);
+        partition1.getDefaultPhysicalPartition().createRollupIndex(rollupIndexP1);
 
         // rollup index p2
         MaterializedIndex rollupIndexP2 = new MaterializedIndex(TEST_ROLLUP_ID, IndexState.NORMAL);
@@ -392,7 +391,7 @@ public class CatalogMocker {
         rollupTabletP2.addReplica(replica13);
         rollupTabletP2.addReplica(replica14);
 
-        partition2.createRollupIndex(rollupIndexP2);
+        partition2.getDefaultPhysicalPartition().createRollupIndex(rollupIndexP2);
 
         olapTable2.setIndexMeta(TEST_ROLLUP_ID, TEST_ROLLUP_NAME, TEST_ROLLUP_SCHEMA, 0, ROLLUP_SCHEMA_HASH,
                 (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -475,7 +474,7 @@ public class CatalogMocker {
             partition1 =
                     new Partition(TEST_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo4);
 
-            PhysicalPartition physicalPartition2 = new PhysicalPartitionImpl(
+            PhysicalPartition physicalPartition2 = new PhysicalPartition(
                         TEST_PARTITION2_ID, "", TEST_PARTITION1_ID, 0, baseIndexP2);
             partition1.addSubPartition(physicalPartition2);
 

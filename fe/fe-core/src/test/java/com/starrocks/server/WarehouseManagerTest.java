@@ -279,7 +279,8 @@ public class WarehouseManagerTest {
         Partition partition = new Partition(123, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
-                () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1));
+                () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
+                        index, Collections.emptyList(), 1));
         Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 

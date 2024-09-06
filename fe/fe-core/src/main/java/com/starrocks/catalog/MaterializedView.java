@@ -169,7 +169,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
 
         public static BasePartitionInfo fromOlapTable(Partition partition) {
-            return new BasePartitionInfo(partition.getId(), partition.getVisibleVersion(), -1);
+            return new BasePartitionInfo(partition.getId(), partition.getDefaultPhysicalPartition().getVisibleVersion(), -1);
         }
 
         public long getId() {

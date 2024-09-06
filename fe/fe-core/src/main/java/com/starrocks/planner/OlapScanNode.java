@@ -416,7 +416,7 @@ public class OlapScanNode extends ScanNode {
             Long partitionId = internalScanRange.partition_id;
 
             final Partition partition = olapTable.getPartition(partitionId);
-            final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
+            final MaterializedIndex selectedTable = partition.getDefaultPhysicalPartition().getIndex(selectedIndexId);
             final Tablet selectedTablet = selectedTable.getTablet(tabletId);
             if (selectedTablet == null) {
                 throw new UserException("Tablet " + tabletId + " doesn't exist in partition " + partitionId);

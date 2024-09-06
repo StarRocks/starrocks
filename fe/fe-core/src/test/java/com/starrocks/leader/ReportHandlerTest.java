@@ -393,7 +393,7 @@ public class ReportHandlerTest {
             }
 
             Partition partition = table.getPartition(tabletMeta.getPartitionId());
-            MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex idx = partition.getDefaultPhysicalPartition().getIndex(tabletMeta.getIndexId());
             LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
 
             for (Replica replica : tablet.getImmutableReplicas()) {
@@ -421,7 +421,7 @@ public class ReportHandlerTest {
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                .getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
                 allTablets.add(tablet.getId());

@@ -204,7 +204,7 @@ public class LakeTable extends OlapTable {
     public List<Long> getShardGroupIds() {
         List<Long> shardGroupIds = new ArrayList<>();
         for (Partition p : getAllPartitions()) {
-            shardGroupIds.add(p.getShardGroupId());
+            shardGroupIds.add(p.getDefaultPhysicalPartition().getShardGroupId());
         }
         return shardGroupIds;
     }

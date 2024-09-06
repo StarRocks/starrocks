@@ -740,7 +740,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " as" +
                     " select id_date, sum(t1b) from table_with_day_partition group by id_date");
             MaterializedView mv = starRocksAssert.getMv("test", "test_loose_mv");
-            mv.getPartition("p19910330")
+            mv.getPartition("p19910330").getDefaultPhysicalPartition()
                     .setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
             String query5 = "select id_date, sum(t1b) from table_with_day_partition" +
                     " where id_date >= '1991-03-30' and id_date < '1991-04-03' group by id_date";

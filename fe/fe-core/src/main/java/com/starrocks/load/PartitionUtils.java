@@ -153,7 +153,8 @@ public class PartitionUtils {
     public static void clearTabletsFromInvertedIndex(List<Partition> partitions) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Partition partition : partitions) {
-            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex materializedIndex : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : materializedIndex.getTablets()) {
                     invertedIndex.deleteTablet(tablet.getId());
                 }

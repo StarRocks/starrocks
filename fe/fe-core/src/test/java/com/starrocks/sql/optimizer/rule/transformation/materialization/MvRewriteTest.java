@@ -2079,7 +2079,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             MaterializedView mv = starRocksAssert.getMv("test", name);
 
             int mockRows = i + 1;
-            mv.getPartitions().forEach(p -> p.getBaseIndex().setRowCount(mockRows));
+            mv.getPartitions().forEach(p -> p.getDefaultPhysicalPartition().getBaseIndex().setRowCount(mockRows));
         }
 
         for (int i = 0; i < dimensions.size(); i++) {

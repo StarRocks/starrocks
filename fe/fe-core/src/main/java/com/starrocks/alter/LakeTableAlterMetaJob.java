@@ -14,7 +14,6 @@
 
 package com.starrocks.alter;
 
-
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -52,7 +51,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
 
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
-            MaterializedIndex index, long nodeId, Set<Long> tablets) {
+                                                       MaterializedIndex index, long nodeId, Set<Long> tablets) {
         return TabletMetadataUpdateAgentTaskFactory.createGenericBooleanPropertyUpdateTask(nodeId, tablets,
                 metaValue, metaType);
     }

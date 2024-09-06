@@ -149,7 +149,7 @@ public class ColocateTableBalancerTest {
         // add its tablet to TabletScheduler
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex materializedIndex = partition.getBaseIndex();
+            MaterializedIndex materializedIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
             for (Tablet tablet : materializedIndex.getTablets()) {
                 TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
                             database.getId(),
@@ -215,7 +215,7 @@ public class ColocateTableBalancerTest {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
-        LocalTablet tablet = (LocalTablet) partitions.get(0).getBaseIndex().getTablets().get(0);
+        LocalTablet tablet = (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
         long oldVal = Config.tablet_sched_repair_delay_factor_second;

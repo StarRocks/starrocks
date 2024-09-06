@@ -160,7 +160,7 @@ public class CheckConsistencyJob {
                 return false;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 LOG.debug("index[{}] does not exist", tabletMeta.getIndexId());
                 return false;
@@ -172,7 +172,7 @@ public class CheckConsistencyJob {
                 return false;
             }
 
-            checkedVersion = partition.getVisibleVersion();
+            checkedVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
             checkedSchemaHash = olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId());
 
             int sentTaskReplicaNum = 0;
@@ -278,7 +278,7 @@ public class CheckConsistencyJob {
                 return -1;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 LOG.warn("index[{}] does not exist", tabletMeta.getIndexId());
                 return -1;

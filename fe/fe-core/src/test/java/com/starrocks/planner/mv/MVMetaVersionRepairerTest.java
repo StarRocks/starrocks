@@ -55,7 +55,7 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
     private MVRepairHandler.PartitionRepairInfo toPartitionInfo(Partition partition, long version,
                                                                 long versionTime) {
         return new MVRepairHandler.PartitionRepairInfo(partition.getId(), partition.getName(),
-                partition.getVisibleVersion(), version, versionTime);
+                partition.getDefaultPhysicalPartition().getVisibleVersion(), version, versionTime);
     }
 
     @Test
@@ -205,8 +205,9 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         String baseTablePartitionName = value.keySet().iterator().next();
                         MaterializedView.BasePartitionInfo basePartitionInfo = value.get(baseTablePartitionName);
                         Partition p1 = m1.getPartition("p1");
-                        Assert.assertEquals(basePartitionInfo.getVersion(), p1.getVisibleVersion());
-                        Assert.assertEquals(basePartitionInfo.getLastRefreshTime(), p1.getVisibleVersionTime());
+                        Assert.assertEquals(basePartitionInfo.getVersion(), p1.getDefaultPhysicalPartition().getVisibleVersion());
+                        Assert.assertEquals(basePartitionInfo.getLastRefreshTime(),
+                                p1.getDefaultPhysicalPartition().getVisibleVersionTime());
 
                         Partition p2 = m1.getPartition("p2");
                         long currentTs = System.currentTimeMillis();
@@ -269,8 +270,8 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         String baseTablePartitionName = value.keySet().iterator().next();
                         MaterializedView.BasePartitionInfo basePartitionInfo = value.get(baseTablePartitionName);
                         Partition p1 = m1.getPartition("p1");
-                        long lastRefreshVersion = p1.getVisibleVersion();
-                        long lastRefreshVersionTime = p1.getVisibleVersionTime();
+                        long lastRefreshVersion = p1.getDefaultPhysicalPartition().getVisibleVersion();
+                        long lastRefreshVersionTime = p1.getDefaultPhysicalPartition().getVisibleVersionTime();
                         Assert.assertEquals(basePartitionInfo.getVersion(), lastRefreshVersion);
                         Assert.assertEquals(basePartitionInfo.getLastRefreshTime(), lastRefreshVersionTime);
 
@@ -278,7 +279,8 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         // p1 has been refreshed, but p2 has been compaction or fast schema changed, use curPartition as its
                         // partition
                         // p1 has been updated, so the version of p1 should be updated
-                        p1.setVisibleVersion(lastRefreshVersion + 1, lastRefreshVersionTime + 1);
+                        p1.getDefaultPhysicalPartition()
+                                .setVisibleVersion(lastRefreshVersion + 1, lastRefreshVersionTime + 1);
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(p1, 100L, currentTs);
 

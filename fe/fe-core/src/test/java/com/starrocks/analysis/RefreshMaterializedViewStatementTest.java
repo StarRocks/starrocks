@@ -106,7 +106,8 @@ public class RefreshMaterializedViewStatementTest {
                 refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(table.getId());
         if (partitionInfoMap.containsKey("table_name_tmp_1")) {
             MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
-            Assert.assertEquals(table.getPartition("table_name_tmp_1").getVisibleVersion(), partitionInfo.getVersion());
+            Assert.assertEquals(table.getPartition("table_name_tmp_1").getDefaultPhysicalPartition()
+                    .getVisibleVersion(), partitionInfo.getVersion());
         }
     }
 }

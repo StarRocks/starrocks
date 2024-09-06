@@ -1552,7 +1552,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return true;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 return true;
             }
@@ -1572,7 +1572,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     TabletChecker.getTabletHealthStatusWithPriority(
                             tablet,
                             globalStateMgr.getNodeMgr().getClusterInfo(),
-                            partition.getVisibleVersion(),
+                            partition.getDefaultPhysicalPartition().getVisibleVersion(),
                             replicaNum,
                             aliveBeIds,
                             olapTable.getLocation());
@@ -1691,7 +1691,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         /*
                          * Tablet in SHADOW index can not be repaired of balanced
                          */
-                        for (MaterializedIndex idx : partition
+                        for (MaterializedIndex idx : partition.getDefaultPhysicalPartition()
                                 .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                             PartitionStat pStat = new PartitionStat(dbId, table.getId(), 0, replicaNum,
                                     replicationFactor);

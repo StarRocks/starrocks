@@ -951,13 +951,16 @@ public class LeaderImpl {
             TBasePartitionDesc basePartitionDesc = new TBasePartitionDesc();
             // fill partition meta info
             for (Partition partition : olapTable.getAllPartitions()) {
+
+                PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
                 TPartitionMeta partitionMeta = new TPartitionMeta();
                 partitionMeta.setPartition_id(partition.getId());
                 partitionMeta.setPartition_name(partition.getName());
                 partitionMeta.setState(partition.getState().name());
-                partitionMeta.setVisible_version(partition.getVisibleVersion());
-                partitionMeta.setVisible_time(partition.getVisibleVersionTime());
-                partitionMeta.setNext_version(partition.getNextVersion());
+                partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
+                partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
+                partitionMeta.setNext_version(physicalPartition.getNextVersion());
                 partitionMeta.setIs_temp(olapTable.getPartition(partition.getName(), true) != null);
                 tableMeta.addToPartitions(partitionMeta);
                 short replicaNum = partitionInfo.getReplicationNum(partition.getId());
@@ -1031,7 +1034,8 @@ public class LeaderImpl {
             }
 
             for (Partition partition : olapTable.getAllPartitions()) {
-                List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+                List<MaterializedIndex> indexes =
+                        partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());

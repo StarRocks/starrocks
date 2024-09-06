@@ -634,9 +634,9 @@ public class StarRocksAssert {
                                     .getTable(testDb.getFullName(), tableName.getTbl()));
                         for (Partition partition : tbl.getPartitions()) {
                             if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                long version = partition.getVisibleVersion() + 1;
-                                partition.setVisibleVersion(version, System.currentTimeMillis());
-                                MaterializedIndex baseIndex = partition.getBaseIndex();
+                                long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
+                                partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+                                MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
                                 List<Tablet> tablets = baseIndex.getTablets();
                                 for (Tablet tablet : tablets) {
                                     List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

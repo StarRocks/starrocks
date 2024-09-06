@@ -73,7 +73,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
-        partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
+        partition.getDefaultPhysicalPartition()
+                .updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
                 .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
     }

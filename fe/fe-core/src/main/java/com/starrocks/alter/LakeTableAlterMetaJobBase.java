@@ -305,7 +305,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
         for (MaterializedIndex index : indexList) {
-            updateIndexTabletMeta(db, table, partition, index);
+            updateIndexTabletMeta(db, table, partition.getDefaultPhysicalPartition(), index);
         }
     }
 

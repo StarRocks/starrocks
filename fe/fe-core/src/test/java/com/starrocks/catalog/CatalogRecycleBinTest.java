@@ -117,7 +117,7 @@ public class CatalogRecycleBinTest {
 
         PhysicalPartition recycledPart = bin.getPhysicalPartition(1L);
         Assert.assertNotNull(recycledPart);
-        recycledPart = bin.getPartition(2L);
+        recycledPart = bin.getPhysicalPartition(2L);
         Assert.assertEquals(2L, recycledPart.getId());
     }
 

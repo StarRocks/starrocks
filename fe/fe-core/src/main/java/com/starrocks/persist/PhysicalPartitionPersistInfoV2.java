@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -35,9 +33,9 @@ public class PhysicalPartitionPersistInfoV2 implements Writable {
     @SerializedName("partitionId")
     private Long partitionId;
     @SerializedName("physicalPartition")
-    private PhysicalPartitionImpl partition;
+    private PhysicalPartition partition;
 
-    public PhysicalPartitionPersistInfoV2(Long dbId, Long tableId, Long partitionId, PhysicalPartitionImpl partition) {
+    public PhysicalPartitionPersistInfoV2(Long dbId, Long tableId, Long partitionId, PhysicalPartition partition) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;

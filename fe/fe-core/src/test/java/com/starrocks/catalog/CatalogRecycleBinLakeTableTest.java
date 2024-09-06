@@ -97,7 +97,8 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void checkPartitionTablet(Partition partition, boolean expectExist) {
         TabletInvertedIndex tabletIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index :
+                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 TabletMeta meta = tabletIndex.getTabletMeta(tablet.getId());
                 if (expectExist) {
@@ -343,9 +344,12 @@ public class CatalogRecycleBinLakeTableTest {
         Partition p2 = table1.getPartition("p2");
         Partition p3 = table1.getPartition("p3");
         Assert.assertNotNull(p1);
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2, WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
 
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1", dbName));
@@ -440,7 +444,8 @@ public class CatalogRecycleBinLakeTableTest {
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         p1 = table2.getPartition("p1");
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t2 DROP PARTITION p1", dbName));
         Assert.assertNull(table2.getPartition("p1"));

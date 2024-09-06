@@ -658,10 +658,11 @@ public class OlapTable extends Table {
 
     public boolean hasMaterializedView() {
         Optional<Partition> partition = idToPartition.values().stream().findFirst();
-        if (!partition.isPresent()) {
+        if (partition.isEmpty()) {
             return false;
         } else {
-            return partition.get().hasMaterializedView();
+            PhysicalPartition physicalPartition = partition.get().getDefaultPhysicalPartition();
+            return physicalPartition.hasMaterializedView();
         }
     }
 
@@ -935,7 +936,7 @@ public class OlapTable extends Table {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             boolean chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
-    
+
             if (chooseBackendsArbitrary) {
                 backendsPerBucketSeq = Lists.newArrayList();
             }
@@ -944,7 +945,7 @@ public class OlapTable extends Table {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
-    
+
                 // replicas
                 List<Long> beIds;
                 if (chooseBackendsArbitrary) {
@@ -982,7 +983,7 @@ public class OlapTable extends Table {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
-    
+
                 // replicas
                 List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
                         .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
@@ -1601,7 +1602,8 @@ public class OlapTable extends Table {
         Collections.sort(partitions, new Comparator<Partition>() {
             @Override
             public int compare(Partition h1, Partition h2) {
-                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+                return (int) (h2.getDefaultPhysicalPartition().getVisibleVersion()
+                        - h1.getDefaultPhysicalPartition().getVisibleVersion());
             }
         });
         return partitions.subList(0, recentPartitionNum);
@@ -1813,7 +1815,9 @@ public class OlapTable extends Table {
     public long getRowCount() {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
-            rowCount += entry.getValue().getBaseIndex().getRowCount();
+            for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
+                rowCount += partition.getBaseIndex().getRowCount();
+            }
         }
         return rowCount;
     }
@@ -2229,7 +2233,7 @@ public class OlapTable extends Table {
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
         Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
         if (optionalPartition.isPresent()) {
-            Partition partition = optionalPartition.get();
+            PhysicalPartition partition = optionalPartition.get().getDefaultPhysicalPartition();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = partition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
@@ -2868,7 +2872,7 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             return -1;
         }
-        return tableProperty.getCompressionLevel();   
+        return tableProperty.getCompressionLevel();
     }
 
     public void setPartitionLiveNumber(int number) {
@@ -2884,7 +2888,7 @@ public class OlapTable extends Table {
         Collection<Partition> partitions = getPartitions();
         for (Partition partition : partitions) {
             result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
-                    String.valueOf(partition.getVisibleVersion()));
+                    String.valueOf(partition.getDefaultPhysicalPartition().getVisibleVersion()));
         }
         return result;
     }
@@ -3126,7 +3130,8 @@ public class OlapTable extends Table {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     invertedIndex.deleteTablet(tablet.getId());
                 }

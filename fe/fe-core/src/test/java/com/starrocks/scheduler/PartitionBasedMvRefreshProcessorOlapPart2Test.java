@@ -272,8 +272,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 2, 10)");
                     Partition p2 = table.getPartition("p2");
-                    while (p2.getVisibleVersion() != 3) {
-                        System.out.println("waiting for partition p2 to be visible:" + p2.getVisibleVersion());
+                    while (p2.getDefaultPhysicalPartition().getVisibleVersion() != 3) {
+                        System.out.println("waiting for partition p2 to be visible:" +
+                                p2.getDefaultPhysicalPartition().getVisibleVersion());
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);

@@ -964,22 +964,22 @@ public class AlterTest {
         OlapTable replace2 =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assert.assertEquals(3,
-                    replace1.getPartition("replace1").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace1.getPartition("replace1").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assert.assertEquals(1,
-                    replace2.getPartition("replace2").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace2.getPartition("replace2").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
 
         alterTableWithNewParser(replaceStmt, false);
 
         replace1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace1");
         replace2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assert.assertEquals(1,
-                    replace1.getPartition("replace1").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace1.getPartition("replace1").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assert.assertEquals(3,
-                    replace2.getPartition("replace2").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                .size());
+                    replace2.getPartition("replace2").getDefaultPhysicalPartition()
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assert.assertEquals("replace1", replace1.getIndexNameById(replace1.getBaseIndexId()));
         Assert.assertEquals("replace2", replace2.getIndexNameById(replace2.getBaseIndexId()));
     }

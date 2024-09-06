@@ -98,7 +98,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
         t0StatsTableId = t0.getId();
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
-        partition.updateVisibleVersion(2, t0UpdateTime
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(2, t0UpdateTime
                 .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
 
@@ -115,7 +115,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ");");
 
         OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1_stats");
-        new ArrayList<>(t1.getPartitions()).get(0).updateVisibleVersion(2);
+        new ArrayList<>(t1.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(t1, 20000000);
 
         starRocksAssert.withTable("CREATE TABLE `t0_stats_partition` (\n" +
@@ -143,7 +143,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
         OlapTable t0p = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats_partition");
-        new ArrayList<>(t0p.getPartitions()).get(0).updateVisibleVersion(2);
+        new ArrayList<>(t0p.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(t0p, 20000000);
 
         starRocksAssert.withDatabase("stats");
@@ -161,7 +161,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ");");
 
         OlapTable tps = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tprimary_stats");
-        new ArrayList<>(tps.getPartitions()).get(0).updateVisibleVersion(2);
+        new ArrayList<>(tps.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(tps, 20000000);
 
         starRocksAssert.withTable("CREATE TABLE `tunique_stats` (\n" +
@@ -177,7 +177,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ");");
 
         OlapTable tus = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tunique_stats");
-        new ArrayList<>(tus.getPartitions()).get(0).updateVisibleVersion(2);
+        new ArrayList<>(tus.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(tps, 20000000);
 
         starRocksAssert.withTable("CREATE TABLE `tcount` (\n" +
@@ -192,7 +192,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ");");
 
         OlapTable tcount = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tcount");
-        new ArrayList<>(tcount.getPartitions()).get(0).updateVisibleVersion(2);
+        new ArrayList<>(tcount.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(tcount, 20000000);
 
         String createStructTableSql = "CREATE TABLE struct_a(\n" +
@@ -207,7 +207,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ");";
         starRocksAssert.withTable(createStructTableSql);
         OlapTable structTable = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("struct_a");
-        new ArrayList<>(structTable.getPartitions()).get(0).updateVisibleVersion(2);
+        new ArrayList<>(structTable.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(structTable, 20000000);
     }
 
@@ -876,8 +876,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
         int i = 1;
         for (Partition p : t0p.getAllPartitions()) {
-            p.updateVisibleVersion(2);
-            p.getBaseIndex().setRowCount(i * 100L);
+            p.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            p.getDefaultPhysicalPartition().getBaseIndex().setRowCount(i * 100L);
             i++;
         }
 
@@ -909,8 +909,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(4, collectSqlList.size());
 
         for (Partition p : t0p.getAllPartitions()) {
-            p.updateVisibleVersion(2);
-            p.getBaseIndex().setRowCount(0);
+            p.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            p.getDefaultPhysicalPartition().getBaseIndex().setRowCount(0);
         }
 
         collectSqlList = collectJob.buildCollectSQLList(1);

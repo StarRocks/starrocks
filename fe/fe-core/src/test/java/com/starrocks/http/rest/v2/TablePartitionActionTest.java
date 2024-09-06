@@ -369,8 +369,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
             long partitionId = BASE_PARTITION_ID + i;
             Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));
@@ -459,8 +459,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
             long partitionId = BASE_PARTITION_ID + i;
             Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));

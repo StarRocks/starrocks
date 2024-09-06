@@ -1740,7 +1740,7 @@ public class AstToStringBuilder {
                 sb.append(entry.getValue().lowerEndpoint().toSql());
                 sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
                 sb.append("(\"version_info\" = \"");
-                sb.append(partition.getVisibleVersion()).append("\"");
+                sb.append(partition.getDefaultPhysicalPartition().getVisibleVersion()).append("\"");
                 sb.append(");");
                 addPartitionStmt.add(sb.toString());
             }

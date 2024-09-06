@@ -2766,7 +2766,7 @@ public class ShowExecutor {
             // rows
             if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                 Partition partition = olapTable.getPartitions().iterator().next();
-                MaterializedIndex index = partition.getIndex(mvId);
+                MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
                 mvStatus.setRows(index.getRowCount());
             } else {
                 mvStatus.setRows(0L);

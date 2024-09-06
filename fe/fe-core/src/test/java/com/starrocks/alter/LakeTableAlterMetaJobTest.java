@@ -220,8 +220,8 @@ public class LakeTableAlterMetaJobTest {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
-            partition.updateVisibleVersion(commitVersion - 1);
+            Assert.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion(), commitVersion);
+            partition.getDefaultPhysicalPartition().updateVisibleVersion(commitVersion - 1);
         }
 
         replayAlterMetaJob.replay(job);
@@ -238,7 +238,7 @@ public class LakeTableAlterMetaJobTest {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
+            Assert.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion(), commitVersion);
         }
     }
 

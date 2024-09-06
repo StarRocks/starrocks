@@ -471,12 +471,15 @@ public class ExternalOlapTable extends OlapTable {
         }
 
         for (TPartitionMeta partitionMeta : meta.getPartitions()) {
-            Partition partition = new Partition(partitionMeta.getPartition_id(),
+            Partition logicalPartition = new Partition(partitionMeta.getPartition_id(),
                     partitionMeta.getPartition_name(),
                     null, // TODO(wulei): fix it
                     defaultDistributionInfo);
-            partition.setNextVersion(partitionMeta.getNext_version());
-            partition.updateVisibleVersion(partitionMeta.getVisible_version(),
+
+            PhysicalPartition physicalPartition = logicalPartition.getDefaultPhysicalPartition();
+
+            physicalPartition.setNextVersion(partitionMeta.getNext_version());
+            physicalPartition.updateVisibleVersion(partitionMeta.getVisible_version(),
                     partitionMeta.getVisible_time());
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
@@ -503,18 +506,18 @@ public class ExternalOlapTable extends OlapTable {
                             tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
                     index.addTablet(tablet, tabletMeta, false);
                 }
-                if (indexMeta.getPartition_id() == partition.getId()) {
+                if (indexMeta.getPartition_id() == physicalPartition.getId()) {
                     if (index.getId() != baseIndexId) {
-                        partition.createRollupIndex(index);
+                        physicalPartition.createRollupIndex(index);
                     } else {
-                        partition.setBaseIndex(index);
+                        physicalPartition.setBaseIndex(index);
                     }
                 }
             }
             if (partitionMeta.isSetIs_temp() && partitionMeta.isIs_temp()) {
-                addTempPartition(partition);
+                addTempPartition(logicalPartition);
             } else {
-                addPartition(partition);
+                addPartition(logicalPartition);
             }
         }
         long endOfTabletMetaBuild = System.currentTimeMillis();
