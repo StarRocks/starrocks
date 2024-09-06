@@ -4555,9 +4555,9 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### stream_load_profile_collect_second
+##### stream_load_profile_collect_threshold_second
 
-- 默认值：10
+- 默认值：0
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是

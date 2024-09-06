@@ -1,3 +1,16 @@
 -- name: test_table_profile
-create table t(k int, v int);
+create database db_${uuid0};
+use db_${uuid0};
 
+create table t(k int) properties('enable_load_profile'='true');
+show create table t;
+alter table t set ('enable_load_profile'='false');
+show create table t;
+
+shell: curl --location-trusted -u root: -H label:${uuid0}_1 -T ${root_path}/lib/../common/data/stream_load/kv.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select profile_id from information_schema.loads where label='${uuid0}_1';
+alter table t set ('enable_load_profile'='true');
+show create table t;
+shell: curl --location-trusted -u root: -H label:${uuid0}_2 -T ${root_path}/lib/../common/data/stream_load/kv.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+[UC]id=select profile_id from information_schema.loads where label='${uuid0}_2';
+analyze profile from '${id}';

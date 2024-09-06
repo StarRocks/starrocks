@@ -47,10 +47,8 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -856,7 +854,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 }
 
                 if (coord.isEnableLoadProfile()) {
-                    collectProfile();
+                    collectProfile(false);
                 }
 
                 this.trackingUrl = coord.getTrackingUrl();
@@ -1035,7 +1033,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
-            collectProfile();
+            collectProfile(false);
         }
 
         writeLock();
@@ -1053,31 +1051,24 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
     }
 
-    public void collectProfile() {
-        long currentTimestamp = System.currentTimeMillis();
-        long totalTimeMs = currentTimestamp - createTimeMs;
-
-        // For the usage scenarios of flink cdc or routine load,
-        // the frequency of stream load maybe very high, resulting in many profiles,
-        // but we may only care about the long-duration stream load profile.
-        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
-            LOG.info(String.format("Load %s, totalTimeMs %d < Config.stream_load_profile_collect_second %d)",
-                    label, totalTimeMs, Config.stream_load_profile_collect_second));
-            return;
-        }
-
+    public RuntimeProfile buildTopLevelProfile(boolean isAborted) {
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
                 TimeUtils.longToTimeString(createTimeMs));
 
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(System.currentTimeMillis()));
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimeMs;
+        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+        summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, getStringByType());
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isAborted ? "Aborted" : "Finished");
         summaryProfile.addInfoString("StarRocks Version",
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
 
         Map<String, String> loadCounters = coord.getLoadCounters();
@@ -1087,19 +1078,20 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             summaryProfile.addInfoString("NumRowsAbnormal", loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
             summaryProfile.addInfoString("numRowsUnselected", loadCounters.get(LoadJob.UNSELECTED_ROWS));
         }
-        ConnectContext session = ConnectContext.get();
-        if (session != null) {
-            SessionVariable variables = session.getSessionVariable();
-            if (variables != null) {
-                summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
-            }
-        }
 
         profile.addChild(summaryProfile);
+
+        return profile;
+    }
+
+
+    public void collectProfile(boolean isAborted) {
+        RuntimeProfile profile = buildTopLevelProfile(isAborted);
+
         if (coord.getQueryProfile() != null) {
             if (!isSyncStreamLoad()) {
                 coord.collectProfileSync();
-                profile.addChild(coord.buildQueryProfile(session == null || session.needMergeProfile()));
+                profile.addChild(coord.buildQueryProfile(true));
             } else {
                 profile.addChild(coord.getQueryProfile());
             }
@@ -1154,6 +1146,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             throws UserException {
         if (!txnOperated) {
             return;
+        }
+
+        if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
+            collectProfile(true);
         }
 
         writeLock();
@@ -1371,8 +1367,16 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return isSyncStreamLoad;
     }
 
+    public boolean setIsSyncStreamLoad(boolean isSyncStreamLoad) {
+        return this.isSyncStreamLoad = isSyncStreamLoad;
+    }
+
     public boolean isRoutineLoadTask() {
         return type == Type.ROUTINE_LOAD;
+    }
+
+    public String getStmt() {
+        return "";
     }
 
     // for sync stream load
@@ -1383,9 +1387,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public String getStringByType() {
         switch (this.type) {
             case ROUTINE_LOAD:
-                return "ROUTINE_LOAD";
+                return ProfileManager.LOAD_TYPE_ROUTINE_LOAD;
             case STREAM_LOAD:
-                return "STREAM_LOAD";
+                return ProfileManager.LOAD_TYPE_STREAM_LOAD;
             case PARALLEL_STREAM_LOAD:
                 return "PARALLEL_STREAM_LOAD";
             default:
@@ -1531,7 +1535,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             } else {
                 info.setProgress("0%");
             }
-
+            if (ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
+                info.setProfile_id(DebugUtil.printId(loadId));
+            }
             // tracking url
             if (trackingUrl != null) {
                 info.setUrl(trackingUrl);
