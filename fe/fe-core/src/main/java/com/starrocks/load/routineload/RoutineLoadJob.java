@@ -868,49 +868,52 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        OlapTable copiedTable;
         try {
-            StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
-            info.setTxnId(txnId);
-            StreamLoadPlanner planner =
-                    new StreamLoadPlanner(db, (OlapTable) table, info);
-            TExecPlanFragmentParams planParams = planner.plan(loadId);
-            planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
-            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-
-            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table.getName(), label, "", "",
-                    taskTimeoutSecond * 1000, true, warehouseId);
-            streamLoadTask.setTxnId(txnId);
-            streamLoadTask.setLabel(label);
-            streamLoadTask.setTUniqueId(loadId);
-            streamLoadManager.addLoadTask(streamLoadTask);
-
-            Coordinator coord =
-                    getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
-            streamLoadTask.setCoordinator(coord);
-
-            QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
-
-            LOG.info(new LogBuilder("routine load task create stream load task success").
-                    add("transactionId", txnId).
-                    add("label", label).
-                    add("streamLoadTaskId", streamLoadTask.getId()));
-
-            // add table indexes to transaction state
-            TransactionState txnState =
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
-            if (txnState == null) {
-                throw new MetaNotFoundException("txn does not exist: " + txnId);
-            }
-            txnState.addTableIndexes(planner.getDestTable());
-
-            planParams.setImport_label(txnState.getLabel());
-            planParams.setDb_name(db.getFullName());
-            planParams.setLoad_job_id(txnId);
-
-            return planParams;
+            copiedTable = new OlapTable();
+            ((OlapTable) table).copyForQueryOrWritePlan(copiedTable, true);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
+        info.setTxnId(txnId);
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, copiedTable, info);
+        TExecPlanFragmentParams planParams = planner.plan(loadId);
+        planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
+        StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+
+        StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table.getName(), label, "", "",
+                taskTimeoutSecond * 1000, true, warehouseId);
+        streamLoadTask.setTxnId(txnId);
+        streamLoadTask.setLabel(label);
+        streamLoadTask.setTUniqueId(loadId);
+        streamLoadManager.addLoadTask(streamLoadTask);
+
+        Coordinator coord =
+                getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
+        streamLoadTask.setCoordinator(coord);
+
+        QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
+
+        LOG.info(new LogBuilder("routine load task create stream load task success").
+                add("transactionId", txnId).
+                add("label", label).
+                add("streamLoadTaskId", streamLoadTask.getId()));
+
+        // add table indexes to transaction state
+        TransactionState txnState =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
+        if (txnState == null) {
+            throw new MetaNotFoundException("txn does not exist: " + txnId);
+        }
+        txnState.addTableIndexes(planner.getDestTable());
+
+        planParams.setImport_label(txnState.getLabel());
+        planParams.setDb_name(db.getFullName());
+        planParams.setLoad_job_id(txnId);
+
+        return planParams;
     }
 
     // if task not exists, before aborted will reset the txn attachment to null, task will not be updated

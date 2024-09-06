@@ -345,11 +345,20 @@ public class OlapTable extends Table {
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
+        copyForQueryOrWritePlan(olapTable, false);
+    }
+
+    public void copyForQueryOrWritePlan(OlapTable olapTable, boolean isWrite) {
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.type = this.type;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
-        olapTable.nameToColumn = new CaseInsensitiveMap(this.nameToColumn);
+        if (!isWrite) {
+            olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
+        } else {
+            olapTable.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            olapTable.nameToColumn.putAll(this.nameToColumn);
+        }
         olapTable.idToColumn = new CaseInsensitiveMap(this.idToColumn);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
