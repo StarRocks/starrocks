@@ -110,6 +110,24 @@ public class BaseTableInfo {
         return this.tableId;
     }
 
+    /**
+     * Called when a table is renamed.
+     * @param newTable the new table with the new table name
+     */
+    public void onTableRename(Table newTable, String oldTableName) {
+        if (newTable == null) {
+            return;
+        }
+
+        // only changes the table name if the old table name is the same as the current table name
+        if (this.tableName != null && this.tableName.equals(oldTableName)) {
+            if (newTable instanceof OlapTable) {
+                this.tableId = newTable.getId();
+            }
+            this.tableName = newTable.getName();
+        }
+    }
+
     public String toString() {
         if (isInternalCatalog()) {
             return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbId, tableId);
