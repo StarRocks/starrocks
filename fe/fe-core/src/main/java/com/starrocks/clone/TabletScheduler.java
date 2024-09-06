@@ -94,6 +94,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1151,11 +1152,31 @@ public class TabletScheduler extends FrontendDaemon {
             // won't delete location mismatched replica.
             return false;
         }
+
+        Set<Pair<String, String>> matchedLocations = new HashSet<>();
+        Replica dupReplica = null;
+        //1. delete the unmatched replica
         for (Replica replica : tabletCtx.getReplicas()) {
             if (!TabletChecker.isLocationMatch(replica.getBackendId(), tabletCtx.getRequiredLocation())) {
                 deleteReplicaInternal(tabletCtx, replica, "location mismatch", force);
                 return true;
+            } else {
+                Backend backend = systemInfoService.getBackend(replica.getBackendId());
+                if (backend != null) {
+                    Pair<String, String> location = backend.getSingleLevelLocationKV();
+                    if (location != null && matchedLocations.contains(location)) {
+                        dupReplica = replica;
+                    } else {
+                        matchedLocations.add(location);
+                    }
+                }
             }
+        }
+
+        //2. delete the duplicate location replica
+        if (dupReplica != null) {
+            deleteReplicaInternal(tabletCtx, dupReplica, "duplicate location", force);
+            return true;
         }
 
         return false;
