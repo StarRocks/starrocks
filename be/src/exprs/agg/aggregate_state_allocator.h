@@ -17,6 +17,7 @@
 #include "column/hash_set.h"
 #include "common/config.h"
 #include "runtime/memory/allocator.h"
+#include "runtime/memory/column_allocator.h"
 #include "runtime/memory/roaring_hook.h"
 
 namespace starrocks {
