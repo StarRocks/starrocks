@@ -240,17 +240,14 @@ public:
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
     /// we return the most recently created instance.
-    static ExecEnv* GetInstance() {
-        static ExecEnv s_exec_env;
-        return &s_exec_env;
-    }
+    static ExecEnv* GetInstance();
 
     // only used for test
-    ExecEnv() = default;
+    ExecEnv();
 
     // Empty destructor because the compiler-generated one requires full
     // declarations for classes in scoped_ptrs.
-    ~ExecEnv() = default;
+    ~ExecEnv();
 
     std::string token() const;
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
@@ -268,10 +265,13 @@ public:
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
-    workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
-    workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
     ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
-    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; };
+    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; }
+
+    pipeline::DriverExecutor* wg_driver_executor();
+    workgroup::ScanExecutor* scan_executor();
+    workgroup::ScanExecutor* connector_scan_executor();
+    workgroup::WorkGroupManager* workgroup_manager() { return _workgroup_manager.get(); }
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
@@ -280,7 +280,6 @@ public:
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
@@ -357,9 +356,6 @@ private:
     ThreadPool* _load_segment_thread_pool = nullptr;
     ThreadPool* _load_rowset_thread_pool = nullptr;
 
-    workgroup::ScanExecutor* _scan_executor = nullptr;
-    workgroup::ScanExecutor* _connector_scan_executor = nullptr;
-
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
@@ -368,7 +364,7 @@ private:
     std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
-    pipeline::DriverExecutor* _wg_driver_executor = nullptr;
+    std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     pipeline::DriverLimiter* _driver_limiter = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 

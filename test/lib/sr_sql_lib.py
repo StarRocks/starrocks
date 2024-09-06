@@ -274,14 +274,14 @@ class StarrocksSQLApiLib(object):
                 title = f"[{self.run_info}] SQL-Tester crash"
                 run_link = os.environ.get("WORKFLOW_URL", "")
                 body = (
-                    """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
-                    % (
-                        be_crash_case,
-                        be_crash_log,
-                        cluster_status_dict["version"],
-                        cluster_status_dict["ip"][0],
-                        run_link,
-                    )
+                        """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
+                        % (
+                            be_crash_case,
+                            be_crash_log,
+                            cluster_status_dict["version"],
+                            cluster_status_dict["ip"][0],
+                            run_link,
+                        )
                 )
                 assignee = os.environ.get("ISSUE_AUTHOR")
                 repo = os.environ.get("GITHUB_REPOSITORY")
@@ -748,7 +748,7 @@ class StarrocksSQLApiLib(object):
                 res_log = []
 
                 if ori:
-                    return {"status": True, "result": result, "msg": cursor._result.message}
+                    return {"status": True, "result": result, "msg": cursor._result.message, "desc": cursor.description}
 
                 if isinstance(result, tuple) or isinstance(result, list):
                     if len(result) > 0:
@@ -975,7 +975,7 @@ class StarrocksSQLApiLib(object):
         if regex.match(cmd):
             # set variable
             var = regex.match(cmd).group()
-            cmd = cmd[len(var) :]
+            cmd = cmd[len(var):]
             var = var[:-1]
 
         match_words: list = re.compile("\\${([^}]*)}").findall(cmd)
@@ -993,7 +993,8 @@ class StarrocksSQLApiLib(object):
 
                 # only replace the first keywords
                 if each_keyword in self.thread_var[thread_key]:
-                    each_keyword_value = each_word.replace(each_keyword, f"self.thread_var[{thread_key}][{each_keyword}]")
+                    each_keyword_value = each_word.replace(each_keyword,
+                                                           f"self.thread_var[{thread_key}][{each_keyword}]")
 
                     if unfold:
                         each_keyword_value = str(eval(each_keyword_value))
@@ -1289,7 +1290,8 @@ class StarrocksSQLApiLib(object):
                     except Exception as e:
                         self_print(f"[LOOP] Exception: {each_statement}, {e}!", ColorEnum.YELLOW, logout=True)
                         for self_k in re.findall(r'self.([0-9a-zA-Z_-]+)', each_statement_new):
-                            self_print(f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
+                            self_print(
+                                f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
                         loop_check_res = False
                         break
 
@@ -1301,7 +1303,8 @@ class StarrocksSQLApiLib(object):
                                    color=ColorEnum.YELLOW, logout=True)
                         # print variables in each_statement_new
                         for self_k in re.findall(r'self.([0-9a-zA-Z_-]+)', each_statement_new):
-                            self_print(f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
+                            self_print(
+                                f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
                         loop_check_res = False
                         break
 
@@ -1400,7 +1403,7 @@ class StarrocksSQLApiLib(object):
                     r"%s" % str(act),
                     exp[len(REGEX_FLAG):],
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                    % (self_print(sql, need_print=False), exp[len(REGEX_FLAG) :], act),
+                    % (self_print(sql, need_print=False), exp[len(REGEX_FLAG):], act),
                 )
                 return
 
@@ -2462,6 +2465,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 {"status": "OK"}, res_json, f"failed to update be config [response={res}] [url={exec_url}]"
             )
 
+    def get_resource_group_id(self, name):
+        res = self.execute_sql(f"show resource group {name};", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        return res["result"][0][1]
+
+    def get_backend_cpu_cores(self):
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        for i, col_info in enumerate(res["desc"]):
+            if col_info[0] == "CpuCores":
+                return res["result"][0][i]
+
+        tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
+
     def assert_table_cardinality(self, sql, rows):
         """
         assert table with an expected row counts
@@ -2642,7 +2659,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         Check cache select is success, make sure that read_cache_size + write_cache_size > 0
         """
-        res = self.execute_sql(query,True,)
+        res = self.execute_sql(query, True, )
         result = res["result"][0]
         # remove unit
         read_cache_size = int(result[0].replace("B", "").replace("KB", ""))

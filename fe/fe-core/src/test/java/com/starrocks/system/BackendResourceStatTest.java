@@ -130,6 +130,7 @@ public class BackendResourceStatTest {
         stat.setNumHardwareCoresOfBe(0L, 8);
         stat.setNumHardwareCoresOfBe(1L, 4);
         assertThat(stat.getAvgNumHardwareCoresOfBe()).isEqualTo(6);
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(4);
 
         stat.setMemLimitBytesOfBe(0L, 100);
         stat.setMemLimitBytesOfBe(1L, 50);
@@ -139,6 +140,7 @@ public class BackendResourceStatTest {
         stat.reset();
 
         assertThat(stat.getAvgNumHardwareCoresOfBe()).isEqualTo(1);
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
         assertThat(stat.getAvgMemLimitBytes()).isEqualTo(0);
         assertThat(stat.getNumBes()).isEqualTo(0);
     }
@@ -175,6 +177,29 @@ public class BackendResourceStatTest {
         stat.setNumHardwareCoresOfBe(1L, 32 * 2 * 4);
         assertThat(stat.getAvgNumHardwareCoresOfBe()).isEqualTo(32 * 2 * 4);
         assertThat(stat.getSinkDefaultDOP()).isEqualTo(32);
+    }
+
+    @Test
+    public void testGetMinNumHardwareCoresOfBe() {
+        BackendResourceStat stat = BackendResourceStat.getInstance();
+
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+
+        stat.setNumHardwareCoresOfBe(0L, 0);
+        stat.setNumHardwareCoresOfBe(1L, 0);
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+
+        stat.setNumHardwareCoresOfBe(0L, 4);
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+
+        stat.setNumHardwareCoresOfBe(1L, 8);
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(4);
+
+        stat.removeBe(0L);
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(8);
+
+        stat.removeBe(1L);
+        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
     }
 
 }

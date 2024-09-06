@@ -66,23 +66,37 @@ void WorkGroupScanTaskQueue::close() {
 
     _is_closed = true;
     _cv.notify_all();
+    _cv_for_borrowed_cpus.notify_all();
 }
 
 StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
     WorkGroupScanSchedEntity* wg_entity = nullptr;
-    while (wg_entity == nullptr) {
+    while (true) {
         if (_is_closed) {
             return Status::Cancelled("Shutdown");
         }
 
-        if (_wg_entities.empty()) {
-            _cv.wait(lock);
-            continue;
+        // For task queue used by exclusive workgroup, driver queue always contains only tasks of this workgroup,
+        // so `_pick_next_wg` will always return this workgroup.
+        // TODO: In the future, we may implement different task queues for exclusive workgroup and shared workgroup,
+        // since exclusive workgroup does not need two-level queues about workgroup.
+        wg_entity = _pick_next_wg();
+        if (wg_entity != nullptr &&
+            !ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_entity->workgroup())) {
+            break;
         }
 
-        wg_entity = _take_next_wg();
+        if (wg_entity == nullptr) {
+            _cv.wait(lock);
+        } else {
+            // This thread can only run on the borrowed CPU. At this time, the owner of the borrowed CPU has a task
+            // coming, so give up the CPU.
+            // And wake up the threads running on its own CPU to continue processing the task.
+            _cv.notify_one();
+            _cv_for_borrowed_cpus.wait_for(lock, std::chrono::milliseconds(50));
+        }
     }
 
     // If wg only contains one ready task, it will be not ready anymore
@@ -155,6 +169,10 @@ void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_n
 }
 
 bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const {
+    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg)) {
+        return true;
+    }
+
     // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
     const auto* wg_entity = _sched_entity(wg);
     const auto* min_entity = _min_wg_entity.load();
@@ -163,7 +181,7 @@ bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccount
 }
 
 void WorkGroupScanTaskQueue::_update_min_wg() {
-    auto* min_wg_entity = _take_next_wg();
+    auto* min_wg_entity = _pick_next_wg();
     if (min_wg_entity == nullptr) {
         _min_wg_entity = nullptr;
     } else {
@@ -171,7 +189,7 @@ void WorkGroupScanTaskQueue::_update_min_wg() {
     }
 }
 
-WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_take_next_wg() const {
+WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_pick_next_wg() const {
     if (_wg_entities.empty()) {
         return nullptr;
     }
@@ -211,11 +229,7 @@ int64_t WorkGroupScanTaskQueue::_ideal_runtime_ns(WorkGroupScanSchedEntity* wg_e
 }
 
 WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(WorkGroup* wg) {
-    if (_sched_entity_type == ScanSchedEntityType::CONNECTOR) {
-        return wg->connector_scan_sched_entity();
-    } else {
-        return wg->scan_sched_entity();
-    }
+    return const_cast<WorkGroupScanSchedEntity*>(_sched_entity(const_cast<const WorkGroup*>(wg)));
 }
 
 const WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(const WorkGroup* wg) const {

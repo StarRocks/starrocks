@@ -32,7 +32,7 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
     std::unordered_map<int64_t, TResourceGroupUsage> group_to_usage;
     std::unordered_map<int64_t, int64_t> curr_group_to_cpu_runtime_ns;
 
-    workgroup::WorkGroupManager::instance()->for_each_workgroup(
+    ExecEnv::GetInstance()->workgroup_manager()->for_each_workgroup(
             [&group_to_usage, &curr_group_to_cpu_runtime_ns](const workgroup::WorkGroup& wg) {
                 auto it = group_to_usage.find(wg.id());
                 if (it == group_to_usage.end()) {

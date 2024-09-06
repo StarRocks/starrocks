@@ -45,7 +45,9 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
+        if (_num_threads_setter.should_expand()) {
+            (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
+        }
     }
 }
 
@@ -91,6 +93,10 @@ bool ScanExecutor::submit(ScanTask task) {
 
 void ScanExecutor::force_submit(ScanTask task) {
     _task_queue->force_put(std::move(task));
+}
+
+void ScanExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
 }
 
 } // namespace starrocks::workgroup

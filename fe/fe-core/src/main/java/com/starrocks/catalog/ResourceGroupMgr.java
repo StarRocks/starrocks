@@ -68,11 +68,12 @@ import java.util.stream.Collectors;
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
 
-    private static final String EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG =
-            "the sum of %s of all the resource groups cannot exceed %d";
-    public static final String SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG =
-            "'short_query' ResourceGroup cannot set 'dedicated_cpu_cores', " +
-                    "since it use 'cpu_weight' as 'dedicated_cpu_cores'";
+    private static final String EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG =
+            "the sum of %s across all resource groups cannot exceed the minimum number of CPU cores " +
+                    "available on the backends minus one [%d]";
+    public static final String SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG =
+            "'short_query' ResourceGroup cannot set 'exclusive_cpu_cores', " +
+                    "since it use 'cpu_weight' as 'exclusive_cpu_cores'";
 
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
 
@@ -86,7 +87,7 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-    private int sumDedicatedCpuCores = 0;
+    private int sumExclusiveCpuCores = 0;
 
     private void readLock() {
         lock.readLock().lock();
@@ -136,11 +137,11 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("This type Resource Group need define classifiers.");
             }
 
-            if (wg.getNormalizedDedicatedCpuCores() > 0 && sumDedicatedCpuCores + wg.getNormalizedDedicatedCpuCores() >=
-                    BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
-                throw new DdlException(String.format(EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG,
-                        ResourceGroup.DEDICATED_CPU_CORES,
-                        BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
+            final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
+            if (wg.getNormalizedExclusiveCpuCores() > 0 &&
+                    sumExclusiveCpuCores + wg.getNormalizedExclusiveCpuCores() >= minCoreNum) {
+                throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
+                        ResourceGroup.EXCLUSIVE_CPU_CORES, minCoreNum - 1));
             }
 
             if (needReplace) {
@@ -349,22 +350,22 @@ public class ResourceGroupMgr implements Writable {
                 if (cpuWeight == null) {
                     cpuWeight = wg.getCpuWeight();
                 }
-                Integer dedicatedCpuCores = changedProperties.getDedicatedCpuCores();
-                if (dedicatedCpuCores == null) {
-                    dedicatedCpuCores = wg.getDedicatedCpuCores();
+                Integer exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
+                if (exclusiveCpuCores == null) {
+                    exclusiveCpuCores = wg.getExclusiveCpuCores();
                 }
 
-                ResourceGroup.validateCpuParameters(cpuWeight, dedicatedCpuCores);
+                ResourceGroup.validateCpuParameters(cpuWeight, exclusiveCpuCores);
 
-                if (dedicatedCpuCores != null && dedicatedCpuCores > 0) {
-                    if (sumDedicatedCpuCores + dedicatedCpuCores - wg.getNormalizedDedicatedCpuCores() >=
+                if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+                    if (sumExclusiveCpuCores + exclusiveCpuCores - wg.getNormalizedExclusiveCpuCores() >=
                             BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
-                        throw new DdlException(String.format(EXCEED_TOTAL_DEDICATED_CPU_CORES_ERR_MSG,
-                                ResourceGroup.DEDICATED_CPU_CORES,
+                        throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
+                                ResourceGroup.EXCLUSIVE_CPU_CORES,
                                 BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
                     }
                     if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
-                        throw new SemanticException(SHORT_QUERY_SET_DEDICATED_CPU_CORES_ERR_MSG);
+                        throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
                     }
                 }
                 // NOTE that validate cpu parameters should be called before setting properties.
@@ -373,10 +374,10 @@ public class ResourceGroupMgr implements Writable {
                     wg.setCpuWeight(cpuWeight);
                 }
 
-                if (dedicatedCpuCores != null) {
-                    sumDedicatedCpuCores -= wg.getNormalizedDedicatedCpuCores();
-                    wg.setDedicatedCpuCores(dedicatedCpuCores);
-                    sumDedicatedCpuCores += wg.getNormalizedDedicatedCpuCores();
+                if (exclusiveCpuCores != null) {
+                    sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
+                    wg.setExclusiveCpuCores(exclusiveCpuCores);
+                    sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
                 }
 
                 Integer maxCpuCores = changedProperties.getMaxCpuCores();
@@ -497,7 +498,7 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = null;
         }
-        sumDedicatedCpuCores -= wg.getNormalizedDedicatedCpuCores();
+        sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
     }
 
     private void addResourceGroupInternal(ResourceGroup wg) {
@@ -509,7 +510,7 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
         }
-        sumDedicatedCpuCores += wg.getNormalizedDedicatedCpuCores();
+        sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
     }
 
     public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
