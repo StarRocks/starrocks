@@ -82,7 +82,7 @@ public class AWSCloudCredential implements CloudCredential {
 
     private static final Logger LOG = LoggerFactory.getLogger(AWSCloudCredential.class);
 
-    private static final String DEFAULT_CREDENTIAL_PROVIDER = DefaultCredentialsProvider.class.getName();
+    private static final String DEFAULT_CREDENTIAL_PROVIDER = AWSDefaultCredentialsProvider.class.getName();
     private static final String IAM_CREDENTIAL_PROVIDER = IAMInstanceCredentialsProvider.class.getName();
     private static final String ASSUME_ROLE_CREDENTIAL_PROVIDER = AssumedRoleCredentialProvider.class.getName();
     private static final String SIMPLE_CREDENTIAL_PROVIDER = SimpleAWSCredentialsProvider.class.getName();
