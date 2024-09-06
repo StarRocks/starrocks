@@ -2888,11 +2888,17 @@ public class Config extends ConfigBase {
     public static int routine_load_scheduler_interval_millisecond = 10000;
 
     /**
-     * Only when the stream load time exceeds this value,
+     * Only when the stream/routine load time exceeds this value,
      * the profile will be put into the profileManager
      */
+    @ConfField(mutable = true, aliases = {"stream_load_profile_collect_second"})
+    public static long stream_load_profile_collect_threshold_second = 0;
+
+    /**
+     * The interval of collecting load profile through table granularity
+     */
     @ConfField(mutable = true)
-    public static long stream_load_profile_collect_second = 10; //10s
+    public static long load_profile_collect_interval_second = 0;
 
     /**
      * If set to <= 0, means that no limitation.

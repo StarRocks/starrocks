@@ -285,6 +285,8 @@ public class OlapTable extends Table {
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
 
     // Both the following two flags are used by StarMgrMetaSyncer
+    private long lastCollectProfileTime = 0;
+
     // The flag is used to indicate whether the table shard group has changed.
     public AtomicBoolean isShardGroupChanged = new AtomicBoolean(false);
     // The flag is used to indicate whether the table is doing automatic bucketing.
@@ -2552,6 +2554,23 @@ public class OlapTable extends Table {
         tableProperty.buildMutableBucketNum();
     }
 
+    public Boolean enableLoadProfile() {
+        if (tableProperty != null) {
+            return tableProperty.enableLoadProfile();
+        }
+        return false;
+    }
+
+    public void setEnableLoadProfile(boolean enableLoadProfile) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE,
+                        Boolean.valueOf(enableLoadProfile).toString());
+        tableProperty.buildEnableLoadProfile();
+    }
+
     public TWriteQuorumType writeQuorum() {
         if (tableProperty != null) {
             return tableProperty.writeQuorum();
@@ -3253,6 +3272,12 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, mutableBucketNum.toString());
         }
 
+        // enable load profile
+        Boolean enableLoadProfile = enableLoadProfile();
+        if (enableLoadProfile) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
+        }
+
         // locations
         Multimap<String, String> locationsMap = getLocation();
         if (locationsMap != null) {
@@ -3539,5 +3564,13 @@ public class OlapTable extends Table {
         } else {
             return null;
         }
+    }
+
+    public long getLastCollectProfileTime() {
+        return lastCollectProfileTime;
+    }
+
+    public void updateLastCollectProfileTime() {
+        this.lastCollectProfileTime = System.currentTimeMillis();
     }
 }

@@ -147,6 +147,7 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_BUCKET_SIZE));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM));
+        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB));
