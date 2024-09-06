@@ -71,6 +71,13 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202402 VALUES IN (('2', '2024-02-01'))");
         starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202403 VALUES IN (('2', '2024-03-01'))");
 
+        starRocksAssert.withTable("CREATE TABLE t_bool_partition (" +
+                " c1 datetime NOT NULL, " +
+                " c2 boolean" +
+                " ) " +
+                " PARTITION BY (c1, c2) " +
+                " PROPERTIES('replication_num'='1')");
+
         // year(c1)
         starRocksAssert.withTable("CREATE TABLE t_gen_col_1 (" +
                 " c1 datetime NOT NULL," +
@@ -235,6 +242,10 @@ public class PartitionPruneTest extends PlanTestBase {
                 "and c2 > 100", "true");
         testRemovePredicate("select * from t_gen_col where c2 in (1, 2,3)", "true");
         testRemovePredicate("select * from t_gen_col where c2 = cast('123' as int)", "true");
+
+        // bool partition column
+        testRemovePredicate("select * from t_bool_partition where c2=true", "2: c2");
+        testRemovePredicate("select * from t_bool_partition where c2=false", "true");
 
         // can not be removed
         testRemovePredicate("select * from t_gen_col where c1 = random() and c2 > 100",
