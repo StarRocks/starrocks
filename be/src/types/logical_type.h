@@ -162,6 +162,18 @@ inline bool is_scalar_field_type(LogicalType type) {
     }
 }
 
+inline bool is_semi_type(LogicalType type) {
+    switch (type) {
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_JSON:
+        return true;
+    default:
+        return false;
+    }
+}
+
 inline bool is_complex_metric_type(LogicalType type) {
     switch (type) {
     case TYPE_OBJECT:
