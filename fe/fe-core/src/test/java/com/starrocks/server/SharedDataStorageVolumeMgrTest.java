@@ -379,6 +379,9 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_path = "bucketname:30/b";
         Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
+        Config.aws_s3_path = "s3://bucketname:9030/b";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+
         Config.aws_s3_path = "/";
         Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
@@ -391,6 +394,12 @@ public class SharedDataStorageVolumeMgrTest {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
             Assert.assertEquals(1, locations.size());
             Assert.assertEquals("hdfs://url", locations.get(0));
+        }
+        Config.cloud_native_hdfs_url = "viewfs://host:9030/a/b/c";
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("viewfs://host:9030/a/b/c", locations.get(0));
         }
     }
 
