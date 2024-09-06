@@ -73,6 +73,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -489,6 +490,7 @@ public class GlobalStateMgr {
     private TemporaryTableCleaner temporaryTableCleaner;
 
     private final GtidGenerator gtidGenerator;
+    private final GlobalConstraintManager globalConstraintManager;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -732,6 +734,7 @@ public class GlobalStateMgr {
         this.lockManager = new LockManager();
 
         this.gtidGenerator = new GtidGenerator();
+        this.globalConstraintManager = new GlobalConstraintManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1014,6 +1017,10 @@ public class GlobalStateMgr {
 
     public GtidGenerator getGtidGenerator() {
         return gtidGenerator;
+    }
+
+    public GlobalConstraintManager getGlobalConstraintManager() {
+        return globalConstraintManager;
     }
 
     // Use tryLock to avoid potential deadlock

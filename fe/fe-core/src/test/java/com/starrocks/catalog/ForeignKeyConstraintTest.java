@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
