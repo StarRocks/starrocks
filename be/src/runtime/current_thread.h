@@ -277,8 +277,6 @@ public:
 
     static CurrentThread& current();
 
-    static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
-
     static void set_singleton_check_mem_tracker(starrocks::MemTracker* mem_tracker) {
         tls_singleton_check_mem_tracker = mem_tracker;
     }
