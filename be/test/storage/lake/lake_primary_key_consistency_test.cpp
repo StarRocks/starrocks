@@ -463,7 +463,7 @@ public:
                     delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
             _replayer->condition_update(chunk_index.first, merge_condition);
         }
-        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+        RETURN_IF_ERROR(delta_writer->finish());
         delta_writer->close();
         // Publish version
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
