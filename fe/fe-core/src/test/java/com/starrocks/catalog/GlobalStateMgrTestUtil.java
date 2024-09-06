@@ -109,7 +109,7 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
-        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getLocalMetastore();
         metastore.unprotectCreateDb(db);
         return globalStateMgr;
     }

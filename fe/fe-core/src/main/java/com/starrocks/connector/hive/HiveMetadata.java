@@ -162,7 +162,7 @@ public class HiveMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
             Table table = GlobalStateMgr.getCurrentState()
-                    .getMetadata().getTable(dbName, tableName);
+                    .getLocalMetastore().getTable(dbName, tableName);
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
             if (hmsTable != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(

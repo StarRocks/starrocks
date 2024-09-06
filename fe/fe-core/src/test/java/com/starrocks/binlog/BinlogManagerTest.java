@@ -44,7 +44,7 @@ public class BinlogManagerTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         String createTableStmtStr = "CREATE TABLE test.binlog_test(k1 int, v1 int) " +
                 "duplicate key(k1) distributed by hash(k1) buckets 2 properties('replication_num' = '1', " +
                 "'binlog_enable' = 'false', 'binlog_ttl_second' = '100', 'binlog_max_size' = '100');";
