@@ -71,6 +71,7 @@ public final class ProcService {
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
         root.register("meta_recovery", new MetaRecoveryProdDir());
+        root.register("replications", new ReplicationsProcNode());
     }
 
     // Get the corresponding PROC Node by the specified path
