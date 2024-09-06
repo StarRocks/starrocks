@@ -30,23 +30,28 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowResourceGroupStmt extends ShowStmt {
     private final String name;
     private final boolean listAll;
+    private final boolean verbose;
 
-    public ShowResourceGroupStmt(String name, boolean listAll) {
-        this(name, listAll, NodePosition.ZERO);
-    }
-
-    public ShowResourceGroupStmt(String name, boolean listAll, NodePosition pos) {
+    public ShowResourceGroupStmt(String name, boolean listAll, boolean verbose, NodePosition pos) {
         super(pos);
         this.name = name;
         this.listAll = listAll;
+        this.verbose = verbose;
     }
 
     public boolean isListAll() {
         return listAll;
     }
 
+    public boolean isVerbose() {
+        return verbose;
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
+        if (verbose) {
+            return ResourceGroup.VERBOSE_META_DATA;
+        }
         return ResourceGroup.META_DATA;
     }
 

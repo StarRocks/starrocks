@@ -786,15 +786,6 @@ CONF_mBool(pipeline_print_profile, "false");
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
 CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
-// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
-// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
-// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
-//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
-CONF_Int64(pipeline_scan_queue_mode, "0");
-// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
-// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
-CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
-CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
@@ -1271,11 +1262,15 @@ CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
-// Used by default mv resource group
-CONF_mDouble(default_mv_resource_group_memory_limit, "0.8");
-CONF_mInt32(default_mv_resource_group_cpu_limit, "1");
-CONF_mInt32(default_mv_resource_group_concurrency_limit, "0");
-CONF_mDouble(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
+// Used by default mv resource group.
+// These parameters are deprecated because now FE store and persist default_mv_wg.
+CONF_Double(default_mv_resource_group_memory_limit, "0.8");
+CONF_Int32(default_mv_resource_group_cpu_limit, "1");
+CONF_Int32(default_mv_resource_group_concurrency_limit, "0");
+CONF_Double(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
+
+CONF_Bool(enable_resource_group_bind_cpus, "true");
+CONF_mBool(enable_resource_group_cpu_borrowing, "true");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");

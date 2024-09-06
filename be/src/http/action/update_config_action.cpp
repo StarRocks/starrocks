@@ -224,8 +224,15 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("pipeline_connector_scan_thread_num_per_cpu", [&]() {
             LOG(INFO) << "set pipeline_connector_scan_thread_num_per_cpu:"
                       << config::pipeline_connector_scan_thread_num_per_cpu;
-            ExecEnv::GetInstance()->connector_scan_executor()->change_num_threads(
-                    config::pipeline_connector_scan_thread_num_per_cpu);
+            if (config::pipeline_connector_scan_thread_num_per_cpu > 0) {
+                ExecEnv::GetInstance()->workgroup_manager()->change_num_connector_scan_threads(
+                        config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+            }
+        });
+        _config_callback.emplace("enable_resource_group_cpu_borrowing", [&]() {
+            LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;
+            ExecEnv::GetInstance()->workgroup_manager()->change_enable_resource_group_cpu_borrowing(
+                    config::enable_resource_group_cpu_borrowing);
         });
         _config_callback.emplace("create_tablet_worker_count", [&]() {
             LOG(INFO) << "set create_tablet_worker_count:" << config::create_tablet_worker_count;
@@ -243,34 +250,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (tablet_manager != nullptr) {
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
-        });
-
-        _config_callback.emplace("default_mv_resource_group_memory_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_memory_limit:"
-                      << config::default_mv_resource_group_memory_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_cpu_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_cpu_limit:" << config::default_mv_resource_group_cpu_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_concurrency_limit", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_concurrency_limit:"
-                      << config::default_mv_resource_group_concurrency_limit;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
-        });
-        _config_callback.emplace("default_mv_resource_group_spill_mem_limit_threshold", [&]() {
-            LOG(INFO) << "set default_mv_resource_group_spill_mem_limit_threshold:"
-                      << config::default_mv_resource_group_spill_mem_limit_threshold;
-            workgroup::DefaultWorkGroupInitialization default_wg_initializer;
-            auto default_mv_wg = default_wg_initializer.create_default_mv_workgroup();
-            workgroup::WorkGroupManager::instance()->add_workgroup(default_mv_wg);
         });
 
 #ifdef USE_STAROS

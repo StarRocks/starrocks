@@ -56,7 +56,7 @@ struct YieldContext {
     std::any task_context_data;
     size_t yield_point{};
     size_t total_yield_point_cnt{};
-    const workgroup::WorkGroup* wg = nullptr;
+    const WorkGroup* wg = nullptr;
     // used to record the runtime information of a single call in order to decide whether to trigger yield.
     // It needs to be reset every time when the task is executed.
     int64_t time_spent_ns = 0;
@@ -112,13 +112,11 @@ public:
     RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;
 };
 
-/// There are three types of ScanTaskQueue:
+/// There are two types of ScanTaskQueue:
 /// - WorkGroupScanTaskQueue, which is a two-level queue.
 ///   - The first level selects the workgroup with the shortest execution time.
-///   - The second level selects an appropriate task using either PriorityScanTaskQueue or MultiLevelFeedScanTaskQueue.
+///   - The second level selects an appropriate task using either PriorityScanTaskQueue.
 /// - PriorityScanTaskQueue, which prioritizes scan tasks with lower committed times.
-/// - MultiLevelFeedScanTaskQueue, which prioritizes scan tasks with shorter execution time.
-///   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
 class ScanTaskQueue {
 public:
     ScanTaskQueue() = default;
@@ -135,53 +133,6 @@ public:
 
     virtual void update_statistics(ScanTask& task, int64_t runtime_ns) = 0;
     virtual bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const = 0;
-};
-
-class MultiLevelFeedScanTaskQueue final : public ScanTaskQueue {
-public:
-    MultiLevelFeedScanTaskQueue();
-    ~MultiLevelFeedScanTaskQueue() override = default;
-
-    void close() override;
-
-    StatusOr<ScanTask> take() override;
-    bool try_offer(ScanTask task) override;
-    void force_put(ScanTask task) override;
-
-    size_t size() const override { return _num_tasks; }
-
-    void update_statistics(ScanTask& task, int64_t runtime_ns) override;
-    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override { return false; }
-
-    static constexpr int NUM_QUEUES = 8;
-    static double ratio_of_adjacent_queue() { return config::pipeline_scan_queue_ratio_of_adjacent_queue; }
-
-private:
-    int _compute_queue_level(const ScanTask& task) const;
-
-    struct SubQueue {
-        void incr_cost_ns(int64_t delta) { cost_ns += delta; }
-        double normalized_cost() const { return cost_ns / factor_for_normal; }
-
-        std::queue<ScanTask> queue;
-
-        int64_t level_time_slice = 0;
-        double factor_for_normal = 0;
-        int64_t cost_ns = 0;
-    };
-
-    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
-    // so when a driver's execution time exceeds 0.1s, 0.3s, 0.6s, 1.0s, 1.5s, 2.1s, 2.8s, 3.7s.
-    // it will move to next level.
-    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_scan_queue_level_time_slice_base_ns;
-    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
-
-    mutable std::mutex _global_mutex;
-    std::condition_variable _cv;
-    bool _is_closed = false;
-
-    SubQueue _queues[NUM_QUEUES];
-    std::atomic<size_t> _num_tasks = 0;
 };
 
 class PriorityScanTaskQueue final : public ScanTaskQueue {
@@ -222,38 +173,32 @@ public:
 
 private:
     /// These methods should be guarded by the outside _global_mutex.
-    workgroup::WorkGroupScanSchedEntity* _take_next_wg();
+    WorkGroupScanSchedEntity* _pick_next_wg() const;
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
-    // Apply hard bandwidth control to non-short-query workgroups, when there are queries of the short-query workgroup.
-    bool _throttled(const workgroup::WorkGroupScanSchedEntity* wg_entity, int64_t unaccounted_runtime_ns = 0) const;
-    // _update_bandwidth_control_period resets period_end_ns and period_usage_ns, when a new period comes.
-    // It is invoked when taking a task to execute or an executed task is finished.
-    void _update_bandwidth_control_period();
-    void _enqueue_workgroup(workgroup::WorkGroupScanSchedEntity* wg_entity);
-    void _dequeue_workgroup(workgroup::WorkGroupScanSchedEntity* wg_entity);
+    void _enqueue_workgroup(WorkGroupScanSchedEntity* wg_entity);
+    void _dequeue_workgroup(WorkGroupScanSchedEntity* wg_entity);
 
-    int64_t _bandwidth_quota_ns() const;
     // The ideal runtime of a work group is the weighted average of the schedule period.
-    int64_t _ideal_runtime_ns(workgroup::WorkGroupScanSchedEntity* wg_entity) const;
+    int64_t _ideal_runtime_ns(WorkGroupScanSchedEntity* wg_entity) const;
 
-    workgroup::WorkGroupScanSchedEntity* _sched_entity(workgroup::WorkGroup* wg);
-    const workgroup::WorkGroupScanSchedEntity* _sched_entity(const workgroup::WorkGroup* wg) const;
+    WorkGroupScanSchedEntity* _sched_entity(WorkGroup* wg);
+    const WorkGroupScanSchedEntity* _sched_entity(const WorkGroup* wg) const;
 
 private:
     static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
-    static constexpr int64_t BANDWIDTH_CONTROL_PERIOD_NS = 100'000'000;
 
     struct WorkGroupScanSchedEntityComparator {
-        using WorkGroupScanSchedEntityPtr = workgroup::WorkGroupScanSchedEntity*;
+        using WorkGroupScanSchedEntityPtr = WorkGroupScanSchedEntity*;
         bool operator()(const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const;
     };
-    using WorkgroupSet = std::set<workgroup::WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
+    using WorkgroupSet = std::set<WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
 
     const ScanSchedEntityType _sched_entity_type;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+    std::condition_variable _cv_for_borrowed_cpus;
     bool _is_closed = false;
 
     // Contains the workgroups which include the tasks ready to be run.
@@ -261,23 +206,10 @@ private:
     // MUST guarantee the entity is not in set, when updating its vruntime.
     WorkgroupSet _wg_entities;
 
-    size_t _sum_cpu_limit = 0;
+    size_t _sum_cpu_weight = 0;
 
     // Cache the minimum entity, used to check should_yield() without lock.
-    std::atomic<workgroup::WorkGroupScanSchedEntity*> _min_wg_entity = nullptr;
-
-    // Hard bandwidth control to non-short-query workgroups.
-    // - The control period is 100ms, and the total quota of non-short-query workgroups is 100ms*(vCPUs-rt_wg.cpu_limit).
-    // - The non-short-query workgroups cannot be executed in the current period, if their usage exceeds quota.
-    // - When a new period comes, penalize the non-short-query workgroups according to the previous bandwidth usage.
-    //     - If usage <= quota, don't penalize it.
-    //     - If quota < usage <= 2*quota, set the new usage to `usage-quota`.
-    //     - Otherwise, set the new usage to quota to prevent them from being executed in the new period.
-    // Whether to apply the bandwidth control is decided by whether there are queries of the short-query workgroup.
-    // - If there are queries of the short-query workgroup, apply the control.
-    // - Otherwise, don't apply the control.
-    int64_t _bandwidth_control_period_end_ns = 0;
-    std::atomic<int64_t> _bandwidth_usage_ns = 0;
+    std::atomic<WorkGroupScanSchedEntity*> _min_wg_entity = nullptr;
 
     std::atomic<size_t> _num_tasks = 0;
 };
