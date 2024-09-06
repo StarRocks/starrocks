@@ -44,6 +44,10 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
     @SerializedName("tableId")
     private long tableId;
 
+    // Deprecated by columnStatsMetaMap
+    // But for backward compatibility, we still need to write into this field, to make sure the behavior is still
+    // correct after rollback
+    @Deprecated
     @SerializedName("columns")
     private List<String> columns;
 
@@ -109,6 +113,9 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
     }
 
     public List<String> getColumns() {
+        if (MapUtils.isNotEmpty(columnStatsMetaMap)) {
+            return Lists.newArrayList(columnStatsMetaMap.keySet());
+        }
         // Just for compatibility, there are no columns in the old code,
         // and the columns may be null after deserialization.
         if (columns == null) {
@@ -198,18 +205,18 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
         }
     }
 
-    public void updateStats(StatsConstants.AnalyzeType type, LocalDateTime updateTime, Map<String, String> properties) {
-        this.type = type;
+    public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
-        this.properties = properties;
     }
 
-    public Map<String, ColumnStatsMeta> getColumnStatsMetaMap() {
-        return columnStatsMetaMap;
-    }
-
-    public List<ColumnStatsMeta> getColumnStatsMetaList() {
-        return Lists.newArrayList(columnStatsMetaMap.values());
+    public Map<String, ColumnStatsMeta> getAnalyzedColumns() {
+        Map<String, ColumnStatsMeta> deduplicate = Maps.newHashMap();
+        // TODO: just for compatible, we can remove it at next version
+        for (String column : columns) {
+            deduplicate.put(column, new ColumnStatsMeta(column, type, updateTime));
+        }
+        deduplicate.putAll(columnStatsMetaMap);
+        return deduplicate;
     }
 
     public String getColumnStatsString() {
