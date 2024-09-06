@@ -101,6 +101,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setScan_node_number(scanNodes.size());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -129,6 +130,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setScan_node_number(scanNodes.size());
 
             return new Builder()
                     .queryId(context.getExecutionId())
