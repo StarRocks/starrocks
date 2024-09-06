@@ -31,6 +31,9 @@ public class ReplicationSchedule {
     @SerializedName(value = "roundFinishedTimeMs")
     private volatile long roundFinishedTimeMs; // A replication round finished time
 
+    @SerializedName(value = "roundFinishedTimes")
+    private volatile int roundFinishedTimes; // Replication round finished times
+
     @SerializedName(value = "forceSchedule")
     private volatile boolean forceSchedule; // Whether need to force trigger a new replication
 
@@ -44,6 +47,7 @@ public class ReplicationSchedule {
         this.lastScheduledTimeMs = 0;
         this.roundScheduledTimeMs = 0;
         this.roundFinishedTimeMs = 0;
+        this.roundFinishedTimes = 0;
         this.forceSchedule = false;
         this.suspended = false;
     }
@@ -56,6 +60,7 @@ public class ReplicationSchedule {
         this.lastScheduledTimeMs = 0;
         this.roundScheduledTimeMs = 0;
         this.roundFinishedTimeMs = 0;
+        this.roundFinishedTimes = 0;
         this.forceSchedule = false;
         this.suspended = false;
     }
@@ -68,6 +73,7 @@ public class ReplicationSchedule {
         this.lastScheduledTimeMs = other.lastScheduledTimeMs;
         this.roundScheduledTimeMs = other.roundScheduledTimeMs;
         this.roundFinishedTimeMs = other.roundFinishedTimeMs;
+        this.roundFinishedTimes = other.roundFinishedTimes;
         this.forceSchedule = other.forceSchedule;
         this.suspended = other.suspended;
     }
@@ -82,6 +88,10 @@ public class ReplicationSchedule {
 
     public long getFinishedTimeMs() {
         return finishedTimeMs;
+    }
+
+    public int getRoundFinishedTimes() {
+        return roundFinishedTimes;
     }
 
     public void forceSchedule() {
@@ -168,6 +178,7 @@ public class ReplicationSchedule {
         if (!isPending()) {
             scheduledTimeMs = roundScheduledTimeMs;
             finishedTimeMs = 0;
+            roundFinishedTimes = 0;
         }
     }
 
@@ -178,6 +189,7 @@ public class ReplicationSchedule {
             finishedTimeMs = roundFinishedTimeMs;
             lastScheduledTimeMs = scheduledTimeMs;
         }
+        ++roundFinishedTimes;
         forceSchedule = false;
     }
 
@@ -187,6 +199,7 @@ public class ReplicationSchedule {
         this.lastScheduledTimeMs = 0;
         this.roundScheduledTimeMs = 0;
         this.roundFinishedTimeMs = 0;
+        this.roundFinishedTimes = 0;
         this.forceSchedule = false;
     }
 

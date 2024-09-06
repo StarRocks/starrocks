@@ -45,6 +45,8 @@ public class DropReplicatedTableJob extends FailoverGroupJob {
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception e) {
+            failoverGroup.addErrorMessage("Failed to drop table " + localDatabase.getFullName() + "." +
+                    localTable.getName() + ", error: " + e.getMessage());
             LOG.info("Failed to drop table {}.{} in failover group {}, ", localDatabase.getFullName(),
                     localTable.getName(), failoverGroup.getName(), e);
             return;

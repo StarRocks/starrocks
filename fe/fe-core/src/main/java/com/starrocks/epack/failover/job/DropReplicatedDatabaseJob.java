@@ -38,6 +38,8 @@ public class DropReplicatedDatabaseJob extends FailoverGroupJob {
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().dropDb(localDatabase.getFullName(), isDropForce);
         } catch (Exception e) {
+            failoverGroup.addErrorMessage("Failed to drop database " +
+                    localDatabase.getFullName() + ", error: " + e.getMessage());
             LOG.warn("Failed to drop database {} in failover group {}, ", localDatabase.getFullName(),
                     failoverGroup.getName(), e);
             return;

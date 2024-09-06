@@ -9,8 +9,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.InternalErrorCode;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
@@ -35,6 +33,8 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -220,8 +220,11 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
             throws UserException {
         FailoverGroup failoverGroup = nameToFailoverGroup.get(request.getFailover_group_name());
         if (failoverGroup == null) {
-            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
-                    "Failover group " + request.getFailover_group_name() + " not found");
+            TFailoverGroupHandshakeResponse response = new TFailoverGroupHandshakeResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("Failover group " + request.getFailover_group_name() + " not found");
+            response.setStatus(status);
+            return response;
         }
         return failoverGroup.handleHandshakeRequest(request);
     }
@@ -230,8 +233,11 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
             throws UserException, IOException {
         FailoverGroup failoverGroup = nameToFailoverGroup.get(request.getFailover_group_name());
         if (failoverGroup == null) {
-            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
-                    "Failover group " + request.getFailover_group_name() + " not found");
+            TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("Failover group " + request.getFailover_group_name() + " not found");
+            response.setStatus(status);
+            return response;
         }
         return failoverGroup.handleRequestMetaRequest(request);
     }

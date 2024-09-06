@@ -3195,6 +3195,7 @@ public class Config extends ConfigBase {
     public static int failover_group_pull_image_timeout_sec = 30;
     @ConfField(mutable = true)
     public static int failover_group_trigger_new_image_interval_sec = 10;
+    public static int failover_group_error_message_keep_max_num = 10;
 
 
     @ConfField(mutable = true)

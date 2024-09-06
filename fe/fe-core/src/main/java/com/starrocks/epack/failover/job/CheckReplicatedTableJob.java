@@ -94,15 +94,15 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             }
 
             if (needReplication) {
-                try {
-                    ReplicationJob job = new ReplicationJob(null,
-                            failoverGroup.getObjectMeta().getClusterToken(),
-                            localDatabase.getId(), localOlapTable, remoteOlapTable,
-                            failoverGroup.getObjectMeta().getSystemInfoService());
-                    failoverGroup.getJobExecutor().addReplicationJob(job);
-                } catch (Exception e) {
-                    LOG.warn("Failed to create replication job for {}.{} in failover group {}, ",
-                            localDatabase.getFullName(), localTable.getName(), failoverGroup.getName(), e);
+                String jobId = String.format("FAILOVER_GROUP_%s-%d-%d-%d", failoverGroup.getName(),
+                        localDatabase.getId(), localOlapTable.getId(), System.currentTimeMillis());
+                ReplicationJob job = new ReplicationJob(jobId,
+                        failoverGroup.getObjectMeta().getClusterToken(),
+                        localDatabase.getId(), localOlapTable, remoteOlapTable,
+                        failoverGroup.getObjectMeta().getSystemInfoService());
+                if (failoverGroup.getJobExecutor().addReplicationJob(job)) {
+                    LOG.info("Succeed to create replication job for {}.{} in failover group {}",
+                            localDatabase.getFullName(), localTable.getName(), failoverGroup.getName());
                 }
             }
 

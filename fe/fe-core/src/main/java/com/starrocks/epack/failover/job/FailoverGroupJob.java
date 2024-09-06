@@ -37,6 +37,7 @@ public abstract class FailoverGroupJob implements Runnable {
         try {
             execute();
         } catch (Exception e) {
+            failoverGroup.addErrorMessage("Failed to execute failover group job " + e.getMessage());
             LOG.warn("Failed to execute failover group job in failover group {}, ", failoverGroup.getName(), e);
         } finally {
             failoverGroup.getJobExecutor().removeFailoverGroupJob(this);

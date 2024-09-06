@@ -72,10 +72,10 @@ public class SecondaryHelper {
                 return response;
             }
             if (response.getStatus().getStatus_code() != TStatusCode.REMOTE_FILE_NOT_FOUND) {
-                LOG.warn("Send request meta to {} returns failed: {}", address, response.getStatus());
+                LOG.warn("Send request meta to {} returns error: {}", address, response.getStatus());
             }
         } catch (Exception e) {
-            LOG.warn("Send request meta to {} failed ", address, e);
+            LOG.warn("Failed to send request meta to {} ", address, e);
         }
         return null;
     }

@@ -33,6 +33,8 @@ public class CreateReplicatedDatabaseJob extends FailoverGroupJob {
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().createDb(remoteDatabase.getFullName());
         } catch (Exception e) {
+            failoverGroup.addErrorMessage("Failed to create database " +
+                    remoteDatabase.getFullName() + ", error: " + e.getMessage());
             LOG.warn("Failed to create database {} in failover group {}, ", remoteDatabase.getFullName(),
                     failoverGroup.getName(), e);
             return;

@@ -72,6 +72,8 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().createTable(createTableStmt);
         } catch (Exception e) {
+            failoverGroup.addErrorMessage("Failed to create table " + localDatabase.getFullName() + "." +
+                    remoteTable.getName() + ", error: " + e.getMessage());
             LOG.warn("Failed to create table {}.{} in failover group {}, ", localDatabase.getFullName(),
                     remoteTable.getName(), failoverGroup.getName(), e);
             return;
@@ -96,7 +98,8 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         String engine = table.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name();
         KeysDesc keysDesc = new KeysDesc(table.getKeysType(), keysColumnNames);
         PartitionDesc partitionDesc = getPartitionDesc(table);
-        DistributionDesc distributionDesc = table.getDefaultDistributionInfo().toDistributionDesc(table.getIdToColumn());
+        DistributionDesc distributionDesc = table.getDefaultDistributionInfo()
+                .toDistributionDesc(table.getIdToColumn());
         List<String> sortKeysColumnNames = null;
         MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
         if (baseIndexMeta.getSortKeyIdxes() != null) {

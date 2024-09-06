@@ -15,15 +15,15 @@ public class FailoverGroupProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> FAILOVER_GROUP_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Id")
             .add("Name")
-            .add("State")
             .add("Role")
+            .add("State")
             .add("Members")
             .add("Schedule")
             .add("IsSuspended")
             .add("ScheduledTime")
             .add("FinishedTime")
-            .add("Comment")
-            .add("Properties")
+            .add("FinishedRound")
+            .add("Errors")
             .build();
 
     private String failoverGroupName;
@@ -45,15 +45,15 @@ public class FailoverGroupProcNode implements ProcNodeInterface {
         result.addRow(Lists.newArrayList(
                 String.valueOf(failoverGroup.getId()),
                 failoverGroup.getName(),
-                failoverGroup.getState().toString(),
                 failoverGroup.getRole().toString(),
+                failoverGroup.getState().toString(),
                 failoverGroup.getMembers().values().toString(),
                 failoverGroup.getSchedule().getSchedule(),
                 String.valueOf(failoverGroup.getSchedule().isSuspended()),
                 TimeUtils.longToTimeString(failoverGroup.getSchedule().getScheduledTimeMs()),
                 TimeUtils.longToTimeString(failoverGroup.getSchedule().getFinishedTimeMs()),
-                failoverGroup.getComment(),
-                failoverGroup.getProperties().isEmpty() ? "" : failoverGroup.getProperties().toString()));
+                String.valueOf(failoverGroup.getSchedule().getRoundFinishedTimes()),
+                failoverGroup.getErrorMessages().isEmpty() ? "" : failoverGroup.getErrorMessages().toString()));
 
         return result;
     }

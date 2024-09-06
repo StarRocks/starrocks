@@ -38,7 +38,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Random;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
 /*
@@ -82,6 +84,9 @@ public class FailoverGroup implements Writable {
 
     @SerializedName(value = "excludeMgr")
     private volatile ExcludeObjectMgr excludeMgr; // Managing exclude objects, such as dbs or tables
+
+    @SerializedName(value = "errorMessages")
+    private final ArrayBlockingQueue<String> errorMessages; // Save recent error messages
 
     private volatile ReplicatedObjectMeta objectMeta; // Replicated object meta from primary
 
@@ -131,6 +136,16 @@ public class FailoverGroup implements Writable {
         return excludeMgr;
     }
 
+    public void addErrorMessage(String errorMessage) {
+        while (!errorMessages.offer(errorMessage)) {
+            errorMessages.poll();
+        }
+    }
+
+    public Queue<String> getErrorMessages() {
+        return errorMessages;
+    }
+
     public ReplicatedObjectMeta getObjectMeta() {
         return objectMeta;
     }
@@ -146,6 +161,7 @@ public class FailoverGroup implements Writable {
     public FailoverGroup() {
         this.id = 0;
         this.name = null;
+        this.errorMessages = null;
     }
 
     // For primary
@@ -161,6 +177,7 @@ public class FailoverGroup implements Writable {
         this.schedule = new ReplicationSchedule(stmt.getSchedule());
         this.includeMgr = new IncludeObjectMgr(stmt);
         this.excludeMgr = new ExcludeObjectMgr(stmt);
+        this.errorMessages = new ArrayBlockingQueue<>(Config.failover_group_error_message_keep_max_num);
     }
 
     // For secondary
@@ -176,6 +193,7 @@ public class FailoverGroup implements Writable {
         this.schedule = new ReplicationSchedule();
         this.includeMgr = new IncludeObjectMgr();
         this.excludeMgr = new ExcludeObjectMgr();
+        this.errorMessages = new ArrayBlockingQueue<>(Config.failover_group_error_message_keep_max_num);
     }
 
     // For primary
@@ -590,8 +608,8 @@ public class FailoverGroup implements Writable {
             return;
         }
 
-        LOG.info("Failover group {} succeeded to get image {} from {} in primary {}",
-                name, response.getMeta_version(), address, primary);
+        LOG.info("Failover group {} succeeded to pull image {} from {} in primary {}, finished round: {}",
+                name, response.getMeta_version(), address, primary, schedule.getRoundFinishedTimes());
 
         try {
             GlobalStateMgr.setFailoverGroupThread();
@@ -622,56 +640,49 @@ public class FailoverGroup implements Writable {
 
         state = FailoverGroupState.REPLICATING;
         schedule.startSchedule();
+        errorMessages.clear();
 
         CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(this);
         job.start();
 
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        LOG.info("Failover group {} start replication from primary {}", name, primary);
+        LOG.info("Failover group {} start replication from primary {}, finished round: {}",
+                name, primary, schedule.getRoundFinishedTimes());
     }
 
     /*
      * For secondary
-     * Check jobs
+     * Check jobs finished
      */
     private void checkJobsFinished() {
-        if (schedule.isRoundPending()) {
-            if (jobExecutor.isAllJobsFinished()) {
-                if (jobExecutor.hasFailedJobs()) {
-                    handleReplicationFailed();
-                } else {
-                    if (state.equals(FailoverGroupState.REPLICATING)) {
-                        handleReplicationFinished();
-                    } else {
-                        handleUpdatingFinished();
-                    }
-                }
-            }
+        if (!schedule.isRoundPending()) {
+            return;
         }
-    }
 
-    /*
-     * For secondary
-     * Do some work when replication has failures
-     */
-    private void handleReplicationFailed() {
-        schedule.finishSchedule(true);
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        LOG.info("Failover group {} finished replication from primary {}, but need retry failed jobs", name, primary);
+        if (!jobExecutor.isAllJobsFinished()) {
+            return;
+        }
+
+        if (state.equals(FailoverGroupState.REPLICATING)) {
+            handleReplicatingFinished();
+        } else {
+            handleUpdatingFinished();
+        }
     }
 
     /*
      * For secondary
      * Do some work when replication finished
      */
-    private void handleReplicationFinished() {
+    private void handleReplicatingFinished() {
         state = FailoverGroupState.UPDATING;
 
         UpdateReplicatedObjectJob job = new UpdateReplicatedObjectJob(this);
         job.start();
 
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        LOG.info("Failover group {} finished replication and start updating from primary {}", name, primary);
+        LOG.info("Failover group {} finished replication and start updating from primary {}, finished round: {}",
+                name, primary, schedule.getRoundFinishedTimes());
     }
 
     /*
@@ -679,13 +690,15 @@ public class FailoverGroup implements Writable {
      * Do some work when updating finished
      */
     private void handleUpdatingFinished() {
+        boolean needRetry = jobExecutor.hasFailedJobs();
+        schedule.finishSchedule(needRetry);
         state = FailoverGroupState.RUNNING;
-        schedule.finishSchedule(false);
         objectMeta = null;
         jobExecutor.clear();
         objectMap.clear();
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
-        LOG.info("Failover group {} finished replication and updating from primary {}", name, primary);
+        LOG.info("Failover group {} finished updating from primary {}, finished round: {}, need retry: {}",
+                name, primary, schedule.getRoundFinishedTimes(), needRetry);
     }
 
     /*
@@ -701,8 +714,7 @@ public class FailoverGroup implements Writable {
 
     /*
      * For both primary and secondary
-     * When received a rpc request，use find member to check the request is from a
-     * valid cluster
+     * Check if the member is from a valid cluster
      * FE members could change, so it just check an intersection
      */
     private FailoverGroupMember findMember(FailoverGroupMember member) {

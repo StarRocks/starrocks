@@ -48,6 +48,8 @@ public class DropReplicatedPartitionJob extends FailoverGroupJob {
             GlobalStateMgr.getServingState().getLocalMetastore().dropPartition(localDatabase, localTable,
                     dropPartitionClause);
         } catch (Exception e) {
+            failoverGroup.addErrorMessage("Failed to drop partition " + localDatabase.getFullName() + "." +
+                    localTable.getName() + "." + localPartitionName + ", error: " + e.getMessage());
             LOG.warn("Failed to drop partition {}.{}.{} in failover group {}, ", localDatabase.getFullName(),
                     localTable.getName(), localPartitionName, failoverGroup.getName(), e);
             return;

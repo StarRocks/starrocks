@@ -208,6 +208,7 @@ import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /*
  * Some utilities about Gson.
@@ -458,6 +459,7 @@ public class GsonUtils {
             .enableComplexMapKeySerialization()
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
+            .registerTypeHierarchyAdapter(ArrayBlockingQueue.class, new ArrayBlockingQueueAdapter())
             .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
             .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
             // For call constructor with selectedFields
@@ -695,6 +697,37 @@ public class GsonUtils {
                 map.putAll(entry.getKey(), entry.getValue());
             }
             return map;
+        }
+    }
+
+    private static class ArrayBlockingQueueAdapter<E>
+            implements JsonSerializer<ArrayBlockingQueue<E>>, JsonDeserializer<ArrayBlockingQueue<E>> {
+
+        @Override
+        public JsonElement serialize(ArrayBlockingQueue<E> queue, Type typeOfSrc, JsonSerializationContext context) {
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("capacity", queue.size() + queue.remainingCapacity());
+            JsonArray elementsArray = new JsonArray();
+            for (E element : queue) {
+                elementsArray.add(context.serialize(element));
+            }
+            jsonObject.add("elements", elementsArray);
+            return jsonObject;
+        }
+
+        @Override
+        public ArrayBlockingQueue<E> deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+                throws JsonParseException {
+            Type typeOfE = ((ParameterizedType) typeOfT).getActualTypeArguments()[0];
+            JsonObject jsonObject = json.getAsJsonObject();
+            int capacity = jsonObject.get("capacity").getAsInt();
+            JsonArray elementsArray = jsonObject.get("elements").getAsJsonArray();
+            ArrayBlockingQueue<E> queue = new ArrayBlockingQueue<>(capacity);
+            for (JsonElement jsonElement : elementsArray) {
+                E element = context.deserialize(jsonElement, typeOfE);
+                queue.add(element);
+            }
+            return queue;
         }
     }
 

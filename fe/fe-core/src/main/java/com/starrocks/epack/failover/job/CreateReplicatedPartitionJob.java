@@ -70,6 +70,8 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
             GlobalStateMgr.getServingState().getLocalMetastore().addPartitions(ctx, localDatabase, localTable.getName(),
                     addPartitionClause);
         } catch (Exception e) {
+            failoverGroup.addErrorMessage("Failed to create partition " + localDatabase.getFullName() + "." +
+                    localTable.getName() + "." + remotePartition.getName() + ", error: " + e.getMessage());
             LOG.warn("Failed to create partition {}.{}.{} in failover group {}, ", localDatabase.getFullName(),
                     localTable.getName(), remotePartition.getName(), failoverGroup.getName(), e);
             return;
