@@ -1281,6 +1281,7 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+        resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
     }
 

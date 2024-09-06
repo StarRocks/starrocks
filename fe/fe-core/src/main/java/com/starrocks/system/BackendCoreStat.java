@@ -16,6 +16,7 @@
 package com.starrocks.system;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.CloseableLock;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,9 +29,11 @@ public class BackendCoreStat {
     private static final Logger LOG = LogManager.getLogger(BackendCoreStat.class);
 
     private static int DEFAULT_CORES_OF_BE = 1;
+    private static final int ABSENT_CACHE_VALUE = -1;
 
     private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
-    private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(-1);
+    private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(ABSENT_CACHE_VALUE);
+    private static AtomicInteger cachedMinNumCores = new AtomicInteger(ABSENT_CACHE_VALUE);
     private static ReentrantLock lock = new ReentrantLock();
 
     public static void setNumOfHardwareCoresOfBe(long be, int numOfCores) {
@@ -38,7 +41,8 @@ public class BackendCoreStat {
         LOG.info("set numOfHardwareCores of be({}) to {}, current cpuCores stats: {}", be, numOfCores,
                 numOfHardwareCoresPerBe);
         if (previous == null || previous != numOfCores) {
-            cachedAvgNumOfHardwareCores.set(-1);
+            cachedAvgNumOfHardwareCores.set(ABSENT_CACHE_VALUE);
+            cachedMinNumCores.set(ABSENT_CACHE_VALUE);
         }
     }
 
@@ -46,13 +50,15 @@ public class BackendCoreStat {
         Integer previous = numOfHardwareCoresPerBe.remove(be);
         LOG.info("remove numOfHardwareCores of be({}), current cpuCores stats: {}", be, numOfHardwareCoresPerBe);
         if (previous != null) {
-            cachedAvgNumOfHardwareCores.set(-1);
+            cachedAvgNumOfHardwareCores.set(ABSENT_CACHE_VALUE);
+            cachedMinNumCores.set(ABSENT_CACHE_VALUE);
         }
     }
 
     public static void reset() {
         numOfHardwareCoresPerBe.clear();
-        cachedAvgNumOfHardwareCores.set(-1);
+        cachedAvgNumOfHardwareCores.set(ABSENT_CACHE_VALUE);
+        cachedMinNumCores.set(ABSENT_CACHE_VALUE);
     }
 
     public static ImmutableMap<Long, Integer> getNumOfHardwareCoresPerBe() {
@@ -97,6 +103,26 @@ public class BackendCoreStat {
             return avg;
         } finally {
             lock.unlock();
+        }
+    }
+
+    public static int getMinNumHardwareCoresOfBe() {
+        int snapshot = cachedMinNumCores.get();
+        if (snapshot > 0) {
+            return snapshot;
+        }
+
+        try (CloseableLock ignored = CloseableLock.lock(lock)) {
+            if (numOfHardwareCoresPerBe.isEmpty()) {
+                return DEFAULT_CORES_OF_BE;
+            }
+
+            int min = numOfHardwareCoresPerBe.values().stream().reduce(Integer::min).orElse(DEFAULT_CORES_OF_BE);
+            min = Math.max(min, 1);
+            cachedMinNumCores.set(min);
+            LOG.info("update minNumHardwareCoresOfBe to {}, current cpuCores stats: {}", min, numOfHardwareCoresPerBe);
+
+            return min;
         }
     }
 

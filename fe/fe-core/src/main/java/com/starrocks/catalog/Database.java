@@ -70,6 +70,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -748,5 +749,22 @@ public class Database extends MetaObject implements Writable {
 
     public boolean getExist() {
         return exist;
+    }
+
+    public List<PhysicalPartition> getPartitionSamples() {
+        return this.idToTable.values()
+                .stream()
+                .filter(table -> table instanceof OlapTable)
+                .map(table -> ((OlapTable) table).getPartitionSample())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    public int getOlapPartitionsCount() {
+        return this.idToTable.values()
+                .stream()
+                .filter(table -> table instanceof OlapTable)
+                .mapToInt(table -> ((OlapTable) table).getPartitionsCount())
+                .sum();
     }
 }

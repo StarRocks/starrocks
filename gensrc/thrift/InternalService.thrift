@@ -174,7 +174,7 @@ struct TSpillOptions {
 struct TQueryOptions {
   2: optional i32 max_errors = 0
   4: optional i32 batch_size = 0
-  
+
   12: optional i64 mem_limit = 2147483648
   13: optional bool abort_on_default_limit_exceeded = 0
   14: optional i32 query_timeout = 3600
@@ -214,7 +214,7 @@ struct TQueryOptions {
   59: optional bool enable_tablet_internal_parallel;
 
   60: optional i32 query_delivery_timeout;
-  
+
   61: optional bool enable_query_debug_trace;
 
   62: optional Types.TCompressionType load_transmission_compression_type;
@@ -228,7 +228,7 @@ struct TQueryOptions {
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
-  
+
   69: optional bool enable_populate_datacache;
 
   70: optional bool allow_throw_exception = 0;
@@ -252,7 +252,7 @@ struct TQueryOptions {
   85: optional TSpillMode spill_mode;
 
   82: optional TSpillOptions spill_options;
-  
+
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
@@ -394,6 +394,8 @@ struct TQueryGlobals {
   30: optional string last_query_id
 
   31: optional i64 timestamp_us
+
+  32: optional i64 scan_node_number
 }
 
 
@@ -459,7 +461,7 @@ struct TExecPlanFragmentParams {
   53: optional WorkGroup.TWorkGroup workgroup
   54: optional bool enable_resource_group
   55: optional i32 func_version
-  
+
   // Sharing data between drivers of same scan operator
   56: optional bool enable_shared_scan
 

@@ -519,7 +519,7 @@ class StarrocksSQLApiLib(object):
                 res_log = []
 
                 if ori:
-                    return {"status": True, "result": result, "msg": cursor._result.message}
+                    return {"status": True, "result": result, "msg": cursor._result.message, "desc": cursor.description}
 
                 if isinstance(result, tuple):
                     if len(result) > 0:
@@ -1793,6 +1793,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             tools.assert_dict_contains_subset({"status": "OK"}, res_json,
                                               f"failed to update be config [response={res}] [url={exec_url}]")
 
+    def get_resource_group_id(self, name):
+        res = self.execute_sql(f"show resource group {name};", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        return res["result"][0][1]
+
+    def get_backend_cpu_cores(self):
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        for i, col_info in enumerate(res["desc"]):
+            if col_info[0] == "CpuCores":
+                return res["result"][0][i]
+
+        tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
+
     def assert_table_cardinality(self, sql, rows):
         """
         assert table with an expected row counts
@@ -1873,8 +1887,10 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "explain verbose %s" % (query)
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res['msg'])
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            plan_string = "\n".join(item[0] for item in res["result"])
+            tools.assert_true(plan_string.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan_string))
 
     def assert_trace_values_contains(self, query, *expects):
         """
@@ -1964,7 +1980,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         Check cache select is success, make sure that read_cache_size + write_cache_size > 0
         """
-        res = self.execute_sql(query,True,)
+        res = self.execute_sql(query, True, )
         result = res["result"][0]
         # remove unit
         read_cache_size = int(result[0].replace("B", "").replace("KB", ""))

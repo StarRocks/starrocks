@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -21,11 +22,10 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group_fwd.h"
+#include "pipeline_executor_set_manager.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
-#include "util/blocking_queue.hpp"
-#include "util/metrics.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
 
@@ -41,34 +41,29 @@ using steady_clock = std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 using pipeline::QueryContext;
-
-class WorkGroup;
-class WorkGroupManager;
-using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 using WorkGroupType = TWorkGroupType::type;
-
 struct WorkGroupMetrics;
 using WorkGroupMetricsPtr = std::shared_ptr<WorkGroupMetrics>;
 
 template <typename Q>
 class WorkGroupSchedEntity {
 public:
-    explicit WorkGroupSchedEntity(WorkGroup* workgroup) : _workgroup(workgroup) {}
+    explicit WorkGroupSchedEntity(WorkGroup* workgroup);
+    ~WorkGroupSchedEntity();
 
     WorkGroup* workgroup() { return _workgroup; }
 
     Q* queue() { return _my_queue.get(); }
-    void set_queue(std::unique_ptr<Q> my_queue) { _my_queue = std::move(my_queue); }
+    void set_queue(std::unique_ptr<Q> my_queue);
 
     Q* in_queue() { return _in_queue; }
     const Q* in_queue() const { return _in_queue; }
     void set_in_queue(Q* in_queue) { _in_queue = in_queue; }
 
-    int64_t cpu_limit() const;
-    bool is_sq_wg() const;
+    int64_t cpu_weight() const;
 
     int64_t vruntime_ns() const { return _vruntime_ns; }
-    int64_t runtime_ns() const { return _vruntime_ns * cpu_limit(); }
+    int64_t runtime_ns() const { return _vruntime_ns * cpu_weight(); }
 
     /// Return the growth runtime in the range [last, curr].
     /// For example:
@@ -90,8 +85,8 @@ public:
 private:
     WorkGroup* _workgroup; // The workgroup owning this entity.
 
-    std::unique_ptr<Q> _my_queue = nullptr; // The queue owned by this group.
-    Q* _in_queue = nullptr;                 // The queue on which this entity is queued.
+    std::unique_ptr<Q> _my_queue; // The queue owned by this group.
+    Q* _in_queue = nullptr;       // The queue on which this entity is queued.
 
     int64_t _vruntime_ns = 0;
 
@@ -104,8 +99,7 @@ using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
 using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
 
 struct RunningQueryToken {
-public:
-    RunningQueryToken(WorkGroupPtr wg) : wg(std::move(wg)) {}
+    explicit RunningQueryToken(WorkGroupPtr wg) : wg(std::move(wg)) {}
     ~RunningQueryToken();
 
 private:
@@ -118,9 +112,9 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 // the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
 class WorkGroup : public std::enable_shared_from_this<WorkGroup> {
 public:
-    WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit, size_t concurrency,
+    WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_weight, double memory_limit, size_t concurrency,
               double spill_mem_limit_threshold, WorkGroupType type);
-    WorkGroup(const TWorkGroup& twg);
+    explicit WorkGroup(const TWorkGroup& twg);
     ~WorkGroup() = default;
 
     void init();
@@ -134,19 +128,17 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
     const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
-
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
     int64_t id() const { return _id; }
     int64_t version() const { return _version; }
     const std::string& name() const { return _name; }
-    size_t cpu_limit() const { return _cpu_limit; }
+    size_t cpu_weight() const { return _cpu_weight; }
+    size_t exclusive_cpu_cores() const { return _exclusive_cpu_cores; }
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
     int64_t mem_consumption_bytes() const { return _mem_tracker == nullptr ? 0L : _mem_tracker->consumption(); }
-
-    bool is_sq_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
 
     WorkGroupDriverSchedEntity* driver_sched_entity() { return &_driver_sched_entity; }
     const WorkGroupDriverSchedEntity* driver_sched_entity() const { return &_driver_sched_entity; }
@@ -172,7 +164,7 @@ public:
     // no drivers shall be added to this workgroup
     bool is_marked_del() const { return _is_marked_del.load(std::memory_order_acquire); }
     // a workgroup should wait several seconds to be cleaned safely.
-    bool is_expired() {
+    bool is_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _vacuum_ttl;
     }
@@ -181,7 +173,7 @@ public:
     // 1. is already marked del
     // 2. no pending drivers exists
     // 3. wait for a period of vacuum_ttl to prevent race condition
-    bool is_removable() {
+    bool is_removable() const {
         return is_marked_del() && _num_running_drivers.load(std::memory_order_acquire) == 0 && is_expired();
     }
 
@@ -205,6 +197,15 @@ public:
     void incr_cpu_runtime_ns(int64_t delta_ns) { _cpu_runtime_ns += delta_ns; }
     int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
 
+    void set_executors(PipelineExecutorSet* executors) { _executors = executors; }
+    void set_exclusive_executors(std::unique_ptr<PipelineExecutorSet> executors) {
+        _exclusive_executors = std::move(executors);
+        _executors = _exclusive_executors.get();
+    }
+
+    PipelineExecutorSet* exclusive_executors() const { return _exclusive_executors.get(); }
+    PipelineExecutorSet* executors() const { return _executors; }
+
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_MV_WG_ID = 1;
     static constexpr int64 DEFAULT_VERSION = 0;
@@ -222,22 +223,23 @@ private:
 
     std::string _name;
     int64_t _id;
-    int64_t _version;
-    WorkGroupType _type;
+    int64_t _version = 0;
+    WorkGroupType _type = WorkGroupType::WG_NORMAL;
 
     // Specified limitations
-    size_t _cpu_limit;
-    double _memory_limit;
+    size_t _cpu_weight = 1;
+    size_t _exclusive_cpu_cores = 0;
+    double _memory_limit = ABSENT_MEMORY_LIMIT;
     int64_t _memory_limit_bytes = -1;
-    size_t _concurrency_limit = 0;
+    size_t _concurrency_limit = ABSENT_CONCURRENCY_LIMIT;
     int64_t _big_query_mem_limit = 0;
     int64_t _big_query_scan_rows_limit = 0;
     int64_t _big_query_cpu_nanos_limit = 0;
     double _spill_mem_limit_threshold = 1.0;
     int64_t _spill_mem_limit_bytes = -1;
 
-    std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
-    std::shared_ptr<starrocks::MemTracker> _connector_scan_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker = nullptr;
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
     WorkGroupScanSchedEntity _scan_sched_entity;
@@ -257,34 +259,45 @@ private:
     /// The total CPU runtime cost in nanos unit, including driver execution time, and the cpu execution time of
     /// other threads including Source and Sink threads.
     std::atomic<int64_t> _cpu_runtime_ns = 0;
+
+    std::unique_ptr<PipelineExecutorSet> _exclusive_executors;
+    PipelineExecutorSet* _executors = nullptr;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
 // pick next workgroup for computation and launching io tasks.
 class WorkGroupManager {
-    DECLARE_SINGLETON(WorkGroupManager);
-
 public:
+    explicit WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf);
+
+    ~WorkGroupManager();
+
+    Status start();
+
     // add a new workgroup to WorkGroupManger
     WorkGroupPtr add_workgroup(const WorkGroupPtr& wg);
     // return reserved beforehand default workgroup for query is not bound to any workgroup
     WorkGroupPtr get_default_workgroup();
     // return reserved beforehand default mv workgroup for MV query is not bound to any workgroup
     WorkGroupPtr get_default_mv_workgroup();
+
+    void close();
     // destruct workgroups
     void destroy();
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
+
     using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
     void for_each_workgroup(const WorkGroupConsumer& consumer) const;
 
-    void incr_num_running_sq_drivers() { _num_running_sq_drivers++; }
-    void decr_num_running_sq_drivers() { _num_running_sq_drivers--; }
-    bool is_sq_wg_running() const { return _num_running_sq_drivers > 0; }
-    size_t normal_workgroup_cpu_hard_limit() const;
-
     void update_metrics();
+
+    bool should_yield(const WorkGroup* wg) const;
+    PipelineExecutorSet* shared_executors() const { return _executors_manager.shared_executors(); }
+    void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
+    void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
+    void change_enable_resource_group_cpu_borrowing(bool val);
 
 private:
     using MutexType = std::shared_mutex;
@@ -301,14 +314,18 @@ private:
     WorkGroupPtr get_default_workgroup_unlocked();
 
 private:
+    friend class ExecutorsManager;
+
     mutable std::shared_mutex _mutex;
+    // Place it before _workgroups to ensure the shared executors is destructed after all the dedicated executors for
+    // workgroups, since _executors_manager owns the shared executors, and WorkGroup owns the dedicated executors.
+    ExecutorsManager _executors_manager;
+
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
 
-    std::atomic<size_t> _num_running_sq_drivers = 0;
-    std::atomic<size_t> _sum_cpu_limit = 0;
-    std::atomic<size_t> _rt_cpu_limit = 0;
+    std::atomic<size_t> _sum_cpu_weight = 0;
 
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;

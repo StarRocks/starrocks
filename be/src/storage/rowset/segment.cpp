@@ -471,7 +471,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     } else {
         tablet_schema = TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]);
     }
-    FileInfo info{.path = dcg.column_files(parent_name(_segment_file_info.path))[idx]};
+    ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
+    FileInfo info{.path = filepath};
+    if (idx < dcg.encryption_metas().size()) {
+        info.encryption_meta = dcg.encryption_metas()[idx];
+    }
     return Segment::open(_fs, info, 0, tablet_schema, nullptr);
 }
 

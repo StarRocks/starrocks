@@ -68,6 +68,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
+import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
@@ -92,6 +93,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -136,9 +138,6 @@ import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
-import com.starrocks.scheduler.Constants;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -796,49 +795,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetTaskInfoResult getTasks(TGetTasksParams params) throws TException {
         LOG.debug("get show task request: {}", params);
+
+        List<TTaskInfo> tasksResult = TasksSystemTable.query(params);
         TGetTaskInfoResult result = new TGetTaskInfoResult();
-        List<TTaskInfo> tasksResult = Lists.newArrayList();
         result.setTasks(tasksResult);
-
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        }
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<Task> taskList = taskManager.filterTasks(params);
-
-        for (Task task : taskList) {
-            if (task.getDbName() == null) {
-                LOG.warn("Ignore the task db because information is incorrect: " + task);
-                continue;
-            }
-
-            try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        task.getDbName());
-            } catch (AccessDeniedException e) {
-                continue;
-            }
-
-            TTaskInfo info = new TTaskInfo();
-            info.setTask_name(task.getName());
-            info.setCreate_time(task.getCreateTime() / 1000);
-            String scheduleStr = "UNKNOWN";
-            if (task.getType() != null) {
-                scheduleStr = task.getType().name();
-            }
-            if (task.getType() == Constants.TaskType.PERIODICAL) {
-                scheduleStr += task.getSchedule();
-            }
-            info.setSchedule(scheduleStr);
-            info.setCatalog(task.getCatalogName());
-            info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
-            info.setDefinition(task.getDefinition());
-            info.setExpire_time(task.getExpireTime() / 1000);
-            info.setProperties(task.getPropertiesString());
-            tasksResult.add(info);
-        }
 
         return result;
     }
@@ -2248,7 +2208,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         AddPartitionClause addPartitionClause;
         List<String> partitionColNames = Lists.newArrayList();
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values);
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
@@ -2314,8 +2275,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
-            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-            analyzer.analyze(ctx, addPartitionClause);
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+                    LockType.READ)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(ctx, addPartitionClause);
+            }
             state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to cancel alter operation", e);

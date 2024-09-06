@@ -125,8 +125,7 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
                 "for version as of " + "123456777" + ";";
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second;
     }
-
-    @Test
+    
     public void testIcebergMetadataScanNodeScheduler() throws Exception {
         mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();

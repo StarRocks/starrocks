@@ -2107,6 +2107,15 @@ public class OlapTable extends Table {
     public Partition replacePartition(Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
 
+        // For cloud native table, add partition into recycle Bin after truncate table.
+        // It is no necessary for share nothing mode because file will be deleted throught
+        // tablet report in this case.
+        if (this.isCloudNativeTableOrMaterializedView()) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(-1, oldPartition);
+            recyclePartitionInfo.setRecoverable(false);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        }
+
         oldPartition.getSubPartitions().forEach(physicalPartition -> {
             physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
             physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
@@ -3522,4 +3531,15 @@ public class OlapTable extends Table {
         }
     }
 
+    public int getPartitionsCount() {
+        return physicalPartitionIdToPartitionId.size();
+    }
+
+    public PhysicalPartition getPartitionSample() {
+        if (!idToPartition.isEmpty()) {
+            return idToPartition.values().iterator().next().getSubPartitions().iterator().next();
+        } else {
+            return null;
+        }
+    }
 }

@@ -17,7 +17,9 @@
 #include <utility>
 
 #include "common/config.h"
-#include "exec/workgroup/work_group_fwd.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/pipeline_executor_set.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
 #include "util/cpu_info.h"
@@ -27,52 +29,67 @@
 
 namespace starrocks::workgroup {
 
-/// WorkGroupMetrics
+// ------------------------------------------------------------------------------------
+// WorkGroupMetrics
+// ------------------------------------------------------------------------------------
+
 struct WorkGroupMetrics {
     int128_t group_unique_id;
 
-    std::unique_ptr<starrocks::DoubleGauge> cpu_limit = nullptr;
-    std::unique_ptr<starrocks::DoubleGauge> inuse_cpu_ratio = nullptr;
-    std::unique_ptr<starrocks::DoubleGauge> inuse_scan_ratio = nullptr;
-    std::unique_ptr<starrocks::DoubleGauge> inuse_connector_scan_ratio = nullptr;
-    std::unique_ptr<starrocks::IntGauge> mem_limit = nullptr;
-    std::unique_ptr<starrocks::IntGauge> inuse_mem_bytes = nullptr;
-    std::unique_ptr<starrocks::IntGauge> running_queries = nullptr;
-    std::unique_ptr<starrocks::IntGauge> total_queries = nullptr;
-    std::unique_ptr<starrocks::IntGauge> concurrency_overflow_count = nullptr;
-    std::unique_ptr<starrocks::IntGauge> bigquery_count = nullptr;
+    std::unique_ptr<DoubleGauge> cpu_limit = nullptr;
+    std::unique_ptr<DoubleGauge> inuse_cpu_ratio = nullptr;
+    std::unique_ptr<DoubleGauge> inuse_scan_ratio = nullptr;
+    std::unique_ptr<DoubleGauge> inuse_connector_scan_ratio = nullptr;
+    std::unique_ptr<IntGauge> mem_limit = nullptr;
+    std::unique_ptr<IntGauge> inuse_mem_bytes = nullptr;
+    std::unique_ptr<IntGauge> running_queries = nullptr;
+    std::unique_ptr<IntGauge> total_queries = nullptr;
+    std::unique_ptr<IntGauge> concurrency_overflow_count = nullptr;
+    std::unique_ptr<IntGauge> bigquery_count = nullptr;
 
-    std::unique_ptr<starrocks::DoubleGauge> inuse_cpu_cores = nullptr;
+    std::unique_ptr<DoubleGauge> inuse_cpu_cores = nullptr;
     int64_t timestamp_ns = 0;
     int64_t cpu_runtime_ns = 0;
 };
 
-/// WorkGroupSchedEntity.
+// ------------------------------------------------------------------------------------
+// WorkGroupSchedEntity
+// ------------------------------------------------------------------------------------
+
 template <typename Q>
-int64_t WorkGroupSchedEntity<Q>::cpu_limit() const {
-    return _workgroup->cpu_limit();
+WorkGroupSchedEntity<Q>::WorkGroupSchedEntity(WorkGroup* workgroup) : _workgroup(workgroup) {}
+
+template <typename Q>
+WorkGroupSchedEntity<Q>::~WorkGroupSchedEntity() = default;
+
+template <typename Q>
+void WorkGroupSchedEntity<Q>::set_queue(std::unique_ptr<Q> my_queue) {
+    _my_queue = std::move(my_queue);
 }
 
 template <typename Q>
-bool WorkGroupSchedEntity<Q>::is_sq_wg() const {
-    return _workgroup->is_sq_wg();
+int64_t WorkGroupSchedEntity<Q>::cpu_weight() const {
+    return _workgroup->cpu_weight();
 }
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::incr_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns += runtime_ns / cpu_limit();
+    _vruntime_ns += runtime_ns / cpu_weight();
     _unadjusted_runtime_ns += runtime_ns;
 }
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::adjust_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns += runtime_ns / cpu_limit();
+    _vruntime_ns += runtime_ns / cpu_weight();
 }
 
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
 template class WorkGroupSchedEntity<ScanTaskQueue>;
 
-/// WorkGroup.
+// ------------------------------------------------------------------------------------
+// WorkGroup
+// ------------------------------------------------------------------------------------
+
 RunningQueryToken::~RunningQueryToken() {
     wg->decr_num_queries();
 }
@@ -83,7 +100,7 @@ WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_l
           _id(id),
           _version(version),
           _type(type),
-          _cpu_limit(cpu_limit),
+          _cpu_weight(cpu_limit),
           _memory_limit(memory_limit),
           _concurrency_limit(concurrency),
           _spill_mem_limit_threshold(spill_mem_limit_threshold),
@@ -97,25 +114,26 @@ WorkGroup::WorkGroup(const TWorkGroup& twg)
           _driver_sched_entity(this),
           _scan_sched_entity(this),
           _connector_scan_sched_entity(this) {
-    if (twg.__isset.cpu_core_limit) {
-        _cpu_limit = twg.cpu_core_limit;
-    } else {
-        _cpu_limit = -1;
+    if (twg.__isset.cpu_core_limit && twg.cpu_core_limit > 0) {
+        _cpu_weight = twg.cpu_core_limit;
     }
+
+    if (twg.__isset.exclusive_cpu_cores) {
+        _exclusive_cpu_cores = twg.exclusive_cpu_cores;
+    }
+
     if (twg.__isset.mem_limit) {
         _memory_limit = twg.mem_limit;
-    } else {
-        _memory_limit = ABSENT_MEMORY_LIMIT;
     }
 
     if (twg.__isset.concurrency_limit) {
         _concurrency_limit = twg.concurrency_limit;
-    } else {
-        _concurrency_limit = ABSENT_CONCURRENCY_LIMIT;
     }
+
     if (twg.__isset.workgroup_type) {
         _type = twg.workgroup_type;
     }
+
     if (twg.__isset.version) {
         _version = twg.version;
     }
@@ -134,8 +152,6 @@ WorkGroup::WorkGroup(const TWorkGroup& twg)
 
     if (twg.__isset.spill_mem_limit_threshold) {
         _spill_mem_limit_threshold = twg.spill_mem_limit_threshold;
-    } else {
-        _spill_mem_limit_threshold = 1.0;
     }
 }
 
@@ -154,7 +170,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_workgroup_type(_type);
     std::string state = is_marked_del() ? "dead" : "alive";
     twg.__set_state(state);
-    twg.__set_cpu_core_limit(_cpu_limit);
+    twg.__set_cpu_core_limit(_cpu_weight);
     twg.__set_mem_limit(_memory_limit);
     twg.__set_concurrency_limit(_concurrency_limit);
     twg.__set_num_drivers(_acc_num_drivers);
@@ -173,42 +189,35 @@ void WorkGroup::init() {
     _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
                                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
+
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 
-    _connector_scan_mem_tracker = std::make_shared<MemTracker>(
-            MemTracker::RESOURCE_GROUP, _memory_limit_bytes * config::connector_scan_use_query_mem_ratio,
-            _name + "/connector_scan", GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker());
+    _connector_scan_mem_tracker =
+            std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name + "/connector_scan",
+                                         GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker());
 }
 
 std::string WorkGroup::to_string() const {
     return fmt::format(
             "(id:{}, name:{}, version:{}, "
-            "cpu_limit:{}, mem_limit:{}, concurrency_limit:{}, "
+            "cpu_weight:{}, exclusive_cpu_cores:{}, mem_limit:{}, concurrency_limit:{}, "
             "bigquery: (cpu_second_limit:{}, mem_limit:{}, scan_rows_limit:{}), "
             "spill_mem_limit_threshold:{}"
             ")",
-            _id, _name, _version, _cpu_limit, _memory_limit_bytes, _concurrency_limit, big_query_cpu_second_limit(),
-            _big_query_mem_limit, _big_query_scan_rows_limit, _spill_mem_limit_threshold);
+            _id, _name, _version, _cpu_weight, _exclusive_cpu_cores, _memory_limit_bytes, _concurrency_limit,
+            big_query_cpu_second_limit(), _big_query_mem_limit, _big_query_scan_rows_limit, _spill_mem_limit_threshold);
 }
 
 void WorkGroup::incr_num_running_drivers() {
     ++_num_running_drivers;
     ++_acc_num_drivers;
-
-    if (is_sq_wg()) {
-        WorkGroupManager::instance()->incr_num_running_sq_drivers();
-    }
 }
 
 void WorkGroup::decr_num_running_drivers() {
     int64_t old = _num_running_drivers.fetch_sub(1);
     DCHECK_GT(old, 0);
-
-    if (is_sq_wg()) {
-        WorkGroupManager::instance()->decr_num_running_sq_drivers();
-    }
 }
 
 StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token(bool enable_group_level_query_queue) {
@@ -259,10 +268,15 @@ void WorkGroup::copy_metrics(const WorkGroup& rhs) {
     _bigquery_count = rhs.bigquery_count();
 }
 
-/// WorkGroupManager.
-WorkGroupManager::WorkGroupManager() = default;
+// ------------------------------------------------------------------------------------
+// WorkGroupManager
+// ------------------------------------------------------------------------------------
+
+WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf)
+        : _executors_manager(this, std::move(executors_manager_conf)) {}
 
 WorkGroupManager::~WorkGroupManager() = default;
+
 void WorkGroupManager::destroy() {
     std::unique_lock write_lock(_mutex);
 
@@ -284,9 +298,8 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock) {
-    std::call_once(init_metrics_once_flag, []() {
-        StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook",
-                                                               [] { WorkGroupManager::instance()->update_metrics(); });
+    std::call_once(init_metrics_once_flag, [this] {
+        StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook", [this] { update_metrics(); });
     });
 
     if (_wg_metrics.count(wg->name()) == 0) {
@@ -378,7 +391,7 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
     _wg_metrics[wg->name()]->group_unique_id = wg->unique_id();
 }
 
-double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
+static double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
     if (sum_value <= 0) {
         return 0;
     }
@@ -412,7 +425,7 @@ void WorkGroupManager::update_metrics_unlocked() {
             const auto& wg = wg_it->second;
             VLOG(2) << "workgroup update_metrics " << name;
 
-            double cpu_expected_use_ratio = _calculate_ratio(wg->cpu_limit(), _sum_cpu_limit);
+            double cpu_expected_use_ratio = _calculate_ratio(wg->cpu_weight(), _sum_cpu_weight);
             double cpu_use_ratio = _calculate_ratio(wg->driver_sched_entity()->growth_runtime_ns(), sum_cpu_runtime_ns);
             double scan_use_ratio = _calculate_ratio(wg->scan_sched_entity()->growth_runtime_ns(), sum_scan_runtime_ns);
             double connector_scan_use_ratio = _calculate_ratio(wg->connector_scan_sched_entity()->growth_runtime_ns(),
@@ -488,7 +501,7 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
             auto id = wg_it->second->id();
             auto version = wg_it->second->version();
-            _sum_cpu_limit -= wg_it->second->cpu_limit();
+            _sum_cpu_weight -= wg_it->second->cpu_weight();
             _workgroups.erase(wg_it);
             auto version_it = _workgroup_versions.find(id);
             if (version_it != _workgroup_versions.end() && version_it->second <= version) {
@@ -524,31 +537,35 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
     if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] >= wg->version()) {
         return;
     }
+
     wg->init();
     _workgroups[unique_id] = wg;
 
-    _sum_cpu_limit += wg->cpu_limit();
-    if (wg->is_sq_wg()) {
-        _rt_cpu_limit = wg->cpu_limit();
-    }
+    _sum_cpu_weight += wg->cpu_weight();
 
     // old version exists, so mark the stale version delete
     if (_workgroup_versions.count(wg->id())) {
-        auto stale_version = _workgroup_versions[wg->id()];
+        const auto stale_version = _workgroup_versions[wg->id()];
         DCHECK(stale_version < wg->version());
-        auto old_unique_id = WorkGroup::create_unique_id(wg->id(), stale_version);
+        const auto old_unique_id = WorkGroup::create_unique_id(wg->id(), stale_version);
         if (_workgroups.count(old_unique_id)) {
-            _workgroups[old_unique_id]->mark_del();
+            auto& old_wg = _workgroups[old_unique_id];
+
+            _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
+            old_wg->mark_del();
             _workgroup_expired_versions.push_back(old_unique_id);
             LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
 
             // Copy metrics from old version work-group
-            auto& old_wg = _workgroups[old_unique_id];
             wg->copy_metrics(*old_wg);
         }
     }
     // install new version
     _workgroup_versions[wg->id()] = wg->version();
+
+    _executors_manager.assign_cpuids_to_workgroup(wg.get());
+    _executors_manager.create_and_assign_executors(wg.get());
+    _executors_manager.update_shared_executors();
 
     // Update metrics
     add_metrics_unlocked(wg, unique_lock);
@@ -577,7 +594,10 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     auto unique_id = WorkGroup::create_unique_id(id, curr_version);
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
-        wg_it->second->mark_del();
+        const auto& old_wg = wg_it->second;
+        _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
+        old_wg->mark_del();
+        _executors_manager.update_shared_executors();
         _workgroup_expired_versions.push_back(unique_id);
         LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
     }
@@ -602,18 +622,45 @@ void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) con
     }
 }
 
-size_t WorkGroupManager::normal_workgroup_cpu_hard_limit() const {
-    static int num_hardware_cores = CpuInfo::num_cores();
-    return std::max<int>(1, num_hardware_cores - _rt_cpu_limit);
+Status WorkGroupManager::start() {
+    std::unique_lock write_lock(_mutex);
+    return _executors_manager.start_shared_executors();
 }
 
-/// DefaultWorkGroupInitialization.
+void WorkGroupManager::close() {
+    std::unique_lock write_lock(_mutex);
+    _executors_manager.close();
+}
+
+bool WorkGroupManager::should_yield(const WorkGroup* wg) const {
+    return _executors_manager.should_yield(wg);
+}
+
+void WorkGroupManager::for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const {
+    std::shared_lock read_lock(_mutex);
+    _executors_manager.for_each_executors(consumer);
+}
+
+void WorkGroupManager::change_num_connector_scan_threads(uint32_t num_connector_scan_threads) {
+    std::unique_lock write_lock(_mutex);
+    _executors_manager.change_num_connector_scan_threads(num_connector_scan_threads);
+}
+
+void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val) {
+    std::unique_lock write_lock(_mutex);
+    _executors_manager.change_enable_resource_group_cpu_borrowing(val);
+}
+
+// ------------------------------------------------------------------------------------
+// DefaultWorkGroupInitialization
+// ------------------------------------------------------------------------------------
+
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     auto default_wg = create_default_workgroup();
-    WorkGroupManager::instance()->add_workgroup(default_wg);
+    ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(default_wg);
 
     auto default_mv_wg = create_default_mv_workgroup();
-    WorkGroupManager::instance()->add_workgroup(default_mv_wg);
+    ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(default_mv_wg);
 }
 
 std::shared_ptr<WorkGroup> DefaultWorkGroupInitialization::create_default_workgroup() {

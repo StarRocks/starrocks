@@ -166,12 +166,12 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
     WorkGroupPtr wg;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
-        wg = WorkGroupManager::instance()->get_default_workgroup();
+        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
     } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
-        wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_mv_workgroup();
     } else {
         wg = std::make_shared<WorkGroup>(request.common().workgroup);
-        wg = WorkGroupManager::instance()->add_workgroup(wg);
+        wg = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
 
@@ -221,8 +221,13 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
             spill_mem_limit_ratio = query_options.spill_mem_limit_threshold;
         }
     }
+
+    int scan_node_number = 1;
+    if (query_globals.__isset.scan_node_number) {
+        scan_node_number = query_globals.scan_node_number;
+    }
     _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
-                                 wg.get(), runtime_state);
+                                 wg.get(), runtime_state, scan_node_number);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -572,12 +577,13 @@ bool FragmentExecutor::_is_in_colocate_exec_group(PlanNodeId plan_node_id) {
     return false;
 }
 
-void create_adaptive_group_initialize_events(RuntimeState* state, PipelineGroupMap&& unready_pipeline_groups) {
+static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGroup* wg,
+                                                    PipelineGroupMap&& unready_pipeline_groups) {
     if (unready_pipeline_groups.empty()) {
         return;
     }
 
-    auto* driver_executor = state->exec_env()->wg_driver_executor();
+    auto* driver_executor = wg->executors()->driver_executor();
     for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
         EventPtr group_initialize_event =
                 Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
@@ -655,7 +661,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     });
 
     if (!unready_pipeline_groups.empty()) {
-        create_adaptive_group_initialize_events(runtime_state, std::move(unready_pipeline_groups));
+        create_adaptive_group_initialize_events(runtime_state, _wg.get(), std::move(unready_pipeline_groups));
     }
 
     // Acquire driver token to avoid overload
@@ -805,7 +811,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     prepare_success = true;
 
     DCHECK(_fragment_ctx->enable_resource_group());
-    auto* executor = exec_env->wg_driver_executor();
+    auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
 
     return Status::OK();

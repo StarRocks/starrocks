@@ -100,6 +100,15 @@ public class Config extends ConfigBase {
 
     @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
     public static String sys_log_format = "plaintext";
+
+    @ConfField(comment = "Max length of a log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 1MB")
+    public static int sys_log_json_max_string_length = 1048576;
+
+    @ConfField(comment = "Max length of a profile log line when using log4j json format," +
+            " truncate string values longer than this specified limit. Default: 100MB")
+    public static int sys_log_json_profile_max_string_length = 104857600;
+
     /**
      * audit_log_dir:
      * This specifies FE audit log dir.
@@ -134,6 +143,8 @@ public class Config extends ConfigBase {
     public static String[] audit_log_modules = {"slow_query", "query"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
+    @ConfField(mutable = true)
+    public static boolean enable_qe_slow_log = true;
     @ConfField
     public static String audit_log_roll_interval = "DAY";
     @ConfField
@@ -1288,7 +1299,7 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = false;
+    public static boolean memory_tracker_enable = true;
 
     /**
      * Decide how often to track the memory usage of the FE process
@@ -1998,6 +2009,10 @@ public class Config extends ConfigBase {
     // choose collect sample statistics first
     @ConfField(mutable = true)
     public static double statistic_auto_collect_sample_threshold = 0.3;
+
+    @ConfField(mutable = true, comment = "Tolerate some percent of failure for a large table, it will not affect " +
+            "the job status but improve the robustness")
+    public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G

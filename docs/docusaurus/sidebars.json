@@ -90,6 +90,7 @@
                         "deployment/shared_data/gcs",
                         "deployment/shared_data/azure",
                         "deployment/shared_data/minio",
+                        "deployment/shared_data/hdfs",
                         "deployment/shared_data/feature-support-shared-data"
                     ]
                 },
@@ -204,6 +205,7 @@
                 },
                 "loading/StreamLoad",
                 "loading/hdfs_load",
+                "loading/cloud_storage_load",
                 {
                     "type": "category",
                     "label": "Load data from Apache Kafka",
@@ -337,7 +339,8 @@
                             ]
                         },
                         "using_starrocks/mv_ref",
-                        "using_starrocks/troubleshooting_asynchronous_materialized_views"
+                        "using_starrocks/troubleshooting_asynchronous_materialized_views",
+                        "using_starrocks/feature-support-asynchronous-materialized-views"
                     ]
                 },
                 "using_starrocks/Colocate_join",

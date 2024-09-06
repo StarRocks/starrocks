@@ -1693,7 +1693,8 @@ public class ExpressionAnalyzer {
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
-            } else if (funcType.equalsIgnoreCase(FunctionSet.USER)) {
+            } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
+                    || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(Type.VARCHAR);
 
                 String user = session.getQualifiedUser();

@@ -256,61 +256,28 @@ public class Log4jConfig extends XmlConfiguration {
         // appender layout
         final String jsonLoggingConfValue = "json";
         if (jsonLoggingConfValue.equalsIgnoreCase(Config.sys_log_format)) {
-            // json logging
-            String jsonLayout =
-                    "<JsonTemplateLayout maxStringLength=\"104857600\" locationInfoEnabled=\"true\">\n" +
-                            "        <EventTemplate><![CDATA[\n{\n" +
-                            "   \"@timestamp\": {\n" +
-                            "       \"$resolver\": \"timestamp\",\n" +
-                            "       \"pattern\": {\n" +
-                            "         \"format\": \"yyyy-MM-dd HH:mm:ss.SSSXXX\",\n" +
-                            "         \"timeZone\": \"UTC\"\n" +
-                            "        }\n" +
-                            "      },\n" +
-                            "      \"level\": {\n" +
-                            "       \"$resolver\": \"level\",\n" +
-                            "       \"field\": \"name\"\n" +
-                            "      },\n" +
-                            "      \"thread.name\": {\n" +
-                            "       \"$resolver\": \"thread\",\n" +
-                            "       \"field\": \"name\"\n" +
-                            "      },\n" +
-                            "      \"thread.id\": {\n" +
-                            "       \"$resolver\": \"thread\",\n" +
-                            "       \"field\": \"id\"\n" +
-                            "      },\n" +
-                            "      \"method\": {\n" +
-                            "       \"$resolver\": \"logger\",\n" +
-                            "       \"field\": \"name\",\n" +
-                            "       \"shorten\": {\n" +
-                            "         \"length\": 1,\n" +
-                            "         \"strategy\": \"tail\"\n" +
-                            "        }\n" +
-                            "      },\n" +
-                            "      \"line\": {\n" +
-                            "        \"$resolver\": \"source\",\n" +
-                            "        \"field\": \"lineNumber\"\n" +
-                            "      },\n" +
-                            "      \"message\": {\n" +
-                            "        \"$resolver\": \"message\",\n" +
-                            "        \"stringfield\": \"true\"\n" +
-                            "      },\n" +
-                            "      \"exception\": {\n" +
-                            "        \"$resolver\": \"exception\",\n" +
-                            "        \"field\": \"stackTrace\",\n" +
-                            "        \"stackTrace\": {\n" +
-                            "          \"stringified\": true,\n" +
-                            "          \"full\": true\n" +
-                            "        }\n" +
-                            "      }" +
-                            "      }\n]]></EventTemplate>\n" +
-                            "</JsonTemplateLayout>";
-            properties.put("syslog_default_layout", jsonLayout);
-            properties.put("syslog_warning_layout", jsonLayout);
-            properties.put("syslog_audit_layout", jsonLayout);
-            properties.put("syslog_dump_layout", jsonLayout);
-            properties.put("syslog_bigquery_layout", jsonLayout);
-            properties.put("syslog_profile_layout", jsonLayout);
+            // json logging, use `'` and replace them to `"` in batch to avoid too many escapes
+            String jsonConfig =
+                    "{'@timestamp':{'$resolver':'timestamp','pattern':{'format':'yyyy-MM-dd HH:mm:ss.SSSXXX','timeZone':'UTC'}}," +
+                            "'level':{'$resolver':'level','field':'name'}," +
+                            "'thread.name':{'$resolver':'thread','field':'name'}," +
+                            "'thread.id':{'$resolver':'thread','field':'id'}," +
+                            "'line':{'$resolver':'source','field':'lineNumber'}," +
+                            "'file':{'$resolver':'source','field':'fileName'}," +
+                            "'method':{'$resolver':'source','field':'methodName'}," +
+                            "'message':{'$resolver':'message','stringfield':'true'}," +
+                            "'exception':{'$resolver':'exception','field':'stackTrace','stackTrace':{'stringified':true,'full':true}}}";
+            jsonConfig = jsonConfig.replace("'", "\"");
+            String jsonLayoutFormatter = "<JsonTemplateLayout maxStringLength=\"%d\" locationInfoEnabled=\"true\">\n" +
+                    "<EventTemplate><![CDATA[" + jsonConfig + "]]></EventTemplate>\n" + "</JsonTemplateLayout>";
+            String jsonLayoutDefault = String.format(jsonLayoutFormatter, Config.sys_log_json_max_string_length);
+            String jsonLayoutProfile = String.format(jsonLayoutFormatter, Config.sys_log_json_profile_max_string_length);
+            properties.put("syslog_default_layout", jsonLayoutDefault);
+            properties.put("syslog_warning_layout", jsonLayoutDefault);
+            properties.put("syslog_audit_layout", jsonLayoutDefault);
+            properties.put("syslog_dump_layout", jsonLayoutDefault);
+            properties.put("syslog_bigquery_layout", jsonLayoutDefault);
+            properties.put("syslog_profile_layout", jsonLayoutProfile);
         } else {
             // fallback to plaintext logging
             properties.put("syslog_default_layout",

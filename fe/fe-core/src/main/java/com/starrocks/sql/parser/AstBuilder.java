@@ -2557,10 +2557,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowResourceGroupStatement(StarRocksParser.ShowResourceGroupStatementContext context) {
         NodePosition pos = createPos(context);
         if (context.GROUPS() != null) {
-            return new ShowResourceGroupStmt(null, context.ALL() != null, pos);
+            return new ShowResourceGroupStmt(null, context.ALL() != null, context.VERBOSE() != null, pos);
         } else {
             Identifier identifier = (Identifier) visit(context.identifier());
-            return new ShowResourceGroupStmt(identifier.getValue(), false, pos);
+            return new ShowResourceGroupStmt(identifier.getValue(), false, context.VERBOSE() != null, pos);
         }
     }
 
@@ -6184,6 +6184,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_USER)) {
+            return new InformationFunction(FunctionSet.SESSION_USER.toUpperCase());
         }
 
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_ID)) {

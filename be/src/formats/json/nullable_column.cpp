@@ -415,8 +415,6 @@ static Status add_adaptive_nullable_column(Column* column, const TypeDescriptor&
         return add_adaptive_nullable_boolean_column(column, type_desc, name, value);
     case TYPE_JSON:
         return add_adaptive_nullable_native_json_column(column, type_desc, name, value);
-    case TYPE_VARBINARY:
-        return add_adaptive_nullable_native_json_column(column, type_desc, name, value);
     case TYPE_ARRAY:
         return add_adaptive_nullable_array_column(column, type_desc, name, value);
     case TYPE_STRUCT:
