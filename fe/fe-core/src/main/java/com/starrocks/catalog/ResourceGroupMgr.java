@@ -359,10 +359,10 @@ public class ResourceGroupMgr implements Writable {
 
                 if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
                     if (sumExclusiveCpuCores + exclusiveCpuCores - wg.getNormalizedExclusiveCpuCores() >=
-                            BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
+                            BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe()) {
                         throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
                                 ResourceGroup.EXCLUSIVE_CPU_CORES,
-                                BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
+                                BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe() - 1));
                     }
                     if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
                         throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
