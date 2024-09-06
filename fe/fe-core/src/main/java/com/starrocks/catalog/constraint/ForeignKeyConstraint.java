@@ -28,12 +28,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/ForeignKeyConstraint.java
 import com.starrocks.sql.common.MetaUtils;
-=======
-import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.collections.CollectionUtils;
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737)):fe/fe-core/src/main/java/com/starrocks/catalog/constraint/ForeignKeyConstraint.java
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
