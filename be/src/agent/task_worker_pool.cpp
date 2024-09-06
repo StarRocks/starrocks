@@ -741,7 +741,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
-        auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
+        auto workgroups = ExecEnv::GetInstance()->workgroup_manager()->list_workgroups();
         request.__set_active_workgroups(workgroups);
         request.__set_backend(BackendOptions::get_localBackend());
         TMasterResult result;
@@ -753,7 +753,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
         if (result.__isset.workgroup_ops) {
-            workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
+            ExecEnv::GetInstance()->workgroup_manager()->apply(result.workgroup_ops);
         }
         nap_sleep(config::report_workgroup_interval_seconds,
                   [worker_pool_this] { return worker_pool_this->_stopped.load(); });

@@ -48,8 +48,8 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
-using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
-using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+using ConstDriverPredicator = std::function<bool(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {

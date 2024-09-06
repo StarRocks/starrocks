@@ -94,6 +94,11 @@ public:
         return cache_sizes;
     }
 
+    static std::vector<size_t> get_core_ids();
+
+    static bool is_cgroup_with_cpuset() { return is_cgroup_with_cpuset_; }
+    static bool is_cgroup_with_cpu_quota() { return is_cgroup_with_cpu_quota_; }
+
 private:
     /// Initialize NUMA-related state - called from Init();
     static void _init_numa();
@@ -117,6 +122,9 @@ private:
     static int max_num_cores_;
     static std::string model_name_;
 
+    static bool is_cgroup_with_cpuset_;
+    static bool is_cgroup_with_cpu_quota_;
+
     /// Maximum possible number of NUMA nodes.
     static int max_num_numa_nodes_;
 
@@ -126,6 +134,7 @@ private:
     /// Vector with 'max_num_numa_nodes_' entries, each of which is a vector of the cores
     /// belonging to that NUMA node.
     static std::vector<std::vector<int>> numa_node_to_cores_;
+    static std::vector<size_t> cpuset_cores_;
 
     /// Array with 'max_num_cores_' entries, each of which is the index of that core in its
     /// NUMA node.

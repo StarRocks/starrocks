@@ -1,0 +1,157 @@
+-- name: test_change_pipeline_connector_scan_thread_num_per_cpu
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}(c_tinyint tinyint,c_int int,c_bigint bigint,c_bool boolean,c_float float,c_double double,c_decimal decimal(38,18),c_datetime datetime,c_char char(10),c_varchar varchar(20),c_string string,c_struct struct<col_int int, col_string string, col_date date>,c_map map<boolean, string>,c_array array<int>,
+c_date date,c_smallint smallint) partition by(c_date,c_smallint);
+-- result:
+-- !result
+insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}(c_tinyint,c_string,c_date,c_smallint) values(1+100, concat('overwrite old partition', ' yeah~'),cast('2000-01-01' + interval '1' day as date),10-10),(2+100,'generate new partition','2000-01-02',1),(3+100,'generate new partition','2022-02-02',100/10);
+-- result:
+-- !result
+insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}(c_bool,c_date,c_int,c_array,c_char,c_smallint,c_struct)
+values(0, '0000-01-01',9,[1,2,3,null,4],'China',-32768,null),(1, '2000-01-01',9,[1,2,3,null,4],'Korea',0,null),(0, '2000-01-01',9,[1,2,3,null,4],'Japan',0,null),(1, '2022-02-02',9,[1,2,3,null,4],'Tailand',10,null);
+-- result:
+-- !result
+insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} partition(c_smallint=32767,c_date='9999-12-31') values (-128,-2147483648,-9223372036854775808,
+0,-3.4E+38,-1.79E+308,-99999999999999999999.999999999999999999,'0000-01-01 00:00:00','','','',row(-2147483648,'',cast("0000-01-01" as date)),map(cast(0 as boolean),''),[]),(-127,-2147483648,-9223372036854775808,0,-3.4E+38,-1.79E+308,-99999999999999999999.999999999999999999,'0000-01-01 00:00:00','','','',row(-2147483648,'',cast("0000-01-01" as date)),map(cast(0 as boolean),''),[1,null,2]);
+-- result:
+-- !result
+[UC]function: num_cores=get_backend_cpu_cores()
+-- result:
+16
+-- !result
+select count(1) = ${num_cores}*8 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
+-- result:
+1
+-- !result
+update information_schema.be_configs set value = "2" where name= "pipeline_connector_scan_thread_num_per_cpu";
+-- result:
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) = ${num_cores}*2 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
+-- result:
+0
+-- !result
+update information_schema.be_configs set value = "8" where name= "pipeline_connector_scan_thread_num_per_cpu";
+-- result:
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) 
+from (
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
+    select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+)t;
+-- result:
+56
+-- !result
+select count(1) = ${num_cores}*8 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
+-- result:
+1
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

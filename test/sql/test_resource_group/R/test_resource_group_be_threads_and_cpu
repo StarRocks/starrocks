@@ -1,0 +1,390 @@
+-- name: test_resource_group_be_threads_and_cpu_for_borrowing_cpu @sequential
+CREATE RESOURCE GROUP rgd1_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'exclusive_cpu_cores' = '3', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgd2_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgn1_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'cpu_weight' = '4', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgn2_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'cpu_weight' = '5', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+[UC]SELECT sleep(10);
+-- result:
+1
+-- !result
+[UC]function: num_cores=get_backend_cpu_cores()
+-- result:
+16
+-- !result
+[UC]function: rgd1_id=get_resource_group_id('rgd1_${uuid0}')
+-- result:
+30137
+-- !result
+[UC]function: rgd2_id=get_resource_group_id('rgd1_${uuid0}')
+-- result:
+30137
+-- !result
+[UC]function: rgn1_id=get_resource_group_id('rgn1_${uuid0}')
+-- result:
+30141
+-- !result
+[UC]function: rgn2_id=get_resource_group_id('rgn2_${uuid0}')
+-- result:
+30143
+-- !result
+select min(bound_cpus), max(bound_cpus) from information_schema.be_threads where name = 'pip_exec_${rgd1_id}';
+-- result:
+3	3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' limit 1);
+-- result:
+3
+-- !result
+select min(bound_cpus), max(bound_cpus) from information_schema.be_threads where name = 'pip_exec_${rgd2_id}';
+-- result:
+3	3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn1_id}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn2_id}';
+-- result:
+0
+-- !result
+select min(bound_cpus) = array_min([2, 3, ${num_cores}-3-2]), max(bound_cpus) = array_max([2, 3, ${num_cores}-3-2]) from information_schema.be_threads where name = 'pip_exec_com';
+-- result:
+1	1
+-- !result
+select count(1) = ${num_cores} from information_schema.be_threads where name = 'pip_exec_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_com' limit 1);
+-- result:
+1
+-- !result
+DROP RESOURCE GROUP rgd1_${uuid0};
+-- result:
+-- !result
+[UC]SELECT sleep(5);
+-- result:
+1
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' limit 1);
+-- result:
+3
+-- !result
+select min(bound_cpus), max(bound_cpus) from information_schema.be_threads where name = 'pip_exec_${rgd2_id}';
+-- result:
+3	3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn1_id}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn2_id}';
+-- result:
+0
+-- !result
+select min(bound_cpus) = array_min([2, ${num_cores}-2]), max(bound_cpus) = array_max([2, ${num_cores}-2]) from information_schema.be_threads where name = 'pip_exec_com';
+-- result:
+1	1
+-- !result
+select count(1) = ${num_cores} from information_schema.be_threads where name = 'pip_exec_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_com' limit 1);
+-- result:
+1
+-- !result
+DROP RESOURCE GROUP rgd2_${uuid0};
+-- result:
+-- !result
+[UC]SELECT sleep(5);
+-- result:
+1
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn1_id}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn2_id}';
+-- result:
+0
+-- !result
+select min(bound_cpus) = ${num_cores}, max(bound_cpus) = ${num_cores} from information_schema.be_threads where name = 'pip_exec_com';
+-- result:
+1	1
+-- !result
+select count(1) = ${num_cores} from information_schema.be_threads where name = 'pip_exec_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_com' limit 1);
+-- result:
+1
+-- !result
+DROP RESOURCE GROUP rgn1_${uuid0};
+-- result:
+-- !result
+DROP RESOURCE GROUP rgn2_${uuid0};
+-- result:
+-- !result
+-- name: test_resource_group_be_threads_and_cpu_for_not_borrowing_cpu @sequential
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+
+create table t1 (
+    k1 int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 64
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgd1_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'exclusive_cpu_cores' = '3', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgd2_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgn1_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'cpu_weight' = '4', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgn2_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'cpu_weight' = '5', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+[UC]SELECT sleep(10);
+-- result:
+1
+-- !result
+[UC]function: num_cores=get_backend_cpu_cores()
+-- result:
+16
+-- !result
+[UC]function: rgd1_id=get_resource_group_id('rgd1_${uuid0}')
+-- result:
+30373
+-- !result
+[UC]function: rgd2_id=get_resource_group_id('rgd1_${uuid0}')
+-- result:
+30373
+-- !result
+[UC]function: rgn1_id=get_resource_group_id('rgn1_${uuid0}')
+-- result:
+30377
+-- !result
+[UC]function: rgn2_id=get_resource_group_id('rgn2_${uuid0}')
+-- result:
+30379
+-- !result
+update information_schema.be_configs set value = "false" where name= "enable_resource_group_cpu_borrowing";
+-- result:
+-- !result
+SELECT /*+SET_VAR(resource_group='rgd1_${uuid0}',pipeline_dop=32)*/ count(1)
+FROM 
+    t1 
+    join [shuffle] t1 t2 on t1.k1 = t2.k1
+    join [shuffle] t1 t3 on t1.k1 = t3.k1
+    join [shuffle] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}',pipeline_dop=32)*/ count(1)
+FROM 
+    t1 
+    join [shuffle] t1 t2 on t1.k1 = t2.k1
+    join [shuffle] t1 t3 on t1.k1 = t3.k1
+    join [shuffle] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}',pipeline_dop=32)*/ count(1)
+FROM 
+    t1 
+    join [shuffle] t1 t2 on t1.k1 = t2.k1
+    join [shuffle] t1 t3 on t1.k1 = t3.k1
+    join [shuffle] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}',pipeline_dop=32)*/ count(1)
+FROM 
+    t1 
+    join [shuffle] t1 t2 on t1.k1 = t2.k1
+    join [shuffle] t1 t3 on t1.k1 = t3.k1
+    join [shuffle] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+SELECT /*+SET_VAR(pipeline_dop=32)*/ count(1)
+FROM 
+    t1 
+    join [shuffle] t1 t2 on t1.k1 = t2.k1
+    join [shuffle] t1 t3 on t1.k1 = t3.k1
+    join [shuffle] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+[UC]SELECT sleep(10);
+-- result:
+1
+-- !result
+select min(bound_cpus), max(bound_cpus) from information_schema.be_threads where name = 'pip_exec_${rgd1_id}';
+-- result:
+3	3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' limit 1);
+-- result:
+3
+-- !result
+select min(bound_cpus), max(bound_cpus) from information_schema.be_threads where name = 'pip_exec_${rgd2_id}';
+-- result:
+3	3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn1_id}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn2_id}';
+-- result:
+0
+-- !result
+select min(bound_cpus) = ${num_cores}-3-2, max(bound_cpus) = ${num_cores}-3-2 from information_schema.be_threads where name = 'pip_exec_com';
+-- result:
+1	1
+-- !result
+select count(1) = ${num_cores}-3-2 from information_schema.be_threads where name = 'pip_exec_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_com' limit 1);
+-- result:
+1
+-- !result
+DROP RESOURCE GROUP rgd1_${uuid0};
+-- result:
+-- !result
+[UC]SELECT sleep(5);
+-- result:
+1
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' limit 1);
+-- result:
+3
+-- !result
+select min(bound_cpus), max(bound_cpus) from information_schema.be_threads where name = 'pip_exec_${rgd2_id}';
+-- result:
+3	3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn1_id}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn2_id}';
+-- result:
+0
+-- !result
+select min(bound_cpus) = ${num_cores}-2, max(bound_cpus) = ${num_cores}-2 from information_schema.be_threads where name = 'pip_exec_com';
+-- result:
+1	1
+-- !result
+select count(1) = ${num_cores}-2 from information_schema.be_threads where name = 'pip_exec_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_com' limit 1);
+-- result:
+1
+-- !result
+DROP RESOURCE GROUP rgd2_${uuid0};
+-- result:
+-- !result
+[UC]SELECT sleep(5);
+-- result:
+1
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd1_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) as num_threads from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_${rgd2_id}' limit 1);
+-- result:
+3
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn1_id}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.be_threads where name = 'pip_exec_${rgn2_id}';
+-- result:
+0
+-- !result
+select min(bound_cpus) = ${num_cores}, max(bound_cpus) = ${num_cores} from information_schema.be_threads where name = 'pip_exec_com';
+-- result:
+1	1
+-- !result
+select count(1) = ${num_cores} from information_schema.be_threads where name = 'pip_exec_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_exec_com' limit 1);
+-- result:
+1
+-- !result
+DROP RESOURCE GROUP rgn1_${uuid0};
+-- result:
+-- !result
+DROP RESOURCE GROUP rgn2_${uuid0};
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name= "enable_resource_group_cpu_borrowing";
+-- result:
+-- !result

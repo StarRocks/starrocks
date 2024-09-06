@@ -41,7 +41,7 @@ public class ResourceGroup {
     public static final String PLAN_MEM_COST_RANGE = "plan_mem_cost_range";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String CPU_WEIGHT = "cpu_weight";
-    public static final String DEDICATED_CPU_CORES = "dedicated_cpu_cores";
+    public static final String EXCLUSIVE_CPU_CORES = "exclusive_cpu_cores";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
@@ -91,8 +91,8 @@ public class ResourceGroup {
                     new Column(CPU_WEIGHT, ScalarType.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getCpuWeight()),
             new ColumnMeta(
-                    new Column(DEDICATED_CPU_CORES, ScalarType.createVarchar(200)),
-                    (rg, classifier) -> "" + rg.getNormalizedDedicatedCpuCores()),
+                    new Column(EXCLUSIVE_CPU_CORES, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores()),
             new ColumnMeta(
                     new Column(MEM_LIMIT, ScalarType.createVarchar(200)),
                     (rg, classifier) -> (rg.getMemLimit() * 100) + "%"),
@@ -147,8 +147,8 @@ public class ResourceGroup {
 
     @SerializedName(value = "cpuCoreLimit")
     private Integer cpuWeight;
-    @SerializedName(value = "dedicatedCpuCores")
-    private Integer dedicatedCpuCores;
+    @SerializedName(value = "exclusiveCpuCores")
+    private Integer exclusiveCpuCores;
 
     @SerializedName(value = "maxCpuCores")
     private Integer maxCpuCores;
@@ -258,7 +258,7 @@ public class ResourceGroup {
             twg.setWorkgroup_type(resourceGroupType);
         }
 
-        twg.setDedicated_cpu_cores(getNormalizedDedicatedCpuCores());
+        twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());
 
         twg.setVersion(version);
         return twg;
@@ -272,13 +272,13 @@ public class ResourceGroup {
         this.cpuWeight = cpuWeight;
     }
 
-    public Integer getDedicatedCpuCores() {
-        return dedicatedCpuCores;
+    public Integer getExclusiveCpuCores() {
+        return exclusiveCpuCores;
     }
 
-    public int getNormalizedDedicatedCpuCores() {
-        if (dedicatedCpuCores != null && dedicatedCpuCores > 0) {
-            return dedicatedCpuCores;
+    public int getNormalizedExclusiveCpuCores() {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return exclusiveCpuCores;
         }
         // For compatibility, resource group of deprecated type `short_query` uses `cpu_weight` (the original `cpu_core_limit`)
         // as the reserved cores.
@@ -288,8 +288,8 @@ public class ResourceGroup {
         return 0;
     }
 
-    public void setDedicatedCpuCores(Integer dedicatedCpuCores) {
-        this.dedicatedCpuCores = dedicatedCpuCores;
+    public void setExclusiveCpuCores(Integer exclusiveCpuCores) {
+        this.exclusiveCpuCores = exclusiveCpuCores;
     }
 
     public boolean isMaxCpuCoresEffective() {
@@ -389,15 +389,15 @@ public class ResourceGroup {
         return Objects.hash(id, version);
     }
 
-    public static void validateCpuParameters(Integer cpuWeight, Integer dedicatedCpuCores) {
-        if ((cpuWeight == null || cpuWeight <= 0) && (dedicatedCpuCores == null || dedicatedCpuCores <= 0)) {
+    public static void validateCpuParameters(Integer cpuWeight, Integer exclusiveCpuCores) {
+        if ((cpuWeight == null || cpuWeight <= 0) && (exclusiveCpuCores == null || exclusiveCpuCores <= 0)) {
             throw new SemanticException(String.format("property '%s' or '%s' must be positive",
-                    ResourceGroup.CPU_WEIGHT, ResourceGroup.DEDICATED_CPU_CORES));
+                    ResourceGroup.CPU_WEIGHT, ResourceGroup.EXCLUSIVE_CPU_CORES));
         }
-        if ((cpuWeight != null && cpuWeight > 0) && (dedicatedCpuCores != null && dedicatedCpuCores > 0)) {
+        if ((cpuWeight != null && cpuWeight > 0) && (exclusiveCpuCores != null && exclusiveCpuCores > 0)) {
             throw new SemanticException(
                     String.format("property '%s' and '%s' cannot be present and positive at the same time",
-                            ResourceGroup.CPU_WEIGHT, ResourceGroup.DEDICATED_CPU_CORES));
+                            ResourceGroup.CPU_WEIGHT, ResourceGroup.EXCLUSIVE_CPU_CORES));
         }
     }
 

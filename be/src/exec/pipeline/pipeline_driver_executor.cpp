@@ -29,19 +29,19 @@
 namespace starrocks::pipeline {
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
-                                           bool enable_resource_group)
-        : Base(name),
+                                           bool enable_resource_group, const CpuUtil::CpuIds& cpuids)
+        : Base("pip_exec_" + name),
           _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
                                               : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
-          _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
-          _exec_state_reporter(new ExecStateReporter()),
+          _blocked_driver_poller(new PipelineDriverPoller(name, _driver_queue.get(), cpuids)),
+          _exec_state_reporter(new ExecStateReporter(cpuids)),
           _audit_statistics_reporter(new AuditStatisticsReporter()) {
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
-                                    [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
+                                    [this] { return _blocked_driver_poller->num_drivers(); });
 }
 
 void GlobalDriverExecutor::close() {
@@ -64,7 +64,9 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+        if (_num_threads_setter.should_expand()) {
+            (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+        }
     }
 }
 
@@ -78,7 +80,7 @@ void GlobalDriverExecutor::_worker_thread() {
     const int worker_id = _next_id++;
     std::queue<DriverRawPtr> local_driver_queue;
     while (true) {
-        if (_num_threads_setter.should_shrink()) {
+        if (local_driver_queue.empty() && _num_threads_setter.should_shrink()) {
             break;
         }
         // Reset TLS state
@@ -405,11 +407,11 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     }
 }
 
-size_t GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
+size_t GlobalDriverExecutor::activate_parked_driver(const ConstDriverPredicator& predicate_func) {
     return _blocked_driver_poller->activate_parked_driver(predicate_func);
 }
 
-size_t GlobalDriverExecutor::calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const {
+size_t GlobalDriverExecutor::calculate_parked_driver(const ConstDriverPredicator& predicate_func) const {
     return _blocked_driver_poller->calculate_parked_driver(predicate_func);
 }
 
@@ -445,8 +447,8 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
-void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
-    _blocked_driver_poller->iterate_immutable_driver(call);
+void GlobalDriverExecutor::iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const {
+    _blocked_driver_poller->for_each_driver(call);
 }
 
 RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContext* query_ctx,
@@ -506,4 +508,12 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
 
     return new_instance_profile;
 }
+
+void GlobalDriverExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids,
+                                     const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
+    _blocked_driver_poller->bind_cpus(cpuids);
+    _exec_state_reporter->bind_cpus(cpuids);
+}
+
 } // namespace starrocks::pipeline

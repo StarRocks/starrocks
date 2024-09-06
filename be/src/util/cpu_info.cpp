@@ -86,9 +86,12 @@ int64_t CpuInfo::cycles_per_ms_;
 int CpuInfo::num_cores_ = 1;
 int CpuInfo::max_num_cores_ = 1;
 std::string CpuInfo::model_name_ = "unknown";
+bool CpuInfo::is_cgroup_with_cpuset_ = false;
+bool CpuInfo::is_cgroup_with_cpu_quota_ = false;
 int CpuInfo::max_num_numa_nodes_;
 std::unique_ptr<int[]> CpuInfo::core_to_numa_node_;
 std::vector<vector<int>> CpuInfo::numa_node_to_cores_;
+std::vector<size_t> CpuInfo::cpuset_cores_;
 std::vector<int> CpuInfo::numa_node_core_idx_;
 
 static struct {
@@ -237,21 +240,25 @@ void CpuInfo::_init_num_cores_with_cgroup() {
         return;
     }
 
-    auto sizeof_cpusets = [](const std::string& cpuset_str) {
-        int32_t count = 0;
+    auto parse_cpusets = [](const std::string& cpuset_str) {
+        std::vector<size_t> cpuids;
         std::vector<std::string> fields = strings::Split(cpuset_str, ",", strings::SkipWhitespace());
         for (const auto& field : fields) {
+            StringParser::ParseResult result;
             if (field.find('-') == std::string::npos) {
-                count++;
+                auto cpu_id = StringParser::string_to_int<int32_t>(field.data(), field.size(), &result);
+                if (result == StringParser::PARSE_SUCCESS) {
+                    cpuids.emplace_back(cpu_id);
+                }
                 continue;
             }
+
             std::vector<std::string> pair = strings::Split(field, "-", strings::SkipWhitespace());
             if (pair.size() != 2) {
                 continue;
             }
             std::string& start_str = pair[0];
             std::string& end_str = pair[1];
-            StringParser::ParseResult result;
             auto start = StringParser::string_to_int<int32_t>(start_str.data(), start_str.size(), &result);
             if (result != StringParser::PARSE_SUCCESS) {
                 continue;
@@ -260,10 +267,11 @@ void CpuInfo::_init_num_cores_with_cgroup() {
             if (result != StringParser::PARSE_SUCCESS) {
                 continue;
             }
-
-            count += (end - start + 1);
+            for (int i = start; i <= end; i++) {
+                cpuids.emplace_back(i);
+            }
         }
-        return count;
+        return cpuids;
     };
 
     std::string cfs_period_us_str;
@@ -308,13 +316,16 @@ void CpuInfo::_init_num_cores_with_cgroup() {
         }
         if (cfs_quota_us > 0 && cfs_period_us > 0) {
             cfs_num_cores = cfs_quota_us / cfs_period_us;
+            is_cgroup_with_cpu_quota_ = true;
         }
     }
 
     int32_t cpuset_num_cores = num_cores_;
     if (!cpuset_str.empty() &&
         std::any_of(cpuset_str.begin(), cpuset_str.end(), [](char c) { return !std::isspace(c); })) {
-        cpuset_num_cores = sizeof_cpusets(cpuset_str);
+        cpuset_cores_ = parse_cpusets(cpuset_str);
+        cpuset_num_cores = cpuset_cores_.size();
+        is_cgroup_with_cpuset_ = true;
     }
 
     if (cfs_num_cores < num_cores_ || cpuset_num_cores < num_cores_) {
@@ -419,6 +430,18 @@ std::string CpuInfo::debug_string() {
     }
     stream << std::endl;
     return stream.str();
+}
+
+std::vector<size_t> CpuInfo::get_core_ids() {
+    if (!cpuset_cores_.empty()) {
+        return cpuset_cores_;
+    }
+
+    std::vector<size_t> core_ids;
+    for (const auto& core_ids_of_node : numa_node_to_cores_) {
+        core_ids.insert(core_ids.end(), core_ids_of_node.begin(), core_ids_of_node.end());
+    }
+    return core_ids;
 }
 
 } // namespace starrocks
