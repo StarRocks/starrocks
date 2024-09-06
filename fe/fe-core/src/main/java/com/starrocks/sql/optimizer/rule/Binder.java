@@ -241,7 +241,6 @@ public class Binder {
             // NOTE: To avoid iterating all children group expressions which may take a lot of time, only iterate
             // group expressions which are already rewritten by mv except the first iteration, so can be used for
             // nested mv rewritten.
-            // TODO: Introduce rule based join-reorder for mv rewrite, so can reduce this iteration time.
             int geSize = groupExpressions.size();
             while (++valueIndex < geSize) {
                 next = group.getLogicalExpressions().get(valueIndex);
