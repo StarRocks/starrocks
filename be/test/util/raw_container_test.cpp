@@ -12,18 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "util/raw_container.h"
 
-#include <cstdint>
-#include <vector>
+#include <gtest/gtest.h>
 
 #include "runtime/memory/column_allocator.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
-// Bytes is a special vector<uint8_t> in which the internal memory is always allocated with an additional 16 bytes,
-// to make life easier with 128 bit instructions.
-typedef starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>> Bytes;
+TEST(TestRawContainer, testResizeWithStdAllocator) {
+    std::vector<int> v;
+    raw::make_room(&v, 5);
+    ASSERT_EQ(v.size(), 5);
+    raw::stl_vector_resize_uninitialized(&v, 10);
+    ASSERT_EQ(v.size(), 10);
+}
 
+TEST(TestRawContainer, testResizeWithColumnAllocator) {
+    std::vector<int, ColumnAllocator<int>> v;
+    raw::make_room(&v, 5);
+    ASSERT_EQ(v.size(), 5);
+    raw::stl_vector_resize_uninitialized(&v, 10);
+    ASSERT_EQ(v.size(), 10);
+}
 } // namespace starrocks
