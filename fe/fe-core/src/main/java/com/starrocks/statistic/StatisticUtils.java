@@ -425,7 +425,112 @@ public class StatisticUtils {
         return joiner.toString();
     }
 
+<<<<<<< HEAD
     public static String quoting(String identifier) {
         return "`" + identifier + "`";
+=======
+    public static String quoting(Table table, String columnName) {
+        if (!columnName.contains(".")) {
+            return quoting(columnName);
+        }
+        Column c = table.getColumn(columnName);
+        if (c != null) {
+            return quoting(columnName);
+        }
+
+        int start = 0;
+        int end;
+
+        StringBuilder sb = new StringBuilder();
+        while ((end = columnName.indexOf(".", start)) > 0) {
+            start = end + 1;
+            String name = columnName.substring(0, end);
+            c = table.getColumn(name);
+            if (c != null && c.getType().isStructType()) {
+                sb.append(quoting(name));
+                columnName = columnName.substring(end + 1);
+                Type type = c.getType();
+                if (!columnName.contains(".")) {
+                    sb.append(".").append(quoting(columnName));
+                } else {
+                    int subStart = 0;
+                    int pos = 0;
+                    int subEnd;
+                    while ((subEnd = columnName.indexOf(".", pos)) > 0 && type.isStructType()) {
+                        String subName = columnName.substring(subStart, subEnd);
+                        if (((StructType) type).containsField(subName)) {
+                            sb.append(".").append(quoting(subName));
+                            type = ((StructType) type).getField(subName).getType();
+                            subStart = subEnd + 1;
+                        }
+                        pos = subEnd + 1;
+                    }
+                    sb.append(".").append(quoting(columnName.substring(subStart)));
+                }
+                break;
+            }
+        }
+        Preconditions.checkState(sb.length() != 0, "column name is not found in table");
+        return sb.toString();
+    }
+
+    public static void dropStatisticsAfterDropTable(Table table) {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
+
+        if (table.isHiveTable() || table.isHudiTable()) {
+            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
+                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
+                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
+        } else if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
+                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
+                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+        } else {
+            LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
+                    table.getType().name());
+        }
+
+        List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+    }
+
+    // only support collect statistics for slotRef and subfield expr
+    public static String getColumnName(Table table, Expr column) {
+        String colName;
+        if (column instanceof SlotRef) {
+            colName = table.getColumn(((SlotRef) column).getColumnName()).getName();
+        } else {
+            colName = ((SubfieldExpr) column).getPath();
+        }
+        return colName;
+    }
+
+    public static Type getQueryStatisticsColumnType(Table table, String column) {
+        String[] parts = column.split("\\.");
+        Preconditions.checkState(parts.length >= 1);
+        Column base = table.getColumn(parts[0]);
+        if (base == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
+        }
+
+        Type baseColumnType = base.getType();
+        for (int i = 1; i < parts.length; i++) {
+            if (baseColumnType.isStructType()) {
+                StructType baseStructType = (StructType) baseColumnType;
+                StructField field = baseStructType.getField(parts[i]);
+                if (field.getType().isStructType()) {
+                    baseColumnType = field.getType();
+                } else {
+                    return field.getType();
+                }
+            }
+        }
+        return baseColumnType;
+>>>>>>> e9cf160216 ([BugFix] report the correct error message in getQueryStatisticsColumnType (#50785))
     }
 }
