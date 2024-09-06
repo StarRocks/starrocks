@@ -81,14 +81,14 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(1, 5);
             transactionState.setTxnCommitAttachment(attachment);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true);
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true);
             Assert.assertEquals(null, trigger.getAnalyzeType());
         }
         {
             InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(1000, 5);
             transactionState.setTxnCommitAttachment(attachment);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true);
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true);
             Assert.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
         }
 
@@ -96,7 +96,7 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(1000000, 5);
             transactionState.setTxnCommitAttachment(attachment);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true);
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true);
             Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
         }
     }
@@ -128,7 +128,7 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
         {
             InsertOverwriteJobStats stats = new InsertOverwriteJobStats(
                     List.of(sourceId), List.of(targetId), 1000, 1001);
-            StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true);
+            StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
             Partition targetPartition = new Partition(targetId, "p1", null, null);
             Map<Long, Optional<Long>> tableStats =
                     storage.getTableStatistics(table.getId(), List.of(targetPartition));
@@ -140,7 +140,7 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             InsertOverwriteJobStats stats = new InsertOverwriteJobStats(
                     List.of(sourceId), List.of(targetId), 1000, 50000);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true);
+                    StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
             Assert.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
         }
 
@@ -149,7 +149,7 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             InsertOverwriteJobStats stats = new InsertOverwriteJobStats(
                     List.of(sourceId), List.of(targetId), 1000, 50000000);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true);
+                    StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
             Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
         }
     }
