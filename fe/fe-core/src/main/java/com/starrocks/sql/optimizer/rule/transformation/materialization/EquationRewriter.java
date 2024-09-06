@@ -161,7 +161,14 @@ public class EquationRewriter {
                     return rewritten;
                 }
             }
-
+            // If count(1)/sum(1) cannot be rewritten by mv's defined equivalents, return null directly,
+            // otherwise it may cause a wrong plan.
+            // mv       : SELECT 1, count(distinct k1) from tbl1;
+            // query    : SELECT count(1) from tbl1;
+            // MV should not rewrite the query.
+            if (call.isAggregate() && call.isConstant()) {
+                return null;
+            }
             return super.visitCall(call, context);
         }
 
