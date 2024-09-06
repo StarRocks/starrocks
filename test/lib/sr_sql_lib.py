@@ -2125,7 +2125,7 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.catalog.ColumnId;
 
-var tid = GlobalStateMgr.getCurrentState().getMetadata().getDb(\"{db}\").getTable(\"{tb}\").getId();
+var tid = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(\"{db}\").getTable(\"{tb}\").getId();
 var dictMgr = CacheDictManager.getInstance();
 var columnId = new ColumnId("{col}");
 var cid = new ColumnIdentifier(tid, columnId)

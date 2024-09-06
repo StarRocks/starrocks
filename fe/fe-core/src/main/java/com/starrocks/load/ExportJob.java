@@ -993,7 +993,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
-        if (stateMgr.getMetadata() != null) {
+        if (stateMgr.getLocalMetastore() != null) {
             db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {
@@ -1086,7 +1086,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         isReplayed = true;
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
-        if (stateMgr.getMetadata() != null) {
+        if (stateMgr.getLocalMetastore() != null) {
             db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {
