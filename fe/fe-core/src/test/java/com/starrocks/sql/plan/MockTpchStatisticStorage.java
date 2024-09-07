@@ -25,7 +25,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import com.starrocks.sql.optimizer.statistics.TableStatistic;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -36,6 +35,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -43,7 +43,7 @@ import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
 public class MockTpchStatisticStorage implements StatisticStorage {
-    private final Map<Long, TableStatistic> rowCountStats;
+    private final Map<Long, Optional<Long>> rowCountStats;
     private final Map<String, Map<String, ColumnStatistic>> tableStatistics;
 
     private final int scale;
@@ -61,15 +61,14 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         Database database = globalStateMgr.getDb("test");
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
-        rowCountStats.put(t0.getId(), new TableStatistic(t0.getId(), t0.getPartition("region").getId(),
-                5L));
+        rowCountStats.put(t0.getId(), Optional.of(5L));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t0.getId(), null,
                         StatsConstants.AnalyzeType.FULL,
                         LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                         Maps.newHashMap()));
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
-        rowCountStats.put(t1.getId(), new TableStatistic(t1.getId(), t1.getPartition("nation").getId(),
+        rowCountStats.put(t1.getId(), Optional.of(
                 25L));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t1.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -77,7 +76,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
                 Maps.newHashMap()));
 
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
-        rowCountStats.put(t2.getId(), new TableStatistic(t2.getId(), t2.getPartition("supplier").getId(),
+        rowCountStats.put(t2.getId(), Optional.of(
                 10000L * scale));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t2.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -85,7 +84,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
                 Maps.newHashMap()));
 
         OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
-        rowCountStats.put(t3.getId(), new TableStatistic(t3.getId(), t3.getPartition("customer").getId(),
+        rowCountStats.put(t3.getId(), Optional.of(
                 150000L * scale));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t3.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -93,7 +92,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
                 Maps.newHashMap()));
 
         OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
-        rowCountStats.put(t4.getId(), new TableStatistic(t4.getId(), t4.getPartition("part").getId(),
+        rowCountStats.put(t4.getId(), Optional.of(
                 200000L * scale));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t4.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -101,7 +100,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
                 Maps.newHashMap()));
 
         OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
-        rowCountStats.put(t5.getId(), new TableStatistic(t5.getId(), t5.getPartition("partsupp").getId(),
+        rowCountStats.put(t5.getId(), Optional.of(
                 800000L * scale));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t5.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -109,7 +108,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
                 Maps.newHashMap()));
 
         OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
-        rowCountStats.put(t6.getId(), new TableStatistic(t6.getId(), t6.getPartition("orders").getId(),
+        rowCountStats.put(t6.getId(), Optional.of(
                 1500000L * scale));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t6.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -117,7 +116,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
                 Maps.newHashMap()));
 
         OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
-        rowCountStats.put(t7.getId(), new TableStatistic(t7.getId(), t7.getPartition("lineitem").getId(),
+        rowCountStats.put(t7.getId(), Optional.of(
                 6000000L * scale));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t7.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -326,7 +325,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+    public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> rowCountStats.get(tableId)));
     }
 
