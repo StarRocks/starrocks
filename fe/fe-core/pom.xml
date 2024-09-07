@@ -589,8 +589,8 @@ under the License.
                     <groupId>org.apache.orc</groupId>
                 </exclusion>
                 <exclusion>
-                    <groupId>com.google.protobuf</groupId>
-                    <artifactId>protobuf-java</artifactId>
+                    <groupId>org.apache.orc</groupId>
+                    <artifactId>orc-mapreduce</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
