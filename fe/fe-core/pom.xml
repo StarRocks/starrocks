@@ -231,6 +231,16 @@ under the License.
         <dependency>
             <groupId>com.baidu</groupId>
             <artifactId>jprotobuf-precompile-plugin</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.maven</groupId>
+                    <artifactId>maven-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.plexus</groupId>
+                    <artifactId>plexus-utils</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
@@ -577,6 +587,10 @@ under the License.
                 <exclusion>
                     <artifactId>orc-core</artifactId>
                     <groupId>org.apache.orc</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -1037,7 +1051,7 @@ under the License.
             <plugin>
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-precompile-plugin</artifactId>
-                <version>2.2.6</version>
+                <version>2.2.12</version>
                 <configuration>
                     <filterClassPackage>com.starrocks</filterClassPackage>
                     <generateProtoFile>true</generateProtoFile>
