@@ -66,6 +66,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("CPUTime")
             .add("ExecTime")
             .add("Warehouse")
+            .add("ResourceGroup")
             .build();
 
     @Override
