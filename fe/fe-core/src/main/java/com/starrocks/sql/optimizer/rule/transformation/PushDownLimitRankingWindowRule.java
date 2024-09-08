@@ -175,6 +175,11 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
+        // partition columns are useless for sort
+        List<Ordering> orderByElements = windowOperator.getEnforceSortColumns().stream()
+                .filter(ordering -> !partitionByColumns.contains(ordering.getColumnRef()))
+                .collect(Collectors.toList());
+
         Ordering firstOrdering = topNOperator.getOrderByElements().get(0);
         if (!firstOrdering.isAscending()) {
             return Collections.emptyList();
@@ -195,7 +200,7 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         LogicalTopNOperator.Builder topNBuilder = new LogicalTopNOperator.Builder()
                 .setPartitionByColumns(partitionByColumns)
                 .setPartitionLimit(partitionLimit)
-                .setOrderByElements(rankRelatedWindowOperator.getEnforceSortColumns())
+                .setOrderByElements(orderByElements)
                 .setLimit(limit)
                 .setTopNType(topNType)
                 .setSortPhase(sortPhase);
