@@ -119,6 +119,12 @@ public:
     explicit Field(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
             : _type(type), _name(name), _storage(storage), _defval(defval), _valmutable(valmutable) {
         _s_field_map.insert(std::make_pair(std::string(_name), this));
+        if (strlen(defval) + 1 > _config_value_size) {
+            _config_value_size = strlen(defval) + 1;
+         }
+         _last_set_val = new char[_config_value_size];
+         _current_set_val = new char[_config_value_size];
+         strcpy(_current_set_val, defval);
     }
 
     virtual ~Field() = default;
@@ -142,6 +148,10 @@ public:
 
     bool set_value(std::string value);
 
+    bool rollback_last_value();
+
+    void set_last_update_value();
+
     virtual std::string value() const = 0;
 
     static void clear_fields() { _s_field_map.clear(); }
@@ -160,6 +170,9 @@ protected:
     void* _storage;
     const char* _defval;
     bool _valmutable;
+    char* _last_set_val;
+    char* _current_set_val;
+    int _config_value_size = 32;
 };
 
 template <typename T, typename = void>
