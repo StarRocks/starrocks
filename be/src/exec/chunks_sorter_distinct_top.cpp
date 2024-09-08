@@ -28,7 +28,6 @@ Status ChunksSorterDistinctTopn::_sort_chunks(RuntimeState* state) {
     // else if _init_merged_segment == true, means this is not first batch, _merged_segment is not empty:
     //     permutations.first is the `SMALLER_THAN_MIN_OF_SEGMENT` part
     //     permutations.second is the `INCLUDE_IN_SEGMENT` part
-    //
     std::pair<Permutation, Permutation> permutations;
     size_t distinct_top_n_of_first_size = 0;
     size_t distinct_top_n_of_second_size = 0;
@@ -36,17 +35,26 @@ Status ChunksSorterDistinctTopn::_sort_chunks(RuntimeState* state) {
     // Step 1: extract datas from _raw_chunks into segments,
     // and initialize permutations.second when _init_merged_segment == false.
     RETURN_IF_ERROR(_build_sorting_data(state, permutations.second, segments));
+    LOG(WARNING) << "tttttttttttt after _build_sorting_data: permutations.second.size(): "
+                 << permutations.second.size();
 
-    // Step 2: filter batch-chunks as permutations.first and permutations.second when _init_merged_segment == true.
-    // sort part chunks in permutations.first and permutations.second, if _init_merged_segment == false means permutations.first is empty.
+    // Step 2: if _init_merged_segment == true, filter batch-chunks as SMALLER_THAN_MIN_OF_SEGMENT(permutations.first) and INCLUDE_IN_SEGMENT(permutations.second)
+    // get permutations.first and permutations.second‘s top distinct n sorted elements
+    // if _init_merged_segment == false, get permutations.second‘s top distinct n sorted elements
     RETURN_IF_ERROR(_filter_and_sort_data_for_dense_rank(state, permutations, segments, distinct_top_n_of_first_size,
                                                          distinct_top_n_of_second_size));
-
-    // Step 3: merge sort of two ordered groups
-    // the first ordered group only contains permutations.first
-    // the second ordered group contains both permutations.second and _merged_segment
+    LOG(WARNING) << "tttttttttttt after _filter_and_sort_data_for_dense_rank: permutations.first.size(): "
+                 << permutations.first.size() << ", permutations.second.size(): " << permutations.second.size()
+                 << ", distinct_top_n_of_first_size: " << distinct_top_n_of_first_size
+                 << ", distinct_top_n_of_second_size: " << distinct_top_n_of_second_size;
+    // Step 3: if _init_merged_segment == true, store permutations.first into big_chunk
+    // if needed, merge permutations.first and _merged_segment, get sorted top distinct n from merged result and store it into big_chunk
+    // replace _merged_segment with big_chunk
     RETURN_IF_ERROR(_merge_sort_data_as_merged_segment_for_dense_rank(
             state, permutations, segments, distinct_top_n_of_first_size, distinct_top_n_of_second_size));
+
+    LOG(WARNING) << "tttttttttttt 合并后的_merged_segment.chunk->num_rows(): " << _merged_segment.chunk->num_rows()
+                 << ", _current_distinct_top_n: " << _current_distinct_top_n;
 
     return Status::OK();
 }
@@ -67,8 +75,8 @@ Status ChunksSorterDistinctTopn::_filter_and_sort_data_for_dense_rank(RuntimeSta
             // 2.INCLUDE_IN_SEGMENT( >= min && <= max): which is larger than or eqaul to the first row of _merged_segment but is smaller than or equal to the last row of _merged_segment
             // 3.LARGER_THAN_MAX_OF_SEGMENT( > max ): which is larger than the last row of _merged_segment, this part is useless
             SCOPED_TIMER(_sort_filter_timer);
-            RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, rows_to_sort, filter_array, _sort_desc,
-                                                             smaller_num, include_num));
+            RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, _merged_segment.chunk->num_rows() - 1,
+                                                             filter_array, _sort_desc, smaller_num, include_num));
         } else {
             // in this case, we use the frist row of _merged_segment to split segments into two parts:
             // 1.SMALLER_THAN_MIN_OF_SEGMENT(< min): which is smaller than the first row of _merged_segment
@@ -90,7 +98,7 @@ Status ChunksSorterDistinctTopn::_filter_and_sort_data_for_dense_rank(RuntimeSta
             permutations.first.resize(smaller_num);
             // INCLUDE_IN_SEGMENT
             permutations.second.resize(include_num);
-            // Use filter_array to set permutations.first and permutations.second.
+            // Use filter_array to set permutations.first and permutations.second. LARGER_THAN_MAX_OF_SEGMENT will be thrown away
             _set_permutation_complete(permutations, segments.size(), filter_array);
         }
 
@@ -106,7 +114,7 @@ Status ChunksSorterDistinctTopn::_filter_and_sort_data_for_dense_rank(RuntimeSta
         } else {
             // otherwise we need to get more distinct top n from INCLUDE_IN_SEGMENT
             RETURN_IF_ERROR(_partial_sort_col_wise(state, permutations.second, segments,
-                                                   distinct_top_n_of_first_size - rows_to_sort,
+                                                   rows_to_sort - distinct_top_n_of_first_size,
                                                    distinct_top_n_of_second_size));
             filtered_rows -= smaller_num;
             filtered_rows -= include_num;
@@ -115,6 +123,10 @@ Status ChunksSorterDistinctTopn::_filter_and_sort_data_for_dense_rank(RuntimeSta
         if (_sort_filter_rows) {
             COUNTER_UPDATE(_sort_filter_rows, filtered_rows);
         }
+    } else {
+        RETURN_IF_ERROR(_partial_sort_col_wise(state, permutations.second, segments, rows_to_sort,
+                                               distinct_top_n_of_second_size));
+        DCHECK(permutations.second.size() == 0 || distinct_top_n_of_second_size > 0);
     }
 
     return Status::OK();
@@ -132,6 +144,7 @@ Status ChunksSorterDistinctTopn::_merge_sort_data_as_merged_segment_for_dense_ra
         // The first batch chunks, just new_permutation.second.
         RETURN_IF_ERROR(_hybrid_sort_first_time(state, new_permutation.second, segments));
         _init_merged_segment = true;
+        _current_distinct_top_n = distinct_top_n_of_second_size;
     }
 
     // Include release memory's time in _merge_timer.

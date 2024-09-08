@@ -1,0 +1,26 @@
+-- name: test_dense_rank_topn
+create table t0 (
+    c0 int,
+    partition_col BIGINT not null,
+    value BIGINT not null
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+
+insert into t0 select cast(rand() * 100000000 as int), 1, 1 from TABLE(generate_series(0, 8192));
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 1;
+
+insert into t0 select cast(rand() * 100000000 as int), 1, 2 from TABLE(generate_series(0, 8192));
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 1;
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 2;
+
+insert into t0 select cast(rand() * 100000000 as int), 1, 3 from TABLE(generate_series(0, 8192));
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 1;
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 2;
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 3;
+
+
+insert into t0 select cast(rand() * 100000000 as int), 1, 4 from TABLE(generate_series(0, 8192));
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 1;
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 2;
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 3;
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 4;
+select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 5;

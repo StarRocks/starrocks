@@ -688,8 +688,6 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
 
     if (topn_type == TTopNType::DENSE_RANK) {
         DCHECK(distinct_topn != nullptr);
-        // size_t count_zero = SIMD::count_zero(tie);
-        // *distinct_topn = count_zero;
         return Status::OK();
     }
 

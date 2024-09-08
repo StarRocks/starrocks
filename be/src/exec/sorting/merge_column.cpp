@@ -328,7 +328,9 @@ public:
             RETURN_IF_ERROR(sort_vertical_chunks(false, {left_run.orderby, right_run.orderby}, sort_desc, *output,
                                                  target_distinct_num, TTopNType::DENSE_RANK, &result_top_distinct_num,
                                                  true));
-            DCHECK(result_top_distinct_num <= target_distinct_num);
+            DCHECK(result_top_distinct_num <= target_distinct_num)
+                    << "result_top_distinct_num: " << result_top_distinct_num
+                    << ", target_distinct_num: " << target_distinct_num;
             return result_top_distinct_num;
         }
 
