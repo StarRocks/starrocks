@@ -212,7 +212,6 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
 
     size_t row_count = _raw_chunks.size_of_rows;
     auto& raw_chunks = _raw_chunks.chunks;
-    LOG(WARNING) << "tttttttttttt new round, row_count is: " << row_count;
 
     // Build one chunk as one DataSegment
     // The timer says that: in top-n case, _build_sorting_data may be called multiple times.

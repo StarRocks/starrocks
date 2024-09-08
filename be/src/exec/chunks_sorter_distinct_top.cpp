@@ -35,26 +35,17 @@ Status ChunksSorterDistinctTopn::_sort_chunks(RuntimeState* state) {
     // Step 1: extract datas from _raw_chunks into segments,
     // and initialize permutations.second when _init_merged_segment == false.
     RETURN_IF_ERROR(_build_sorting_data(state, permutations.second, segments));
-    LOG(WARNING) << "tttttttttttt after _build_sorting_data: permutations.second.size(): "
-                 << permutations.second.size();
 
     // Step 2: if _init_merged_segment == true, filter batch-chunks as SMALLER_THAN_MIN_OF_SEGMENT(permutations.first) and INCLUDE_IN_SEGMENT(permutations.second)
     // get permutations.first and permutations.second‘s top distinct n sorted elements
     // if _init_merged_segment == false, get permutations.second‘s top distinct n sorted elements
     RETURN_IF_ERROR(_filter_and_sort_data_for_dense_rank(state, permutations, segments, distinct_top_n_of_first_size,
                                                          distinct_top_n_of_second_size));
-    LOG(WARNING) << "tttttttttttt after _filter_and_sort_data_for_dense_rank: permutations.first.size(): "
-                 << permutations.first.size() << ", permutations.second.size(): " << permutations.second.size()
-                 << ", distinct_top_n_of_first_size: " << distinct_top_n_of_first_size
-                 << ", distinct_top_n_of_second_size: " << distinct_top_n_of_second_size;
     // Step 3: if _init_merged_segment == true, store permutations.first into big_chunk
     // if needed, merge permutations.first and _merged_segment, get sorted top distinct n from merged result and store it into big_chunk
     // replace _merged_segment with big_chunk
     RETURN_IF_ERROR(_merge_sort_data_as_merged_segment_for_dense_rank(
             state, permutations, segments, distinct_top_n_of_first_size, distinct_top_n_of_second_size));
-
-    LOG(WARNING) << "tttttttttttt 合并后的_merged_segment.chunk->num_rows(): " << _merged_segment.chunk->num_rows()
-                 << ", _current_distinct_top_n: " << _current_distinct_top_n;
 
     return Status::OK();
 }
