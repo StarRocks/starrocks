@@ -104,7 +104,7 @@ public class UDFTest extends PlanTestBase {
         PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
 
         Assert.assertEquals(3, tp.getFnParamColumnRefs().size());
-        Assert.assertEquals("[2, 4, 4]",
+        Assert.assertEquals("[8, 9, 10]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
 
         sql = "select * from tarray, unnest(v3, v3)";

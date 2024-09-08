@@ -24,6 +24,7 @@
 #include "common/compiler_util.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/hash_util.hpp"
@@ -430,14 +431,12 @@ void JsonColumn::reset_column() {
     _path_to_index.clear();
 }
 
-bool JsonColumn::capacity_limit_reached(std::string* msg) const {
+Status JsonColumn::capacity_limit_reached() const {
     if (size() > Column::MAX_CAPACITY_LIMIT) {
-        if (msg != nullptr) {
-            msg->append("row count of object column exceed the limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));
-        }
-        return true;
+        return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
     }
-    return false;
+    return Status::OK();
 }
 
 void JsonColumn::check_or_die() const {

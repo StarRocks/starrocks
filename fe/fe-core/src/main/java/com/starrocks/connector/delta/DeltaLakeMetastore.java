@@ -50,6 +50,7 @@ import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
+    private static final int MEMORY_META_SAMPLES = 10;
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
@@ -172,5 +173,26 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     public void invalidateAll() {
         checkpointCache.invalidateAll();
         jsonCache.invalidateAll();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return Map.of("checkpointCache", checkpointCache.size(), "jsonCache", jsonCache.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> jsonSamples = jsonCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+
+        List<Object> checkpointSamples = checkpointCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+
+        return Lists.newArrayList(Pair.create(jsonSamples, jsonCache.size()),
+                Pair.create(checkpointSamples, checkpointCache.size()));
     }
 }

@@ -81,6 +81,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DateUtils;
@@ -190,7 +191,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         try {
             List<Partition> partitions = Lists.newArrayList();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
@@ -212,7 +213,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);
@@ -911,4 +912,14 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 "DeleteJob", (long) idToDeleteJob.size());
     }
 
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = dbToDeleteInfos.values()
+                .stream()
+                .filter(infos -> !infos.isEmpty())
+                .map(infos -> infos.stream().findAny().get())
+                .collect(Collectors.toList());
+        long size = dbToDeleteInfos.values().stream().mapToInt(List::size).sum();
+        return Lists.newArrayList(Pair.create(samples, size));
+    }
 }

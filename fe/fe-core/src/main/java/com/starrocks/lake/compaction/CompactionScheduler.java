@@ -269,7 +269,7 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
 
         try {
             // lake table or lake materialized view
@@ -308,7 +308,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
@@ -416,7 +416,7 @@ public class CompactionScheduler extends Daemon {
                 .getTransactionState(db.getId(), job.getTxnId());
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             CompactionTxnCommitAttachment attachment = null;
             if (forceCommit) { // do not write extra info if no need to force commit
@@ -425,7 +425,7 @@ public class CompactionScheduler extends Daemon {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());

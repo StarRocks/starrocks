@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -50,6 +51,10 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
+import com.starrocks.catalog.constraint.TableWithFKConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -123,6 +128,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class AlterTest {
 
@@ -982,6 +988,189 @@ public class AlterTest {
                                 .size());
         Assert.assertEquals("replace1", replace1.getIndexNameById(replace1.getBaseIndexId()));
         Assert.assertEquals("replace2", replace2.getIndexNameById(replace2.getBaseIndexId()));
+    }
+
+    @Test
+    public void testSwapTableWithUniqueConstraints() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s2.k1');";
+
+        createTable(s1);
+        createTable(s2);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        String replaceStmt = "ALTER TABLE test.s1 SWAP WITH test.s2";
+        alterTableWithNewParser(replaceStmt, true);
+
+        OlapTable tbl1 = (OlapTable) db.getTable("s1");
+        List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
+        Assert.assertEquals(1, uk1.size());
+        UniqueConstraint uk10 = uk1.get(0);
+        Assert.assertEquals("s1", uk10.getTableName());
+
+        OlapTable tbl2 = (OlapTable) db.getTable("s2");
+        List<UniqueConstraint> uk2 = tbl2.getUniqueConstraints();
+        Assert.assertEquals(1, uk2.size());
+        UniqueConstraint uk20 = uk2.get(0);
+        Assert.assertEquals("s2", uk20.getTableName());
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+    }
+
+    @Test
+    public void testSwapTableWithForeignConstraints1() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s2(k1) REFERENCES s1(k1)');";
+        String s3 = "CREATE TABLE test.s3 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
+        createTable(s1);
+        createTable(s2);
+        createTable(s3);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        // swap child tables
+        String replaceStmt = "ALTER TABLE test.s2 SWAP WITH test.s3";
+        alterTableWithNewParser(replaceStmt, true);
+
+        OlapTable tbl1 = (OlapTable) db.getTable("s1");
+        List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
+        Assert.assertEquals(1, uk1.size());
+        UniqueConstraint uk10 = uk1.get(0);
+        Assert.assertEquals("s1", uk10.getTableName());
+
+        OlapTable tbl2 = (OlapTable) db.getTable("s2");
+        List<ForeignKeyConstraint> fk2 = tbl2.getForeignKeyConstraints();
+        Assert.assertEquals(1, fk2.size());
+        ForeignKeyConstraint fk20 = fk2.get(0);
+        BaseTableInfo baseTableInfo20 = fk20.getChildTableInfo();
+        Assert.assertTrue(baseTableInfo20 == null);
+        BaseTableInfo parentTableInfo = fk20.getParentTableInfo();
+        Assert.assertTrue(parentTableInfo != null);
+        Assert.assertEquals("s1", parentTableInfo.getTableName());
+        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+
+        OlapTable tbl3 = (OlapTable) db.getTable("s3");
+        List<ForeignKeyConstraint> fk3 = tbl3.getForeignKeyConstraints();
+        Assert.assertEquals(1, fk3.size());
+        ForeignKeyConstraint fk30 = fk3.get(0);
+        BaseTableInfo baseTableInfo30 = fk30.getChildTableInfo();
+        Assert.assertTrue(baseTableInfo30 == null);
+        parentTableInfo = fk30.getParentTableInfo();
+        Assert.assertTrue(parentTableInfo != null);
+        Assert.assertEquals("s1", parentTableInfo.getTableName());
+        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+
+        // test global constraint manager
+        GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        Assert.assertTrue(cm != null);
+
+        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
+        Assert.assertTrue(tableWithFKConstraintSet != null);
+        Assert.assertTrue(tableWithFKConstraintSet.size() == 2);
+        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
+        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
+
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropTable("s3");
+    }
+
+    @Test
+    public void testSwapTableWithForeignConstraints2() throws Exception {
+        String s1 = "CREATE TABLE test.s1 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+        String s2 = "CREATE TABLE test.s2 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s2.k1');";
+        String s3 = "CREATE TABLE test.s3 \n" +
+                "(\n" +
+                "    k1 int, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
+        createTable(s1);
+        createTable(s2);
+        createTable(s3);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        // swap parent tables
+        String replaceStmt = "ALTER TABLE test.s2 SWAP WITH test.s1";
+        alterTableWithNewParser(replaceStmt, true);
+
+        OlapTable tbl1 = (OlapTable) db.getTable("s1");
+        List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
+        Assert.assertEquals(1, uk1.size());
+        UniqueConstraint uk10 = uk1.get(0);
+        Assert.assertEquals("s1", uk10.getTableName());
+
+        OlapTable tbl2 = (OlapTable) db.getTable("s2");
+        List<UniqueConstraint> uk2 = tbl2.getUniqueConstraints();
+        Assert.assertEquals(1, uk2.size());
+        UniqueConstraint uk20 = uk2.get(0);
+        Assert.assertEquals("s2", uk20.getTableName());
+
+        OlapTable tbl3 = (OlapTable) db.getTable("s3");
+        List<ForeignKeyConstraint> fk3 = tbl3.getForeignKeyConstraints();
+        Assert.assertEquals(1, fk3.size());
+        ForeignKeyConstraint fk30 = fk3.get(0);
+        BaseTableInfo baseTableInfo30 = fk30.getChildTableInfo();
+        Assert.assertTrue(baseTableInfo30 == null);
+        BaseTableInfo parentTableInfo = fk30.getParentTableInfo();
+        Assert.assertTrue(parentTableInfo != null);
+        Assert.assertEquals("s1", parentTableInfo.getTableName());
+        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+
+        // test global constraint manager
+        GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        Assert.assertTrue(cm != null);
+
+        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
+        Assert.assertTrue(tableWithFKConstraintSet != null);
+        Assert.assertTrue(tableWithFKConstraintSet.size() == 1);
+        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
+
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropTable("s3");
     }
 
     @Test

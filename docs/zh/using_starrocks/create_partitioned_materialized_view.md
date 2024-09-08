@@ -197,17 +197,17 @@ DISTRIBUTED BY HASH(k1);
 
 ### 自定义时间粒度对齐分区
 
-上述的分区上卷方法只允许根据特定的时间粒度对物化视图进行分区，不允许自定义分区时间范围。如果您的业务场景需要使用自定义的时间粒度进行分区，您可以创建一个物化视图，并使用 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 或 [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md) 函数定义其分区的时间粒度。以上两种函数可以根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。
+上述的分区上卷方法只允许根据特定的时间粒度对物化视图进行分区，不允许自定义分区时间范围。如果您的业务场景需要使用自定义的时间粒度进行分区，您可以创建一个物化视图，并使用 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 函数定义其分区的时间粒度。以上两种函数可以根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。
 
-您需要在 SELECT List 中使用 time_slice 或 date_slice 函数在基表的分区键上定义新的时间粒度，为其设置别名，然后结合 date_trunc 函数指定物化视图的分区键，从而创建一个自定义分区时间粒度的物化视图。
+您需要在 SELECT List 中使用 time_slice 函数在基表的分区键上定义新的时间粒度，为其设置别名，然后结合 date_trunc 函数指定物化视图的分区键，从而创建一个自定义分区时间粒度的物化视图。
 
 ```SQL
 PARTITION BY
 date_trunc(<format>, <mv_partitioning_column>)
 AS
 SELECT 
-  -- 您可以使用 time_slice 或 date_slice 函数。
-  date_slice(<base_table_partitioning_column>, <interval>) AS <mv_partitioning_column>
+  -- 您可以使用 time_slice 函数。
+  time_slice(<base_table_partitioning_column>, <interval>) AS <mv_partitioning_column>
 ```
 
 示例：
@@ -220,7 +220,7 @@ AS
 SELECT 
   k1, 
   sum(v1) AS SUM, 
-  date_slice(datekey, INTERVAL 5 HOUR) AS mv_datekey 
+  time_slice(datekey, INTERVAL 5 HOUR) AS mv_datekey 
 FROM par_tbl1 
 GROUP BY datekey, k1;
 ```

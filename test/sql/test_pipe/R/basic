@@ -33,7 +33,7 @@ desc t1;
 -- result:
 col_int	int	YES	true	None	
 col_map	map<varchar(1048576),int>	YES	false	None	
-col_struct	varchar(1048576)	YES	false	None	
+col_struct	struct<a varchar(1048576), b int(11)>	YES	false	None	
 -- !result
 select count(*) from t1;
 -- result:

@@ -4,6 +4,18 @@ displayed_sidebar: docs
 
 # StarRocks version 3.1
 
+## 3.1.15
+
+发布日期：2024 年 9 月 4 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 在通过异步物化视图改写查询时，部分表 `count(*)` 返回的结果为 NULL。[#49288](https://github.com/StarRocks/starrocks/pull/49288)
+- `partition_linve_nubmer` 不生效。[#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- FE 汇报 Tablet 异常：BE 磁盘下线，Tablet 无法迁移。[#47833](https://github.com/StarRocks/starrocks/pull/47833)
+
 ## 3.1.14
 
 发布日期：2024 年 7 月 29 日

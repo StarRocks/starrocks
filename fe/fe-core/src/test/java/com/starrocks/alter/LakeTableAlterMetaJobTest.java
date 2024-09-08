@@ -73,7 +73,7 @@ public class LakeTableAlterMetaJobTest {
     public void setUp() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
 
@@ -89,7 +89,7 @@ public class LakeTableAlterMetaJobTest {
     public void tearDown() throws DdlException, MetaNotFoundException {
         db.dropTable(table.getName());
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().dropDb(DB_NAME, true);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
         } catch (MetaNotFoundException ignored) {
         }
     }

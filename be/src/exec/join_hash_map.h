@@ -102,8 +102,8 @@ struct JoinHashTableItems {
     //TODO: memory continues problem?
     ChunkPtr build_chunk = nullptr;
     Columns key_columns;
-    Buffer<HashTableSlotDescriptor> build_slots;
-    Buffer<HashTableSlotDescriptor> probe_slots;
+    std::vector<HashTableSlotDescriptor> build_slots;
+    std::vector<HashTableSlotDescriptor> probe_slots;
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
     // buckets of the hash map, and it holds the index of the first key value saved in each bucket,
     // while other keys can be found by following the indices saved in
@@ -280,6 +280,7 @@ struct HashTableProbeState {
 struct HashTableParam {
     bool with_other_conjunct = false;
     bool enable_late_materialization = false;
+    bool enable_partition_hash_join = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
@@ -833,6 +834,7 @@ public:
     Status lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
     void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
+    void merge_ht(const JoinHashTable& ht);
     // convert input column to spill schema order
     ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const;
 

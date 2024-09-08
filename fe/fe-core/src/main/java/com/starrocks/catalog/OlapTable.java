@@ -66,6 +66,9 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -285,6 +288,8 @@ public class OlapTable extends Table {
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
 
     // Both the following two flags are used by StarMgrMetaSyncer
+    private long lastCollectProfileTime = 0;
+
     // The flag is used to indicate whether the table shard group has changed.
     public AtomicBoolean isShardGroupChanged = new AtomicBoolean(false);
     // The flag is used to indicate whether the table is doing automatic bucketing.
@@ -568,6 +573,7 @@ public class OlapTable extends Table {
         }
 
         // change name
+        String oldTableName = this.name;
         this.name = newName;
 
         // change single partition name
@@ -587,6 +593,25 @@ public class OlapTable extends Table {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprsSize() == 1);
             expressionRangePartitionInfo.renameTableName("", newName);
+        }
+
+        if (tableProperty != null) {
+            // renew unique constraints
+            List<UniqueConstraint> tpUniqueConstraints = tableProperty.getUniqueConstraints();
+            if (!CollectionUtils.isEmpty(tpUniqueConstraints)) {
+                for (UniqueConstraint constraint : tpUniqueConstraints) {
+                    constraint.onTableRename(this, oldTableName);
+                }
+                setUniqueConstraints(tpUniqueConstraints);
+            }
+            // renew foreign constraints
+            List<ForeignKeyConstraint> tpForeignConstraints = tableProperty.getForeignKeyConstraints();
+            if (!CollectionUtils.isEmpty(tpForeignConstraints)) {
+                for (ForeignKeyConstraint constraint : tpForeignConstraints) {
+                    constraint.onTableRename(this, oldTableName);
+                }
+                setForeignKeyConstraints(tpForeignConstraints);
+            }
         }
     }
 
@@ -2552,6 +2577,23 @@ public class OlapTable extends Table {
         tableProperty.buildMutableBucketNum();
     }
 
+    public Boolean enableLoadProfile() {
+        if (tableProperty != null) {
+            return tableProperty.enableLoadProfile();
+        }
+        return false;
+    }
+
+    public void setEnableLoadProfile(boolean enableLoadProfile) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE,
+                        Boolean.valueOf(enableLoadProfile).toString());
+        tableProperty.buildEnableLoadProfile();
+    }
+
     public TWriteQuorumType writeQuorum() {
         if (tableProperty != null) {
             return tableProperty.writeQuorum();
@@ -2996,6 +3038,10 @@ public class OlapTable extends Table {
         analyzePartitionInfo();
         analyzeRollupIndexMeta();
         tryToAssignIndexId();
+
+        // register constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.registerConstraint(this);
     }
 
     @Override
@@ -3127,6 +3173,10 @@ public class OlapTable extends Table {
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
         }
+
+        // unregister constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.unRegisterConstraint(this);
     }
 
     public void removeTableBinds(boolean isReplay) {
@@ -3251,6 +3301,12 @@ public class OlapTable extends Table {
         Long mutableBucketNum = getMutableBucketNum();
         if (mutableBucketNum > 0) {
             properties.put(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, mutableBucketNum.toString());
+        }
+
+        // enable load profile
+        Boolean enableLoadProfile = enableLoadProfile();
+        if (enableLoadProfile) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
         }
 
         // locations
@@ -3529,4 +3585,23 @@ public class OlapTable extends Table {
         }
     }
 
+    public int getPartitionsCount() {
+        return physicalPartitionIdToPartitionId.size();
+    }
+
+    public PhysicalPartition getPartitionSample() {
+        if (!idToPartition.isEmpty()) {
+            return idToPartition.values().iterator().next().getSubPartitions().iterator().next();
+        } else {
+            return null;
+        }
+    }
+
+    public long getLastCollectProfileTime() {
+        return lastCollectProfileTime;
+    }
+
+    public void updateLastCollectProfileTime() {
+        this.lastCollectProfileTime = System.currentTimeMillis();
+    }
 }

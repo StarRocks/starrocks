@@ -625,6 +625,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
     endif ()
 else ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+        # ignore error from apache-orc
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=dangling-reference")
+    endif ()
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
 endif()
 
@@ -773,6 +777,8 @@ endif()
 
 set(WL_START_GROUP "-Wl,--start-group")
 set(WL_END_GROUP "-Wl,--end-group")
+set(WL_LINK_STATIC "-Wl,-Bstatic")
+set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
@@ -963,7 +969,8 @@ if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON")
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    -lresolv -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    ${WL_LINK_STATIC} -lbfd
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
 )
 
 # link gcov if WITH_GCOV is on

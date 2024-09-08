@@ -231,14 +231,18 @@ AS
 
 > **注意**
 >
-> 异步物化视图暂不支持使用 List 分区策略。
+> 自 v3.3.3 起，StarRocks 支持创建基于 List 分区策略的异步物化视图。
+>
+> - 您可以基于使用 List 分区或表达式分区策略创建的表来创建 List 分区的物化视图。
+> - 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
+> - 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
 
 该参数支持如下值：
 
 - `date_column`：用于分区的列的名称。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
 - `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
 - `str2date` 函数：用于将基表的 STRING 类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
-- `time_slice` 或 `date_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 或 date_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 或 date_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
+- `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
 如不指定该参数，则默认物化视图为无分区。
 
@@ -293,10 +297,6 @@ AS
 **query_statement**（必填）
 
 创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。从 v3.1.6 版本开始，StarRocks 支持使用 Common Table Expression (CTE) 创建异步物化视图。
-
-> **注意**
->
-> 异步物化视图暂不支持基于使用 List 分区的基表创建。
 
 ### 查询异步物化视图
 

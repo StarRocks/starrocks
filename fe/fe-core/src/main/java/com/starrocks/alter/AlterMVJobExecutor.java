@@ -19,11 +19,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -380,7 +380,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
                 GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
             LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                     newRefreshType, materializedView.getId());

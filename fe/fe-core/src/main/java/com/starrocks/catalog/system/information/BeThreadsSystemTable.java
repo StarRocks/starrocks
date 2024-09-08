@@ -36,6 +36,7 @@ public class BeThreadsSystemTable {
                         .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("BOUND_CPUS", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_THREADS);
     }
 }

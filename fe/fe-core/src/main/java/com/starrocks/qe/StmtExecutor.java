@@ -1334,7 +1334,8 @@ public class StmtExecutor {
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
         // For short circuit query, 'ProfileElement#plan' is null
-        if (profileElement.plan == null) {
+        if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
+                !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
             throw new UserException(
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
@@ -1990,7 +1991,7 @@ public class StmtExecutor {
                     job.getTargetDbId(), job.getTargetTableId(), job.getSourcePartitionIds());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();

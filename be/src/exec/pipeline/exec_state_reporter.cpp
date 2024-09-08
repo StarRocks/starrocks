@@ -316,12 +316,13 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
     return rpc_status;
 }
 
-ExecStateReporter::ExecStateReporter() {
+ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
     auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                          .set_cpuids(cpuids)
                           .build(&_thread_pool);
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
@@ -331,6 +332,7 @@ ExecStateReporter::ExecStateReporter() {
                      .set_min_threads(1)
                      .set_max_threads(2)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                     .set_cpuids(cpuids)
                      .build(&_priority_thread_pool);
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
@@ -343,6 +345,11 @@ void ExecStateReporter::submit(std::function<void()>&& report_task, bool priorit
     } else {
         (void)_thread_pool->submit_func(std::move(report_task));
     }
+}
+
+void ExecStateReporter::bind_cpus(const CpuUtil::CpuIds& cpuids) const {
+    _thread_pool->bind_cpus(cpuids, {});
+    _priority_thread_pool->bind_cpus(cpuids, {});
 }
 
 } // namespace starrocks::pipeline

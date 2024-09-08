@@ -111,6 +111,7 @@ import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 public class DatabaseTransactionMgr {
     public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
+    private static final int MEMORY_TXN_SAMPLES = 10;
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
     private final GlobalStateMgr globalStateMgr;
@@ -882,7 +883,7 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = txn.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
         long currentTs = System.currentTimeMillis();
         try {
             // check each table involved in transaction
@@ -970,7 +971,7 @@ public class DatabaseTransactionMgr {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
         }
         return true;
     }
@@ -1010,7 +1011,7 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             transactionState.writeLock();
             try {
@@ -1202,7 +1203,7 @@ public class DatabaseTransactionMgr {
                 transactionState.writeUnlock();
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1858,7 +1859,7 @@ public class DatabaseTransactionMgr {
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
         Locker locker = new Locker();
         List<Long> tableIdList = transactionState.getTableIdList();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         finishSpan.addEvent("db_lock");
         try {
             transactionState.writeLock();
@@ -1892,7 +1893,7 @@ public class DatabaseTransactionMgr {
                 transactionState.writeUnlock();
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1932,7 +1933,7 @@ public class DatabaseTransactionMgr {
         for (TransactionState transactionState : stateBatch.getTransactionStates()) {
             tableIds.addAll(transactionState.getTableIdList());
         }
-        locker.lockTablesWithIntensiveDbLock(db, new ArrayList<>(tableIds), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), new ArrayList<>(tableIds), LockType.WRITE);
 
         try {
             boolean txnOperated = false;
@@ -1959,7 +1960,7 @@ public class DatabaseTransactionMgr {
                 stateBatch.writeUnlock();
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, new ArrayList<>(tableIds), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), new ArrayList<>(tableIds), LockType.WRITE);
         }
 
         // do after transaction finish in batch
@@ -2035,5 +2036,26 @@ public class DatabaseTransactionMgr {
 
     public void updateDatabaseUsedQuotaData(long usedQuotaDataBytes) {
         this.usedQuotaDataBytes = usedQuotaDataBytes;
+    }
+
+    public List<Object> getSamplesForMemoryTracker() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.size() > 0) {
+                return idToRunningTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            if (idToFinalStatusTransactionState.size() > 0) {
+                return idToFinalStatusTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            return new ArrayList<>();
+        } finally {
+            readUnlock();
+        }
     }
 }

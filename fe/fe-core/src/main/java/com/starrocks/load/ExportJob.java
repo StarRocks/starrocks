@@ -274,7 +274,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.tableId = exportTable.getId();
         this.tableName = stmt.getTblName();
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(this.tableId),
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
                     LockType.READ)) {
             genExecFragment(stmt);
         }
@@ -993,7 +993,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
-        if (stateMgr.getMetadata() != null) {
+        if (stateMgr.getLocalMetastore() != null) {
             db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {
@@ -1086,7 +1086,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         isReplayed = true;
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
-        if (stateMgr.getMetadata() != null) {
+        if (stateMgr.getLocalMetastore() != null) {
             db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {

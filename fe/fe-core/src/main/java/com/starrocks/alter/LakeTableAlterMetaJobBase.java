@@ -97,11 +97,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             partitions.addAll(table.getPartitions());
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         if (this.watershedTxnId == -1) {
@@ -148,7 +148,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             commitVersionMap.clear();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -168,7 +168,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
     }
 
@@ -202,7 +202,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
@@ -213,7 +213,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             table.setState(OlapTable.OlapTableState.NORMAL);
 
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
         handleMVRepair(db, table);
@@ -233,7 +233,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -247,7 +247,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         return true;
     }
@@ -281,11 +281,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     public void updatePartitionTabletMeta(Database db, LakeTable table, Partition partition) throws DdlException {
         Collection<PhysicalPartition> subPartitions;
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             subPartitions = partition.getSubPartitions();
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         for (PhysicalPartition physicalPartition : subPartitions) {
@@ -298,11 +298,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         List<MaterializedIndex> indexList;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             indexList = new ArrayList<>(subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         for (MaterializedIndex index : indexList) {
             updateIndexTabletMeta(db, table, partition, index);
@@ -317,11 +317,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         List<Tablet> tablets;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             tablets = new ArrayList<>(index.getTablets());
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -427,7 +427,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table != null) {
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
                 try {
                     // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
                     if (jobState == JobState.FINISHED_REWRITING) {
@@ -435,7 +435,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                     }
                     table.setState(OlapTable.OlapTableState.NORMAL);
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
                 }
             }
         }
@@ -493,7 +493,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
@@ -509,7 +509,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
     }
 
@@ -536,7 +536,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
 
         Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
             for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
                 long partitionId = partitionVersion.getKey();
@@ -552,7 +552,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 partitionRepairInfos.add(partitionRepairInfo);
             }
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
 
         if (partitionRepairInfos.isEmpty()) {

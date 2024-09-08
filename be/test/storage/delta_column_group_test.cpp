@@ -41,7 +41,9 @@ TEST(TestDeltaColumnGroup, testLoad) {
     }
     DeltaColumnGroup dcg2;
     dcg2.init(100, {{2, 12}}, {"abc1.cols"}, {ep.encryption_meta});
-    dcg.merge_by_version(dcg2, "tmp", RowsetId(100, 100), 100);
+    RowsetId rowset_id;
+    rowset_id.init(100, 100, 0, 0);
+    dcg.merge_by_version(dcg2, "tmp", rowset_id, 100);
     ASSERT_EQ(2, dcg.encryption_metas().size());
 };
 
@@ -215,14 +217,20 @@ TEST(TestDeltaColumnGroup, testDeltaColumnGroupVerPBLoad) {
     ASSERT_TRUE(idx.first == 0);
     ASSERT_TRUE(idx.second == 1);
     ASSERT_TRUE("tmp/aaa.cols" == dcg.column_files("tmp")[idx.first]);
+    ASSERT_TRUE("tmp/aaa.cols" == dcg.column_file_by_idx("tmp", idx.first).value());
     idx = dcg.get_column_idx(5);
     ASSERT_TRUE(idx.first == 1);
     ASSERT_TRUE(idx.second == 0);
     ASSERT_TRUE("tmp/bbb.cols" == dcg.column_files("tmp")[idx.first]);
+    ASSERT_TRUE("tmp/bbb.cols" == dcg.column_file_by_idx("tmp", idx.first).value());
     idx = dcg.get_column_idx(8);
     ASSERT_TRUE(idx.first == 2);
     ASSERT_TRUE(idx.second == 1);
     ASSERT_TRUE("tmp/ccc.cols" == dcg.column_files("tmp")[idx.first]);
+    ASSERT_TRUE("tmp/ccc.cols" == dcg.column_file_by_idx("tmp", idx.first).value());
+
+    // overflow
+    ASSERT_FALSE(dcg.column_file_by_idx("tmp", 100).ok());
 }
 
 } // namespace starrocks

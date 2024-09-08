@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -60,6 +61,7 @@ import java.util.stream.Collectors;
 
 public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     // label -> streamLoadTask
     private Map<String, StreamLoadTask> idToStreamLoadTask;
@@ -172,12 +174,12 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws UserException {
         Table table;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // init stream load task
@@ -203,12 +205,12 @@ public class StreamLoadMgr implements MemoryTrackable {
                                          int channelId, long warehouseId) throws UserException {
         Table table;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // init stream load task
@@ -671,5 +673,14 @@ public class StreamLoadMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("StreamLoad", (long) idToStreamLoadTask.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = idToStreamLoadTask.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) idToStreamLoadTask.size()));
     }
 }

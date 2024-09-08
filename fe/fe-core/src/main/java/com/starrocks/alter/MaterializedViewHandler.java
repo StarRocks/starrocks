@@ -842,7 +842,8 @@ public class MaterializedViewHandler extends AlterHandler {
         long rollupIndexId = dropInfo.getIndexId();
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tableId), LockType.WRITE)) {
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tableId), LockType.WRITE)) {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
             for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
@@ -897,14 +898,14 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             if (tbl.getState() == olapTableState) {
                 return;
             }
             tbl.setState(olapTableState);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
     }
 
@@ -1067,7 +1068,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             if (!(table instanceof OlapTable)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
@@ -1095,7 +1096,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 throw new DdlException("Table[" + tableName + "] is under ROLLUP but job does not exist.");
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock
@@ -1125,7 +1126,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
         AlterJobV2 materializedViewJob = null;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 if (table instanceof OlapTable) {
@@ -1140,7 +1141,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         if (materializedViewJob == null) {

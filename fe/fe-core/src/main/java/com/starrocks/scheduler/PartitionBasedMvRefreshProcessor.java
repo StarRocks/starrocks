@@ -283,8 +283,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throws AnalysisException, LockTimeoutException {
         Set<String> mvToRefreshedPartitions = null;
         Locker locker = new Locker();
-        if (!locker.tryLockTableWithIntensiveDbLock(db, materializedView, LockType.READ, Config.mv_refresh_try_lock_timeout_ms,
-                TimeUnit.MILLISECONDS)) {
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(),
+                LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             LOG.warn("Failed to lock database: {} in checkMvToRefreshedPartitions for mv refresh {}", db.getFullName(),
                     materializedView.getName());
             throw new LockTimeoutException("Failed to lock database: " + db.getFullName());
@@ -307,7 +307,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     materializedView.getName(), partitionRefreshNumber, mvToRefreshedPartitions, mvPotentialPartitionNames,
                     mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db, materializedView, LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.READ);
         }
         return mvToRefreshedPartitions;
     }
@@ -827,7 +827,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("update final meta failed after mv refreshed:", e);
             throw e;
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db, materializedView, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
         }
 
         // update mv status message

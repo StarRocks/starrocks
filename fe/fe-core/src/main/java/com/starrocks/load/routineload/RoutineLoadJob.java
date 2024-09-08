@@ -867,7 +867,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
@@ -909,7 +909,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             return planParams;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -1499,11 +1499,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         Table tbl = null;
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
@@ -2004,11 +2004,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         Table tbl = null;
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         readLock();

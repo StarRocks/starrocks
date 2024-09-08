@@ -112,8 +112,6 @@ public:
 
     [[nodiscard]] bool append_nulls(size_t count) override;
 
-    [[nodiscard]] bool append_strings(const Buffer<Slice>& strs) override;
-
     [[nodiscard]] size_t append_numbers(const void* buff, size_t length) override;
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -171,7 +169,7 @@ public:
 
     void reset_column() override;
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override;
+    Status capacity_limit_reached() const override;
 
     void check_or_die() const override;
 

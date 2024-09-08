@@ -1340,7 +1340,7 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = false;
+    public static boolean memory_tracker_enable = true;
 
     /**
      * Decide how often to track the memory usage of the FE process
@@ -2032,6 +2032,10 @@ public class Config extends ConfigBase {
     // choose collect sample statistics first
     @ConfField(mutable = true)
     public static double statistic_auto_collect_sample_threshold = 0.3;
+
+    @ConfField(mutable = true, comment = "Tolerate some percent of failure for a large table, it will not affect " +
+            "the job status but improve the robustness")
+    public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
@@ -2884,11 +2888,17 @@ public class Config extends ConfigBase {
     public static int routine_load_scheduler_interval_millisecond = 10000;
 
     /**
-     * Only when the stream load time exceeds this value,
+     * Only when the stream/routine load time exceeds this value,
      * the profile will be put into the profileManager
      */
+    @ConfField(mutable = true, aliases = {"stream_load_profile_collect_second"})
+    public static long stream_load_profile_collect_threshold_second = 0;
+
+    /**
+     * The interval of collecting load profile through table granularity
+     */
     @ConfField(mutable = true)
-    public static long stream_load_profile_collect_second = 10; //10s
+    public static long load_profile_collect_interval_second = 0;
 
     /**
      * If set to <= 0, means that no limitation.
@@ -3161,4 +3171,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int thrift_max_recursion_depth = 64;
+
+    @ConfField(mutable = true)
+    public static double partition_hash_join_min_cardinality_rate = 0.3;
 }

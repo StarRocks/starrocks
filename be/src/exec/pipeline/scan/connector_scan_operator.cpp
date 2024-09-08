@@ -24,6 +24,12 @@
 namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
+ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit,
+                                                                                 int scan_node_number)
+        : query_mem_limit(query_mem_limit),
+          scan_mem_limit(query_mem_limit),
+          total_chunk_source_mem_bytes(scan_node_number * connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES) {}
+
 int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
     int64_t diff = new_value - old_value;
     int64_t total = total_chunk_source_mem_bytes.fetch_add(diff) + diff;
@@ -291,7 +297,8 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
         _adaptive_processor->started_running = true;
         int64_t c = L->update_active_scan_operator_count(1);
         if (c == 0) {
-            _adjust_scan_mem_limit(0, L->get_arb_chunk_source_mem_bytes());
+            _adjust_scan_mem_limit(connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES,
+                                   L->get_arb_chunk_source_mem_bytes());
         }
     }
 

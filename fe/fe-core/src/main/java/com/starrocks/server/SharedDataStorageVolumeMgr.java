@@ -330,7 +330,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
@@ -344,7 +344,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         bindings.add(dbBindings);
@@ -359,8 +359,12 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (!uri.isAbsolute()) {
                 uri = new URI(defaultScheme + "://" + uriStr);
             }
-            if (Strings.isNullOrEmpty(uri.getAuthority()) || uri.getPort() != -1) {
-                // no bucket or bucket name contains ':'
+            if (Strings.isNullOrEmpty(uri.getAuthority())) {
+                throw new InvalidConfException("");
+            }
+            if (uri.getPort() != -1 && "s3".equals(defaultScheme)) {
+                // s3 uri, not allow `:` in authority, e.g. the following url is invalid
+                // - s3://{bucket}:3020/b/c
                 throw new InvalidConfException("");
             }
             if (matchScheme && !uri.getScheme().equals(defaultScheme)) {

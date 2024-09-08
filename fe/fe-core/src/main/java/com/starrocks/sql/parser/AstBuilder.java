@@ -5428,6 +5428,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         String functionName = qualifiedName.toString();
         boolean isGlobal = context.GLOBAL() != null;
+        boolean dropIfExist = context.IF() != null && context.EXISTS() != null;
         FunctionName fnName = FunctionName.createFnName(functionName);
         if (isGlobal) {
             if (!Strings.isNullOrEmpty(fnName.getDb())) {
@@ -5436,7 +5437,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             fnName.setAsGlobalFunction();
         }
 
-        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()), createPos(context));
+        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()), createPos(context), dropIfExist);
     }
 
     @Override
@@ -5444,6 +5445,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
+        boolean createIfNotExists = context.ifNotExists() != null;
         if (context.functionType != null) {
             functionType = context.functionType.getText();
         }
@@ -5483,7 +5485,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new CreateFunctionStmt(functionType, fnName,
-                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent, replaceIfExists);
+                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent, replaceIfExists,
+                createIfNotExists);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------
@@ -6412,6 +6415,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_USER)) {
+            return new InformationFunction(FunctionSet.SESSION_USER.toUpperCase());
         }
 
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_ID)) {

@@ -53,7 +53,6 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -72,7 +71,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -2061,11 +2061,11 @@ public class SchemaChangeHandler extends AlterHandler {
                     .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             partitions.addAll(olapTable.getPartitions());
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         boolean metaValue = false;
@@ -2100,6 +2100,11 @@ public class SchemaChangeHandler extends AlterHandler {
             if (mutableBucketNum == olapTable.getMutableBucketNum()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
+            boolean enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
+            if (enableLoadProfile == olapTable.enableLoadProfile()) {
+                return;
+            }
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
                     PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
@@ -2117,11 +2122,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2140,7 +2145,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return false;
         }
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             partitions.addAll(olapTable.getPartitions());
             if (!olapTable.containsBinlogConfig()) {
@@ -2150,7 +2155,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 newBinlogConfig = new BinlogConfig(olapTable.getCurBinlogConfig());
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         // judge whether the attribute has changed
@@ -2184,7 +2189,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return true;
         }
 
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             // check for concurrent modifications by version
             if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
@@ -2215,7 +2220,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.warn("update binlog config of table {} failed", olapTable.getName());
             isModifiedSuccess = false;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
 
         // TODO optimize by asynchronous rpc
@@ -2244,7 +2249,7 @@ public class SchemaChangeHandler extends AlterHandler {
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), tableName);
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             for (String partitionName : partitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
@@ -2254,7 +2259,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         boolean isInMemory = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
@@ -2289,7 +2294,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
@@ -2308,7 +2313,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletId.keySet().size();
@@ -2376,7 +2381,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
@@ -2395,7 +2400,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletSet.keySet().size();
@@ -2467,7 +2472,7 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable = (OlapTable) table;
             tableProperty = olapTable.getTableProperty();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         boolean hasChanged = false;
@@ -2517,11 +2522,11 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!hasChanged) {
             return;
         }
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2553,7 +2558,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         AlterJobV2 schemaChangeJobV2 = null;
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
@@ -2571,7 +2576,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Table[" + tableName + "] is under SCHEMA_CHANGE but job does not exits.");
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock
@@ -2676,7 +2681,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, Long> indexToNewSchemaId, boolean isReplay)
             throws DdlException, NotImplementedException {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
@@ -2757,7 +2762,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     isReplay);
         } finally {
             olapTable.setState(OlapTableState.NORMAL);
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2778,7 +2783,7 @@ public class SchemaChangeHandler extends AlterHandler {
         OlapTable olapTable = (OlapTable) table;
         Locker locker = new Locker();
         try {
-            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
             modifyTableAddOrDrop(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
                     indexToNewSchemaId, true);
         } catch (DdlException e) {
@@ -2787,7 +2792,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } catch (NotImplementedException e) {
             LOG.error("InternalError", e);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 

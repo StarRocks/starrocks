@@ -133,9 +133,8 @@ Status AggGroupState::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AggGroupState::process_chunk(size_t chunk_size, const Columns& group_by_columns,
-                                    const Buffer<uint8_t>& keys_not_in_map, const StreamRowOp* ops,
-                                    const std::vector<std::vector<ColumnPtr>>& agg_columns,
+Status AggGroupState::process_chunk(size_t chunk_size, const Columns& group_by_columns, const Filter& keys_not_in_map,
+                                    const StreamRowOp* ops, const std::vector<std::vector<ColumnPtr>>& agg_columns,
                                     std::vector<std::vector<const Column*>>& raw_columns,
                                     const Buffer<AggDataPtr>& agg_group_state) const {
     DCHECK(!_agg_states.empty());
@@ -253,7 +252,7 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             RETURN_IF_ERROR(agg_state->output_detail(chunk_size, agg_group_state, detail_cols, result_count.get()));
 
             auto result_count_data = reinterpret_cast<Int64Column*>(result_count.get())->get_data();
-            std::vector<uint32_t> replicate_offsets;
+            Buffer<uint32_t> replicate_offsets;
             replicate_offsets.reserve(result_count_data.size() + 1);
             int offset = 0;
             for (auto count : result_count_data) {

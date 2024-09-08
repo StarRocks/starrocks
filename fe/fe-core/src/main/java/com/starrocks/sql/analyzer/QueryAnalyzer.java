@@ -1315,14 +1315,14 @@ public class QueryAnalyzer {
                         Preconditions.checkState(mvTable instanceof OlapTable);
                         try {
                             // Add read lock to avoid concurrent problems.
-                            locker.lockDatabase(db, LockType.READ);
+                            locker.lockDatabase(db.getId(), LockType.READ);
                             OlapTable mvOlapTable = new OlapTable();
                             ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                             // Copy the necessary olap table meta to avoid changing original meta;
                             mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
                             table = mvOlapTable;
                         } finally {
-                            locker.unLockDatabase(db, LockType.READ);
+                            locker.unLockDatabase(db.getId(), LockType.READ);
                         }
                     }
                 }
@@ -1478,16 +1478,13 @@ public class QueryAnalyzer {
                 if (item.getAlias() == null) {
                     continue;
                 }
-                // Ignore c1 as c1
-                if (item.getExpr() instanceof SlotRef &&
-                        alias.equalsIgnoreCase(((SlotRef) item.getExpr()).getColumnName())) {
-                    continue;
-                }
+
                 // Alias is case-insensitive
                 Expr lastAssociatedExpr = aliases.putIfAbsent(alias.toLowerCase(), item.getExpr());
                 if (lastAssociatedExpr != null) {
                     // Duplicate alias is allowed, eg: select a.v1 as v, a.v2 as v from t0 a,
-                    // But it should not be ambiguous, eg: select a.v1 as v, a.v2 as v from t0 a order by v
+                    // But it should be ambiguous when the alias is used in the order by expr,
+                    // eg: select a.v1 as v, a.v2 as v from t0 a order by v
                     aliasesMaybeAmbiguous.add(alias.toLowerCase());
                 }
             }

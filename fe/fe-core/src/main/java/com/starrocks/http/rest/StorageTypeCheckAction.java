@@ -85,7 +85,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
 
         JSONObject root = new JSONObject();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             List<Table> tbls = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table tbl : tbls) {
@@ -104,7 +104,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
                 root.put(tbl.getName(), indexObj);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // to json response

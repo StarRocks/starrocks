@@ -24,7 +24,6 @@ sr api lib in this module
 """
 import base64
 import bz2
-import configparser
 import copy
 import datetime
 import json
@@ -33,6 +32,7 @@ import sys
 import threading
 import traceback
 
+import pymysql
 import trino
 import pyhive
 
@@ -53,8 +53,11 @@ import requests
 from cup import shell
 from nose import tools
 from cup import log
+from cup.util import conf as configparser
 from requests.auth import HTTPBasicAuth
 from timeout_decorator import timeout, TimeoutError
+from dbutils.pooled_db import PooledDB
+
 
 from lib import skip
 from lib import data_delete_lib
@@ -141,11 +144,14 @@ class StarrocksSQLApiLib(object):
     """api lib"""
 
     version = os.environ.get("version", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
+    _instance = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.root_path = root_path
         self.data_path = common_data_path
+        self.db = list()
+        self.resource = list()
         self.mysql_lib = MysqlLib()
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
@@ -162,10 +168,15 @@ class StarrocksSQLApiLib(object):
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
 
+        # connection pool
+        self.connection_pool = None
         # thread
         self.thread_res = {}
         self.thread_var = {}
         self.thread_res_log = {}
+
+        self.component_status = {}
+        self.data_status = {}
 
         # trino client config
         self.trino_host = ""
@@ -187,6 +198,10 @@ class StarrocksSQLApiLib(object):
         self.log = []
         self.res_log = []
 
+        # check data dir
+        self.check_data_dir()
+
+        # read conf
         config_path = os.environ.get("config_path")
         if config_path is None or config_path == "":
             self.read_conf("conf/sr.conf")
@@ -259,14 +274,14 @@ class StarrocksSQLApiLib(object):
                 title = f"[{self.run_info}] SQL-Tester crash"
                 run_link = os.environ.get("WORKFLOW_URL", "")
                 body = (
-                    """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
-                    % (
-                        be_crash_case,
-                        be_crash_log,
-                        cluster_status_dict["version"],
-                        cluster_status_dict["ip"][0],
-                        run_link,
-                    )
+                        """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
+                        % (
+                            be_crash_case,
+                            be_crash_log,
+                            cluster_status_dict["version"],
+                            cluster_status_dict["ip"][0],
+                            run_link,
+                        )
                 )
                 assignee = os.environ.get("ISSUE_AUTHOR")
                 repo = os.environ.get("GITHUB_REPOSITORY")
@@ -400,48 +415,157 @@ class StarrocksSQLApiLib(object):
     def setUpClass(cls) -> None:
         pass
 
+    def check_data_dir(self):
+
+        def _sort_by_len_and_alph(n):
+            return
+
+        for _data_path in os.listdir(self.data_path):
+            # check data files exist
+            _this_data_path = os.path.join(self.data_path, _data_path)
+
+            # check dirs not empty
+            _files = os.listdir(_this_data_path)
+            if all(_file.startswith(".") for _file in _files):
+                self.data_status[_data_path] = False
+                continue
+            else:
+                self.data_status[_data_path] = True
+
+        if not StarrocksSQLApiLib._instance:
+            self_print(f"\n{'-' * 30}\n[Data check]\n{'-' * 30}", color=ColorEnum.BLUE, logout=True, bold=True)
+            _data_names = sorted(list(self.data_status.keys()))
+
+            for _data_name in _data_names:
+                if self.data_status[_data_name]:
+                    self_print("▶ %-20s ... YES" % str(_data_name).upper(), color=ColorEnum.CYAN, bold=True)
+                else:
+                    self_print("▶ %-20s ... NO" % str(_data_name).upper(), color=ColorEnum.YELLOW, bold=True)
+            self_print(f"{'-' * 30}", color=ColorEnum.BLUE, logout=True, bold=True)
+
     def read_conf(self, path):
         """read conf"""
-        config_parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        config_parser.read("%s/%s" % (root_path, path))
-        self.mysql_host = config_parser.get("mysql-client", "host")
-        self.mysql_port = config_parser.get("mysql-client", "port")
-        self.mysql_user = config_parser.get("mysql-client", "user")
-        self.mysql_password = config_parser.get("mysql-client", "password")
-        self.http_port = config_parser.get("mysql-client", "http_port")
-        self.host_user = config_parser.get("mysql-client", "host_user")
-        self.host_password = config_parser.get("mysql-client", "host_password")
-        self.cluster_path = config_parser.get("mysql-client", "cluster_path")
 
+        def _get_value(_conf_dict, *args):
+            _tmp_conf = _conf_dict
+            _index = 0
+            _now_conf_key = ""
+
+            for arg in args:
+                _now_conf_key = ".".join(args[:_index + 1])
+                if arg not in _tmp_conf:
+                    if not StarrocksSQLApiLib._instance:
+                        self_print(f"[Miss config] {_now_conf_key}", color=ColorEnum.YELLOW)
+
+                    return ""
+
+                _tmp_conf = _tmp_conf.get(arg)
+                _index += 1
+
+            if isinstance(_tmp_conf, str):
+                if _tmp_conf == "":
+                    if not StarrocksSQLApiLib._instance:
+                        log.warning(f"[Null config] {_now_conf_key}")
+
+                return _tmp_conf
+            else:
+                return _tmp_conf
+
+        # read conf file to dict
+        config_parser = configparser.Configure2Dict(path, separator="=").get_dict()
+        config_parser_str = json.dumps(config_parser)
+
+        # replace ${} in conf
+        var_strs = set(re.findall(r"\${([a-zA-Z._-]+)}", config_parser_str))
+        for var_str in var_strs:
+            var_str_path = "['" + var_str.replace(".", "']['") + "']"
+            try:
+                var_value = eval(f'config_parser{var_str_path}')
+            except Exception as e:
+                self_print(f"[ERROR] config: {var_str} is incorrect!", color=ColorEnum.RED, bold=True)
+                sys.exit(1)
+            config_parser_str = config_parser_str.replace(f"${{{var_str}}}", var_value)
+
+        config_parser = json.loads(config_parser_str)
+
+        # update dependency component status dict
+        component_list = list(_get_value(config_parser, "env").keys())
+        component_list.extend(list(_get_value(config_parser, "client").keys()))
+
+        if not StarrocksSQLApiLib._instance:
+            self_print(f"\n{'-' * 30}\n[Component check]\n{'-' * 30}", color=ColorEnum.BLUE, logout=True, bold=True)
+
+        for each_comp in component_list:
+            if each_comp == "others":
+                continue
+
+            if each_comp in _get_value(config_parser, "env"):
+                comp_conf_dict = _get_value(config_parser, "env", each_comp)
+            else:
+                comp_conf_dict = _get_value(config_parser, "client", each_comp)
+
+            self.component_status[each_comp] = {
+                "status": None,
+                "keys": list(comp_conf_dict.keys())
+            }
+
+            for com_k, com_v in comp_conf_dict.items():
+                if str(com_v).strip() == "" and "passwd" not in com_k.lower() and "passwd" not in com_k.lower():
+                    self.component_status[each_comp]["status"] = False
+                    if not StarrocksSQLApiLib._instance:
+                        self_print("▶ %-20s ... NO" % str(each_comp).upper(), color=ColorEnum.YELLOW, bold=True)
+                    break
+
+            if self.component_status[each_comp]["status"] is None:
+                self.component_status[each_comp]["status"] = True
+                if not StarrocksSQLApiLib._instance:
+                    self_print("▶ %-20s ... YES" % str(each_comp).upper(), color=ColorEnum.BLUE, bold=True)
+
+        if not StarrocksSQLApiLib._instance:
+            self_print(f"{'-' * 30}", color=ColorEnum.BLUE, logout=True, bold=True)
+
+        cluster_conf = _get_value(config_parser, "cluster")
+        self.mysql_host = _get_value(cluster_conf, "host")
+        self.mysql_port = _get_value(cluster_conf, "port")
+        self.mysql_user = _get_value(cluster_conf, "user")
+        self.mysql_password = _get_value(cluster_conf, "password")
+        self.http_port = _get_value(cluster_conf, "http_port")
+        self.host_user = _get_value(cluster_conf, "host_user")
+        self.host_password = _get_value(cluster_conf, "host_password")
+        self.cluster_path = _get_value(cluster_conf, "cluster_path")
+
+        # client
+        client_conf = _get_value(config_parser, "client")
         # parse trino config
-        self.trino_host = config_parser.get("trino-client", "host")
-        self.trino_port = config_parser.get("trino-client", "port")
-        self.trino_user = config_parser.get("trino-client", "user")
-
+        self.trino_host = _get_value(client_conf, "trino-client", "host")
+        self.trino_port = _get_value(client_conf, "trino-client", "port")
+        self.trino_user = _get_value(client_conf, "trino-client", "user")
         # parse spark config
-        self.spark_host = config_parser.get("spark-client", "host")
-        self.spark_port = config_parser.get("spark-client", "port")
-        self.spark_user = config_parser.get("spark-client", "user")
-
+        self.spark_host = _get_value(client_conf, "spark-client", "host")
+        self.spark_port = _get_value(client_conf, "spark-client", "port")
+        self.spark_user = _get_value(client_conf, "spark-client", "user")
         # parse hive config
-        self.hive_host = config_parser.get("hive-client", "host")
-        self.hive_port = config_parser.get("hive-client", "port")
-        self.hive_user = config_parser.get("hive-client", "user")
+        self.hive_host = _get_value(client_conf, "hive-client", "host")
+        self.hive_port = _get_value(client_conf, "hive-client", "port")
+        self.hive_user = _get_value(client_conf, "hive-client", "user")
 
         # read replace info
-        for rep_key, rep_value in config_parser.items("replace"):
+        for rep_key, rep_value in _get_value(config_parser, "replace").items():
             self.__setattr__(rep_key, rep_value)
 
         # read env info
-        for env_key, env_value in config_parser.items("env"):
-            if not env_value:
-                env_value = os.environ.get(env_key, "")
-            else:
-                # save secrets info
-                if "aws" in env_key or "oss_" in env_key:
-                    SECRET_INFOS[env_key] = env_value
+        for env_key, env_value in _get_value(config_parser, "env").items():
+            for each_env_key, each_env_value in env_value.items():
+                if not each_env_value:
+                    each_env_value = os.environ.get(each_env_key, "")
+                else:
+                    # save secrets info
+                    if 'aws' in each_env_key or 'oss_' in each_env_key:
+                        SECRET_INFOS[each_env_key] = each_env_value
 
-            self.__setattr__(env_key, env_value)
+                self.__setattr__(each_env_key, each_env_value)
+
+        StarrocksSQLApiLib._instance = True
 
     def connect_starrocks(self):
         mysql_dict = {
@@ -451,6 +575,17 @@ class StarrocksSQLApiLib(object):
             "password": self.mysql_password,
         }
         self.mysql_lib.connect(mysql_dict)
+
+    def create_starrocks_conn_pool(self):
+        self.connection_pool = PooledDB(
+            creator=pymysql,
+            mincached=3,
+            blocking=True,
+            host=self.mysql_host,
+            port=int(self.mysql_port),
+            user=self.mysql_user,
+            password=self.mysql_password,
+        )
 
     def connect_trino(self):
         trino_dict = {
@@ -581,10 +716,13 @@ class StarrocksSQLApiLib(object):
             file_path_list.append(os.path.join(data_path, file_name))
         return file_path_list
 
-    def execute_sql(self, sql, ori=False):
+    def execute_sql(self, sql, ori=False, conn=None):
         """execute query"""
         try:
-            with self.mysql_lib.connector.cursor() as cursor:
+            if conn is None:
+                conn = self.mysql_lib.connector
+
+            with conn.cursor() as cursor:
                 cursor.execute(sql)
                 result = cursor.fetchall()
                 if isinstance(result, tuple):
@@ -610,7 +748,7 @@ class StarrocksSQLApiLib(object):
                 res_log = []
 
                 if ori:
-                    return {"status": True, "result": result, "msg": cursor._result.message}
+                    return {"status": True, "result": result, "msg": cursor._result.message, "desc": cursor.description}
 
                 if isinstance(result, tuple) or isinstance(result, list):
                     if len(result) > 0:
@@ -635,6 +773,25 @@ class StarrocksSQLApiLib(object):
         except Exception as e:
             print("unknown error", e)
             raise
+
+    def get_now_db(self, conn=None):
+        """execute query"""
+        db = None
+        try:
+            if conn is None:
+                conn = self.mysql_lib.connector
+
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT DATABASE()")
+                result = cursor.fetchall()
+                db = result[0][0]
+
+        except _mysql.Error as e:
+            print("Get now db with _mysql.Error!", e.args)
+        except Exception as e:
+            print("Get now db with unknown error!", e)
+
+        return db
 
     @timeout(
         QUERY_TIMEOUT,
@@ -818,7 +975,7 @@ class StarrocksSQLApiLib(object):
         if regex.match(cmd):
             # set variable
             var = regex.match(cmd).group()
-            cmd = cmd[len(var) :]
+            cmd = cmd[len(var):]
             var = var[:-1]
 
         match_words: list = re.compile("\\${([^}]*)}").findall(cmd)
@@ -836,7 +993,8 @@ class StarrocksSQLApiLib(object):
 
                 # only replace the first keywords
                 if each_keyword in self.thread_var[thread_key]:
-                    each_keyword_value = each_word.replace(each_keyword, f"self.thread_var[{thread_key}][{each_keyword}]")
+                    each_keyword_value = each_word.replace(each_keyword,
+                                                           f"self.thread_var[{thread_key}][{each_keyword}]")
 
                     if unfold:
                         each_keyword_value = str(eval(each_keyword_value))
@@ -915,12 +1073,16 @@ class StarrocksSQLApiLib(object):
         self.thread_res[args.thread.name] = trace_stack
         # tools.ok_(False, "Thread exit with exception!")
 
-    def execute_thread(self, exec_id, cmd_list, res_list, ori_cmd_list, record_mode):
+    def execute_thread(self, exec_id, cmd_list, res_list, ori_cmd_list, record_mode, init_db, conn):
 
         this_res = []
         self.thread_var[exec_id] = {}
         _t_info = exec_id[:str(exec_id).rindex("-")]
         _t_exec_id = exec_id.split("-")[-1]
+
+        if init_db:
+            self_print(f"Init conn's db: {init_db}", color=ColorEnum.CYAN, logout=True)
+            self.execute_sql("use %s" % init_db, conn=conn)
 
         for _cmd_id, _each_cmd in enumerate(cmd_list):
             uncheck = False
@@ -935,7 +1097,7 @@ class StarrocksSQLApiLib(object):
 
             old_this_res_len = len(this_res)
             actual_res, actual_res_log, var, order = self.execute_single_statement(_each_cmd, _cmd_id_str, record_mode,
-                                                                                   this_res, var_key=exec_id)
+                                                                                   this_res, var_key=exec_id, conn=conn)
 
             if record_mode:
                 for new_res_lino in range(old_this_res_len, len(this_res)):
@@ -970,7 +1132,7 @@ class StarrocksSQLApiLib(object):
             self.thread_res_log.setdefault(_t_info, [])
             self.thread_res_log[_t_info].append(this_res)
 
-    def execute_single_statement(self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None):
+    def execute_single_statement(self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None, conn: any = None):
         """
         execute single statement and return result
         """
@@ -1070,7 +1232,7 @@ class StarrocksSQLApiLib(object):
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
 
-            actual_res = self.execute_sql(statement)
+            actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
 
             if record_mode:
@@ -1128,7 +1290,8 @@ class StarrocksSQLApiLib(object):
                     except Exception as e:
                         self_print(f"[LOOP] Exception: {each_statement}, {e}!", ColorEnum.YELLOW, logout=True)
                         for self_k in re.findall(r'self.([0-9a-zA-Z_-]+)', each_statement_new):
-                            self_print(f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
+                            self_print(
+                                f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
                         loop_check_res = False
                         break
 
@@ -1140,7 +1303,8 @@ class StarrocksSQLApiLib(object):
                                    color=ColorEnum.YELLOW, logout=True)
                         # print variables in each_statement_new
                         for self_k in re.findall(r'self.([0-9a-zA-Z_-]+)', each_statement_new):
-                            self_print(f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
+                            self_print(
+                                f"    ▶ {self_k}: %s" % eval(f'self.{self_k}') if self_k in self.__dict__ else "")
                         loop_check_res = False
                         break
 
@@ -1239,7 +1403,7 @@ class StarrocksSQLApiLib(object):
                     r"%s" % str(act),
                     exp[len(REGEX_FLAG):],
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
-                    % (self_print(sql, need_print=False), exp[len(REGEX_FLAG) :], act),
+                    % (self_print(sql, need_print=False), exp[len(REGEX_FLAG):], act),
                 )
                 return
 
@@ -1964,7 +2128,7 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.catalog.ColumnId;
 
-var tid = GlobalStateMgr.getCurrentState().getMetadata().getDb(\"{db}\").getTable(\"{tb}\").getId();
+var tid = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(\"{db}\").getTable(\"{tb}\").getId();
 var dictMgr = CacheDictManager.getInstance();
 var columnId = new ColumnId("{col}");
 var cid = new ColumnIdentifier(tid, columnId)
@@ -2301,6 +2465,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 {"status": "OK"}, res_json, f"failed to update be config [response={res}] [url={exec_url}]"
             )
 
+    def get_resource_group_id(self, name):
+        res = self.execute_sql(f"show resource group {name};", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        return res["result"][0][1]
+
+    def get_backend_cpu_cores(self):
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        for i, col_info in enumerate(res["desc"]):
+            if col_info[0] == "CpuCores":
+                return res["result"][0][i]
+
+        tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
+
     def assert_table_cardinality(self, sql, rows):
         """
         assert table with an expected row counts
@@ -2386,8 +2564,10 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         sql = "explain verbose %s" % (query)
         res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res['msg'])
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            plan_string = "\n".join(item[0] for item in res["result"])
+            tools.assert_true(plan_string.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan_string))
 
     def assert_explain_costs_contains(self, query, *expects):
         """
@@ -2479,9 +2659,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         Check cache select is success, make sure that read_cache_size + write_cache_size > 0
         """
-        res = self.execute_sql(query,True,)
+        res = self.execute_sql(query, True, )
         result = res["result"][0]
         # remove unit
         read_cache_size = int(result[0].replace("B", "").replace("KB", ""))
         write_cache_size = int(result[1].replace("B", "").replace("KB", ""))
         tools.assert_true(read_cache_size + write_cache_size > 0, "cache select is failed, read_cache_size + write_cache_size must larger than 0 bytes")
+
+    @staticmethod
+    def regex_match(check_str: str, pattern: str):
+        if re.fullmatch(pattern, check_str):
+            return True
+
+        return False

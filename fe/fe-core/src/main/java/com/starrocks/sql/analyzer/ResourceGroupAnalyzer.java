@@ -168,13 +168,15 @@ public class ResourceGroupAnalyzer {
                 resourceGroup.setCpuWeight(cpuWeight);
                 continue;
             }
-            if (key.equalsIgnoreCase(ResourceGroup.DEDICATED_CPU_CORES)) {
-                int dedicatedCpuCores = Integer.parseInt(value);
-                if (dedicatedCpuCores >= avgCoreNum) {
-                    throw new SemanticException(
-                            String.format("%s should range from 0 to %d", ResourceGroup.DEDICATED_CPU_CORES, avgCoreNum - 1));
+            if (key.equalsIgnoreCase(ResourceGroup.EXCLUSIVE_CPU_CORES)) {
+                final int exclusiveCpuCores = Integer.parseInt(value);
+                final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
+                if (exclusiveCpuCores >= minCoreNum) {
+                    throw new SemanticException(String.format(
+                            "%s cannot exceed the minimum number of CPU cores available on the backends minus one [%d]",
+                            ResourceGroup.EXCLUSIVE_CPU_CORES, minCoreNum - 1));
                 }
-                resourceGroup.setDedicatedCpuCores(dedicatedCpuCores);
+                resourceGroup.setExclusiveCpuCores(exclusiveCpuCores);
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
@@ -193,8 +195,8 @@ public class ResourceGroupAnalyzer {
                 } else {
                     memLimit = Double.parseDouble(value);
                 }
-                if (memLimit <= 0.0 || memLimit >= 1.0) {
-                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(exclude)");
+                if (memLimit <= 0.0 || memLimit > 1.0) {
+                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(include)");
                 }
                 resourceGroup.setMemLimit(memLimit);
                 continue;

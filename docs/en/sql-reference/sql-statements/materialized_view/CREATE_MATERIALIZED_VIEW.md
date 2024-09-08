@@ -235,14 +235,18 @@ The partitioning strategy of the asynchronous materialized view. As for the curr
 
 > **CAUTION**
 >
-> Currently, asynchronous materialized views do not support the list partitioning strategy.
+> From v3.3.3 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
+>
+> - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
+> - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
+> - The refresh behavior and query rewrite logic of materialized views with the List Partitioning strategy are consistent with those with the Range Partitioning strategy.
 
 Valid values:
 
 - `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
 - `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
 - `str2date` function: The function used to partition string type parititions of base table into materialized view's partition. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a string date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
-- `time_slice` or `date_slice` functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
+- `time_slice` function: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
 
 If this parameter is not specified, no partitioning strategy is adopted by default.
 
@@ -297,10 +301,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
-
-> **CAUTION**
->
-> Currently, StarRocks does not support creating asynchronous materialized views with base tables created with the list partitioning strategy.
 
 ### Query an asynchronous materialized view
 
