@@ -140,7 +140,7 @@ public class ConnectorAnalyzeTask {
         }
     }
 
-    private AnalyzeStatus executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStatus analyzeStatus) {
+    public AnalyzeStatus executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStatus analyzeStatus) {
         List<String> columnNames = Lists.newArrayList(columns);
         List<Type> columnTypes = columnNames.stream().map(col -> {
             Column column = table.getColumn(col);
