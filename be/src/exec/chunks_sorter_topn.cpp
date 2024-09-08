@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "exec/chunks_sorter_distinct_topn.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
@@ -46,6 +47,20 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
 }
 
 ChunksSorterTopn::~ChunksSorterTopn() = default;
+
+std::shared_ptr<ChunksSorter> ChunksSorterTopn::create(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                                                       const std::vector<bool>* is_asc_order,
+                                                       const std::vector<bool>* is_null_first,
+                                                       const std::string& sort_keys, size_t offset, size_t limit,
+                                                       const TTopNType::type topn_type, size_t max_buffered_chunks) {
+    if (topn_type == TTopNType::DENSE_RANK) {
+        return std::make_shared<ChunksSorterDistinctTopn>(state, sort_exprs, is_asc_order, is_null_first, sort_keys,
+                                                          offset, limit, max_buffered_chunks);
+    } else {
+        return std::make_shared<ChunksSorterTopn>(state, sort_exprs, is_asc_order, is_null_first, sort_keys, offset,
+                                                  limit, topn_type, max_buffered_chunks);
+    }
+}
 
 void ChunksSorterTopn::setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
     ChunksSorter::setup_runtime(state, profile, parent_mem_tracker);
@@ -197,6 +212,7 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
 
     size_t row_count = _raw_chunks.size_of_rows;
     auto& raw_chunks = _raw_chunks.chunks;
+    LOG(WARNING) << "tttttttttttt new round, row_count is: " << row_count;
 
     // Build one chunk as one DataSegment
     // The timer says that: in top-n case, _build_sorting_data may be called multiple times.
@@ -429,11 +445,7 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
     }
 
     CHECK_GE(merged_perm.size(), rows_to_keep);
-    if (_topn_type == TTopNType::DENSE_RANK) {
-        size_t distinct_num = 0;
-        // xxx
-        merged_perm.resize(distinct_num);
-    } else {
+    if (_topn_type != TTopNType::DENSE_RANK) {
         merged_perm.resize(rows_to_keep);
     }
 

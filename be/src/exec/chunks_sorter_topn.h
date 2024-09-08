@@ -49,6 +49,13 @@ public:
         return 256;
     }
 
+    static std::shared_ptr<ChunksSorter> create(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                                                const std::vector<bool>* is_asc_order,
+                                                const std::vector<bool>* is_null_first, const std::string& sort_keys,
+                                                size_t offset = 0, size_t limit = 0,
+                                                const TTopNType::type topn_type = TTopNType::ROW_NUMBER,
+                                                size_t max_buffered_chunks = kDefaultBufferedChunks);
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.

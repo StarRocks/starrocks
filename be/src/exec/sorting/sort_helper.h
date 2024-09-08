@@ -270,7 +270,7 @@ static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>&
                         tie[j] = 0;
                         distinct_top_n++;
                         if (distinct_top_n == limit + 1) {
-                            *limited = first_iter - 1;
+                            *limited = first_iter;
                             return distinct_top_n - 1;
                         }
                     } else {
@@ -278,8 +278,8 @@ static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>&
                             tie[j] = 0;
                             distinct_top_n++;
                             if (distinct_top_n == limit + 1) {
-                                *limited = first_iter + j - 1;
-                                return distinct_top_n;
+                                *limited = first_iter + j;
+                                return distinct_top_n - 1;
                             }
                         } else {
                             tie[j] = 1;
@@ -309,16 +309,16 @@ static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>&
                     tie[j] = 0;
                     distinct_top_n++;
                     if (distinct_top_n == limit + 1) {
-                        *limited = j - 1;
-                        return distinct_top_n;
+                        *limited = j;
+                        return distinct_top_n - 1;
                     }
                 } else {
                     if (cmp(permutation[j - 1], permutation[j]) != 0) {
                         tie[j] = 0;
                         distinct_top_n++;
                         if (distinct_top_n == limit + 1) {
-                            *limited = j - 1;
-                            return distinct_top_n;
+                            *limited = j;
+                            return distinct_top_n - 1;
                         }
                     } else {
                         tie[j] = 1;
@@ -328,9 +328,9 @@ static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>&
 
             // at the end of this equal range, if distinct_top_n == limit, it's also safe to set limited
             if (distinct_top_n == limit) {
-                *limited = last_iter - 1;
+                *limited = last_iter;
             }
-            DCHECK(distinct_top_n < limit);
+            DCHECK(distinct_top_n <= limit);
         }
 
         return distinct_top_n;
@@ -350,17 +350,24 @@ static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>&
         int range_first = iterator.range_first;
         int range_last = iterator.range_last;
 
-        if (LIKELY(range_last - range_first > 1)) {
+        // current equal range is not empty
+        if (LIKELY(range_last - range_first >= 1)) {
             distinct_top_n = do_topn_for_dense_rank(range_first, range_last, distinct_top_n);
         }
 
-        if (distinct_top_n >= limit) {
-            *result_distinct_top_n = distinct_top_n;
-            return Status::OK();
-        }
+        if (distinct_top_n >= limit) break;
+    }
+
+    // if only one row in tie, TieIterator will return false directly
+    if (distinct_top_n == 0 && range.second > range.first) {
+        distinct_top_n = 1;
     }
 
     *result_distinct_top_n = distinct_top_n;
+
+    // if range is not empty, then distinct_top_n > 0
+    DCHECK(range.second <= range.first || distinct_top_n > 0);
+    DCHECK(distinct_top_n <= limit) << "distinct_top_n: " << distinct_top_n << ", limit: " << limit;
     return Status::OK();
 }
 
