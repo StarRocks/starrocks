@@ -409,7 +409,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (!s.ok()) {
                 Status rollback_status = config::rollback_config(name);
                 if (!rollback_status.ok()) {
-                    LOG(WARNING) <<  strings::Substitute("Failed to rollback config: $1.", name);
+                    LOG(WARNING) <<  strings::Substitute("Failed to rollback config: $0.", name);
                 }
             }
         }
