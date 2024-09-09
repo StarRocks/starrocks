@@ -250,13 +250,6 @@ public class AlterTest {
     @AfterClass
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String dropSQL = "drop table test_partition_exception";
-        try {
-            DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-        } catch (Exception ex) {
-
-        }
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
@@ -990,21 +983,21 @@ public class AlterTest {
                 ")\n" +
                 "DUPLICATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY RANDOM \n" +
-                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='k1');";
         String s2 = "CREATE TABLE test.s2 \n" +
                 "(\n" +
                 "    k1 int, k2 int, k3 int\n" +
                 ")\n" +
                 "DUPLICATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY RANDOM \n" +
-                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s2.k1');";
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='k1');";
 
         createTable(s1);
         createTable(s2);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
-        String replaceStmt = "ALTER TABLE test.s1 SWAP WITH test.s2";
-        alterTableWithNewParser(replaceStmt, true);
+        String replaceStmt = "ALTER TABLE s1 SWAP WITH s2";
+        alterTableWithNewParser(replaceStmt, false);
 
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
@@ -1029,7 +1022,7 @@ public class AlterTest {
                 ")\n" +
                 "DUPLICATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY RANDOM \n" +
-                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='k1');";
         String s2 = "CREATE TABLE test.s2 \n" +
                 "(\n" +
                 "    k1 int, k2 int, k3 int\n" +
@@ -1050,8 +1043,8 @@ public class AlterTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         // swap child tables
-        String replaceStmt = "ALTER TABLE test.s2 SWAP WITH test.s3";
-        alterTableWithNewParser(replaceStmt, true);
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s3";
+        alterTableWithNewParser(replaceStmt, false);
 
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
@@ -1104,14 +1097,14 @@ public class AlterTest {
                 ")\n" +
                 "DUPLICATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY RANDOM \n" +
-                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s1.k1');";
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='k1');";
         String s2 = "CREATE TABLE test.s2 \n" +
                 "(\n" +
                 "    k1 int, k2 int, k3 int\n" +
                 ")\n" +
                 "DUPLICATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY RANDOM \n" +
-                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='test.s2.k1');";
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='k1');";
         String s3 = "CREATE TABLE test.s3 \n" +
                 "(\n" +
                 "    k1 int, k2 int, k3 int\n" +
@@ -1125,8 +1118,8 @@ public class AlterTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         // swap parent tables
-        String replaceStmt = "ALTER TABLE test.s2 SWAP WITH test.s1";
-        alterTableWithNewParser(replaceStmt, true);
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s1";
+        alterTableWithNewParser(replaceStmt, false);
 
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
@@ -1149,13 +1142,13 @@ public class AlterTest {
         BaseTableInfo parentTableInfo = fk30.getParentTableInfo();
         Assert.assertTrue(parentTableInfo != null);
         Assert.assertEquals("s1", parentTableInfo.getTableName());
-        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+        Assert.assertEquals(tbl2.getId(), parentTableInfo.getTableId());
 
         // test global constraint manager
         GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
         Assert.assertTrue(cm != null);
 
-        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
+        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl2);
         Assert.assertTrue(tableWithFKConstraintSet != null);
         Assert.assertTrue(tableWithFKConstraintSet.size() == 1);
         Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
@@ -1407,7 +1400,6 @@ public class AlterTest {
 
     @Test(expected = DdlException.class)
     public void testCatalogAddPartitionsDayConflictException() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_exception (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1424,15 +1416,16 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_exception ADD\n" +
                 "    PARTITIONS START (\"2014-01-01\") END (\"2014-01-04\") EVERY (interval 1 day)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, connectContext);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exception", addPartitionClause);
+        starRocksAssert.dropTable("test_partition_exception");
     }
 
     @Test
