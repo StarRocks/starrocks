@@ -62,8 +62,6 @@
             RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
         }                                                                                                \
     } while (0)
-#define SET_EXCEED_MEM_TRACKER() \
-    starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
 #define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
 #else
 std::atomic<int64_t> g_mem_usage(0);
@@ -72,7 +70,6 @@ std::atomic<int64_t> g_mem_usage(0);
 #define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(STARROCKS_MALLOC_SIZE(ptr))
 #define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(STARROCKS_MALLOC_SIZE(ptr))
 #define TRY_MEM_CONSUME(size, err_ret) g_mem_usage.fetch_add(size)
-#define SET_EXCEED_MEM_TRACKER() (void)0
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
@@ -84,10 +81,7 @@ void* my_malloc(size_t size) __THROW {
         // call the `my_malloc`, and result in a deadloop.
         TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
         void* ptr = STARROCKS_MALLOC(size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0));
-        }
+        assert(ptr != nullptr);
         return ptr;
     } else {
         void* ptr = STARROCKS_MALLOC(size);
