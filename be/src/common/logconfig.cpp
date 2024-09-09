@@ -55,30 +55,6 @@ static bool iequals(const std::string& a, const std::string& b) {
 
 size_t get_build_version(char* buffer, size_t max_size);
 
-// avoid to allocate extra memory
-static int print_unique_id(char* buffer, const TUniqueId& uid) {
-    char buff[32];
-    struct {
-        int64_t hi;
-        int64_t lo;
-    } data;
-    data.hi = gbswap_64(uid.hi);
-    data.lo = gbswap_64(uid.lo);
-    to_hex(data.hi, buff + 16);
-    to_hex(data.lo, buff);
-
-    auto* raw = reinterpret_cast<int16_t*>(buff);
-    std::reverse(raw, raw + 16);
-
-    memset(buffer, '-', 36);
-    memcpy(buffer, buff, 8);
-    memcpy(buffer + 8 + 1, buff + 8, 4);
-    memcpy(buffer + 8 + 4 + 2, buff + 8 + 4, 4);
-    memcpy(buffer + 8 + 4 + 4 + 3, buff + 8 + 4 + 4, 4);
-    memcpy(buffer + 8 + 4 + 4 + 4 + 4, buff + 8 + 4 + 4 + 4, 12);
-    return 36;
-}
-
 // heap may broken when call dump trace info.
 // so we shouldn't allocate any memory allocate function here
 static void dump_trace_info() {
