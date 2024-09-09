@@ -147,21 +147,9 @@ void* my_calloc(size_t n, size_t size) __THROW {
         return nullptr;
     }
 
-    if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(n * size, nullptr);
-        void* ptr = STARROCKS_CALLOC(n, size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(n * size);
-        } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - n * size);
-        }
-        return ptr;
-    } else {
-        void* ptr = STARROCKS_CALLOC(n, size);
-        MEMORY_CONSUME_PTR(ptr);
-        return ptr;
-    }
+    void* ptr = STARROCKS_CALLOC(n, size);
+    MEMORY_CONSUME_PTR(ptr);
+    return ptr;
 }
 
 void my_cfree(void* ptr) __THROW {
@@ -212,40 +200,16 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 
 // valloc
 void* my_valloc(size_t size) __THROW {
-    if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = STARROCKS_VALLOC(size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(size);
-        } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
-        }
-        return ptr;
-    } else {
-        void* ptr = STARROCKS_VALLOC(size);
-        MEMORY_CONSUME_PTR(ptr);
-        return ptr;
-    }
+    void* ptr = STARROCKS_VALLOC(size);
+    MEMORY_CONSUME_PTR(ptr);
+    return ptr;
 }
 
 // pvalloc
 void* my_pvalloc(size_t size) __THROW {
-    if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = STARROCKS_VALLOC(size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(size);
-        } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
-        }
-        return ptr;
-    } else {
-        void* ptr = STARROCKS_VALLOC(size);
-        MEMORY_CONSUME_PTR(ptr);
-        return ptr;
-    }
+    void* ptr = STARROCKS_VALLOC(size);
+    MEMORY_CONSUME_PTR(ptr);
+    return ptr;
 }
 
 // posix_memalign
