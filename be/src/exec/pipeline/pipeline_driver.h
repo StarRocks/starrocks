@@ -472,7 +472,6 @@ protected:
     Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
-    void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
     void _try_to_release_buffer(RuntimeState* state, OperatorPtr& op);
 
     // Update metrics when the driver yields.

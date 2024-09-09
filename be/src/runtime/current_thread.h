@@ -31,12 +31,6 @@
 #define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
 
-#define SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(mem_tracker) \
-    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadSingletonCheckMemTrackerSetter(mem_tracker)
-
-#define SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(operator) \
-    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadOperatorMemTrackerSetter(operator->mem_tracker())
-
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
 
@@ -57,11 +51,9 @@ namespace starrocks {
 class TUniqueId;
 
 inline thread_local MemTracker* tls_mem_tracker = nullptr;
-inline thread_local MemTracker* tls_operator_mem_tracker = nullptr;
 inline thread_local MemTracker* tls_exceed_mem_tracker = nullptr;
 // `tls_singleton_check_mem_tracker` is used when you want to separate the mem tracker and check tracker,
 // you can add a new check tracker by set up `tls_singleton_check_mem_tracker`.
-inline thread_local MemTracker* tls_singleton_check_mem_tracker = nullptr;
 inline thread_local bool tls_is_thread_status_init = false;
 
 class CurrentThread {
@@ -73,9 +65,7 @@ private:
         MemCacheManager(MemCacheManager&&) = delete;
 
         void consume(int64_t size) {
-            size = _consume_from_reserved(size);
             _cache_size += size;
-            _allocated_cache_size += size;
             _total_consumed_bytes += size;
             if (_cache_size >= BATCH_SIZE) {
                 commit(false);
@@ -84,15 +74,10 @@ private:
 
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = mem_tracker();
-            int64_t prev_reserved = _reserved_bytes;
-            size = _consume_from_reserved(size);
             _cache_size += size;
-            _allocated_cache_size += size;
             _total_consumed_bytes += size;
             auto failure_handler = [&]() {
-                _reserved_bytes = prev_reserved;
                 _cache_size -= size;
-                _allocated_cache_size -= size;
                 _total_consumed_bytes -= size;
                 _try_consume_mem_size = size;
             };
@@ -112,50 +97,8 @@ private:
             return true;
         }
 
-        bool try_mem_consume_with_limited_tracker(int64_t size) {
-            MemTracker* cur_tracker = mem_tracker();
-            _cache_size += size;
-            _allocated_cache_size += size;
-            _total_consumed_bytes += size;
-            if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size);
-                if (LIKELY(limit_tracker == nullptr)) {
-                    _cache_size = 0;
-                    return true;
-                } else {
-                    _cache_size -= size;
-                    _allocated_cache_size -= size;
-                    _total_consumed_bytes -= size;
-                    _try_consume_mem_size = size;
-                    tls_exceed_mem_tracker = limit_tracker;
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        bool try_mem_reserve(int64_t reserve_bytes) {
-            DCHECK(_reserved_bytes == 0);
-            DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes)) {
-                _reserved_bytes = reserve_bytes;
-                return true;
-            }
-            return false;
-        }
-
-        void release_reserved() {
-            if (_reserved_bytes) {
-                release(_reserved_bytes);
-                _reserved_bytes = 0;
-            }
-        }
-        // release memory to reserved
-        void release_to_reserved(size_t release_bytes) { _reserved_bytes += release_bytes; }
-
         void release(int64_t size) {
             _cache_size -= size;
-            _deallocated_cache_size += size;
             _total_consumed_bytes -= size;
             if (_cache_size <= -BATCH_SIZE) {
                 commit(false);
@@ -168,15 +111,6 @@ private:
                 cur_tracker->consume(_cache_size);
             }
             _cache_size = 0;
-            if (is_ctx_shift) {
-                // Flush all cached info
-                if (cur_tracker != nullptr) {
-                    cur_tracker->update_allocation(_allocated_cache_size);
-                    cur_tracker->update_deallocation(_deallocated_cache_size);
-                }
-                _allocated_cache_size = 0;
-                _deallocated_cache_size = 0;
-            }
         }
 
         int64_t try_consume_mem_size() {
@@ -188,39 +122,19 @@ private:
         int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
     private:
-        int64_t _consume_from_reserved(int64_t size) {
-            if (_reserved_bytes > size) {
-                _reserved_bytes -= size;
-                size = 0;
-            } else {
-                size -= _reserved_bytes;
-                _reserved_bytes = 0;
-            }
-            return size;
-        }
-
         const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
-
-        int64_t _reserved_bytes = 0;
 
         // Allocated or delocated but not committed memory bytes, can be negative
         int64_t _cache_size = 0;
-        // Allocated but not committed memory bytes, always positive
-        int64_t _allocated_cache_size = 0;
-        // Deallocated but not committed memory bytes, always positive
-        int64_t _deallocated_cache_size = 0;
         int64_t _total_consumed_bytes = 0; // Totally consumed memory bytes
         int64_t _try_consume_mem_size = 0; // Last time tried to consumed bytes
     };
 
 public:
-    CurrentThread() {
-        tls_is_thread_status_init = true;
-    }
+    CurrentThread() { tls_is_thread_status_init = true; }
     ~CurrentThread();
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
-    void operator_mem_tracker_ctx_shift() {}
 
     void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
     const starrocks::TUniqueId& query_id() { return _query_id; }
@@ -238,18 +152,9 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        release_reserved();
         mem_tracker_ctx_shift();
         auto* prev = tls_mem_tracker;
         tls_mem_tracker = mem_tracker;
-        return prev;
-    }
-
-    // Return prev memory tracker.
-    starrocks::MemTracker* set_operator_mem_tracker(starrocks::MemTracker* operator_mem_tracker) {
-        operator_mem_tracker_ctx_shift();
-        auto* prev = tls_operator_mem_tracker;
-        tls_operator_mem_tracker = operator_mem_tracker;
         return prev;
     }
 
@@ -262,14 +167,8 @@ public:
     bool check_mem_limit() { return _check; }
 
     static starrocks::MemTracker* mem_tracker();
-    static starrocks::MemTracker* operator_mem_tracker();
-    static starrocks::MemTracker* singleton_check_mem_tracker();
 
     static CurrentThread& current();
-
-    static void set_singleton_check_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        tls_singleton_check_mem_tracker = mem_tracker;
-    }
 
     bool set_is_catched(bool is_catched) {
         bool old = _is_catched;
@@ -279,9 +178,7 @@ public:
 
     bool is_catched() const { return _is_catched; }
 
-    void mem_consume(int64_t size) {
-        _mem_cache_manager.consume(size);
-    }
+    void mem_consume(int64_t size) { _mem_cache_manager.consume(size); }
 
     bool try_mem_consume(int64_t size) {
         if (_mem_cache_manager.try_mem_consume(size)) {
@@ -290,26 +187,7 @@ public:
         return false;
     }
 
-    bool try_mem_reserve(int64_t size) {
-        if (_mem_cache_manager.try_mem_reserve(size)) {
-            _reserve_mod = true;
-            return true;
-        }
-        return false;
-    }
-
-    void release_reserved() {
-        _reserve_mod = false;
-        _mem_cache_manager.release_reserved();
-    }
-
-    void mem_release(int64_t size) {
-        if (_reserve_mod) {
-            _mem_cache_manager.release_to_reserved(size);
-        } else {
-            _mem_cache_manager.release(size);
-        }
-    }
+    void mem_release(int64_t size) { _mem_cache_manager.release(size); }
 
     static void mem_consume_without_cache(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
@@ -357,7 +235,6 @@ private:
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
-    bool _reserve_mod = false;
 };
 
 inline thread_local CurrentThread tls_thread_status;
@@ -385,60 +262,6 @@ public:
 
 private:
     MemTracker* _old_mem_tracker;
-    bool _is_same;
-};
-
-class CurrentThreadOperatorMemTrackerSetter {
-public:
-    explicit CurrentThreadOperatorMemTrackerSetter(MemTracker* new_mem_tracker) {
-        // operator's mem tracker must have no parent
-        DCHECK(new_mem_tracker == nullptr || new_mem_tracker->parent() == nullptr);
-        _old_mem_tracker = tls_thread_status.operator_mem_tracker();
-        _is_same = (_old_mem_tracker == new_mem_tracker);
-        if (!_is_same) {
-            tls_thread_status.set_operator_mem_tracker(new_mem_tracker);
-        }
-    }
-
-    ~CurrentThreadOperatorMemTrackerSetter() {
-        if (!_is_same) {
-            (void)tls_thread_status.set_operator_mem_tracker(_old_mem_tracker);
-        }
-    }
-
-    CurrentThreadOperatorMemTrackerSetter(const CurrentThreadOperatorMemTrackerSetter&) = delete;
-    void operator=(const CurrentThreadOperatorMemTrackerSetter&) = delete;
-    CurrentThreadOperatorMemTrackerSetter(CurrentThreadOperatorMemTrackerSetter&&) = delete;
-    void operator=(CurrentThreadMemTrackerSetter&&) = delete;
-
-private:
-    MemTracker* _old_mem_tracker;
-    bool _is_same;
-};
-
-class CurrentThreadSingletonCheckMemTrackerSetter {
-public:
-    explicit CurrentThreadSingletonCheckMemTrackerSetter(MemTracker* new_tracker) {
-        _old_tracker = tls_thread_status.singleton_check_mem_tracker();
-        _is_same = (_old_tracker == new_tracker);
-        if (!_is_same) {
-            tls_thread_status.set_singleton_check_mem_tracker(new_tracker);
-        }
-    }
-
-    ~CurrentThreadSingletonCheckMemTrackerSetter() {
-        if (!_is_same) {
-            (void)tls_thread_status.set_singleton_check_mem_tracker(_old_tracker);
-        }
-    }
-
-    CurrentThreadSingletonCheckMemTrackerSetter(const CurrentThreadSingletonCheckMemTrackerSetter&) = delete;
-    void operator=(const CurrentThreadSingletonCheckMemTrackerSetter&) = delete;
-    CurrentThreadSingletonCheckMemTrackerSetter(CurrentThreadSingletonCheckMemTrackerSetter&&) = delete;
-    void operator=(CurrentThreadSingletonCheckMemTrackerSetter&&) = delete;
-
-private:
-    MemTracker* _old_tracker;
     bool _is_same;
 };
 
@@ -475,9 +298,6 @@ private:
 };
 
 #define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
-
-#define RELEASE_RESERVED_GUARD() \
-    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().release_reserved(); });
 
 #define SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
     CurrentThread::current().set_pipeline_driver_id(driver_id);   \
