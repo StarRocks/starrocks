@@ -1459,7 +1459,8 @@ public class ScalarOperatorFunctionsTest {
         String[][] testCases = {
                 {"2024-08-06", "-", "", "20240806"},
                 {"abc def ghi", "", "1234", "abc def ghi"},
-                {"abc def ghi abc", "abc", "1234", "1234 def ghi 1234"}
+                {"abc def ghi abc", "abc", "1234", "1234 def ghi 1234"},
+                {"", "abc", "1234", ""}
         };
 
         for (String[] tc : testCases) {

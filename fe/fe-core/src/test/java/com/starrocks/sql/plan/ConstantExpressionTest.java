@@ -559,6 +559,11 @@ public class ConstantExpressionTest extends PlanTestBase {
         }
 
         {
+            String plan = getFragmentPlan("SELECT REPLACE('', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : ''");
+        }
+
+        {
             String plan = getFragmentPlan("SELECT REPLACE(NULL, 'abc', '1234')");
             assertContains(plan, "<slot 2> : NULL");
         }
