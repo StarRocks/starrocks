@@ -36,8 +36,8 @@ displayed_sidebar: docs
 
 | 配置名称                   | 描述                                                      | 取值范围                                                     | 默认值 |
 | -------------------------- | --------------------------------------------------------- | ------------------------------------------------------------ | ------ |
-| cpu_weight                 | 该资源组在一个 BE 节点上调度的权重。                      | (0, `avg_be_cpu_cores`] (大于 0 时生效，`cpu_weight` 和 `exclusive_cpu_cores` 同时只能并且必须有一个为正数) | 0      |
-| exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                               | (0, `min_be_cpu_cores - 1`] (大于 0 时生效，`cpu_weight` 和 `exclusive_cpu_cores` 同时只能并且必须有一个为正数) | 0      |
+| cpu_weight                 | 该资源组在一个 BE 节点上调度的权重。                      | (0, `avg_be_cpu_cores`] (大于 0 时生效，`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数) | 0      |
+| exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                               | (0, `min_be_cpu_cores - 1`] (大于 0 时生效，`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数) | 0      |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。          | (0, 1] (必填项)                                              | -      |
 | spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                          | (0, 1]                                                       | 1.0    |
 | concurrency_limit          | 该资源组中并发查询数的上限。                              | Integer (大于 0 才生效)                                      | 0      |
@@ -53,7 +53,7 @@ displayed_sidebar: docs
 
   - 该值指定了该资源组的任务可用的 CPU 时间的相对份额。
 
-  - 取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。`cpu_weight`  和 `exclusive_cpu_cores` 同时只能并且必须有一个为正数。
+  - 取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。`cpu_weight`  和 `exclusive_cpu_cores` 有且只能有一个为正数。
 
   - 在 3.3.4 以前，该配置名称为 `cpu_core_limit`。
 
@@ -74,7 +74,7 @@ displayed_sidebar: docs
 
   - 与 `cpu_weight` 的关系：
     - `cpu_weight`  和 `exclusive_cpu_cores` 只能同时并且必须生效一个，因为 exclusive 资源组可以自己完全拥有为其预留的 `exclusive_cpu_cores` 个 CPU cores 上运行，无须通过 `cpu_weight` 分配到相对份额的 CPU 时间片。
-    - 因此，`exclusive_cpu_cores` 和 `cpu_weight` 同时只能并且必须有一个为正数。
+    - 因此，`exclusive_cpu_cores` 和 `cpu_weight` 有且只能有一个为正数。
 
   - 此外，be.conf 有一个配置项 `enable_resource_group_cpu_borrowing`  来指定是否允许 shared 资源组借用 exclusive 资源组的 exclusive core。该配置项的值为 true 时，表示允许借用。默认为 true。
     - 具体来讲，当开启该功能时，
