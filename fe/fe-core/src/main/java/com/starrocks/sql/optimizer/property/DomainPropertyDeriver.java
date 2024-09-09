@@ -36,7 +36,7 @@ public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOpera
     public DomainProperty derive(ScalarOperator scalarOperator) {
         Map<ScalarOperator, DomainMessage> domainMap = scalarOperator.accept(this, null);
         Map<ScalarOperator, DomainProperty.DomainWrapper> newMap = domainMap.entrySet().stream()
-                .filter(e -> !e.getValue().equals(ConstantOperator.TRUE))
+                .filter(e -> !e.getValue().predicateDesc.equals(ConstantOperator.TRUE))
                 .collect(Collectors.toMap(Map.Entry::getKey,
                         entry -> new DomainProperty.DomainWrapper(entry.getValue().predicateDesc,
                                 entry.getValue().needDeriveRange)));
