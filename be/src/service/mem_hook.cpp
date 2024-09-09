@@ -250,23 +250,11 @@ void* my_pvalloc(size_t size) __THROW {
 
 // posix_memalign
 int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
-    if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(size, ENOMEM);
-        int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
-        if (UNLIKELY(ret != 0)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(size);
-        } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(*r) - size);
-        }
-        return ret;
-    } else {
-        int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
-        if (ret == 0) {
-            MEMORY_CONSUME_PTR(*r);
-        }
-        return ret;
+    int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
+    if (ret == 0) {
+        MEMORY_CONSUME_PTR(*r);
     }
+    return ret;
 }
 
 size_t my_malloc_usebale_size(void* ptr) __THROW {
