@@ -268,7 +268,7 @@ TO
     (user='rg1_user4'),
     (db='db1')
 WITH (
-    'cpu_weight/exclusive_cpu_cores' = '10',
+    'exclusive_cpu_cores' = '10',
     'mem_limit' = '20%',
     'big_query_cpu_second_limit' = '100',
     'big_query_scan_rows_limit' = '100000',
