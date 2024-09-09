@@ -263,18 +263,29 @@ public:
             auto null_pred = [&](const PermutationItem& item) -> bool {
                 return (*null_datas[item.chunk_index])[item.index_in_chunk] == 1;
             };
+            if (_is_dense_rank_topn) {
+                RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical_for_dense_rank(
+                        _cancel, data_columns, null_pred, _sort_desc, _permutation, _tie, _range, _build_tie, _limit,
+                        &_pruned_limit, &_top_distinct_num, _is_sorted));
+            } else {
+                RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
+                                                                      _permutation, _tie, _range, _build_tie, _limit,
+                                                                      &_pruned_limit));
+            }
 
-            RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
-                                                                  _permutation, _tie, _range, _build_tie, _limit,
-                                                                  &_pruned_limit, _is_dense_rank_topn));
         } else {
             auto null_pred = [&](const PermutationItem& item) -> bool {
                 return (*null_datas[item.chunk_index])[item.index_in_chunk] != 1;
             };
-
-            RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
-                                                                  _permutation, _tie, _range, _build_tie, _limit,
-                                                                  &_pruned_limit, _is_dense_rank_topn));
+            if (_is_dense_rank_topn) {
+                RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical_for_dense_rank(
+                        _cancel, data_columns, null_pred, _sort_desc, _permutation, _tie, _range, _build_tie, _limit,
+                        &_pruned_limit, &_top_distinct_num, _is_sorted));
+            } else {
+                RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
+                                                                      _permutation, _tie, _range, _build_tie, _limit,
+                                                                      &_pruned_limit));
+            }
         }
 
         _prune_limit();

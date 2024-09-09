@@ -102,7 +102,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
                                                            NullPred null_pred, const SortDesc& sort_desc,
                                                            Permutation& permutation, Tie& tie,
                                                            std::pair<int, int> range, bool build_tie, size_t limit,
-                                                           size_t* limited, bool is_dense_rank_topn) {
+                                                           size_t* limited) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
@@ -145,8 +145,49 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
 
     // TODO(Murphy): avoid sort the null datums in the column
     RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, sort_desc, permutation, tie, range, build_tie, limit,
-                                          limited, is_dense_rank_topn));
+                                          limited, false));
 
+    return Status::OK();
+}
+
+// TODO: reduce duplicate code
+template <class NullPred>
+static inline Status sort_and_tie_helper_nullable_vertical_for_dense_rank(
+        const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& data_columns, NullPred null_pred,
+        const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
+        size_t limit, size_t* limited, size_t* distinct_top_n, bool is_sorted = false) {
+    TieIterator iterator(tie, range.first, range.second);
+    while (iterator.next()) {
+        if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
+            return Status::Cancelled("Sort cancelled");
+        }
+        int range_first = iterator.range_first;
+        int range_last = iterator.range_last;
+        if (LIKELY(range_last - range_first >= 1)) {
+            auto pivot_iter =
+                    std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
+            int pivot_start = pivot_iter - permutation.begin();
+            std::pair<size_t, size_t> null_range = {range_first, pivot_start};
+            std::pair<size_t, size_t> notnull_range = {pivot_start, range_last};
+            if (!sort_desc.is_null_first()) {
+                std::swap(null_range, notnull_range);
+            }
+
+            if (notnull_range.first < notnull_range.second) {
+                tie[notnull_range.first] = 0;
+            }
+            if (range_first <= null_range.first && null_range.first < range_last) {
+                // Mark all null as equal
+                std::fill(tie.begin() + null_range.first, tie.begin() + null_range.second, 1);
+
+                // Cut off null and non-null
+                tie[null_range.first] = 0;
+            }
+        }
+    }
+
+    RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, sort_desc, permutation, tie, range, build_tie, limit,
+                                          limited, true, distinct_top_n, is_sorted));
     return Status::OK();
 }
 
@@ -247,14 +288,14 @@ static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>&
         auto begin = permutation.begin() + first_iter;
         auto end = permutation.begin() + last_iter;
 
-        // only try 3 times to find enough distinct elements, otherwise fall back to full sort
+        // only try 2 times to find enough distinct elements, otherwise fall back to full sort
+        size_t number_to_look_up = limit - distinct_top_n + 1;
         size_t begin_index = 0;
         // if we find 'limit' + 1 distinct topn, then it's safe to get 'limit' distinct topn
         // for example: 1 1 1 2 2 2 3 3 4, limit = 2, if we only see 1 1 1 2 2, we may not get enough number
         // but if we see 1 1 1 2 2 2 3, which means we get 'limit' + 1 distinct topn, then 1 1 1 2 2 2 is enough
         if (!is_sorted) {
-            size_t number_to_look_up = limit - distinct_top_n + 1;
-            for (size_t i = 0; i < 3; i++) {
+            for (size_t i = 0; i < 2; i++) {
                 // in this case, no need to try, just full back to full sort
                 if (end - begin < number_to_look_up) break;
                 // only get top n
@@ -290,6 +331,7 @@ static inline Status sort_and_tie_helper_for_dense_rank(const std::atomic<bool>&
                 begin_index += number_to_look_up;
                 // make sure begin = permutation.begin() + begin_indx
                 begin += number_to_look_up;
+                number_to_look_up *= 2;
             }
         }
 

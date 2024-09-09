@@ -1,9 +1,9 @@
 -- name: test_dense_rank_topn
 create table t0 (
     c0 int,
-    partition_col BIGINT not null,
-    value BIGINT not null
-) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+    partition_col BIGINT,
+    value BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 16 PROPERTIES('replication_num' = '1');
 -- result:
 -- !result
 insert into t0 select cast(rand() * 100000000 as int), 1, 1 from TABLE(generate_series(0, 8192));
@@ -59,6 +59,22 @@ select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER
 32772
 -- !result
 select count(*) from (select dense_rank() OVER (PARTITION BY partition_col ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 5;
+-- result:
+32772
+-- !result
+select count(*) from (select dense_rank() OVER (ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 1;
+-- result:
+8193
+-- !result
+select count(*) from (select dense_rank() OVER (ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 2;
+-- result:
+16386
+-- !result
+select count(*) from (select dense_rank() OVER (ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 3;
+-- result:
+24579
+-- !result
+select count(*) from (select dense_rank() OVER (ORDER BY value) AS _rowid         FROM  t0)t where _rowid <= 4;
 -- result:
 32772
 -- !result

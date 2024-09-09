@@ -135,9 +135,10 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* p
     if (max_value_row_id >= order_by_column->size()) {
         return nullptr;
     }
-    size_t current_max_value_row_id = _topn_type == TTopNType::RANK ? order_by_column->size() - 1 : max_value_row_id;
-    // _topn_type != TTopNType::RANK means we need reserve the max_value
-    bool is_close_interval = _topn_type == TTopNType::RANK || _sort_desc.num_columns() != 1;
+    bool is_rank_related = _topn_type == TTopNType::RANK || _topn_type == TTopNType::DENSE_RANK;
+    size_t current_max_value_row_id = is_rank_related ? order_by_column->size() - 1 : max_value_row_id;
+    // _topn_type != TTopNType::RANK or TTopNType::DENSE_RANK means we need reserve the max_value
+    bool is_close_interval = is_rank_related || _sort_desc.num_columns() != 1;
 
     if (order_by_column->is_null(current_max_value_row_id)) {
         return nullptr;
