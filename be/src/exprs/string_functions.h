@@ -79,12 +79,12 @@ struct StringFunctionsState {
         DCHECK(const_pattern);
         re2::RE2* res = nullptr;
         driver_regex_map.lazy_emplace_l(
-                driver_id, [&](auto& value) { res = value.get(); },
+                0, [&](auto& value) { res = value.get(); },
                 [&](auto build) {
                     auto regex = std::make_unique<re2::RE2>(pattern, *options);
                     DCHECK(regex->ok());
                     res = regex.get();
-                    build(driver_id, std::move(regex));
+                    build(0, std::move(regex));
                 });
         DCHECK(!!res);
         return res;
