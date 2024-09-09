@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.CRC32;
@@ -73,7 +74,7 @@ public class ImageLoader {
         this.bufferedInputStream = new BufferedInputStream(inputStream);
         this.checkedInputStream = new CheckedInputStream(inputStream, new CRC32());
         if (imageFormatVersion == ImageFormatVersion.v2) {
-            this.jsonReader = new JsonReader(new InputStreamReader(this.checkedInputStream));
+            this.jsonReader = new JsonReader(new InputStreamReader(this.checkedInputStream, StandardCharsets.UTF_8));
         }
     }
 
