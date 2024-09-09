@@ -367,6 +367,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update fslib_s3client_nonread_max_retries";
                 return Status::InvalidArgument("Failed to update starlet_fslib_s3client_nonread_max_retries.");
             }
+            return Status::OK();
         });
         _config_callback.emplace("starlet_fslib_s3client_nonread_retry_scale_factor", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_retry_scale_factor",
