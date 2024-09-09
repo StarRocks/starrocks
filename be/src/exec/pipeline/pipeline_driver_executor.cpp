@@ -85,7 +85,6 @@ void GlobalDriverExecutor::_worker_thread() {
         }
         // Reset TLS state
         CurrentThread::current().set_query_id({});
-        CurrentThread::current().set_fragment_instance_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
 
         if (current_thread != nullptr) {
@@ -119,7 +118,6 @@ void GlobalDriverExecutor::_worker_thread() {
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
         auto* runtime_state = runtime_state_ptr.get();
         {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif

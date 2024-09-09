@@ -57,7 +57,6 @@ QueryContext::~QueryContext() noexcept {
     // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
     // segmentation fault.
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
         _fragment_mgr.reset();
     }
 

@@ -70,7 +70,6 @@ void CompactionTask::run() {
     TRACE_COUNTER_INCREMENT("input_rowsets_data_size", _task_info.input_rowsets_size);
     TRACE_COUNTER_INCREMENT("input_row_num", _task_info.input_rows_num);
     TRACE_COUNTER_INCREMENT("input_segments_num", _task_info.input_segments_num);
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
 
     bool is_finished = false;
     DeferOp op([&] {

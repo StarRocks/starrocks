@@ -273,7 +273,6 @@ Status VerticalGeneralTabletWriter::flush_columns(const std::shared_ptr<SegmentW
         }
         auto mem_tracker = tls_thread_status.mem_tracker();
         auto task = std::make_shared<std::packaged_task<Status()>>([segment_writer, mem_tracker]() {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             uint64_t index_size = 0;
             return segment_writer->finalize_columns(&index_size);
         });

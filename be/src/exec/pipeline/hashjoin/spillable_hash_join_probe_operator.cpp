@@ -247,7 +247,6 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
                                                                   const std::shared_ptr<spill::SpillerReader>& reader,
                                                                   size_t idx) {
     TRY_CATCH_ALLOC_SCOPE_START()
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
     auto builder = _builders[idx];
     bool finish = false;
     int64_t hash_table_mem_usage = builder->hash_table_mem_usage();

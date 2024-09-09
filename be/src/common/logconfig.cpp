@@ -86,8 +86,6 @@ static void dump_trace_info() {
     if (!start_dump) {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
-        auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-        const std::string& custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -99,14 +97,7 @@ static void dump_trace_info() {
         res = print_unique_id(buffer + res, query_id) + res;
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
-        res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
-
-        // print for lake filename
-        if (!custom_coredump_msg.empty()) {
-            // Avoid buffer overflow, because custom coredump msg's length in not fixed
-            res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "%s\n", custom_coredump_msg.c_str()) + res;
-        }
 
         wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage

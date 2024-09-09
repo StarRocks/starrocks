@@ -62,11 +62,6 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     opts.evict_probability = options->evict_probability;
     Status st;
     {
-        // The memory when writing starcache is no longer recorded to the query memory.
-        // Because we free the memory in other threads in starcache library, which is hard to track.
-        // It is safe because we limit the flying memory in starcache, also, this behavior
-        // doesn't affect the process memory tracker.
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         st = to_status(_cache->set(key, buffer.const_raw_buf(), &opts));
     }
     if (st.ok() && !opts.async) {
@@ -88,7 +83,6 @@ Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, s
     opts.evict_probability = options->evict_probability;
     Status st;
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
         st = to_status(_cache->set_object(key, ptr, size, deleter, handle, &opts));
     }
     if (st.ok()) {

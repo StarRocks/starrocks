@@ -292,8 +292,6 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
 }
 
 void FileScanNode::_scanner_worker(int start_idx, int length) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state()->instance_mem_tracker());
-
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
     DeferOp close_exprs([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });

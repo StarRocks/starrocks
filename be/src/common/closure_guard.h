@@ -33,7 +33,6 @@ public:
     // Run internal closure if it's not NULL.
     ~ClosureGuard() {
         if (_done) {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
             _done->Run();
         }
     }
@@ -47,7 +46,6 @@ public:
     // Run internal closure if it's not NULL and set it to `done'.
     void reset(google::protobuf::Closure* done) {
         if (_done) {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
             _done->Run();
         }
         _done = done;

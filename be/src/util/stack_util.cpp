@@ -338,11 +338,7 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
             print_level == -1 ||
             (print_level == 2 && !ExceptionStackContext::get_instance()->prefix_in_black_list(exception_name))) {
             auto query_id = CurrentThread::current().query_id();
-            auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-            auto stack = fmt::format("{}, query_id={}, fragment_instance_id={} throws exception: {}, trace:\n {} \n",
-                                     ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
-                                     print_id(fragment_instance_id).c_str(), exception_name.c_str(),
-                                     get_stack_trace().c_str());
+            auto stack = fmt::format("xx");
 #ifdef BE_TEST
             // tests check message from stderr.
             std::cerr << stack << std::endl;

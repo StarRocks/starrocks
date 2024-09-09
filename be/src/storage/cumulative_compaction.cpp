@@ -51,8 +51,6 @@ Status CumulativeCompaction::compact() {
     TRACE("rowsets picked");
     TRACE_COUNTER_INCREMENT("input_rowsets_count", _input_rowsets.size());
 
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-
     // 3. do cumulative compaction, merge rowsets
     RETURN_IF_ERROR(do_compaction());
     TRACE("compaction finished");

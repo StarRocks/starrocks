@@ -51,8 +51,6 @@ EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet
 }
 
 Status EngineChecksumTask::execute() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
-
     return _compute_checksum();
 }
 

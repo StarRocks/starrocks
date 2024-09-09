@@ -39,7 +39,6 @@ namespace starrocks {
 class TUniqueId;
 
 inline thread_local MemTracker* tls_mem_tracker = nullptr;
-inline thread_local MemTracker* tls_exceed_mem_tracker = nullptr;
 // `tls_singleton_check_mem_tracker` is used when you want to separate the mem tracker and check tracker,
 // you can add a new check tracker by set up `tls_singleton_check_mem_tracker`.
 inline thread_local bool tls_is_thread_status_init = false;
@@ -67,7 +66,6 @@ private:
             auto failure_handler = [&]() {
                 _cache_size -= size;
                 _total_consumed_bytes -= size;
-                _try_consume_mem_size = size;
             };
             if (_cache_size >= BATCH_SIZE) {
                 if (cur_tracker != nullptr) {
@@ -77,7 +75,6 @@ private:
                         return true;
                     } else {
                         failure_handler();
-                        tls_exceed_mem_tracker = limit_tracker;
                         return false;
                     }
                 }
@@ -101,12 +98,6 @@ private:
             _cache_size = 0;
         }
 
-        int64_t try_consume_mem_size() {
-            auto res = _try_consume_mem_size;
-            _try_consume_mem_size = 0;
-            return res;
-        }
-
         int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
     private:
@@ -115,7 +106,6 @@ private:
         // Allocated or delocated but not committed memory bytes, can be negative
         int64_t _cache_size = 0;
         int64_t _total_consumed_bytes = 0; // Totally consumed memory bytes
-        int64_t _try_consume_mem_size = 0; // Last time tried to consumed bytes
     };
 
 public:
@@ -127,16 +117,8 @@ public:
     void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
     const starrocks::TUniqueId& query_id() { return _query_id; }
 
-    void set_fragment_instance_id(const starrocks::TUniqueId& fragment_instance_id) {
-        _fragment_instance_id = fragment_instance_id;
-    }
-    const starrocks::TUniqueId& fragment_instance_id() { return _fragment_instance_id; }
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
-
-    void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
-
-    const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
@@ -204,9 +186,6 @@ public:
         }
     }
 
-    // get last time try consume and reset
-    int64_t try_consume_mem_size() { return _mem_cache_manager.try_consume_mem_size(); }
-
     int64_t get_consumed_bytes() const { return _mem_cache_manager.get_consumed_bytes(); }
 
 private:
@@ -218,8 +197,6 @@ private:
     MemCacheManager _mem_cache_manager;
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
-    TUniqueId _fragment_instance_id;
-    std::string _custom_coredump_msg{};
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
@@ -301,10 +278,6 @@ private:
     SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
     auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
 
-#define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)                \
-    CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg); \
-    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().set_custom_coredump_msg({}); });
-
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \
         SCOPED_SET_CATCHED(true);
@@ -312,15 +285,8 @@ private:
 #define TRY_CATCH_ALLOC_SCOPE_END()                                                                                    \
     }                                                                                                                  \
     catch (std::bad_alloc const&) {                                                                                    \
-        MemTracker* exceed_tracker = tls_exceed_mem_tracker;                                                           \
-        tls_exceed_mem_tracker = nullptr;                                                                              \
         tls_thread_status.set_is_catched(false);                                                                       \
-        if (LIKELY(exceed_tracker != nullptr)) {                                                                       \
-            return Status::MemoryLimitExceeded(                                                                        \
-                    exceed_tracker->err_msg(fmt::format("try consume:{}", tls_thread_status.try_consume_mem_size()))); \
-        } else {                                                                                                       \
-            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");                                \
-        }                                                                                                              \
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");                                \
     }                                                                                                                  \
     catch (std::runtime_error const& e) {                                                                              \
         return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));                                       \

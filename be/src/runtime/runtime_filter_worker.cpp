@@ -237,8 +237,6 @@ Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
 
 void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& params) {
     auto [query_ctx, mem_tracker] = get_mem_tracker(params.query_id(), params.is_pipeline());
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
-
     DCHECK(params.is_partial());
     int32_t filter_id = params.filter_id();
     int32_t be_number = params.build_be_number();
@@ -672,8 +670,6 @@ static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilte
 
 void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request) {
     auto [query_ctx, mem_tracker] = get_mem_tracker(request.query_id(), request.is_pipeline());
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
-    // deserialize once, and all fragment instance shared that runtime filter.
     JoinRuntimeFilter* rf = nullptr;
     const std::string& data = request.data();
     RuntimeFilterHelper::deserialize_runtime_filter(nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()),
@@ -742,7 +738,6 @@ void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
         PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms,
         int64_t rpc_http_min_size) {
     auto [query_ctx, mem_tracker] = get_mem_tracker(params.query_id(), params.is_pipeline());
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     std::random_device rd;
     std::mt19937 rand(rd());

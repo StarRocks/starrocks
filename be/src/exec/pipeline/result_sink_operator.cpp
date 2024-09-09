@@ -104,15 +104,11 @@ StatusOr<ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ResultSinkOperator::set_cancelled(RuntimeState* state) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-
     _fetch_data_result.clear();
     return Status::OK();
 }
 
 bool ResultSinkOperator::need_input() const {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-
     if (is_finished()) {
         return false;
     }
@@ -137,8 +133,6 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     // and the life cycle of MemTracker needs to be considered
     //
     // All the places where acquire and release memory of _fetch_data_result must use process_mem_tracker.
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-
     if (!_last_error.ok()) {
         return _last_error;
     }

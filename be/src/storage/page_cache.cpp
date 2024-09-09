@@ -93,9 +93,6 @@ StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
 StoragePageCache::~StoragePageCache() = default;
 
 void StoragePageCache::set_capacity(size_t capacity) {
-#ifndef BE_TEST
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-#endif
     _cache->set_capacity(capacity);
 }
 
@@ -112,9 +109,6 @@ uint64_t StoragePageCache::get_hit_count() {
 }
 
 bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
-#ifndef BE_TEST
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-#endif
     return _cache->adjust_capacity(delta, min_capacity);
 }
 
@@ -130,12 +124,6 @@ bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
 void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory) {
     // mem size should equals to data size when running UT
     int64_t mem_size = data.size;
-#ifndef BE_TEST
-    mem_size = malloc_usable_size(data.data);
-    tls_thread_status.mem_release(mem_size);
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-    tls_thread_status.mem_consume(mem_size);
-#endif
 
     auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };
 

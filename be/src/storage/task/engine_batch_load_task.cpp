@@ -66,8 +66,6 @@ EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTablet
 EngineBatchLoadTask::~EngineBatchLoadTask() = default;
 
 Status EngineBatchLoadTask::execute() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
-
     AgentStatus status = STARROCKS_SUCCESS;
     if (_push_req.push_type == TPushType::LOAD_V2) {
         status = _init();

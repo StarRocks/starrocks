@@ -18,7 +18,6 @@ namespace starrocks::pipeline {
 
 int SinkIOBuffer::_process_chunk(bthread::TaskIterator<QueueItemPtr>& iter) {
     // Is it possible the mem_tracker in _state is invalid due to the whole object is in destructing?
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->query_mem_tracker_ptr().get());
     bool fast_skip = false;
     for (; iter; ++iter) {
         if (_is_finished) {

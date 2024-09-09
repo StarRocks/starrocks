@@ -513,8 +513,6 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
         }
     });
 
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
-
     struct evhttp_request* ev_req = req->get_evhttp_request();
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
 
@@ -560,9 +558,6 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
 
         int remove_bytes;
         {
-            // The memory is applied for in http server thread,
-            // so the release of this memory must be recorded in ProcessMemTracker
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
             remove_bytes = evbuffer_remove(evbuf, ctx->buffer->ptr + ctx->buffer->pos, ctx->buffer->remaining());
         }
         ctx->buffer->pos += remove_bytes;
