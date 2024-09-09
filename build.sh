@@ -98,8 +98,8 @@ Usage: $0 <options>
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
-     --with-tenann
-                        build with vector index tenann library
+     --without-tenann
+                        build without vector index tenann library
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      -h,--help          Show this help message
@@ -133,7 +133,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
-  -l 'with-tenann' \
+  -l 'without-tenann' \
   -l 'with-compress-debug-symbol:' \
   -l 'help' \
   -- "$@")
@@ -158,7 +158,7 @@ WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-WITH_TENANN=OFF
+WITH_TENANN=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -178,10 +178,6 @@ if [[ -z ${JEMALLOC_DEBUG} ]]; then
 fi
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
-fi
-
-if [[ -z ${WITH_TENANN} ]]; then
-  WITH_TENANN=ON
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -246,7 +242,7 @@ else
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
-            --with-tenann) WITH_TENANN=ON; shift ;;
+            --without-tenann) WITH_TENANN=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;

@@ -472,7 +472,6 @@ public class StmtExecutor {
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
 
-
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
