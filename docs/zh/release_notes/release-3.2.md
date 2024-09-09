@@ -4,6 +4,29 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.11
+
+发布日期：2024 年 9 月 9 日
+
+### 功能优化
+
+- 对 Files()、PIPE 相关操作中的敏感信息进行脱敏。[#47629](https://github.com/StarRocks/starrocks/pull/47629)
+- 通过 Files() 读取 Parquet 文件支持自动推导 STRUCT 类型。[#50481](https://github.com/StarRocks/starrocks/pull/50481)
+
+### 问题修复
+
+修复了如下问题：
+
+- Equi-join 查询由于全局字典未改写导致报错。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+- Tablet Clone 时 FE 侧死循环导致报错 "version has been compacted"。[#50561](https://github.com/StarRocks/starrocks/pull/50561)
+- 数据副本基于 Label 分布后，不健康副本修复调度错误。[#50331](https://github.com/StarRocks/starrocks/pull/50331)
+- 统计信息收集日志中报错 "Unknown column '%s' in '%s"。[#50785](https://github.com/StarRocks/starrocks/pull/50785)
+- Files() 读取 Parquet 格式文件中复杂类型 TIMESTAMP 时使用的 Timezone 不正确。[#50448](https://github.com/StarRocks/starrocks/pull/50448)
+
+### 行为变更
+
+- 从 v3.3.x 版本降级至 v3.2.11 版本，如果存在不兼容的元数据信息，系统将直接忽略。[#49636](https://github.com/StarRocks/starrocks/pull/49636)
+
 ## 3.2.10
 
 发布日期：2024 年 8 月 23 日
