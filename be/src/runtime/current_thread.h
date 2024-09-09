@@ -24,13 +24,6 @@
 #include "util/defer_op.h"
 #include "util/uid_util.h"
 
-#define SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, check)                             \
-    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker); \
-    auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check);
-
-#define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
-    auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
-
 namespace starrocks {
 
 class TUniqueId;
@@ -111,9 +104,6 @@ public:
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
 
-    void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
-    const starrocks::TUniqueId& query_id() { return _query_id; }
-
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
@@ -123,12 +113,6 @@ public:
         auto* prev = tls_mem_tracker;
         tls_mem_tracker = mem_tracker;
         return prev;
-    }
-
-    bool set_check_mem_limit(bool check) {
-        bool prev_check = _check;
-        _check = check;
-        return prev_check;
     }
 
     bool check_mem_limit() { return _check; }
@@ -192,57 +176,12 @@ private:
     // is invoked, the frequrency is a little bit high, but it does little harm to performance,
     // because operator's MemTracker, which is a dangling MemTracker(withouth parent), has no concurrency conflicts
     MemCacheManager _mem_cache_manager;
-    // Store in TLS for diagnose coredump easier
-    TUniqueId _query_id;
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
 };
 
 inline thread_local CurrentThread tls_thread_status;
-
-class CurrentThreadMemTrackerSetter {
-public:
-    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
-        _old_mem_tracker = tls_thread_status.mem_tracker();
-        _is_same = (_old_mem_tracker == new_mem_tracker);
-        if (!_is_same) {
-            tls_thread_status.set_mem_tracker(new_mem_tracker);
-        }
-    }
-
-    ~CurrentThreadMemTrackerSetter() {
-        if (!_is_same) {
-            (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
-        }
-    }
-
-    CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
-    void operator=(const CurrentThreadMemTrackerSetter&) = delete;
-    CurrentThreadMemTrackerSetter(CurrentThreadMemTrackerSetter&&) = delete;
-    void operator=(CurrentThreadMemTrackerSetter&&) = delete;
-
-private:
-    MemTracker* _old_mem_tracker;
-    bool _is_same;
-};
-
-class CurrentThreadCheckMemLimitSetter {
-public:
-    explicit CurrentThreadCheckMemLimitSetter(bool check) {
-        _prev_check = tls_thread_status.set_check_mem_limit(check);
-    }
-
-    ~CurrentThreadCheckMemLimitSetter() { (void)tls_thread_status.set_check_mem_limit(_prev_check); }
-
-    CurrentThreadCheckMemLimitSetter(const CurrentThreadCheckMemLimitSetter&) = delete;
-    void operator=(const CurrentThreadCheckMemLimitSetter&) = delete;
-    CurrentThreadCheckMemLimitSetter(CurrentThreadCheckMemLimitSetter&&) = delete;
-    void operator=(CurrentThreadCheckMemLimitSetter&&) = delete;
-
-private:
-    bool _prev_check;
-};
 
 class CurrentThreadCatchSetter {
 public:
@@ -252,7 +191,6 @@ public:
 
     CurrentThreadCatchSetter(const CurrentThreadCatchSetter&) = delete;
     void operator=(const CurrentThreadCatchSetter&) = delete;
-    CurrentThreadCatchSetter(CurrentThreadCheckMemLimitSetter&&) = delete;
     void operator=(CurrentThreadCatchSetter&&) = delete;
 
 private:
@@ -261,30 +199,26 @@ private:
 
 #define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
 
-#define SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
-    CurrentThread::current().set_pipeline_driver_id(driver_id);   \
-    CurrentThread::current().set_query_id(query_id);
+#define SET_TRACE_INFO(driver_id) CurrentThread::current().set_pipeline_driver_id(driver_id);
 
-#define RESET_TRACE_INFO()                              \
-    CurrentThread::current().set_pipeline_driver_id(0); \
-    CurrentThread::current().set_query_id({});
+#define RESET_TRACE_INFO() CurrentThread::current().set_pipeline_driver_id(0);
 
-#define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
-    SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
+#define SCOPED_SET_TRACE_INFO(driver_id) \
+    SET_TRACE_INFO(driver_id)            \
     auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \
         SCOPED_SET_CATCHED(true);
 
-#define TRY_CATCH_ALLOC_SCOPE_END()                                                                                    \
-    }                                                                                                                  \
-    catch (std::bad_alloc const&) {                                                                                    \
-        tls_thread_status.set_is_catched(false);                                                                       \
-        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");                                \
-    }                                                                                                                  \
-    catch (std::runtime_error const& e) {                                                                              \
-        return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));                                       \
+#define TRY_CATCH_ALLOC_SCOPE_END()                                                 \
+    }                                                                               \
+    catch (std::bad_alloc const&) {                                                 \
+        tls_thread_status.set_is_catched(false);                                    \
+        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
+    }                                                                               \
+    catch (std::runtime_error const& e) {                                           \
+        return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));    \
     }
 
 #define TRY_CATCH_BAD_ALLOC(stmt)               \

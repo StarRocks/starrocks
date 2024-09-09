@@ -108,8 +108,6 @@ Tablet::~Tablet() {
 }
 
 Status Tablet::_init_once_action() {
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-
     _compaction_context = std::make_unique<CompactionContext>();
     if (config::enable_size_tiered_compaction_strategy) {
         _compaction_context->policy = std::make_unique<SizeTieredCompactionPolicy>(this);

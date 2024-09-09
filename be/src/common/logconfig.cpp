@@ -85,7 +85,6 @@ static void dump_trace_info() {
     static bool start_dump = false;
     if (!start_dump) {
         // dump query_id and fragment id
-        auto query_id = CurrentThread::current().query_id();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -94,7 +93,6 @@ static void dump_trace_info() {
         [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
 
         res = sprintf(buffer, "query_id:");
-        res = print_unique_id(buffer + res, query_id) + res;
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = sprintf(buffer + res, "\n") + res;

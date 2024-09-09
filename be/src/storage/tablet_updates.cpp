@@ -898,7 +898,6 @@ DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 
 void TabletUpdates::do_apply() {
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(config::enable_pk_strict_memcheck);
     // only 1 thread at max is running this method
     bool first = true;
     while (!_apply_stopped) {

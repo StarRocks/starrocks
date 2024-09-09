@@ -288,7 +288,6 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
         tls_thread_status.set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
     });
-    tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(runtime_state());
     if (!status.ok()) {

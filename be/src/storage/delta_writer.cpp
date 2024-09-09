@@ -37,7 +37,6 @@ namespace starrocks {
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
-    SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, false);
     RETURN_IF_ERROR(writer->_init());
     return std::move(writer);
 }
@@ -60,7 +59,6 @@ DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, Storag
           _with_rollback_log(true) {}
 
 DeltaWriter::~DeltaWriter() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     if (_flush_token != nullptr) {
         _flush_token->shutdown();
     }
@@ -145,8 +143,6 @@ bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMo
 }
 
 Status DeltaWriter::_init() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-
     _replica_state = _opt.replica_state;
 
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
@@ -408,7 +404,6 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
 
     // Delay the creation memtables until we write data.
@@ -501,7 +496,6 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
 }
 
 Status DeltaWriter::close() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = get_state();
     switch (state) {
     case kUninitialized:
@@ -677,7 +671,6 @@ Status DeltaWriter::commit() {
         span = Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id);
     }
     auto scoped = trace::Scope(span);
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = get_state();
     switch (state) {
     case kUninitialized:

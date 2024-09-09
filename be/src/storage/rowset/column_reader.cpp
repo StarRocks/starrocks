@@ -378,7 +378,6 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
 
 Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     if (_ordinal_index == nullptr || _ordinal_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _ordinal_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
     if (UNLIKELY(first_load)) {
@@ -394,7 +393,6 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
 
 Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     if (_zonemap_index == nullptr || _zonemap_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _zonemap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
@@ -410,7 +408,6 @@ Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
 
 Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     if (_bitmap_index == nullptr || _bitmap_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _bitmap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
@@ -426,7 +423,6 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
 
 Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     if (_bloom_filter_index == nullptr || _bloom_filter_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _bloom_filter_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {

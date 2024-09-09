@@ -286,7 +286,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
         std::shared_ptr<spill::SpillerReader> reader = std::move(spill_readers[i]);
         auto task = [this, state, reader, i, query_ctx, driver_id]() {
             if (auto acquired = query_ctx.lock()) {
-                SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+                SCOPED_SET_TRACE_INFO(driver_id);
                 _update_status(_load_partition_build_side(state, reader, i));
                 _latch.count_down();
             }

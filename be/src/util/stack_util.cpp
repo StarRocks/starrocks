@@ -337,7 +337,6 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
         if ((print_level == 1 && ExceptionStackContext::get_instance()->prefix_in_white_list(exception_name)) ||
             print_level == -1 ||
             (print_level == 2 && !ExceptionStackContext::get_instance()->prefix_in_black_list(exception_name))) {
-            auto query_id = CurrentThread::current().query_id();
             auto stack = fmt::format("xx");
 #ifdef BE_TEST
             // tests check message from stderr.

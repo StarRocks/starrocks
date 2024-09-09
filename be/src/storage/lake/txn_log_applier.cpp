@@ -68,7 +68,6 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
-        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
         if (log.has_op_write()) {
             RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
@@ -90,7 +89,6 @@ public:
     }
 
     Status finish() override {
-        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         // still need prepre primary index even there is an empty compaction
         if (_index_entry == nullptr && _has_empty_compaction) {
             // get lock to avoid gc
