@@ -206,6 +206,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("lake_metadata_cache_limit", [&]() -> Status {
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+            return Status::OK();
         });
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_use_star_cache", [&]() -> Status {
