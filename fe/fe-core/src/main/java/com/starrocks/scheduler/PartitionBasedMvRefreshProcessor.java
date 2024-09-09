@@ -86,7 +86,6 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
@@ -374,12 +373,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // if lock timeout, retry to refresh
                 lockFailedTimes += 1;
                 LOG.warn("Refresh materialized view {} failed at {}th time because try lock failed: {}",
-                        this.materializedView.getName(), lockFailedTimes, ExceptionUtils.getStackTrace(e));
+                        this.materializedView.getName(), lockFailedTimes, DebugUtil.getStackTrace(e));
                 lastException = e;
             } catch (Throwable e) {
                 refreshFailedTimes += 1;
                 LOG.warn("Refresh materialized view {} failed at {}th time: {}",
-                        this.materializedView.getName(), refreshFailedTimes, ExceptionUtils.getStackTrace(e));
+                        this.materializedView.getName(), refreshFailedTimes, DebugUtil.getRootStackTrace(e));
                 lastException = e;
             }
 
@@ -388,14 +387,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // throw the last exception if all retries failed
-        Preconditions.checkState(lastException != null);
-        String errorMsg = lastException.getMessage();
-        if (lastException instanceof NullPointerException) {
-            errorMsg = ExceptionUtils.getStackTrace(lastException);
-        }
-        // field ERROR_MESSAGE in information_schema.task_runs length is 65535
-        errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ?
-                errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
+        String errorMsg = MvUtils.shrinkToSize(DebugUtil.getRootStackTrace(lastException), MAX_FIELD_VARCHAR_LENGTH);
         throw new DmlException("Refresh materialized view %s failed after retrying %s times(try-lock %s times), error-msg : " +
                 "%s", lastException, this.materializedView.getName(), refreshFailedTimes, lockFailedTimes, errorMsg);
     }
@@ -426,7 +418,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 baseTableCandidatePartitions = getRefTableRefreshPartitions(mvCandidatePartition);
             } catch (Exception e) {
                 LOG.warn("Failed to compute candidate partitions for materialized view {} in sync partitions",
-                        materializedView.getName(), e);
+                        materializedView.getName(), DebugUtil.getRootStackTrace(e));
                 // Since at here we sync partitions before the refreshExternalTable, the situation may happen that
                 // the base-table not exists before refreshExternalTable, so we just need to swallow this exception
                 if (e.getMessage() == null || !e.getMessage().contains("not exist")) {
@@ -824,7 +816,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
                     refBaseTableIds, refTableAndPartitionNames);
         } catch (Exception e) {
-            LOG.warn("update final meta failed after mv refreshed:", e);
+            LOG.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
@@ -839,7 +831,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
             } catch (Exception e) {
                 // just log warn and no throw exceptions for an updating task runs message.
-                LOG.warn("update task run messages failed:", e);
+                LOG.warn("update task run messages failed:", DebugUtil.getRootStackTrace(e));
             }
         });
     }
@@ -1094,7 +1086,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
             }
         } catch (UserException e) {
-            LOG.warn("Materialized view compute partition change failed", e);
+            LOG.warn("Materialized view compute partition change failed", DebugUtil.getRootStackTrace(e));
             return true;
         }
         return false;
