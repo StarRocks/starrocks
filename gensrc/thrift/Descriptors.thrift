@@ -283,6 +283,7 @@ struct TOlapTableIndexSchema {
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
+    7: optional map<string, string> column_to_expr_value
 }
 
 struct TOlapTableSchemaParam {

@@ -105,6 +105,14 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
         _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
+    for (auto& index_schema : params.schema().indexes()) {
+        if (index_schema.id() != _index_id) {
+            continue;
+        }
+        for (auto& entry : index_schema.column_to_expr_value()) {
+            _column_to_expr_value.insert({entry.first, entry.second});
+        }
+    }
 
     RETURN_IF_ERROR(_open_all_writers(params));
 
@@ -660,6 +668,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
         options.ptable_schema_param = &(params.schema());
+        options.column_to_expr_value = &(_column_to_expr_value);
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -857,6 +866,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.miss_auto_increment_column = params.miss_auto_increment_column();
         options.ptable_schema_param = &(params.schema());
         options.immutable_tablet_size = params.immutable_tablet_size();
+        options.column_to_expr_value = &(_column_to_expr_value);
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
