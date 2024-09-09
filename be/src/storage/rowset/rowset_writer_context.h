@@ -91,6 +91,8 @@ public:
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
 
+    bool merge_mode = false;
+
     // gtid
     int64_t gtid = 0;
     // Is pk compaction output writer

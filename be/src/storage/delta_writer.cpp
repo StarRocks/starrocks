@@ -331,6 +331,7 @@ Status DeltaWriter::_init() {
         LOG(WARNING) << "auto increment column in sort key do not support partial update";
         return Status::NotSupported("auto increment column in sort key do not support partial update");
     }
+    writer_context.merge_mode = _opt.merge_mode;
     writer_context.rowset_id = _storage_engine->next_rowset_id();
     writer_context.tablet_uid = _tablet->tablet_uid();
     writer_context.tablet_id = _opt.tablet_id;
@@ -661,6 +662,9 @@ void DeltaWriter::_reset_mem_table() {
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), _opt.merge_condition, _mem_tracker);
+    } else if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _opt.merge_mode) {
+        _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                                _mem_table_sink.get(), "", _opt.merge_mode, _mem_tracker);
     } else {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);

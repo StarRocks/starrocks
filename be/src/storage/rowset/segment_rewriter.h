@@ -41,6 +41,11 @@ public:
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
             const std::vector<uint32_t>& unmodified_column_ids,
             std::vector<std::unique_ptr<Column>>* unmodified_column_data, const starrocks::lake::Tablet* tablet);
+
+    static Status rewrite_merge_mode(const std::string& src_path, const std::string& dest_path,
+                                     const TabletSchemaCSPtr& tschema,
+                                     MergeState& mergeState,
+                                     std::vector<std::unique_ptr<Column>>* columns);
 };
 
 } // namespace starrocks

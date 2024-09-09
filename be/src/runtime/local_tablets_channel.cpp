@@ -680,6 +680,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         }
         options.merge_condition = params.merge_condition();
         options.partial_update_mode = params.partial_update_mode();
+        options.merge_mode = params.merge_mode();
         options.immutable_tablet_size = params.immutable_tablet_size();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);

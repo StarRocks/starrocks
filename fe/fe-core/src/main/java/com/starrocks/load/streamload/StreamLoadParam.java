@@ -46,6 +46,7 @@ public class StreamLoadParam {
     private static final String MAX_FILTER_RATIO = "max_filter_ratio";
     private static final String IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";
     private static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
+    private static final String MERGE_MODE = "merge_mode";
 
     public TFileFormatType formatType = TFileFormatType.FORMAT_CSV_PLAIN;
     public TFileType fileType = TFileType.FILE_STREAM;
@@ -73,6 +74,7 @@ public class StreamLoadParam {
     public double maxFilterRatio = 0.0;
     public int idleTransactionTimeout = 1000;
     public String partialUpdateMode = "row";
+    public boolean mergeMode = false;
 
     public TFileFormatType parseStreamLoadFormat(String formatKey) {
         if (formatKey.equalsIgnoreCase("csv")) {
@@ -183,6 +185,9 @@ public class StreamLoadParam {
         }
         if (headers.contains(PARTIAL_UPDATE_MODE)) {
             context.partialUpdateMode = headers.get(PARTIAL_UPDATE_MODE);
+        }
+        if (headers.contains(MERGE_MODE)) {
+            context.mergeMode = Boolean.parseBoolean(headers.get(MERGE_MODE));
         }
         return context;
     }

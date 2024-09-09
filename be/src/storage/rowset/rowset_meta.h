@@ -134,6 +134,7 @@ public:
     const FooterPointerPB* partial_rowset_footer(uint32_t segment_id) const {
         if (!_rowset_meta_pb->has_txn_meta() || _rowset_meta_pb->txn_meta().has_merge_condition() ||
             _rowset_meta_pb->txn_meta().has_auto_increment_partial_update_column_id() ||
+            _rowset_meta_pb->txn_meta().merge_mode() ||
             _rowset_meta_pb->num_update_files() > 0) {
             return nullptr;
         }

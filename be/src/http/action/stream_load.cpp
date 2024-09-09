@@ -566,6 +566,20 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
         }
     }
+    if (!http_req->header(HTTP_MERGE_MODE).empty()) {
+        if (!http_req->header(HTTP_MERGE_CONDITION).empty() ||
+            !http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
+            return Status::InvalidArgument(
+                    "Not supporting merge_mode, when partial_update=true or merge_condition is set");
+        }
+        if (boost::iequals(http_req->header(HTTP_MERGE_MODE), "false")) {
+            request.__set_merge_mode(false);
+        } else if (boost::iequals(http_req->header(HTTP_MERGE_MODE), "true")) {
+            request.__set_merge_mode(true);
+        } else {
+            return Status::InvalidArgument("Invalid merge mode flag format. Must be bool type");
+        }
+    }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }

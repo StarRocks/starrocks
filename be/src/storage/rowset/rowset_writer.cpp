@@ -125,7 +125,8 @@ Status RowsetWriter::init() {
     _writer_options.is_compaction = _context.is_compaction;
 
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-        (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column)) {
+        (_context.is_partial_update || !_context.merge_condition.empty()
+            || _context.miss_auto_increment_column || _context.merge_mode)) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
@@ -214,6 +215,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                     break;
                 }
             }
+            *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
+        } else if (_context.merge_mode) {
+            _rowset_txn_meta_pb->set_merge_mode(_context.merge_mode);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }
     } else {

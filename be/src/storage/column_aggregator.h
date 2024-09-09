@@ -41,6 +41,8 @@ public:
 
     virtual void aggregate_values(int start, int nums, const uint32* aggregate_loops, bool previous_neq) {}
 
+    virtual void aggregate_merge_values(int start, std::vector<uint32_t> aggregate_loops, const uint32* selective_loops, bool previous_neq) {}
+
     virtual void finalize() { _aggregate_column = nullptr; }
 
 public:
@@ -114,6 +116,41 @@ public:
             aggregate_batch_impl(0, size, column);
         } else {
             aggregate_batch_impl(start, start + aggregate_loops[nums - 1], _source_column);
+        }
+    }
+
+    void aggregate_merge_values(int start, std::vector<uint32_t> aggregate_loops, const uint32* selective_loops, bool previous_neq) override {
+        int nums = aggregate_loops.size();
+        if (nums <= 0) {
+            return;
+        }
+
+        // if different with last row in previous chunk
+        if (previous_neq) {
+            append_data(_aggregate_column);
+            reset();
+        }
+
+        for (int i = 0; i < nums - 1; ++i) {
+            aggregate_batch_impl(start, start + selective_loops[i], _source_column);
+            append_data(_aggregate_column);
+
+            start += aggregate_loops[i];
+            reset();
+        }
+
+        CHECK(nums > 0);
+        // last row just aggregate, not finalize
+        int end = start + aggregate_loops[nums - 1];
+        int select = start + selective_loops[nums - 1];
+        int size = select - start;
+        if (need_deep_copy() && end == _source_column->size()) {
+            // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
+            ColumnPtr column = _source_column->clone_empty();
+            column->append(*_source_column, start, size);
+            aggregate_batch_impl(0, size, column);
+        } else {
+            aggregate_batch_impl(start, start + selective_loops[nums - 1], _source_column);
         }
     }
 
@@ -222,6 +259,100 @@ public:
             CHECK(nums >= 1);
             int end = start + aggregate_loops[nums - 1];
             int size = end - start;
+
+            if (_child->need_deep_copy() && end == _child->_source_column->size()) {
+                // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
+                ColumnPtr column = _child->_source_column->clone_empty();
+                column->append(*_child->_source_column, start, size);
+                for (int j = 0; j < size; ++j) {
+                    if (_source_nulls_data[start + j] != 1) {
+                        _row_is_null &= 0u;
+                        _child->aggregate_impl(j, column);
+                    }
+                }
+            } else {
+                for (int j = start; j < end; ++j) {
+                    if (_source_nulls_data[j] != 1) {
+                        _row_is_null &= 0u;
+                        _child->aggregate_impl(j, _child->_source_column);
+                    }
+                }
+            }
+        }
+    }
+
+    void aggregate_merge_values(int start, std::vector<uint32_t> aggregate_loops, const uint32* selective_loops, bool previous_neq) override {
+        int nums = aggregate_loops.size();
+        if (nums <= 0) {
+            return;
+        }
+
+        if (previous_neq) {
+            _append_data();
+            reset();
+        }
+
+        size_t row_nums = 0;
+        for (int i = 0; i < nums; ++i) {
+            row_nums += aggregate_loops[i];
+        }
+
+        size_t zeros = SIMD::count_zero(_source_nulls_data + start, row_nums);
+
+        if (zeros == 0) {
+            // all null
+            for (int i = 0; i < nums - 1; ++i) {
+                _row_is_null &= 1u;
+                _append_data();
+                start += aggregate_loops[i];
+                reset();
+            }
+
+            CHECK(nums >= 1);
+            _row_is_null &= 1u;
+        } else if (zeros == row_nums) {
+            // all not null
+            for (int i = 0; i < nums - 1; ++i) {
+                _row_is_null &= 0u;
+                _child->aggregate_batch_impl(start, start + implicit_cast<int>(selective_loops[i]),
+                                             _child->_source_column);
+                _append_data();
+                start += aggregate_loops[i];
+                reset();
+            }
+
+            CHECK(nums >= 1);
+
+            _row_is_null &= 0u;
+            int end = start + implicit_cast<int>(aggregate_loops[nums - 1]);
+            int select = start + implicit_cast<int>(selective_loops[nums - 1]);
+            int size = select - start;
+            if (_child->need_deep_copy() && end == _child->_source_column->size()) {
+                // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
+                ColumnPtr column = _child->_source_column->clone_empty();
+                column->append(*_child->_source_column, start, size);
+                _child->aggregate_batch_impl(0, size, column);
+            } else {
+                _child->aggregate_batch_impl(start, select, _child->_source_column);
+            }
+        } else {
+            for (int i = 0; i < nums - 1; ++i) {
+                for (int j = start; j < start + aggregate_loops[i]; ++j) {
+                    if (_source_nulls_data[j] != 1) {
+                        _row_is_null &= 0u;
+                        _child->aggregate_impl(j, _child->_source_column);
+                    }
+                }
+
+                _append_data();
+                start += aggregate_loops[i];
+                reset();
+            }
+
+            CHECK(nums >= 1);
+            int end = start + aggregate_loops[nums - 1];
+            int select = start + selective_loops[nums - 1];
+            int size = select - start;
 
             if (_child->need_deep_copy() && end == _child->_source_column->size()) {
                 // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.

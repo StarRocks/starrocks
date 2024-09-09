@@ -85,6 +85,7 @@ public class StreamLoadInfo {
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+    private boolean mergeMode = false;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
@@ -150,6 +151,14 @@ public class StreamLoadInfo {
 
     public TPartialUpdateMode getPartialUpdateMode() {
         return partialUpdateMode;
+    }
+
+    public boolean isMergeMode() {
+        return mergeMode;
+    }
+
+    public void setMergeMode(boolean mergeMode) {
+        this.mergeMode = mergeMode;
     }
 
     public ColumnSeparator getColumnSeparator() {
@@ -333,6 +342,9 @@ public class StreamLoadInfo {
         if (context.partialUpdate) {
             partialUpdate = context.partialUpdate;
         }
+        if (context.mergeMode) {
+            mergeMode = context.mergeMode;
+        }
         if (context.transmissionCompressionType != null) {
             compressionType = CompressionUtils.findTCompressionByName(context.transmissionCompressionType);
         }
@@ -459,6 +471,10 @@ public class StreamLoadInfo {
 
         if (request.isSetPartial_update_mode()) {
             partialUpdateMode = request.getPartial_update_mode();
+        }
+
+        if (request.isMerge_mode()) {
+            mergeMode = request.isMerge_mode();
         }
 
         if (request.isSetPayload_compression_type()) {

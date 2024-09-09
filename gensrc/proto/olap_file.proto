@@ -105,6 +105,7 @@ message RowsetTxnMetaPB {
     optional PartialUpdateMode partial_update_mode = 6;
     // auto increment column unique id
     optional int32 auto_increment_partial_update_column_uid = 7;
+    optional bool merge_mode = 8;
 }
 
 message RowsetMetaPB {

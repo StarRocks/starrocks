@@ -47,6 +47,8 @@ public:
 
     void aggregate();
 
+    void aggregate_merge();
+
     bool is_do_aggregate() const { return _do_aggregate; }
 
     bool source_exhausted() const { return _source_row == _source_size; }
@@ -92,6 +94,8 @@ private:
 
     // use for calculate the aggregate range covered by each aggregate key
     std::vector<uint32_t> _aggregate_loops;
+
+    std::vector<std::vector<uint32_t>> _aggregate_merge_loops;
 
     ChunkPtr _aggregate_chunk;
     // the last row of non-key column is in aggregator (not in aggregate chunk) before finalize.

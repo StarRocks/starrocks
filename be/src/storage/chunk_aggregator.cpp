@@ -186,6 +186,55 @@ void ChunkAggregator::aggregate() {
     _has_aggregate = true;
 }
 
+void ChunkAggregator::aggregate_merge() {
+    if (source_exhausted()) {
+        return;
+    }
+
+    DCHECK(_source_row < _source_size) << "It's impossible";
+
+    _selective_index.clear();
+    _aggregate_loops.clear();
+
+    // first key is not equal with last row in previous chunk
+    bool previous_neq = !_is_eq[_source_row] && (_aggregate_rows > 0);
+
+    // same with last row
+    if (_is_eq[_source_row] == 1) {
+        _aggregate_loops.emplace_back(0);
+    }
+
+    // 1. Calculate the key rows selective arrays
+    // 2. Calculate the value rows that can be aggregated for each key row
+    uint32_t row = _source_row;
+    for (; row < _source_size; ++row) {
+        if (_is_eq[row] == 0) {
+            if (_aggregate_rows >= _max_aggregate_rows) {
+                break;
+            }
+            ++_aggregate_rows;
+            _selective_index.emplace_back(row);
+            _aggregate_loops.emplace_back(1);
+        } else {
+            _aggregate_loops[_aggregate_loops.size() - 1] += 1;
+        }
+    }
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultColumnAggregatorAllocator);
+    // 3. Copy the selected key rows
+    // 4. Aggregate the value rows
+    for (int i = 0; i < _key_fields; ++i) {
+        _column_aggregator[i]->aggregate_keys(_source_row, _selective_index.size(), _selective_index.data());
+    }
+
+    for (int i = _key_fields; i < _num_fields; ++i) {
+        _column_aggregator[i]->aggregate_merge_values(_source_row, _aggregate_loops,
+                                                      _aggregate_loops.data(), previous_neq);
+    }
+
+    _source_row = row;
+    _has_aggregate = true;
+}
+
 bool ChunkAggregator::is_finish() {
     return (_aggregate_chunk == nullptr || _aggregate_rows >= _max_aggregate_rows);
 }

@@ -225,6 +225,10 @@ public class OlapTableSink extends DataSink {
         tDataSink.getOlap_table_sink().setLoad_id(newLoadId);
     }
 
+    public void setMergeMode(boolean mergeMode) {
+        tDataSink.getOlap_table_sink().setMerge_mode(mergeMode);
+    }
+
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
     }

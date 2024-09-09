@@ -172,6 +172,7 @@ private:
     std::string _merge_condition;
     std::string _encryption_meta;
     TPartialUpdateMode::type _partial_update_mode;
+    bool _merge_mode = false;
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;

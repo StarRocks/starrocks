@@ -66,6 +66,7 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+    bool merge_mode = false;
     // `ptable_schema_param` is valid during initialization.
     // And it will be set to nullptr because we only need to access it during intialization.
     // If you need to access it after intialization, please make sure the pointer is valid.

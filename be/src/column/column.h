@@ -163,6 +163,8 @@ public:
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
+    virtual void merge(const Column& src) {};
+
     // replicate a column to align with an array's offset, used for captured columns in lambda functions
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.

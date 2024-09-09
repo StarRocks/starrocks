@@ -121,6 +121,24 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, 
     _init_aggregator_if_needed();
 }
 
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+                   MemTableSink* sink, std::string merge_condition, bool merge_mode, MemTracker* mem_tracker)
+        : _tablet_id(tablet_id),
+          _vectorized_schema(schema),
+          _slot_descs(slot_descs),
+          _keys_type(schema->keys_type()),
+          _sink(sink),
+          _aggregator(nullptr),
+          _merge_condition(std::move(merge_condition)),
+          _merge_mode(merge_mode),
+          _mem_tracker(mem_tracker) {
+    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
+        _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+        _has_op_slot = true;
+    }
+    _init_aggregator_if_needed();
+}
+
 MemTable::~MemTable() = default;
 
 size_t MemTable::memory_usage() const {
@@ -379,7 +397,11 @@ void MemTable::_aggregate(bool is_final) {
 
     DCHECK(_aggregator->is_do_aggregate());
 
-    _aggregator->aggregate();
+    if (_merge_mode) {
+        _aggregator->aggregate_merge();
+    } else {
+        _aggregator->aggregate();
+    }
     _aggregator_memory_usage = _aggregator->memory_usage();
     _aggregator_bytes_usage = _aggregator->bytes_usage();
 

@@ -278,4 +278,71 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     return Status::OK();
 }
 
+Status SegmentRewriter::rewrite_merge_mode(const std::string& src_path, const std::string& dest_path, const TabletSchemaCSPtr& tschema,
+                                MergeState& mergeState,
+                                std::vector<std::unique_ptr<Column>>* columns) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
+
+    uint32_t segment_id = mergeState.segment_id;
+    Rowset* rowset = mergeState.rowset;
+    RETURN_IF_ERROR(rowset->load());
+
+    uint32_t num_rows = rowset->segments()[segment_id]->num_rows();
+
+    std::vector<uint32_t> src_column_ids;
+    // src_column_ids is new column ( update, and not auto_increment_column_id)
+    for (auto i = 0; i < tschema->num_columns(); ++i) {
+        src_column_ids.emplace_back(i);
+    }
+    Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
+
+    auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
+    auto read_chunk = chunk_shared_ptr.get();
+
+    SegmentReadOptions seg_options;
+    OlapReaderStatistics stats;
+    seg_options.fs = fs;
+    seg_options.stats = &stats;
+    seg_options.chunk_size = num_rows;
+    seg_options.temporary_data = true;
+
+    auto res = rowset->segments()[segment_id]->new_iterator(src_schema, seg_options);
+    auto& itr = res.value();  // new column value( from read )
+
+    if (itr) {
+        auto st = itr->get_next(read_chunk);
+        DCHECK_EQ(read_chunk->num_rows(), num_rows);
+    }
+    itr->close();
+
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
+
+    std::vector<uint32_t> full_column_ids(tschema->num_columns());
+    std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
+    auto schema = ChunkHelper::convert_schema(tschema, full_column_ids);
+    auto chunk = ChunkHelper::new_chunk(schema, full_column_ids.size());
+
+
+    for (int i = 0; i < tschema->num_columns(); ++i) {
+        chunk->get_column_by_index(i).swap(read_chunk->get_column_by_index(i));
+        if (chunk->get_column_by_index(i)->has_null()) {
+            chunk->get_column_by_index(i)->merge(*(*columns)[i].get());
+        }
+    }
+
+    SegmentWriterOptions opts;
+    SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
+    RETURN_IF_ERROR(writer.init(full_column_ids, true));
+
+    uint64_t index_size = 0;
+    uint64_t segment_file_size;
+    RETURN_IF_ERROR(writer.append_chunk(*chunk));
+    RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite4");
+    RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
+
+    return Status::OK();
+}
+
 } // namespace starrocks

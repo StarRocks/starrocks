@@ -61,6 +61,42 @@ struct PartialUpdateState {
     }
 };
 
+struct MergeState {
+    std::vector<uint64_t> src_rss_rowids;
+    std::vector<std::unique_ptr<Column>> write_columns;
+    bool inited = false;
+    EditVersion read_version;
+    int64_t byte_size = 0;
+    Rowset* rowset;
+    uint32_t segment_id;
+
+    void init(Rowset* rowset, uint32_t segment_id) {
+        this->rowset = rowset;
+        this->segment_id = segment_id;
+    }
+
+    void update_byte_size() {
+        for (size_t i = 0; i < write_columns.size(); i++) {
+            if (write_columns[i] != nullptr) {
+                byte_size += write_columns[i]->byte_size();
+            }
+        }
+    }
+
+    void release() {
+        src_rss_rowids.clear();
+        for (size_t i = 0; i < write_columns.size(); i++) {
+            if (write_columns[i] != nullptr) {
+                write_columns[i].reset();
+            }
+        }
+        write_columns.clear();
+        rowset = nullptr;
+        segment_id = 0;
+        inited = false;
+    }
+};
+
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::unique_ptr<Column> write_column;
@@ -154,6 +190,9 @@ private:
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock,
                                           const TabletSchemaCSPtr& tablet_schema);
 
+    Status _prepare_merge_mode_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock);
+
+
     Status _prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
                                                          EditVersion latest_applied_version,
                                                          const std::vector<uint32_t>& column_id,
@@ -163,6 +202,10 @@ private:
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                        const PrimaryIndex& index, const TabletSchemaCSPtr& tablet_schema);
 
+    Status _check_and_resolve_conflict_merge(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
+                                             EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
+                                             const PrimaryIndex& index, const TabletSchemaCSPtr& tablet_schema);
+    
     Status _rebuild_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
                                           const TabletSchemaCSPtr& tablet_schema);
 
@@ -188,6 +231,7 @@ private:
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;
+    std::vector<MergeState> _merge_states;
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 

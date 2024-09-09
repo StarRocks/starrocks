@@ -153,6 +153,7 @@ void NodeChannel::try_open() {
 void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure,
                         std::vector<PTabletWithPartition>& tablets, bool incremental_open) {
     PTabletWriterOpenRequest request;
+    request.set_merge_mode(_parent->_merge_mode);
     request.set_merge_condition(_parent->_merge_condition);
     request.set_encryption_meta(_parent->_encryption_meta);
     if (_parent->_partial_update_mode == TPartialUpdateMode::type::ROW_MODE) {

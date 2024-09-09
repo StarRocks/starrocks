@@ -94,6 +94,47 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+void NullableColumn::merge(const starrocks::Column &src) {
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+
+    if (src.is_nullable()) {
+        const auto& c = down_cast<const NullableColumn&>(src);
+
+        DCHECK_EQ(c._null_column->size(), c._data_column->size());
+
+        const auto& new_src_data = c._data_column->clone_empty();
+        const auto& new_src_null = c._null_column->clone_empty();
+        std::vector<uint32_t> null_idxes;
+
+        for (size_t i = 0; i < _null_column->size(); ++i) {
+            if (_null_column->get_data()[i] == 1 && c._null_column->get_data()[i] == 0) {
+                null_idxes.emplace_back(i);
+                new_src_null->append_datum(c._null_column->get(i));
+                new_src_data->append_datum(c._data_column->get(i));
+            }
+        }
+
+        _null_column->update_rows(*new_src_null, null_idxes.data());
+        _data_column->update_rows(*new_src_data, null_idxes.data());
+        update_has_null();
+    } else {
+        const auto& new_src_data = src.clone_empty();
+        std::vector<uint32_t> null_idxes;
+
+        for (size_t i = 0; i < _null_column->size(); ++i) {
+            if (_null_column->get_data()[i] == 1) {
+                null_idxes.emplace_back(i);
+                new_src_data->append_datum(src.get(i));
+            }
+        }
+
+        _data_column->update_rows(*new_src_data, null_idxes.data());
+        _has_null = false;
+    }
+
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+}
+
 void NullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();

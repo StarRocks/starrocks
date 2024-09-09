@@ -208,6 +208,43 @@ public:
         _null_child->aggregate_values(start, nums, aggregate_loops, previous_neq);
     }
 
+    void aggregate_merge_values(int start, std::vector<uint32_t> aggregate_loops, const uint32* selective_loops, bool previous_neq) override {
+        auto* data = down_cast<FixedLengthColumn<uint8_t>*>(_null_child->_source_column.get())->get_data().data();
+
+        // merge previous & current
+        if (_aggregate_column->size() > 0 && !previous_neq) {
+            // check first row null
+            bool first_is_null = true;
+            for (int i = start; i < start + aggregate_loops[0]; ++i) {
+                if (data[i] != 1) {
+                    first_is_null = false;
+                    break;
+                }
+            }
+            if (first_is_null) {
+                start += aggregate_loops[0];
+                aggregate_loops.erase(aggregate_loops.begin());
+                previous_neq = true;
+            }
+        }
+
+        std::vector<uint32_t> select;
+        int index = start;
+        for (int i = 0; i < aggregate_loops.size(); ++i) {
+            select.emplace_back(1);
+            for (int j = index; j < index + aggregate_loops[i]; ++j) {
+                if (data[j] == 1) {
+                    continue;
+                }
+                select[i] = j - index + 1;
+            }
+            index += aggregate_loops[i];
+        }
+
+        _child->aggregate_merge_values(start, aggregate_loops, select.data(), previous_neq);
+        _null_child->aggregate_merge_values(start, aggregate_loops, select.data(), previous_neq);
+    }
+
     void finalize() override {
         _child->finalize();
         _null_child->finalize();
@@ -314,6 +351,29 @@ public:
         }
     }
 
+    void aggregate_merge_values(int start, std::vector<uint32_t> aggregate_loops, const uint32* selective_loops, bool previous_neq) override {
+        int nums = aggregate_loops.size();
+        if (nums <= 0) {
+            return;
+        }
+
+        // if different with last row in previous chunk
+        if (previous_neq) {
+            append_data(_aggregate_column);
+            reset();
+        }
+
+        for (int i = 0; i < nums; ++i) {
+            aggregate_batch_impl(start, start + selective_loops[i], _source_column);
+            start += aggregate_loops[i];
+            // If there is another loop, append current state to result column
+            if (i < nums - 1) {
+                append_data(_aggregate_column);
+                reset();
+            }
+        }
+    }
+    
     void finalize() override {
         append_data(_aggregate_column);
         _aggregate_column = nullptr;

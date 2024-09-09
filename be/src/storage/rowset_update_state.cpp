@@ -180,6 +180,12 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         RETURN_IF_ERROR(_load_upserts(rowset, 0, pk_column.get()));
     }
 
+    if (rowset->rowset_meta()->get_meta_pb_without_schema().has_txn_meta()
+        && rowset->num_segments() != 0
+        && rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta().merge_mode()) {
+        return _prepare_merge_mode_states(tablet, rowset, 0, true);
+    }
+
     if (!_check_partial_update(rowset)) {
         return Status::OK();
     }
@@ -444,6 +450,76 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     return Status::OK();
 }
 
+Status RowsetUpdateState::_prepare_merge_mode_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_merge_mode_states");
+    if (_merge_states.size() == 0) {
+        _merge_states.resize(rowset->num_segments());
+    }
+
+    if (_merge_states[idx].inited == true) {
+        return Status::OK();
+    }
+
+    int64_t t_start = MonotonicMillis();
+    _merge_states[idx].init(rowset, idx);
+    const auto& tablet_schema = tablet->tablet_schema();
+
+    std::vector<uint32_t> read_column_ids;
+    for (uint32_t i = 0; i < tablet_schema->num_columns(); i++) {
+        read_column_ids.push_back(i);
+    }
+
+    DCHECK(_upserts[idx] != nullptr);
+    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, read_column_ids);
+    std::vector<std::unique_ptr<Column>> read_columns(read_column_ids.size());
+
+    TRY_CATCH_BAD_ALLOC(_merge_states[idx].write_columns.resize(read_columns.size()));
+    TRY_CATCH_BAD_ALLOC(_merge_states[idx].src_rss_rowids.resize(_upserts[idx]->size()));
+    for (uint32_t i = 0; i < read_columns.size(); ++i) {
+        auto column = ChunkHelper::column_from_field(*read_column_schema.field(i).get());
+        read_columns[i] = column->clone_empty();
+        _merge_states[idx].write_columns[i] = column->clone_empty();
+    }
+
+    int64_t t_read_index = MonotonicMillis();
+    if (need_lock) {
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *_upserts[idx],
+                                                                &(_merge_states[idx].read_version),
+                                                                &(_merge_states[idx].src_rss_rowids)));
+    } else {
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(tablet, *_upserts[idx],
+                                                                       &(_merge_states[idx].read_version),
+                                                                       &(_merge_states[idx].src_rss_rowids)));
+    }
+
+    int64_t t_read_values = MonotonicMillis();
+    size_t total_rows = 0;
+    // rows actually needed to be read, excluding rows with default values
+    size_t num_default = 0;
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+    vector<uint32_t> idxes;
+    plan_read_by_rssid(_merge_states[idx].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
+    total_rows += _merge_states[idx].src_rss_rowids.size();
+    RETURN_IF_ERROR(tablet->updates()->get_column_values(
+            read_column_ids, _merge_states[idx].read_version.major_number(), num_default > 0, rowids_by_rssid,
+            &read_columns, nullptr, tablet_schema));
+    for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
+        _merge_states[idx].write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0,
+                                                                    idxes.size());
+        _memory_usage += _merge_states[idx].write_columns[col_idx]->memory_usage();
+    }
+    int64_t t_end = MonotonicMillis();
+    _merge_states[idx].update_byte_size();
+    _merge_states[idx].inited = true;
+
+    LOG(INFO) << strings::Substitute(
+            "prepare MergeState tablet:$0 segment:$1 #row:$2(#non-default:$3) #column:$4 "
+            "time:$5ms(index:$6/value:$7)",
+            _tablet_id, idx, total_rows, total_rows - num_default, read_columns.size(), t_end - t_start,
+            t_read_values - t_read_index, t_end - t_read_values);
+    return Status::OK();
+}
+
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
                                                                         EditVersion latest_applied_version,
                                                                         const std::vector<uint32_t>& column_id,
@@ -667,6 +743,90 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
     return Status::OK();
 }
 
+Status RowsetUpdateState::_check_and_resolve_conflict_merge(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
+                                                            uint32_t segment_id, EditVersion latest_applied_version,
+                                                            std::vector<uint32_t>& read_column_ids,
+                                                            const PrimaryIndex& index,
+                                                            const TabletSchemaCSPtr& tablet_schema) {
+    CHECK_MEM_LIMIT("RowsetUpdateState::_check_and_resolve_conflict_merge");
+    if (_merge_states.size() <= segment_id || !_merge_states[segment_id].inited) {
+        std::string msg = strings::Substitute(
+                "_check_and_reslove_conflict_merge tablet:$0 rowset:$1 segment:$2 failed, merge_states size:$3",
+                tablet->tablet_id(), rowset_id, segment_id, _merge_states.size());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+
+    // _read_version is equal to latest_applied_version which means there is no other rowset is applied
+    // the data of write_columns can be write to segment file directly
+    VLOG(2) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
+            << _merge_states[segment_id].read_version.to_string();
+    if (latest_applied_version == _merge_states[segment_id].read_version) {
+        return Status::OK();
+    }
+
+    // check if there are delta column files generated from read_version to now.
+    // If yes, then need to force resolve conflict.
+    const bool need_resolve_conflict = tablet->updates()->check_delta_column_generate_from_version(
+            _merge_states[segment_id].read_version);
+
+    // get rss_rowids to identify conflict exist or not
+    int64_t t_start = MonotonicMillis();
+    std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->size());
+    RETURN_IF_ERROR(index.get(*_upserts[segment_id], &new_rss_rowids));
+    int64_t t_read_index = MonotonicMillis();
+
+    size_t total_conflicts = 0;
+    uint32_t num_rows = new_rss_rowids.size();
+    std::vector<uint32_t> conflict_idxes;
+    std::vector<uint64_t> conflict_rowids;
+    DCHECK_EQ(num_rows, _merge_states[segment_id].src_rss_rowids.size());
+    for (size_t i = 0; i < new_rss_rowids.size(); ++i) {
+        uint64_t new_rss_rowid = new_rss_rowids[i];
+        uint32_t new_rssid = new_rss_rowid >> 32;
+        uint64_t rss_rowid = _merge_states[segment_id].src_rss_rowids[i];
+        uint32_t rssid = rss_rowid >> 32;
+
+        if (rssid != new_rssid || need_resolve_conflict) {
+            conflict_idxes.emplace_back(i);
+            conflict_rowids.emplace_back(new_rss_rowid);
+        }
+    }
+    if (!conflict_idxes.empty()) {
+        total_conflicts += conflict_idxes.size();
+        std::vector<std::unique_ptr<Column>> read_columns;
+        read_columns.resize(_merge_states[segment_id].write_columns.size());
+        for (uint32_t i = 0; i < read_columns.size(); ++i) {
+            read_columns[i] = _merge_states[segment_id].write_columns[i]->clone_empty();
+        }
+        size_t num_default = 0;
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        std::vector<uint32_t> read_idxes;
+        plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
+        DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
+        RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, latest_applied_version.major_number(),
+                                                             num_default > 0, rowids_by_rssid, &read_columns, nullptr,
+                                                             tablet_schema));
+
+        for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
+            std::unique_ptr<Column> new_write_column =
+                    _merge_states[segment_id].write_columns[col_idx]->clone_empty();
+            new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
+            RETURN_IF_EXCEPTION(_merge_states[segment_id].write_columns[col_idx]->update_rows(
+                    *new_write_column, conflict_idxes.data()));
+        }
+    }
+    int64_t t_end = MonotonicMillis();
+    LOG(INFO) << strings::Substitute(
+            "_check_and_resolve_conflict_merge tablet:$0 rowset:$1 segmet:$2 version:($3 $4) #conflict-row:$5 #column:$6 "
+            "time:$7ms(index:$8/value:$9)",
+            tablet->tablet_id(), rowset_id, segment_id, _merge_states[segment_id].read_version.to_string(),
+            latest_applied_version.to_string(), total_conflicts, read_column_ids.size(), t_end - t_start,
+            t_read_index - t_start, t_end - t_read_index);
+
+    return Status::OK();
+}
+
 template <class T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& vs) {
     for (auto& v : vs) {
@@ -750,6 +910,22 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
         }
     }
 
+    if (txn_meta.merge_mode()) {
+        const auto& tschema = tablet->tablet_schema();
+        // columns supplied in rowset
+        for (uint32_t i = 0; i < tschema->num_columns(); i++) {
+            read_column_ids.push_back(i);
+        }
+
+        if (_merge_states.size() == 0 || !_merge_states[segment_id].inited) {
+            RETURN_IF_ERROR(_prepare_merge_mode_states(tablet, rowset, segment_id, false));
+        } else {
+            // reslove conflict of segment
+            RETURN_IF_ERROR(_check_and_resolve_conflict_merge(tablet, rowset, rowset_id, segment_id, latest_applied_version,
+                                                              read_column_ids, index, _tablet_schema));
+        }
+    }
+
     if (txn_meta.has_auto_increment_partial_update_column_id()) {
         uint32_t id = 0;
         for (int i = 0; i < _tablet_schema->num_columns(); ++i) {
@@ -789,6 +965,11 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(src, &dest, _tablet_schema, read_column_ids,
                                                                 _partial_update_states[segment_id].write_columns,
                                                                 segment_id, partial_rowset_footer));
+    } else if (_merge_states.size() != 0) {
+        LOG(INFO) << "_merge_states is success";
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_merge_mode(
+                src_path, dest_path, _tablet_schema, _merge_states[segment_id],
+                _merge_states.size() != 0 ? &_merge_states[segment_id].write_columns : nullptr));
     }
     int64_t t_rewrite_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
@@ -817,6 +998,15 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
             delete_pks.swap(_auto_increment_partial_update_states[segment_id].delete_pks);
         }
         _auto_increment_partial_update_states[segment_id].release();
+    }
+    if (txn_meta.merge_mode()) {
+        for (auto& write_column : _merge_states[segment_id].write_columns) {
+            if (write_column != nullptr) {
+                _memory_usage -= write_column->memory_usage();
+            }
+        }
+        *append_column_size += _merge_states[segment_id].byte_size;
+        _merge_states[segment_id].release();
     }
     return Status::OK();
 }

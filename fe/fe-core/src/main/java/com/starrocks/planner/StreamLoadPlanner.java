@@ -220,6 +220,7 @@ public class StreamLoadPlanner {
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
                 olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+        olapTableSink.setMergeMode(streamLoadInfo.isMergeMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.
