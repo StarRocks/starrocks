@@ -166,8 +166,9 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
         }
 
         private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates) {
-            if (scanOperatorPredicates.getIdToPartitionKey().size() == 1) {
+            if (scanOperatorPredicates.getIdToPartitionKey().size() <= 1) {
                 // for none-partition table, it has one partition id
+                // but delta lake's none-partition table, it has none partition id
                 return false;
             }
             return scanOperatorPredicates.getSelectedPartitionIds().size() ==
