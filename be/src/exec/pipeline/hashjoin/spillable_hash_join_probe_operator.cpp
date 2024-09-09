@@ -283,7 +283,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
     auto query_ctx = state->query_ctx()->weak_from_this();
     for (size_t i = 0; i < _processing_partitions.size(); ++i) {
         std::shared_ptr<spill::SpillerReader> reader = std::move(spill_readers[i]);
-        auto task = [this, state, reader, i, query_ctx, 0]() {
+        auto task = [this, state, reader, i, query_ctx]() {
             if (auto acquired = query_ctx.lock()) {
                 _update_status(_load_partition_build_side(state, reader, i));
                 _latch.count_down();
