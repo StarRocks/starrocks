@@ -63,13 +63,14 @@ public class QueryStatisticsInfo {
     private long execTime;
     private String wareHouseName;
     private String customQueryId;
+    private String resourceGroupName;
 
     public QueryStatisticsInfo() {
     }
 
     public QueryStatisticsInfo(long queryStartTime, String feIp, String queryId, String connId, String db, String user,
                                long cpuCostNs, long scanBytes, long scanRows, long memUsageBytes, long spillBytes,
-                               long execTime, String wareHouseName, String customQueryId) {
+                               long execTime, String wareHouseName, String customQueryId, String resourceGroupName) {
         this.queryStartTime = queryStartTime;
         this.feIp = feIp;
         this.queryId = queryId;
@@ -84,6 +85,7 @@ public class QueryStatisticsInfo {
         this.execTime = execTime;
         this.wareHouseName = wareHouseName;
         this.customQueryId = customQueryId;
+        this.resourceGroupName = resourceGroupName;
     }
 
     public long getQueryStartTime() {
@@ -136,6 +138,10 @@ public class QueryStatisticsInfo {
 
     public String getWareHouseName() {
         return wareHouseName;
+    }
+
+    public String getResourceGroupName() {
+        return resourceGroupName;
     }
 
     public String getCustomQueryId() {
@@ -207,6 +213,11 @@ public class QueryStatisticsInfo {
         return this;
     }
 
+    public QueryStatisticsInfo withResourceGroupName(String resourceGroupName) {
+        this.resourceGroupName = resourceGroupName;
+        return this;
+    }
+
     public QueryStatisticsInfo withCustomQueryId(String customQueryId) {
         this.customQueryId = customQueryId;
         return this;
@@ -227,7 +238,8 @@ public class QueryStatisticsInfo {
                 .setSpillBytes(spillBytes)
                 .setExecTime(execTime)
                 .setWareHouseName(wareHouseName)
-                .setCustomQueryId(customQueryId);
+                .setCustomQueryId(customQueryId)
+                .setResourceGroupName(resourceGroupName);
     }
 
     public static QueryStatisticsInfo fromThrift(TQueryStatisticsInfo tinfo) {
@@ -245,7 +257,8 @@ public class QueryStatisticsInfo {
                 .withCpuCostNs(tinfo.getCpuCostNs())
                 .withExecTime(tinfo.getExecTime())
                 .withWareHouseName(tinfo.getWareHouseName())
-                .withCustomQueryId(tinfo.getCustomQueryId());
+                .withCustomQueryId(tinfo.getCustomQueryId())
+                .withResourceGroupName(tinfo.getResourceGroupName());
     }
 
     public List<String> formatToList() {
@@ -264,6 +277,7 @@ public class QueryStatisticsInfo {
         values.add(QueryStatisticsFormatter.getSecondsFromMilli(this.getExecTime()));
         values.add(this.getWareHouseName());
         values.add(this.getCustomQueryId());
+        values.add(this.getResourceGroupName());
         return values;
     }
 
@@ -281,13 +295,14 @@ public class QueryStatisticsInfo {
                 Objects.equals(db, that.db) && Objects.equals(user, that.user) && cpuCostNs == that.cpuCostNs &&
                 scanBytes == that.scanBytes && scanRows == that.scanRows && memUsageBytes == that.memUsageBytes &&
                 spillBytes == that.spillBytes && execTime == that.execTime &&
-                Objects.equals(wareHouseName, that.wareHouseName) && Objects.equals(customQueryId, that.customQueryId);
+                Objects.equals(wareHouseName, that.wareHouseName) && Objects.equals(customQueryId, that.customQueryId) &&
+                Objects.equals(resourceGroupName, that.resourceGroupName);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(queryStartTime, feIp, queryId, connId, db, user, cpuCostNs, scanBytes, scanRows, memUsageBytes,
-                spillBytes, execTime, wareHouseName, customQueryId);
+                spillBytes, execTime, wareHouseName, customQueryId, resourceGroupName);
     }
 
     @Override
@@ -306,6 +321,7 @@ public class QueryStatisticsInfo {
                 ", execTime=" + execTime +
                 ", wareHouseName=" + wareHouseName +
                 ", customQueryId=" + customQueryId +
+                ", resourceGroupName=" + resourceGroupName +
                 '}';
     }
 
@@ -341,7 +357,8 @@ public class QueryStatisticsInfo {
                     .withCpuCostNs(statistics.getCpuCostNs())
                     .withExecTime(item.getQueryExecTime())
                     .withWareHouseName(item.getWarehouseName())
-                    .withCustomQueryId(item.getCustomQueryId());
+                    .withCustomQueryId(item.getCustomQueryId())
+                    .withResourceGroupName(item.getResourceGroupName());
             sortedRowData.add(info);
         }
 
