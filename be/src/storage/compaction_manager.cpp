@@ -577,6 +577,7 @@ int32_t CompactionManager::compute_max_compaction_concurrency() {
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
         if (max_threads == -1) {
+            std::lock_guard lg(_tasks_mutex);
             _max_task_num = compute_max_compaction_concurrency();
             return _compaction_pool->update_max_threads(std::max(1, max_task_num()));
         }
