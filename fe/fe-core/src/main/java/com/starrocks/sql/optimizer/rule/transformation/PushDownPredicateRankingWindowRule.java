@@ -185,10 +185,13 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
-        // patition columns should not be included in orderByElements
-        List<Ordering> orderByElements = windowOperator.getEnforceSortColumns().stream()
-                .filter(ordering -> !partitionByColumns.contains(ordering.getColumnRef()))
-                .collect(Collectors.toList());
+        // patition columns should not be included in orderByElements when it's not the only column in orderByElements
+        List<Ordering> orderByElements;
+        if (windowOperator.getOrderByElements() != null && !windowOperator.getOrderByElements().isEmpty()) {
+            orderByElements = windowOperator.getOrderByElements();
+        } else {
+            orderByElements = windowOperator.getEnforceSortColumns();
+        }
 
         TopNType topNType = TopNType.parse(callOperator.getFnName());
 
