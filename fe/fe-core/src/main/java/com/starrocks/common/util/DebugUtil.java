@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Joiner;
 import com.starrocks.common.Pair;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.thrift.TUniqueId;
@@ -171,5 +172,17 @@ public class DebugUtil {
         final StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
         return sw.toString();
+    }
+
+    /**
+     * Get the root cause stack trace of a throwable object.
+     * @param e the throwable object
+     */
+    public static String getRootStackTrace(Throwable e) {
+        if (e == null) {
+            return "";
+        }
+        String[] stacks = ExceptionUtils.getRootCauseStackTrace(e);
+        return Joiner.on("\n").join(stacks);
     }
 }
