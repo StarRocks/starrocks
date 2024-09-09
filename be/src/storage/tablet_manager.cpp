@@ -1099,10 +1099,9 @@ Status TabletManager::start_trash_sweep() {
             tablets_to_check.emplace_back(info);
         }
 
-        while (!_shutdown_tablets_redundant_queue.empty()) {
-            auto info = _shutdown_tablets_redundant_queue.front();
-            tablets_redundant_to_check.emplace_back(std::move(info));
-            _shutdown_tablets_redundant_queue.pop_front();
+        tablets_redundant_to_check.reserve(_shutdown_tablets_redundant_map.size());
+        for (auto& [tablet_uid, info] : _shutdown_tablets_redundant_map) {
+            tablets_redundant_to_check.emplace_back(info);
         }
     }
 
@@ -1125,19 +1124,9 @@ Status TabletManager::start_trash_sweep() {
             _shutdown_tablets.erase(tablet_finished->tablet_id());
         }
 
-        for (const auto& tablet_info : tablets_redundant_to_check) {
-            auto& tablet = tablet_info.tablet;
-            bool is_finished_tablet = false;
-            for (const auto& tablet_info_finished : finished_tablets_redundant) {
-                auto& tablet_finished = tablet_info_finished.tablet;
-                if (tablet->tablet_uid() == tablet_finished->tablet_uid()) {
-                    is_finished_tablet = true;
-                    break;
-                }
-            }
-            if (!is_finished_tablet) {
-                _shutdown_tablets_redundant_queue.push_back(std::move(tablet_info));
-            }
+        for (const auto& tablet_info_finished : finished_tablets_redundant) {
+            auto& tablet_finished = tablet_info_finished.tablet;
+            _shutdown_tablets_redundant_map.erase(tablet_finished->tablet_uid());
         }
     }
     return Status::OK();
@@ -1825,8 +1814,9 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
             }
         }
         auto drop_info_redundant = iter->second;
+        auto tablet_uid = (drop_info_redundant.tablet)->tablet_uid();
         _shutdown_tablets.erase(iter);
-        _shutdown_tablets_redundant_queue.push_back(std::move(drop_info_redundant));
+        _shutdown_tablets_redundant_map.emplace(tablet_uid, std::move(drop_info_redundant));
     }
     _shutdown_tablets.emplace(tablet_id, drop_info);
 }

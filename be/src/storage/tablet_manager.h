@@ -283,12 +283,12 @@ private:
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _partition_tablet_map_lock;
-    // Protect _shutdown_tablets/_shutdown_tablets_redundant_queue, should not be obtained before _tablet_map_lock to avoid deadlock
+    // Protect _shutdown_tablets/_shutdown_tablets_redundant_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
     std::map<int64_t, DroppedTabletInfo> _shutdown_tablets;
-    std::deque<DroppedTabletInfo> _shutdown_tablets_redundant_queue;
+    std::map<TabletUid, DroppedTabletInfo> _shutdown_tablets_redundant_map;
 
     std::mutex _tablet_stat_mutex;
     // cache to save tablets' statistics, such as data-size and row-count
