@@ -191,6 +191,9 @@ public final class SqlToScalarOperatorTranslator {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
+        result = ScalarOperatorRewriter.replaceScalarOperatorByColumnRef(result,
+                                        expressionMapping.getGeneratedColumnExprOpToColumnRef());
+
         requireNonNull(result, "translated expression is null");
         return result;
     }
