@@ -320,6 +320,7 @@ public class SelectStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         // array is not supported now
@@ -354,6 +355,8 @@ public class SelectStmtTest {
     }
 
     @Test
+=======
+>>>>>>> 01f048a733 ([Enhancement] support constant folding in translating scalarOperator phase (#50734))
     void testGroupByMultiColumnCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
