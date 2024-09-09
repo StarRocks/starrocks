@@ -84,7 +84,6 @@ void GlobalDriverExecutor::_worker_thread() {
             break;
         }
         // Reset TLS state
-        CurrentThread::current().set_query_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
 
         if (current_thread != nullptr) {
