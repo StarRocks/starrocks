@@ -2832,6 +2832,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
+    public boolean tableExists(String dbName, String tblName) {
+        Database database = getDb(dbName);
+        if (database == null) {
+            return false;
+        }
+        return database.getTable(tblName) != null;
+    }
+
+    @Override
     public Table getTable(String dbName, String tblName) {
         Database database = getDb(dbName);
         if (database == null) {
