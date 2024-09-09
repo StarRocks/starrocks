@@ -535,7 +535,7 @@ public:
         // all the other platforms.
         if (std::filesystem::is_symlink(dirname)) {
             char real_path[PATH_MAX];
-            char *result = realpath(dirname, real_path);
+            char* result = realpath(dirname, real_path);
             if (result == NULL) {
                 return io_error(fmt::format("create {} recursively", dirname), errno);
             }
