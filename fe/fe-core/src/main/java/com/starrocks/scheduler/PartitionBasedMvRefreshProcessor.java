@@ -102,11 +102,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
-<<<<<<< HEAD
 import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-=======
->>>>>>> e3e6943f6f ([BugFix] Fix mv refresh log in exception throwing  (#50781))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -371,20 +367,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // if lock timeout, retry to refresh
                 lockFailedTimes += 1;
                 LOG.warn("Refresh materialized view {} failed at {}th time because try lock failed: {}",
-<<<<<<< HEAD
-                        this.materializedView.getName(), lockFailedTimes, e);
-=======
-                        this.materializedView.getName(), lockFailedTimes, DebugUtil.getStackTrace(e));
->>>>>>> e3e6943f6f ([BugFix] Fix mv refresh log in exception throwing  (#50781))
+                        this.materializedView.getName(), lockFailedTimes, DebugUtil.getRootStackTrace(e));
                 lastException = e;
             } catch (Throwable e) {
                 refreshFailedTimes += 1;
                 LOG.warn("Refresh materialized view {} failed at {}th time: {}",
-<<<<<<< HEAD
-                        this.materializedView.getName(), refreshFailedTimes, e);
-=======
                         this.materializedView.getName(), refreshFailedTimes, DebugUtil.getRootStackTrace(e));
->>>>>>> e3e6943f6f ([BugFix] Fix mv refresh log in exception throwing  (#50781))
                 lastException = e;
             }
 
@@ -799,13 +787,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         getBaseTableRefreshedPartitionsByExecPlan(execPlan);
                 extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
             } catch (Exception e) {
-<<<<<<< HEAD
-                // just log warn and no throw exceptions for updating task runs message.
-                LOG.warn("update task run messages failed:", e);
-=======
                 // just log warn and no throw exceptions for an updating task runs message.
                 LOG.warn("update task run messages failed:", DebugUtil.getRootStackTrace(e));
->>>>>>> e3e6943f6f ([BugFix] Fix mv refresh log in exception throwing  (#50781))
             }
         }
     }
