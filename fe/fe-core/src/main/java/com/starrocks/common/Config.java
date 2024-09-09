@@ -2794,6 +2794,9 @@ public class Config extends ConfigBase {
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;
 
+    @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
+    public static boolean enable_active_materialized_view_schema_strict_check = true;
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
