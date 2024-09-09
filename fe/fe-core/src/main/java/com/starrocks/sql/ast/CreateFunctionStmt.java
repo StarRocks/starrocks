@@ -91,13 +91,14 @@ public class CreateFunctionStmt extends DdlStmt {
                 properties,
                 content,
                 shouldReplaceIfExists,
-                NodePosition.ZERO,
-                createIfNotExists);
+                createIfNotExists,
+                NodePosition.ZERO
+        );
     }
 
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, Map<String, String> properties, String content,
-                              boolean shouldReplaceIfExists, NodePosition pos, boolean createIfNotExists) {
+                              boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
         super(pos);
         this.functionName = functionName;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
