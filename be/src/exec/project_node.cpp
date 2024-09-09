@@ -133,8 +133,6 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         RETURN_IF_ERROR(_children[0]->get_next(state, chunk, eos));
     } while (!(*eos) && ((*chunk)->num_rows() == 0));
 
-    TRY_CATCH_ALLOC_SCOPE_START()
-
     if (*eos) {
         *chunk = nullptr;
         return Status::OK();
@@ -182,7 +180,6 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     DCHECK_CHUNK(*chunk);
 
-    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

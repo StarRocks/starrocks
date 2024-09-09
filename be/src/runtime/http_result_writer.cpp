@@ -97,7 +97,6 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
 
     // Step 2: convert chunk to http json row format row by row
     {
-        TRY_CATCH_ALLOC_SCOPE_START()
         _row_str.reserve(128);
         size_t current_bytes = 0;
         int current_rows = 0;
@@ -141,7 +140,6 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
             result_rows.resize(current_rows);
             results.emplace_back(std::move(result));
         }
-        TRY_CATCH_ALLOC_SCOPE_END()
     }
     return results;
 }

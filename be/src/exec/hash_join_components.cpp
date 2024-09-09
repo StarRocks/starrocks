@@ -28,24 +28,20 @@ void HashJoinProber::push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) {
 
 StatusOr<ChunkPtr> HashJoinProber::probe_chunk(RuntimeState* state, JoinHashTable* hash_table) {
     auto chunk = std::make_shared<Chunk>();
-    TRY_CATCH_ALLOC_SCOPE_START()
     DCHECK(_current_probe_has_remain && _probe_chunk);
     RETURN_IF_ERROR(hash_table->probe(state, _key_columns, &_probe_chunk, &chunk, &_current_probe_has_remain));
     if (!_current_probe_has_remain) {
         _probe_chunk = nullptr;
     }
     RETURN_IF_ERROR(_hash_joiner.filter_probe_output_chunk(chunk, *hash_table));
-    TRY_CATCH_ALLOC_SCOPE_END()
     return chunk;
 }
 
 StatusOr<ChunkPtr> HashJoinProber::probe_remain(RuntimeState* state, JoinHashTable* hash_table, bool* has_remain) {
     auto chunk = std::make_shared<Chunk>();
-    TRY_CATCH_ALLOC_SCOPE_START()
     RETURN_IF_ERROR(hash_table->probe_remain(state, &chunk, &_current_probe_has_remain));
     *has_remain = _current_probe_has_remain;
     RETURN_IF_ERROR(_hash_joiner.filter_post_probe_output_chunk(chunk));
-    TRY_CATCH_ALLOC_SCOPE_END()
     return chunk;
 }
 

@@ -76,7 +76,6 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
     // TODO: reuse io context
     SerdeContext spill_ctx;
     {
-        TRY_CATCH_ALLOC_SCOPE_START()
         // flush all pending result to spilled files
         size_t num_rows_flushed = 0;
         RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {
@@ -85,7 +84,6 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
             return Status::OK();
         }));
         TRACE_SPILL_LOG << "spill flush rows:" << num_rows_flushed << ",spiller:" << this;
-        TRY_CATCH_ALLOC_SCOPE_END();
     }
 
     // be careful close method return a not ok status

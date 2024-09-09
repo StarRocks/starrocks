@@ -339,10 +339,8 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
         StatusOr<ChunkPB> res = Status::OK();
         // This lambda is to get the result of TRY_CATCH_ALLOC_SCOPE_END()
         auto st = [&]() {
-            TRY_CATCH_ALLOC_SCOPE_START()
             res = serde::ProtobufChunkSerde::serialize(*src);
             return res.status();
-            TRY_CATCH_ALLOC_SCOPE_END()
         }();
         if (!st.ok()) {
             _cancelled = true;

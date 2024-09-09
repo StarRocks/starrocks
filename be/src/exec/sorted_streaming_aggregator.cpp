@@ -471,7 +471,6 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
 
 Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
                                                           Columns& agg_result_columns) {
-    TRY_CATCH_ALLOC_SCOPE_START()
     auto use_intermediate = _use_intermediate_as_output();
     SCOPED_TIMER(_agg_stat->get_results_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
@@ -493,7 +492,6 @@ Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, con
                                                              selector);
         }
     }
-    TRY_CATCH_ALLOC_SCOPE_END();
     return Status::OK();
 }
 

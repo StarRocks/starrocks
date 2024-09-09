@@ -280,7 +280,6 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         if (Status status = _prj_iter->get_next(chunk); !status.ok()) {
             return status;
         }
-        TRY_CATCH_ALLOC_SCOPE_START()
         for (auto slot : _query_slots) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
             chunk->set_slot_id_to_index(slot->id(), column_index);
@@ -299,7 +298,6 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk));
             DCHECK_CHUNK(chunk);
         }
-        TRY_CATCH_ALLOC_SCOPE_END()
     } while (chunk->num_rows() == 0);
 
     _update_realtime_counter(chunk);
