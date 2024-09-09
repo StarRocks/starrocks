@@ -176,7 +176,7 @@ public class CachedStatisticStorage implements StatisticStorage {
                     LOG.warn("Get connector table column statistics filed, exception: ", e);
                     return;
                 }
-                if (sessionVariable.isEnableQueryTriggerAnalyze()) {
+                if (sessionVariable.isEnableQueryTriggerAnalyze() && GlobalStateMgr.getCurrentState().isLeader()) {
                     GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
                 }
             }, statsCacheRefresherExecutor);

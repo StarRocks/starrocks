@@ -1400,6 +1400,7 @@ public class GlobalStateMgr {
         }
         temporaryTableCleaner.start();
 
+        connectorTableTriggerAnalyzeMgr.start();
     }
 
     // start threads that should run on all FE
@@ -1434,8 +1435,6 @@ public class GlobalStateMgr {
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
-
-        connectorTableTriggerAnalyzeMgr.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
