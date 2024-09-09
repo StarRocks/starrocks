@@ -348,6 +348,8 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_TRUE(cfg_bool);
     ASSERT_TRUE(config::rollback_config("cfg_bool").ok());
     ASSERT_FALSE(cfg_bool);
+    ASSERT_TRUE(config::set_config("cfg_bool", "true").ok());
+    ASSERT_TRUE(cfg_bool);
 
     // double
     ASSERT_EQ(cfg_double, 123.456);
@@ -355,6 +357,8 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_EQ(cfg_double, 654.321);
     ASSERT_TRUE(config::rollback_config("cfg_double").ok());
     ASSERT_EQ(cfg_double, 123.456);
+    ASSERT_TRUE(config::set_config("cfg_double", "654.321").ok());
+    ASSERT_EQ(cfg_double, 654.321);
 
     // int16
     ASSERT_EQ(cfg_int16_t, 2561);
@@ -369,6 +373,8 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_EQ(cfg_int32_t, 65536124);
     ASSERT_TRUE(config::rollback_config("cfg_int32_t").ok());
     ASSERT_EQ(cfg_int32_t, 65536123);
+    ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
+    ASSERT_EQ(cfg_int32_t, 65536124);
 
     // int64
     ASSERT_EQ(cfg_int64_t, 4294967296123);
