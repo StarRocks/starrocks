@@ -28,9 +28,6 @@
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker); \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check);
 
-#define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
-    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
-
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
 
@@ -266,13 +263,11 @@ private:
 
 #define SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
     CurrentThread::current().set_pipeline_driver_id(driver_id);   \
-    CurrentThread::current().set_query_id(query_id);              \
-    CurrentThread::current().set_fragment_instance_id(fragment_instance_id);
+    CurrentThread::current().set_query_id(query_id);
 
 #define RESET_TRACE_INFO()                              \
     CurrentThread::current().set_pipeline_driver_id(0); \
-    CurrentThread::current().set_query_id({});          \
-    CurrentThread::current().set_fragment_instance_id({});
+    CurrentThread::current().set_query_id({});
 
 #define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
     SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
