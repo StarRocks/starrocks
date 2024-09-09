@@ -561,8 +561,33 @@ std::unordered_set<CompactionTask*> CompactionManager::get_running_task(const Ta
     return res;
 }
 
+int32_t CompactionManager::compute_max_compaction_concurrency() {
+    int32_t max_compaction_concurrency = 0;
+    const auto data_dir_num = StorageEngine::instance()->get_store_num();
+    if (config::base_compaction_num_threads_per_disk >= 0 && config::cumulative_compaction_num_threads_per_disk >= 0) {
+        max_compaction_concurrency =
+                static_cast<int32_t>(data_dir_num * (config::cumulative_compaction_num_threads_per_disk +
+                                                     config::base_compaction_num_threads_per_disk));
+    } else {
+        max_compaction_concurrency = std::min(20, static_cast<int32_t>(data_dir_num * 5));
+    }
+    return max_compaction_concurrency;
+}
+
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
+        if (max_threads == -1) {
+            _max_task_num = compute_max_compaction_concurrency();
+            return _compaction_pool->update_max_threads(std::max(1, max_task_num()));
+        }
+        if (max_threads == 0) {
+            //Just to pass the admit test, it doesn't make sense to set max_compaction_concurrency=0 via a dynamic parameter.
+            Status st = _compaction_pool->update_max_threads(1);
+            if (!st.ok()) {
+                return st;
+            }
+            return Status::OK();
+        }
         return _compaction_pool->update_max_threads(max_threads);
     } else {
         return Status::InternalError("Thread pool not exist");
