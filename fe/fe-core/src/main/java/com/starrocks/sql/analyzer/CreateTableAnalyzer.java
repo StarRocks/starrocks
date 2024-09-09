@@ -93,8 +93,8 @@ public class CreateTableAnalyzer {
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, db, tableName);
         } else {
-            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getFullName(), tableName) != null && !statement.isSetIfNotExists()) {
+            if (GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .tableExists(catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
