@@ -20,6 +20,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
+import com.starrocks.lake.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.Warehouse;
@@ -33,22 +34,35 @@ public class RecycleLakeRangePartitionInfo extends RecycleRangePartitionInfo  {
     }
 
     @Override
-    public boolean delete() {
+    public boolean submitAndCheckAsyncDelete() {
         if (isRecoverable()) {
             setRecoverable(false);
             GlobalStateMgr.getCurrentState().getEditLog().logDisablePartitionRecovery(partition.getId());
         }
+
         try {
-            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = manager.getBackgroundWarehouse();
-            if (LakeTableHelper.removePartitionDirectory(partition, warehouse.getId())) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
-                return true;
-            } else {
-                return false;
+            if (asyncDeleteReturn.isEmpty()) {
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getBackgroundWarehouse();
+                LakeTableHelper.submitAsyncRemovePartitionDirectory(partition, warehouse.getId(), asyncDeleteReturn);
             }
         } catch (StarClientException e) {
+            // re-submit in the future if any exception is throw
+            asyncDeleteReturn.clear();
             return false;
         }
+
+        if (!Utils.checkAllAsyncTaskFinished(asyncDeleteReturn)) {
+            return false;
+        }
+
+        if (Utils.checkAllAsyncTaskSuccessed(asyncDeleteReturn)) {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+            return true;
+        }
+
+        // all finished but some tasks have failed, reset the futures and re-schedule
+        asyncDeleteReturn.clear();
+        return false;
     }
 }

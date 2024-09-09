@@ -61,6 +61,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -677,12 +678,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     /**
-     * Delete thie table from {@link CatalogRecycleBin}
-     * @param replay is this a log relay operation.
-     * @return Returns true if the deletion task was performed successfully, false otherwise.
+     * Delete this table from {@link CatalogRecycleBin} in async way
+     * this method should be overwritten by Cloud Native table
+     * For share nothing table, use sync mode to delete table
+     * @param dbId ID of the database to which the table belongs
+     * @param asyncDeleteReturn is saved the future for the async task
+     * @return Returns true if the deletion task was performed successfully (sync or async),
+     *         false if the task failed in sync mode or submit failed/ task unfinished in aysnc mode.
      */
-    public boolean deleteFromRecycleBin(long dbId, boolean replay) {
-        return delete(dbId, replay);
+    public boolean submitAndCheckAsyncDeleteFromRecycleBin(long dbId, List<CompletableFuture<Boolean>> asyncDeleteReturn) {
+        return delete(dbId, false);
+    }
+
+    public boolean replayDeleteFromRecycleBin(long dbId) {
+        return delete(dbId, true);
     }
 
     /**
