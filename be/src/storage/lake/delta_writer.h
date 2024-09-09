@@ -174,6 +174,19 @@ public:
         return *this;
     }
 
+<<<<<<< HEAD
+=======
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
+>>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -189,6 +202,11 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+<<<<<<< HEAD
+=======
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
+>>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
 };
 
 } // namespace starrocks::lake

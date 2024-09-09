@@ -184,6 +184,7 @@ private:
     // to be destructed after segment iters
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;
+    std::map<string, string> _column_to_expr_value;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

@@ -219,6 +219,37 @@ private:
     Status _status = Status::OK();
 
     std::set<int64_t> _immutable_partition_ids;
+<<<<<<< HEAD
+=======
+
+    std::map<string, string> _column_to_expr_value;
+
+    // Profile counters
+    // replicated_storage=false, the number of tablets
+    // replicated_storage=true, the number of primary tablets
+    RuntimeProfile::Counter* _primary_tablets_num = nullptr;
+    // Only available for replicated_storage=true, the number of
+    // secondary tablets
+    RuntimeProfile::Counter* _secondary_tablets_num = nullptr;
+    // Number of times that open() is called
+    RuntimeProfile::Counter* _open_counter = nullptr;
+    // Accumulated time of open()
+    RuntimeProfile::Counter* _open_timer = nullptr;
+    // Number of times that add_chunk() is called
+    RuntimeProfile::Counter* _add_chunk_counter = nullptr;
+    // Accumulated time of add_chunk()
+    RuntimeProfile::Counter* _add_chunk_timer = nullptr;
+    // Number of rows added to this channel
+    RuntimeProfile::Counter* _add_row_num = nullptr;
+    // Accumulated time to wait for memtable flush in add_chunk()
+    RuntimeProfile::Counter* _wait_flush_timer = nullptr;
+    // Accumulated time to wait for async delta writers in add_chunk()
+    RuntimeProfile::Counter* _wait_write_timer = nullptr;
+    // Accumulated time to wait for secondary replicas in add_chunk()
+    RuntimeProfile::Counter* _wait_replica_timer = nullptr;
+    // Accumulated time to wait for txn persist in add_chunk()
+    RuntimeProfile::Counter* _wait_txn_persist_timer = nullptr;
+>>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

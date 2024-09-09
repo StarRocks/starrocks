@@ -295,12 +295,24 @@ public class OlapTableSink extends DataSink {
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
+<<<<<<< HEAD
             columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
+=======
+            Map<String, String> columnToExprValue = new HashMap<>();
+            columns.addAll(indexMeta
+                    .getSchema()
+                    .stream()
+                    .map(column -> column.isShadowColumn() ? column.getName() : column.getColumnId().getId())
+                    .collect(Collectors.toList()));
+>>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
                 columnsDesc.add(tColumn);
+                if (column.getDefaultExpr() != null && column.calculatedDefaultValue() != null) {
+                    columnToExprValue.put(column.getColumnId().getId(), column.calculatedDefaultValue());
+                }
             }
             if (indexMeta.getSortKeyUniqueIds() != null) {
                 columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
@@ -316,6 +328,7 @@ public class OlapTableSink extends DataSink {
                     indexMeta.getSchemaHash());
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
+            indexSchema.setColumn_to_expr_value(columnToExprValue);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 String dbName = MetaUtils.getDatabase(dbId).getFullName();
