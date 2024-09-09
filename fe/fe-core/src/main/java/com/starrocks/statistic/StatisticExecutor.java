@@ -56,7 +56,6 @@ import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatisticExecutor {
@@ -88,8 +87,12 @@ public class StatisticExecutor {
             return Collections.emptyList();
         }
 
-        Map<String, ColumnStatsMeta> analyzedColumns = meta.getAnalyzedColumns();
-        return queryColumnStats(context, dbId, tableId, Lists.newArrayList(analyzedColumns.values()), table);
+        List<ColumnStatsMeta> columnStatsMetaList = meta == null ?
+                columnNames.stream().map(x ->
+                                new ColumnStatsMeta(x, StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.MIN))
+                        .collect(Collectors.toList()) :
+                Lists.newArrayList(meta.getAnalyzedColumns().values());
+        return queryColumnStats(context, dbId, tableId, columnStatsMetaList, table);
     }
 
     private static Table lookupTable(Long dbId, Long tableId) {
@@ -143,8 +146,7 @@ public class StatisticExecutor {
         if (CollectionUtils.isNotEmpty(columnWithSampleStats)) {
             List<String> columnNamesForStats = columnWithSampleStats.stream().map(ColumnStatsMeta::getColumnName)
                             .collect(Collectors.toList());
-            String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(
-                    dbId, tableId, columnNamesForStats);
+            String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNamesForStats);
             List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
             columnStats.addAll(tStatisticData);
         }
