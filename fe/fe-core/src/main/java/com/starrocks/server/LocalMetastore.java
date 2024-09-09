@@ -3060,9 +3060,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
                 return new ListPartitionInfo(PartitionType.LIST, Collections.singletonList(stmt.getPartitionColumn()));
             } else {
-                if (partitionType != PartitionType.RANGE) {
-                    throw new DdlException("Unsupported partition type: " + partitionType);
-                }
                 ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(partitionByExpr);
                 if ((partitionByExpr instanceof FunctionCallExpr)) {
                     FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionByExpr;

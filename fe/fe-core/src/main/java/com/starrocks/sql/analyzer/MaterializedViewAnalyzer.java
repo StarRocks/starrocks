@@ -93,6 +93,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import org.apache.commons.collections.map.CaseInsensitiveMap;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -368,9 +369,8 @@ public class MaterializedViewAnalyzer {
          */
         private Map<TableName, Table> getNormalizedBaseTables(QueryStatement queryStatement, ConnectContext context) {
             Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
-
             // do normalization if catalog is null
-            Map<TableName, Table> result = Maps.newHashMap();
+            Map<TableName, Table> result = new CaseInsensitiveMap();
             for (Map.Entry<TableName, Table> entry : aliasTableMap.entrySet()) {
                 entry.getKey().normalization(context);
                 result.put(entry.getKey(), entry.getValue());
@@ -826,8 +826,10 @@ public class MaterializedViewAnalyzer {
             SlotRef slotRef = getSlotRef(partitionRefTableExpr);
             Table refBaseTable = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
             if (refBaseTable == null) {
-                throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                LOG.warn("Materialized view partition expression %s could only ref to base table",
                         slotRef.toSql());
+                statement.setPartitionType(PartitionType.UNPARTITIONED);
+                return;
             }
 
             if (refBaseTable.isNativeTableOrMaterializedView()) {
