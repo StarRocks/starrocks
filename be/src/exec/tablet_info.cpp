@@ -77,6 +77,9 @@ void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     if (column_param != nullptr) {
         column_param->to_protobuf(pindex->mutable_column_param());
     }
+    for (auto& [name, value] : column_to_expr_value) {
+        pindex->mutable_column_to_expr_value()->insert({name, value});
+    }
 }
 
 Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
@@ -120,6 +123,11 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
         } else {
             index->schema_id = p_index.id();
         }
+
+        for (auto& entry : p_index.column_to_expr_value()) {
+            index->column_to_expr_value.insert({entry.first, entry.second});
+        }
+
         _indexes.emplace_back(index);
     }
 
@@ -172,6 +180,12 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
         } else {
             // schema id is same with index id in previous version, for compatibility
             index->schema_id = t_index.id;
+        }
+
+        if (t_index.__isset.column_to_expr_value) {
+            for (auto& entry : t_index.column_to_expr_value) {
+                index->column_to_expr_value.insert({entry.first, entry.second});
+            }
         }
         _indexes.emplace_back(index);
     }
