@@ -97,14 +97,6 @@ private:
                 _try_consume_mem_size = size;
             };
             if (_cache_size >= BATCH_SIZE) {
-                if (tls_singleton_check_mem_tracker != nullptr) {
-                    // check singleton tracker first.
-                    if (UNLIKELY(tls_singleton_check_mem_tracker->any_limit_exceeded_precheck(_cache_size))) {
-                        failure_handler();
-                        tls_exceed_mem_tracker = tls_singleton_check_mem_tracker;
-                        return false;
-                    }
-                }
                 if (cur_tracker != nullptr) {
                     MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
                     if (LIKELY(limit_tracker == nullptr)) {
@@ -224,13 +216,13 @@ private:
     };
 
 public:
-    CurrentThread() : _mem_cache_manager(mem_tracker), _operator_mem_cache_manager(operator_mem_tracker) {
+    CurrentThread() : _mem_cache_manager(mem_tracker) {
         tls_is_thread_status_init = true;
     }
     ~CurrentThread();
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
-    void operator_mem_tracker_ctx_shift() { _operator_mem_cache_manager.commit(true); }
+    void operator_mem_tracker_ctx_shift() {}
 
     void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
     const starrocks::TUniqueId& query_id() { return _query_id; }
@@ -277,8 +269,6 @@ public:
 
     static CurrentThread& current();
 
-    static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
-
     static void set_singleton_check_mem_tracker(starrocks::MemTracker* mem_tracker) {
         tls_singleton_check_mem_tracker = mem_tracker;
     }
@@ -293,12 +283,10 @@ public:
 
     void mem_consume(int64_t size) {
         _mem_cache_manager.consume(size);
-        _operator_mem_cache_manager.consume(size);
     }
 
     bool try_mem_consume(int64_t size) {
         if (_mem_cache_manager.try_mem_consume(size)) {
-            _operator_mem_cache_manager.consume(size);
             return true;
         }
         return false;
@@ -322,7 +310,6 @@ public:
             _mem_cache_manager.release_to_reserved(size);
         } else {
             _mem_cache_manager.release(size);
-            _operator_mem_cache_manager.release(size);
         }
     }
 
@@ -365,7 +352,6 @@ private:
     // is invoked, the frequrency is a little bit high, but it does little harm to performance,
     // because operator's MemTracker, which is a dangling MemTracker(withouth parent), has no concurrency conflicts
     MemCacheManager _mem_cache_manager;
-    MemCacheManager _operator_mem_cache_manager;
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
