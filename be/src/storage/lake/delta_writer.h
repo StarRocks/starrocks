@@ -182,6 +182,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -198,6 +203,7 @@ private:
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 
 } // namespace starrocks::lake

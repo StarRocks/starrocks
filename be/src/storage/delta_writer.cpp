@@ -308,6 +308,7 @@ Status DeltaWriter::_init() {
         writer_context.full_tablet_schema = _tablet_schema;
         writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
+        writer_context.column_to_expr_value = _opt.column_to_expr_value;
         _tablet_schema = partial_update_schema;
     } else {
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {

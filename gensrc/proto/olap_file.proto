@@ -105,6 +105,8 @@ message RowsetTxnMetaPB {
     optional PartialUpdateMode partial_update_mode = 6;
     // auto increment column unique id
     optional int32 auto_increment_partial_update_column_uid = 7;
+    // the value of the column express
+    map<string, string> column_to_expr_value = 8;
 }
 
 message RowsetMetaPB {

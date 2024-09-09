@@ -56,6 +56,7 @@ protected:
 private:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
+    const std::map<std::string, std::string>* _column_to_expr_value = nullptr;
 };
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {

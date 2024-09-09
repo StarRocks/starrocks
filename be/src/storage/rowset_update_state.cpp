@@ -372,6 +372,11 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     int64_t t_start = MonotonicMillis();
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
 
+    _column_to_expr_value.clear();
+    for (auto& entry : txn_meta.column_to_expr_value()) {
+        _column_to_expr_value.insert({entry.first, entry.second});
+    }
+
     std::vector<uint32_t> update_column_uids(txn_meta.partial_update_column_unique_ids().begin(),
                                              txn_meta.partial_update_column_unique_ids().end());
     std::set<uint32_t> update_columns_set(update_column_uids.begin(), update_column_uids.end());
@@ -421,7 +426,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     total_rows += _partial_update_states[idx].src_rss_rowids.size();
     RETURN_IF_ERROR(tablet->updates()->get_column_values(
             read_column_ids, _partial_update_states[idx].read_version.major_number(), num_default > 0, rowids_by_rssid,
-            &read_columns, nullptr, tablet_schema));
+            &read_columns, nullptr, tablet_schema, &_column_to_expr_value));
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         _partial_update_states[idx].write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0,
                                                                              idxes.size());
@@ -510,9 +515,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
         }
     }
 
-    RETURN_IF_ERROR(tablet->updates()->get_column_values(column_id, latest_applied_version.major_number(), new_rows > 0,
-                                                         rowids_by_rssid, &read_column,
-                                                         &_auto_increment_partial_update_states[idx], tablet_schema));
+    RETURN_IF_ERROR(tablet->updates()->get_column_values(
+            column_id, latest_applied_version.major_number(), new_rows > 0, rowids_by_rssid, &read_column,
+            &_auto_increment_partial_update_states[idx], tablet_schema, &_column_to_expr_value));
 
     _auto_increment_partial_update_states[idx].write_column->append_selective(*read_column[0], idxes.data(), 0,
                                                                               idxes.size());
@@ -645,7 +650,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
         RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, latest_applied_version.major_number(),
                                                              num_default > 0, rowids_by_rssid, &read_columns, nullptr,
-                                                             tablet_schema));
+                                                             tablet_schema, &_column_to_expr_value));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             std::unique_ptr<Column> new_write_column =

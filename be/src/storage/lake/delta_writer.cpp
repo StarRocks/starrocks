@@ -76,7 +76,8 @@ public:
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
-                             const PartialUpdateMode& partial_update_mode)
+                             const PartialUpdateMode& partial_update_mode,
+                             const std::map<string, string>* column_to_expr_value)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -89,7 +90,8 @@ public:
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
-              _partial_update_mode(partial_update_mode) {}
+              _partial_update_mode(partial_update_mode),
+              _column_to_expr_value(column_to_expr_value) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -196,6 +198,8 @@ private:
     bool _partial_schema_with_sort_key_conflict = false;
 
     int64_t _last_write_ts = 0;
+
+    const std::map<string, string>* _column_to_expr_value = nullptr;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -494,6 +498,11 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
             // handle partial update
             op_write->mutable_txn_meta()->set_partial_update_mode(_partial_update_mode);
+            if (_column_to_expr_value != nullptr) {
+                for (auto& [name, value] : (*_column_to_expr_value)) {
+                    op_write->mutable_txn_meta()->mutable_column_to_expr_value()->insert({name, value});
+                }
+            }
         }
         // handle condition update
         if (_merge_condition != "") {
@@ -762,7 +771,7 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     }
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
-                                    _max_buffer_size, _schema_id, _partial_update_mode);
+                                    _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value);
     return std::make_unique<DeltaWriter>(impl);
 }
 

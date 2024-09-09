@@ -359,6 +359,7 @@ public class OlapTableSink extends DataSink {
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
+            Map<String, String> columnToExprValue = new HashMap<>();
             columns.addAll(indexMeta
                     .getSchema()
                     .stream()
@@ -369,6 +370,9 @@ public class OlapTableSink extends DataSink {
                 tColumn.setColumn_name(column.getColumnId().getId());
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds());
                 columnsDesc.add(tColumn);
+                if (column.getDefaultExpr() != null && column.calculatedDefaultValue() != null) {
+                    columnToExprValue.put(column.getColumnId().getId(), column.calculatedDefaultValue());
+                }
             }
             if (indexMeta.getSortKeyUniqueIds() != null) {
                 columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
@@ -384,6 +388,7 @@ public class OlapTableSink extends DataSink {
                     indexMeta.getSchemaHash());
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
+            indexSchema.setColumn_to_expr_value(columnToExprValue);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

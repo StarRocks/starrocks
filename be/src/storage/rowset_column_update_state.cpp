@@ -191,6 +191,11 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
         return Status::OK();
     }
 
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
+    for (auto& entry : txn_meta.column_to_expr_value()) {
+        _column_to_expr_value.insert({entry.first, entry.second});
+    }
+
     EditVersion read_version;
     TRY_CATCH_BAD_ALLOC(_upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size()));
     int64_t t_start = MonotonicMillis();
@@ -522,12 +527,19 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
                                                       vector<std::shared_ptr<Column>>* columns) {
     for (auto i = 0; i < column_ids.size(); ++i) {
         const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
-        if (tablet_column.has_default_value()) {
+
+        bool has_default_value = tablet_column.has_default_value();
+        std::string default_value = has_default_value ? tablet_column.default_value() : "";
+        auto iter = _column_to_expr_value.find(std::string(tablet_column.name()));
+        if (iter != _column_to_expr_value.end()) {
+            has_default_value = true;
+            default_value = iter->second;
+        }
+        if (has_default_value) {
             const TypeInfoPtr& type_info = get_type_info(tablet_column);
             std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
-                    std::make_unique<DefaultValueColumnIterator>(
-                            tablet_column.has_default_value(), tablet_column.default_value(),
-                            tablet_column.is_nullable(), type_info, tablet_column.length(), row_cnt);
+                    std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),
+                                                                 type_info, tablet_column.length(), row_cnt);
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
             RETURN_IF_ERROR(
