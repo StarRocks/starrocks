@@ -5445,7 +5445,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
-        boolean createIfNotExists = context.ifNotExists() != null;
+        boolean createIfNotExists = context.ifNotExists() != null && context.ifNotExists().EXISTS() != null;
         if (context.functionType != null) {
             functionType = context.functionType.getText();
         }
