@@ -18,11 +18,14 @@
 
 #include "column/array_column.h"
 #include "column/column_hash.h"
+#include "column/column_viewer.h"
+#include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "simd/simd.h"
+#include "util/phmap/phmap.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -299,6 +302,7 @@ private:
         HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
+#undef HANDLE_ELEMENT_TYPE
 
         return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
@@ -488,14 +492,34 @@ public:
     }
 
 private:
-    template <bool NullableElement, bool NullableTarget, bool ConstTarget, typename ElementColumn,
+    template <bool NullableElement, bool NullableTarget, bool ConstElement, bool ConstTarget, typename ElementColumn,
               typename TargetColumn>
     static StatusOr<ColumnPtr> _process(const ElementColumn& elements, const UInt32Column& offsets,
                                         const TargetColumn& targets, const NullColumn::Container* null_map_elements,
                                         const NullColumn::Container* null_map_targets) {
-        const size_t num_array = offsets.size() - 1;
+        // @TODO should support const
+
+        // @TODO what if const column
+        // array_contains(a, b)
+        // a is target, b is element
+
+        // @TODO handle targets is Const?
+        // @TODO both const
+
+        const size_t result_size = targets.size();
+        LOG(INFO) << "ArrayContains::_proces, const element: " << ConstElement << ", const target: " << ConstTarget
+            << ", result_size: " << result_size
+            << ", element size: " << elements.size() << ", offset size: " << offsets.size();
+        // const size_t num_array = offsets.size() - 1;
         auto result = ReturnType::create();
-        result->resize(num_array);
+        // result->resize(num_array);
+        size_t result_data_size = result_size;
+        if constexpr (ConstElement && ConstTarget) {
+            result_data_size = 1;
+            result->resize(1);
+        } else {
+            result->resize(result_size);
+        }
 
         auto* result_ptr = result->get_data().data();
 
@@ -514,10 +538,17 @@ private:
         if constexpr (ConstTarget) {
             targets_col = down_cast<const ConstColumn*>(&targets)->data_column().get();
         }
+        // @TODO specialize for both const column
 
-        for (size_t i = 0; i < num_array; i++) {
-            size_t offset = offsets_ptr[i];
-            size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+        // @TODO apply hash table optimize
+
+        // for (size_t i = 0; i < num_array; i++) {
+        for (size_t i = 0; i < result_data_size; i++) {
+            // @TODO what for const column
+            // size_t offset = offsets_ptr[i];
+            // size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+            size_t offset = ConstElement ? offsets_ptr[0]: offsets_ptr[i];
+            size_t array_size = ConstElement ? offsets_ptr[1] - offsets_ptr[0]: offsets_ptr[i + 1] - offsets_ptr[i];
             uint8_t found = 0;
             size_t position = 0;
             for (size_t j = 0; j < array_size; j++) {
@@ -543,6 +574,7 @@ private:
                         break;
                     }
                 }
+                // compare value
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
                               std::is_same_v<StructColumn, ElementColumn> ||
                               std::is_same_v<JsonColumn, ElementColumn>) {
@@ -552,12 +584,12 @@ private:
                         found = elements.equals(offset + j, targets, i);
                     }
                 } else if constexpr (ConstTarget) {
-                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto elements_ptr = (const ValueType*)(elements.raw_data());
                     auto targets_ptr = (const ValueType*)(targets.raw_data());
                     auto& first_target = *targets_ptr;
                     found = (elements_ptr[offset + j] == first_target);
                 } else {
-                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto elements_ptr = (const ValueType*)(elements.raw_data());
                     auto targets_ptr = (const ValueType*)(targets.raw_data());
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
@@ -568,10 +600,16 @@ private:
             }
             result_ptr[i] = PositionEnabled ? position : found;
         }
+        // @TODO, outside maybe Nullable
+        if constexpr (ConstElement && ConstTarget) {
+            // Nullable(Const) is not valid
+            return ConstColumn::create(std::move(result), result_size);
+        }
+
         return result;
     }
 
-    template <bool NullableElement, bool NullableTarget, bool ConstTarget>
+    template <bool NullableElement, bool NullableTarget, bool ConstElement, bool ConstTarget>
     static StatusOr<ColumnPtr> _array_contains(const Column& array_elements, const UInt32Column& array_offsets,
                                                const Column& argument) {
         const Column* elements_ptr = &array_elements;
@@ -596,7 +634,7 @@ private:
 #define HANDLE_ELEMENT_TYPE(ElementType)                                                                          \
     do {                                                                                                          \
         if (typeid(*elements_ptr) == typeid(ElementType)) {                                                       \
-            return _process<NullableElement, NullableTarget, ConstTarget>(                                        \
+            return _process<NullableElement, NullableTarget, ConstElement, ConstTarget>(                          \
                     *down_cast<const ElementType*>(elements_ptr), array_offsets, *targets_ptr, null_map_elements, \
                     null_map_targets);                                                                            \
         }                                                                                                         \
@@ -621,16 +659,20 @@ private:
         HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
+#undef HANDLE_ELEMENT_TYPE
 
         return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
+    // array_contains(array, arg)
+    template <bool ConstArray = false>
     static StatusOr<ColumnPtr> _array_contains_non_nullable(const ArrayColumn& array, const Column& arg) {
         bool nullable_element = false;
         bool nullable_target = false;
         bool const_target = false;
         ColumnPtr targets_holder;
+        LOG(INFO) << "_array_contains_non_nullable, is_const: " << ConstArray;
 
         const UInt32Column& offsets = array.offsets();
         const Column* elements = &array.elements();
@@ -664,30 +706,43 @@ private:
         CHECK(!(const_target && nullable_target));
 
         if (nullable_element && nullable_target) {
-            return _array_contains<true, true, false>(*elements, offsets, *targets);
+            return _array_contains<true, true, ConstArray, false>(*elements, offsets, *targets);
         } else if (nullable_element) {
-            return const_target ? _array_contains<true, false, true>(*elements, offsets, *targets)
-                                : _array_contains<true, false, false>(*elements, offsets, *targets);
+            return const_target ? _array_contains<true, false, ConstArray, true>(*elements, offsets, *targets)
+                                : _array_contains<true, false, ConstArray, false>(*elements, offsets, *targets);
         } else if (nullable_target) {
-            return _array_contains<false, true, false>(*elements, offsets, *targets);
+            return _array_contains<false, true, ConstArray, false>(*elements, offsets, *targets);
         } else {
-            return const_target ? _array_contains<false, false, true>(*elements, offsets, *targets)
-                                : _array_contains<false, false, false>(*elements, offsets, *targets);
+            return const_target ? _array_contains<false, false, ConstArray, true>(*elements, offsets, *targets)
+                                : _array_contains<false, false, ConstArray, false>(*elements, offsets, *targets);
         }
     }
 
     static StatusOr<ColumnPtr> _array_contains_generic(const Column& array, const Column& target) {
-        if (array.is_nullable()) {
-            auto nullable = down_cast<const NullableColumn*>(&array);
-            auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-            ASSIGN_OR_RETURN(auto result, _array_contains_non_nullable(*array_col, target))
-            DCHECK_EQ(nullable->size(), result->size());
-            if (!nullable->has_null()) {
+        bool is_const_array = array.is_constant();
+        const Column* data_column = &array;
+        if (is_const_array) {
+            data_column = down_cast<const ConstColumn*>(&array)->data_column().get();
+        }
+        if (data_column->is_nullable()) {
+            auto nullable_col = down_cast<const NullableColumn*>(data_column);
+            auto array_col = down_cast<const ArrayColumn*>(nullable_col->data_column().get());
+            ColumnPtr result;
+            if (is_const_array) {
+                ASSIGN_OR_RETURN(result, _array_contains_non_nullable<true>(*array_col, target));
+            } else {
+                ASSIGN_OR_RETURN(result, _array_contains_non_nullable<false>(*array_col, target))
+            }
+            // @TODO sometimes we may return a const column
+            DCHECK_EQ(nullable_col->size(), result->size());    
+            if (!nullable_col->has_null()) {
                 return result;
             }
-            return NullableColumn::create(std::move(result), nullable->null_column());
+            return NullableColumn::create(std::move(result), NullColumn::create());
         }
-        return _array_contains_non_nullable(down_cast<const ArrayColumn&>(array), target);
+        return is_const_array ?
+            _array_contains_non_nullable<true>(down_cast<const ArrayColumn&>(*data_column), target):
+            _array_contains_non_nullable<false>(down_cast<const ArrayColumn&>(*data_column), target);
     }
 };
 
@@ -945,6 +1000,8 @@ private:
         bool nullable_target = false;
         bool const_target = false;
         ColumnPtr targets_holder;
+        // [[maybe_unused]] ColumnViewer<TYPE_ARRAY> viewer(array);
+        // LOG(INFO) << viewer.size();
 
         const UInt32Column& array_offsets = array.offsets();
         const UInt32Column& target_offsets = arg.offsets();
@@ -1042,7 +1099,9 @@ private:
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
-    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    // @TODO shouldn't unpack const column...
+    // const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg0 = columns[0];
     const ColumnPtr& arg1 = columns[1];                                                                      // element
 
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
