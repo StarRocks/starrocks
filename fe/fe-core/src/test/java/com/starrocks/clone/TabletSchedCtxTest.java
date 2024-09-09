@@ -40,7 +40,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
-import com.starrocks.clone.TabletScheduler.PathSlot;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -53,7 +52,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
