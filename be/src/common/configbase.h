@@ -121,10 +121,10 @@ public:
         _s_field_map.insert(std::make_pair(std::string(_name), this));
         if (strlen(defval) + 1 > _config_value_size) {
             _config_value_size = strlen(defval) + 1;
-         }
-         _last_set_val = new char[_config_value_size];
-         _current_set_val = new char[_config_value_size];
-         strcpy(_current_set_val, defval);
+        }
+        _last_set_val = new char[_config_value_size];
+        _current_set_val = new char[_config_value_size];
+        strcpy(_current_set_val, defval);
     }
 
     virtual ~Field() = default;

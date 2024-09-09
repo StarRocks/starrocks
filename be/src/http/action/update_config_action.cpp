@@ -148,7 +148,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() -> Status {
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
-           return Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("pindex_major_compaction_num_threads", [&]() -> Status {
             PersistentIndexCompactionManager* mgr =
@@ -179,19 +179,19 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            Status st =thread_pool->update_max_threads(
+            Status st = thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
             return st;
         });
         _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            Status st =thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
-                                                           config::transaction_publish_version_thread_pool_num_min));
+            Status st = thread_pool->update_min_threads(std::max(
+                    MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_thread_pool_num_min));
             return st;
         });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
-                                                                    config::parallel_clone_task_per_path);
+                                                                 config::parallel_clone_task_per_path);
             return Status::OK();
         });
         _config_callback.emplace("replication_threads", [&]() -> Status {
@@ -226,12 +226,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (config::transaction_apply_worker_count > 0) {
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
-            Status st = StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+            Status st = StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(
+                    max_thread_cnt);
             return st;
         });
         _config_callback.emplace("transaction_apply_thread_pool_num_min", [&]() -> Status {
             int min_thread_cnt = config::transaction_apply_thread_pool_num_min;
-            Status st = StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
+            Status st = StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(
+                    min_thread_cnt);
             return st;
         });
         _config_callback.emplace("get_pindex_worker_count", [&]() -> Status {
@@ -271,7 +273,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;
             ExecEnv::GetInstance()->workgroup_manager()->change_enable_resource_group_cpu_borrowing(
                     config::enable_resource_group_cpu_borrowing);
-          return Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("create_tablet_worker_count", [&]() -> Status {
             LOG(INFO) << "set create_tablet_worker_count:" << config::create_tablet_worker_count;
@@ -409,7 +411,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (!s.ok()) {
                 Status rollback_status = config::rollback_config(name);
                 if (!rollback_status.ok()) {
-                    LOG(WARNING) <<  strings::Substitute("Failed to rollback config: $0.", name);
+                    LOG(WARNING) << strings::Substitute("Failed to rollback config: $0.", name);
                 }
             }
         }

@@ -269,7 +269,7 @@ Status set_config(const std::string& field, const std::string& value) {
     return Status::OK();
 }
 
-Status rollback_config(const std::string& field){
+Status rollback_config(const std::string& field) {
     auto it = Field::fields().find(field);
     if (it == Field::fields().end()) {
         return Status::NotFound(fmt::format("'{}' is not found in rollback", field));
