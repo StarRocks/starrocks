@@ -61,7 +61,7 @@ bool ExceptContext::is_probe_finished() const {
 
 Status ExceptContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
                                          const std::vector<ExprContext*>& dst_exprs, ExceptBufferState* buffer_state) {
-    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get(), buffer_state));
+    _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get(), buffer_state);
     return Status::OK();
 }
 

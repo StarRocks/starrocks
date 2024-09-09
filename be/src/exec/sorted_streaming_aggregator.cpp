@@ -535,9 +535,9 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     auto agg_result_columns = _create_agg_result_columns(1, use_intermediate);
     auto group_by_columns = _last_columns;
     if (use_intermediate) {
-        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_last_state, agg_result_columns));
+        _serialize_to_chunk(_last_state, agg_result_columns);
     } else {
-        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_last_state, agg_result_columns));
+        _finalize_to_chunk(_last_state, agg_result_columns);
     }
     _destroy_state(_last_state);
     _last_state = nullptr;

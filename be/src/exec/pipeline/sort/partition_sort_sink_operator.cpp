@@ -62,7 +62,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
     auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
                                                                          _sort_exec_exprs, _order_by_types);
     RETURN_IF_ERROR(materialize_chunk);
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
+    RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value()));
 
     const auto& build_runtime_filters = _sort_context->build_runtime_filters();
     if (!build_runtime_filters.empty()) {

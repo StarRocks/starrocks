@@ -576,7 +576,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
                 // merge chunks from child(1) (the right table) into a big chunk, which can reduce
                 // the complexity and time of cross-join chunks from left table with small chunks
                 // from right table.
-                TRY_CATCH_BAD_ALLOC(_build_chunk->append(*chunk));
+                _build_chunk->append(*chunk);
             }
         }
     }

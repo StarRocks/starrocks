@@ -43,8 +43,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
                     // only hold pkey, so can use larger chunk size
                     ChunkUniquePtr chunk_shared_ptr;
-                    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
-                                                ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
+                    chunk_shared_ptr =
+                                                ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
                     auto chunk = chunk_shared_ptr.get();
                     auto col = pk_column->clone();
                     vector<uint32_t> tmp_deletes;
@@ -96,8 +96,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                                 }
                                 // 6. replace pk index
                                 TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
-                                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
-                                                                              col.get()));
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
                                 RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, current_rowid,
                                                                       replace_indexes, *col));
                                 current_rowid += chunk->num_rows();

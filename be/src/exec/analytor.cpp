@@ -592,7 +592,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 // When chunk's column is const, maybe need to unpack it.
-                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+                _append_column(chunk_size, _agg_intput_columns[i][j].get(), column);
 
                 RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
             }
@@ -600,13 +600,13 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            _append_column(chunk_size, _partition_columns[i].get(), column);
             RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            _append_column(chunk_size, _order_columns[i].get(), column);
             RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
         }
     }

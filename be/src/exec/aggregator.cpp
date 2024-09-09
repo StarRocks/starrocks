@@ -235,9 +235,9 @@ Status Aggregator::open(RuntimeState* state) {
     // For SQL: select distinct id from table or select id from from table group by id;
     // we don't need to allocate memory for agg states.
     if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+        _init_agg_hash_variant(_hash_set_variant);
     } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+        _init_agg_hash_variant(_hash_map_variant);
     }
 
     {
@@ -559,9 +559,9 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
             _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
         }
     } else if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+        _init_agg_hash_variant(_hash_set_variant);
     } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+        _init_agg_hash_variant(_hash_map_variant);
     }
 
     // _state_allocator holds the entries of the hash_map/hash_set, when iterating a hash_map/set, the _state_allocator
@@ -813,9 +813,9 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     auto use_intermediate = _use_intermediate_as_output();
     Columns agg_result_column = _create_agg_result_columns(1, use_intermediate);
     if (!use_intermediate) {
-        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
+        _finalize_to_chunk(_single_agg_state, agg_result_column);
     } else {
-        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
+        _serialize_to_chunk(_single_agg_state, agg_result_column);
     }
     RETURN_IF_ERROR(check_has_error());
     // For agg function column is non-nullable and table is empty
@@ -1393,15 +1393,13 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                 SCOPED_TIMER(_agg_stat->agg_append_timer);
                 if (!use_intermediate) {
                     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
-                                                                              _tmp_agg_states, _agg_states_offsets[i],
-                                                                              agg_result_columns[i].get()));
+                        _agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                          _agg_states_offsets[i], agg_result_columns[i].get());
                     }
                 } else {
                     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index,
-                                                                               _tmp_agg_states, _agg_states_offsets[i],
-                                                                               agg_result_columns[i].get()));
+                        _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                           _agg_states_offsets[i], agg_result_columns[i].get());
                     }
                 }
             }
@@ -1421,9 +1419,9 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                     group_by_columns[0]->append_default();
 
                     if (!use_intermediate) {
-                        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
+                        _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
                     } else {
-                        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
+                        _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
                     }
                     RETURN_IF_ERROR(check_has_error());
                     ++read_index;

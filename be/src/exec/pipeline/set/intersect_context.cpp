@@ -40,7 +40,7 @@ void IntersectContext::close(RuntimeState* state) {
 
 Status IntersectContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
                                             const std::vector<ExprContext*>& dst_exprs) {
-    TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, dst_exprs, _build_pool.get()));
+    _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get());
     return Status::OK();
 }
 

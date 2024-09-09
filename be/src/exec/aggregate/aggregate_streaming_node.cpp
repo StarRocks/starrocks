@@ -83,14 +83,14 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
                 RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
-                TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
+                _aggregator->build_hash_map(input_chunk_size);
                 if (_aggregator->is_none_group_by_exprs()) {
                     RETURN_IF_ERROR(_aggregator->compute_single_agg_state(input_chunk.get(), input_chunk_size));
                 } else {
                     RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(input_chunk.get(), input_chunk_size));
                 }
 
-                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+                _aggregator->try_convert_to_two_level_map();
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
 
@@ -117,21 +117,21 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
-                    TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
+                    _aggregator->build_hash_map(input_chunk_size);
                     if (_aggregator->is_none_group_by_exprs()) {
                         RETURN_IF_ERROR(_aggregator->compute_single_agg_state(input_chunk.get(), input_chunk_size));
                     } else {
                         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(input_chunk.get(), input_chunk_size));
                     }
 
-                    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+                    _aggregator->try_convert_to_two_level_map();
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
                     continue;
                 } else {
                     // TODO: direct call the function may affect the performance of some aggregated cases
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(input_chunk_size));
+                        _aggregator->build_hash_map_with_selection(input_chunk_size);
                     }
 
                     size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());

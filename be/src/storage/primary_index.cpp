@@ -1240,8 +1240,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        TRY_CATCH_BAD_ALLOC(
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();

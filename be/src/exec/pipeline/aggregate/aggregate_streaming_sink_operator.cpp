@@ -103,14 +103,14 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming(const Chun
 Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const ChunkPtr& chunk,
                                                                            const size_t chunk_size) {
     SCOPED_TIMER(_aggregator->agg_compute_timer());
-    TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
+    _aggregator->build_hash_map(chunk_size);
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
     } else {
         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
     }
 
-    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+    _aggregator->try_convert_to_two_level_map();
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     return Status::OK();
@@ -121,7 +121,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(c
                                                                                bool need_build) {
     if (need_build) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
+        _aggregator->build_hash_map_with_selection(chunk_size);
     }
 
     size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
@@ -180,14 +180,14 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
                                                           _aggregator->hash_map_variant().size())) {
             // hash table is not full or allow to expand the hash table according reduction rate
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
+            _aggregator->build_hash_map(chunk_size);
             if (_aggregator->is_none_group_by_exprs()) {
                 RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
             } else {
                 RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
             }
 
-            TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+            _aggregator->try_convert_to_two_level_map();
 
             COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
             break;
@@ -202,7 +202,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
         _auto_context.adjust_count++;
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
+            _aggregator->build_hash_map_with_selection(chunk_size);
         }
 
         size_t hit_count = SIMD::count_zero(_aggregator->streaming_selection());
