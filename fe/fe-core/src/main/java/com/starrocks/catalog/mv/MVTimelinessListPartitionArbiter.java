@@ -91,7 +91,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         });
 
         ListPartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv, refBaseTablePartitionMap,
-                allBasePartitionItems, tableRefIdxes);
+                allBasePartitionItems, tableRefIdxes, isQueryRewrite);
         if (result == null) {
             logMVPrepare(mv, "Partitioned mv compute list diff failed");
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
@@ -131,7 +131,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
                 TableProperty.QueryRewriteConsistencyMode.LOOSE);
         ListPartitionDiff listPartitionDiff = null;
         try {
-            ListPartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv);
+            ListPartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv, isQueryRewrite);
             if (result == null) {
                 logMVPrepare(mv, "Partitioned mv compute list diff failed");
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
