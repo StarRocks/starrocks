@@ -88,12 +88,15 @@ public class QueryTransformer {
                 builder.getColumnRefToConstOperators()));
 
         Map<Expr, SlotRef> generatedExprToColumnRef = queryBlock.getGeneratedExprToColumnRef();
-        ExpressionMapping expressionMapping = builder.getExpressionMapping();
+        Map<ScalarOperator, ColumnRefOperator> generatedColumnExprOpToColumnRef = new HashMap<>();
         for (Map.Entry<Expr, SlotRef> m : generatedExprToColumnRef.entrySet()) {
-            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(m.getValue(),
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(m.getKey(),
                     builder.getExpressionMapping(), columnRefFactory);
-            expressionMapping.put(m.getKey(), (ColumnRefOperator) scalarOperator);
+            ColumnRefOperator columnRefOp = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(m.getValue(),
+                    builder.getExpressionMapping(), columnRefFactory);
+            generatedColumnExprOpToColumnRef.put(scalarOperator, columnRefOp);
         }
+        builder.getExpressionMapping().addGeneratedColumnExprOpToColumnRef(generatedColumnExprOpToColumnRef);
 
         builder = filter(builder, queryBlock.getPredicate());
         builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
@@ -246,6 +249,7 @@ public class QueryTransformer {
 
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
         outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+        outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
@@ -279,6 +283,7 @@ public class QueryTransformer {
 
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
         outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+        outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections, limit);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);

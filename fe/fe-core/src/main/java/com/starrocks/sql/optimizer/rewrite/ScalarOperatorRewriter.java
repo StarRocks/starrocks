@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ArithmeticCommutativeRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ConsolidateLikesRule;
@@ -28,12 +29,14 @@ import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.PruneTediousPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceScalarOperatorRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorRewriter {
@@ -156,5 +159,11 @@ public class ScalarOperatorRewriter {
     public static ScalarOperator simplifyCaseWhen(ScalarOperator predicates) {
         // simplify case-when
         return new ScalarOperatorRewriter().rewrite(predicates, CASE_WHEN_PREDICATE_RULE);
+    }
+
+    public static ScalarOperator replaceScalarOperatorByColumnRef(ScalarOperator operator,
+                                                                  Map<ScalarOperator, ColumnRefOperator> translateMap) {
+        ReplaceScalarOperatorRule rule = new ReplaceScalarOperatorRule(translateMap);
+        return new ScalarOperatorRewriter().rewrite(operator, Lists.newArrayList(rule));
     }
 }
