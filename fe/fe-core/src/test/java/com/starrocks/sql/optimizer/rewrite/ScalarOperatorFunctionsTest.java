@@ -1455,7 +1455,7 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void testReplace() {
-        // expected_result, arg0, arg1, arg2
+        // arg0, arg1, arg2, expected_result
         String[][] testCases = {
                 {"2024-08-06", "-", "", "20240806"},
                 {"abc def ghi", "", "1234", "abc def ghi"},
