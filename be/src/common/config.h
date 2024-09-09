@@ -1226,6 +1226,9 @@ CONF_Int64(query_cache_capacity, "536870912");
 // ranges in [1,16], default value is 4.
 CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
+// Used by vector query cache, 500MB in default
+CONF_Int64(vector_query_cache_capacity, "536870912");
+
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
@@ -1368,6 +1371,9 @@ CONF_mInt64(jit_lru_cache_size, "0");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
+
+// default not to build the empty index
+CONF_mInt32(config_tenann_default_build_threshold, "0");
 
 // Set to true to enable socket_keepalive option in brpc
 CONF_mBool(brpc_socket_keepalive, "false");

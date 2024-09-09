@@ -32,6 +32,7 @@ class SnmpMetrics;
 class QueryCacheMetrics;
 class VectorIndexCacheMetrics;
 class RuntimeFilterMetrics;
+class VectorIndexCacheMetrics;
 
 class MemoryMetrics {
 public:

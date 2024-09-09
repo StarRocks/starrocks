@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -168,7 +169,7 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         return optimize(connectContext, logicOperatorTree, null, null, requiredProperty,
-                requiredColumns, columnRefFactory);
+                requiredColumns, columnRefFactory, new VectorSearchOptions());
     }
 
     public OptExpression optimize(ConnectContext connectContext,
@@ -177,10 +178,13 @@ public class Optimizer {
                                   StatementBase stmt,
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory) {
+                                  ColumnRefFactory columnRefFactory,
+                                  VectorSearchOptions vectorSearchOptions) {
         try {
             // prepare for optimizer
             prepare(connectContext, columnRefFactory, logicOperatorTree);
+
+            context.setVectorSearchOptions(vectorSearchOptions);
 
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
@@ -657,6 +661,8 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);

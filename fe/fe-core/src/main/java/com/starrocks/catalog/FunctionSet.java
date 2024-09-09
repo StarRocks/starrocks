@@ -150,6 +150,11 @@ public class FunctionSet {
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
 
+    // Vector Index functions:
+    public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_COSINE_SIMILARITY_NORM = "approx_cosine_similarity_norm";
+    public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
+
     // Geo functions:
     public static final String ST_ASTEXT = "st_astext";
     public static final String ST_ASWKT = "st_aswkt";
@@ -626,6 +631,13 @@ public class FunctionSet {
                     .add(RANDOM)
                     .add(UUID)
                     .add(SLEEP)
+                    .build();
+
+    public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
+            ImmutableSet.<String>builder()
+                    .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_COSINE_SIMILARITY_NORM)
+                    .add(APPROX_L2_DISTANCE)
                     .build();
 
     // Only use query cache if these time function can be reduced into a constant

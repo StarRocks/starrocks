@@ -25,6 +25,7 @@ namespace starrocks {
 class IndexDescriptor {
 public:
     inline static const std::string mark_word = "TENANNEMPTYMARK";
+    inline static const int64_t mark_word_len = 15;
 
     static StatusOr<std::string> get_index_file_path(const IndexType index_type, const std::string& rowset_dir,
                                                      const std::string& rowset_id, int segment_id, int64_t index_id) {

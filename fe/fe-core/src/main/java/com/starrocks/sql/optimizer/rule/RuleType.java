@@ -202,6 +202,8 @@ public enum RuleType {
 
     TF_PREDICATE_PROPAGATE,
 
+    TF_VECTOR_REWRITE_RULE,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,

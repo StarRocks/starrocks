@@ -112,6 +112,8 @@ public:
     // schema must exist and will be updated.
     void append_column(ColumnPtr column, const FieldPtr& field);
 
+    void append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id);
+
     void append_column(ColumnPtr column, SlotId slot_id);
     void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
 

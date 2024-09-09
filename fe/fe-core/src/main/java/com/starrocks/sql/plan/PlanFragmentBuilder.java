@@ -822,6 +822,7 @@ public class PlanFragmentBuilder {
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
+            scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             currentExecGroup.add(scanNode);
             // set tablet
             try {
