@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,6 +50,8 @@ public class ExpressionMapping {
     private final Scope scope;
     private ColumnRefOperator[] fieldMappings;
     private RelationId outerScopeRelationId;
+
+    private Map<ScalarOperator, ColumnRefOperator> generatedColumnExprOpToColumnRef = new HashMap<>();
 
     public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings) {
         this.scope = scope;
@@ -163,5 +166,13 @@ public class ExpressionMapping {
 
     public void addExpressionToColumns(Map<Expr, ColumnRefOperator> expressionToColumns) {
         this.expressionToColumns.putAll(expressionToColumns);
+    }
+
+    public Map<ScalarOperator, ColumnRefOperator> getGeneratedColumnExprOpToColumnRef() {
+        return generatedColumnExprOpToColumnRef;
+    }
+
+    public void addGeneratedColumnExprOpToColumnRef(Map<ScalarOperator, ColumnRefOperator> generatedColumnExprOpToColumnRef) {
+        this.generatedColumnExprOpToColumnRef.putAll(generatedColumnExprOpToColumnRef);
     }
 }
