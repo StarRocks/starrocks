@@ -35,7 +35,6 @@
 #define STARROCKS_CFREE(ptr) je_free(ptr)
 #define STARROCKS_VALLOC(size) je_valloc(size)
 
-#ifndef BE_TEST
 #define MEMORY_CONSUME_SIZE(size)                                      \
     do {                                                               \
         if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
@@ -63,20 +62,12 @@
         }                                                                                                \
     } while (0)
 #define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
-#else
-std::atomic<int64_t> g_mem_usage(0);
-#define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
-#define MEMORY_RELEASE_SIZE(size) g_mem_usage.fetch_sub(size)
-#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(STARROCKS_MALLOC_SIZE(ptr))
-#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(STARROCKS_MALLOC_SIZE(ptr))
-#define TRY_MEM_CONSUME(size, err_ret) g_mem_usage.fetch_add(size)
-#define IS_BAD_ALLOC_CATCHED() false
-#endif
 
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
+        assert(false);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
         TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
