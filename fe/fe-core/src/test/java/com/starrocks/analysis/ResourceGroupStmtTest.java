@@ -1436,7 +1436,7 @@ public class ResourceGroupStmtTest {
         assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
                 "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
                 "rg1|17|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
-                "rg2|null|16|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)\n" +
+                "rg2|0|16|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)\n" +
                 "rt_rg1|15|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rt_rg1_user)");
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
@@ -1554,7 +1554,7 @@ public class ResourceGroupStmtTest {
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
             assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
                     "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
-                    "rg1|null|17|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+                    "rg1|0|17|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         }
     }
@@ -1720,8 +1720,8 @@ public class ResourceGroupStmtTest {
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
             assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
                     "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
-                    "rg1|null|16|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
-                    "rg2|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)");
+                    "rg1|0|16|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
+                    "rg2|0|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)");
         }
 
         {
@@ -1745,8 +1745,8 @@ public class ResourceGroupStmtTest {
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
             assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
                     "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
-                    "rg1|null|14|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
-                    "rg2|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)");
+                    "rg1|0|14|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
+                    "rg2|0|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)");
         }
 
         {

@@ -21,12 +21,15 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.WarehouseManager;
@@ -117,6 +120,12 @@ public class JobSpecTest extends SchedulerTestBase {
         DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
                 connectContext, fragments, scanNodes, descTable.toThrift());
         JobSpec jobSpec = coordinator.getJobSpec();
+
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(connectContext, sql, coordinator));
+        Map<String, QueryStatisticsItem> queryStatistics = QeProcessorImpl.INSTANCE.getQueryStatistics();
+        assertThat(queryStatistics).hasSize(1);
+        assertThat(queryStatistics.get(DebugUtil.printId(queryId)).getResourceGroupName())
+                .isEqualTo(QUERY_RESOURCE_GROUP.getName());
 
         // Check created jobSpec.
         Assert.assertEquals(queryId, jobSpec.getQueryId());

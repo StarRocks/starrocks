@@ -303,6 +303,11 @@ public class FeExecuteCoordinator extends Coordinator {
         return connectContext.getSessionVariable().getWarehouseName();
     }
 
+    @Override
+    public String getResourceGroupName() {
+        return "";
+    }
+
     public boolean isShortCircuit() {
         return false;
     }
