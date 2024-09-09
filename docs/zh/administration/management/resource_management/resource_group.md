@@ -40,10 +40,10 @@ displayed_sidebar: docs
 | exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                               | (0, `min_be_cpu_cores - 1`] (大于 0 时生效，`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数) | 0      |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。          | (0, 1] (必填项)                                              | -      |
 | spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                          | (0, 1]                                                       | 1.0    |
-| concurrency_limit          | 该资源组中并发查询数的上限。                              | Integer (大于 0 才生效)                                      | 0      |
-| big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。 | Integer (大于 0 才生效)                                      | 0      |
-| big_query_scan_rows_limit  | 该资源组的大查询任务在每个 BE 上可以扫描的行数上限。      | Integer (大于 0 才生效)                                      | 0      |
-| big_query_mem_limit        | 该资源组的大查询任务在每个 BE 上可以使用的内存上限。      | Integer (大于 0 才生效)                                      | 0      |
+| concurrency_limit          | 该资源组中并发查询数的上限。                              | 整数 (大于 0 才生效)                                         | 0      |
+| big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。 | 整数 (大于 0 才生效)                                         | 0      |
+| big_query_scan_rows_limit  | 该资源组的大查询任务在每个 BE 上可以扫描的行数上限。      | 整数 (大于 0 才生效)                                         | 0      |
+| big_query_mem_limit        | 该资源组的大查询任务在每个 BE 上可以使用的内存上限。      | 整数 (大于 0 才生效)                                         | 0      |
 
 
 
@@ -69,14 +69,14 @@ displayed_sidebar: docs
 
   - 取值范围
     - 一个资源组的 `exclusive_cpu_cores` 的取值范围为 (0, `min_be_cpu_cores - 1`]，其中 `min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。只有大于 0 时才生效。
-    - `exclusive_cpu_cores` 大于 0 的资源组称为 exclusive 资源组，分配给它的 CPU core 称为 exclusive core；其余资源组称为 shared 资源组，他们运行在非 exclusive core 上，称为 shared core。
-    - 所有资源组的 `exclusive_cpu_cores` 之和不能超过 `min_be_cpu_cores - 1`。之所以最大值为 `min_be_cpu_cores - 1` 而非 `min_be_cpu_cores`，是为了让 shared core 至少能有一个。
+    - `exclusive_cpu_cores` 大于 0 的资源组称为 exclusive 资源组，分配给它的 CPU core 称为 exclusive cores；其余资源组称为 shared 资源组，他们运行在非 exclusive cores 上，称为 shared cores。
+    - 所有资源组的 `exclusive_cpu_cores` 之和不能超过 `min_be_cpu_cores - 1`。之所以最大值为 `min_be_cpu_cores - 1` 而非 `min_be_cpu_cores`，是为了让 shared cores 至少能被分配到一个 CPU core。
 
   - 与 `cpu_weight` 的关系：
-    - `cpu_weight`  和 `exclusive_cpu_cores` 只能同时并且必须生效一个，因为 exclusive 资源组可以自己完全拥有为其预留的 `exclusive_cpu_cores` 个 CPU cores 上运行，无须通过 `cpu_weight` 分配到相对份额的 CPU 时间片。
+    - `cpu_weight`  和 `exclusive_cpu_cores` 只能同时并且必须生效一个，因为 exclusive 资源组可以在自己完全拥有的为其预留的 `exclusive_cpu_cores` 个 CPU cores 上运行，无须通过 `cpu_weight` 分配到相对份额的 CPU 时间片。
     - 因此，`exclusive_cpu_cores` 和 `cpu_weight` 有且只能有一个为正数。
 
-  - 此外，be.conf 有一个配置项 `enable_resource_group_cpu_borrowing`  来指定是否允许 shared 资源组借用 exclusive 资源组的 exclusive core。该配置项的值为 true 时，表示允许借用。默认为 true。
+  - 此外，be.conf 有一个配置项 `enable_resource_group_cpu_borrowing`  来指定是否允许 shared 资源组借用 exclusive 资源组的 exclusive cores。该配置项的值为 true 时，表示允许借用。默认为 true。
     - 具体来讲，当开启该功能时，
       - 在一个 BE 上，当一个 exclusive 资源组没有任务运行时，shared 资源组可以暂时借用该 exclusive 资源组的 exclusive cores。
       - 在一个 BE 上，当该 exclusive 有任务到来后，shared 资源组不可以再借用该 exclusive 资源组的 exclusive cores，需要尽快让出使用的 exclusive cores。这里可能会有一些调度的延迟和开销，所以如果对隔离性要求极强并且允许浪费一定的 CPU，那么可以选择关闭借用功能。
@@ -128,7 +128,7 @@ displayed_sidebar: docs
 > > - 您最多只能创建一个 `short_query` 资源组。
 > > - StarRocks 不会硬限制 `short_query` 资源组的 CPU 资源。
 
-目前 `type` 为 short_query 类型的资源组已经被废弃，因为它的功能已经被 `exclusive_cpu_cores` CPU 硬隔离所代替。对于之前创建的 short_query 类型的资源组，在 3.3.4 版本之后，会将其当做 `exclusive_cpu_cores` 等于 `cpu_weight` 的 exclusive 资源组。
+目前 `type` 为 short_query 类型的资源组已经被废弃，因为它的功能已经被 `exclusive_cpu_cores` CPU 硬隔离所代替。对于之前创建的 short_query 类型的资源组，在 3.3.4 版本之后，会将其当做 `exclusive_cpu_cores` 值为 `cpu_weight` 的 exclusive 资源组。
 
 #### 系统定义资源组
 
