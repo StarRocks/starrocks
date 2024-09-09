@@ -338,6 +338,8 @@ bool init(std::istream& input);
 
 Status set_config(const std::string& field, const std::string& value);
 
+Status rollback_config(const std::string& field);
+
 std::vector<ConfigInfo> list_configs();
 
 void TEST_clear_configs();

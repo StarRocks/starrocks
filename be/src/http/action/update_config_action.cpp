@@ -107,7 +107,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
             }
             size_t mem_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
-            Stauts st = BlockCache::instance()->update_mem_quota(mem_size, true);
+            Status st = BlockCache::instance()->update_mem_quota(mem_size, true);
             return st;
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
@@ -118,7 +118,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update datacache disk spaces";
                 return st;
             }
-            Stauts st = BlockCache::instance()->adjust_disk_spaces(spaces);
+            Status st = BlockCache::instance()->adjust_disk_spaces(spaces);
             return st;
         });
         _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
@@ -302,7 +302,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update cachemgr_threadpool_size";
                 return Status::InvalidArgument("Failed to update starlet_cache_thread_num.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_cache_evict_low_water", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_low_water", value).empty()) {
@@ -316,35 +316,35 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update cachemgr_evict_percent";
                 return Status::InvalidArgument("Failed to update starlet_cache_evict_percent.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_cache_evict_throughput_mb", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_throughput_mb", value).empty()) {
                 LOG(WARNING) << "Failed to update cachemgr_evict_throughput_mb";
                 return Status::InvalidArgument("Failed to update starlet_cache_evict_throughput_mb.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_cache_evict_high_water", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_high_water", value).empty()) {
                 LOG(WARNING) << "Failed to update cachemgr_evict_high_water";
                 return Status::InvalidArgument("Failed to update starlet_cache_evict_high_water.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_fs_stream_buffer_size_bytes", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_stream_buffer_size_bytes", value).empty()) {
                 LOG(WARNING) << "Failed to update fs_stream_buffer_size_bytes";
                 return Status::InvalidArgument("Failed to update starlet_fs_stream_buffer_size_bytes.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_fs_read_prefetch_enable", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", value).empty()) {
                 LOG(WARNING) << "Failed to update fs_enable_buffer_prefetch";
                 return Status::InvalidArgument("Failed to update starlet_fs_read_prefetch_enable.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_fs_read_prefetch_threadpool_size", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_buffer_prefetch_threadpool_size", value)
@@ -352,14 +352,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update fs_buffer_prefetch_threadpool_size";
                 return Status::InvalidArgument("Failed to update starlet_fs_read_prefetch_threadpool_size.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_cache_evict_interval", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval", value).empty()) {
                 LOG(WARNING) << "Failed to update cachemgr_evict_interval";
                 return Status::InvalidArgument("Failed to update starlet_cache_evict_interval.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_fslib_s3client_nonread_max_retries", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_max_retries", value)
@@ -375,7 +375,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update fslib_s3client_nonread_retry_scale_factor";
                 return Status::InvalidArgument("Failed to update starlet_fslib_s3client_nonread_retry_scale_factor.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_fslib_s3client_connect_timeout_ms", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
@@ -383,7 +383,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
                 return Status::InvalidArgument("Failed to update starlet_fslib_s3client_connect_timeout_ms.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("s3_use_list_objects_v1", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_use_list_objects_v1", value)
@@ -391,14 +391,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update fslib_s3client_use_list_objects_v1";
                 return Status::InvalidArgument("Failed to update s3_use_list_objects_v1.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
         _config_callback.emplace("starlet_delete_files_max_key_in_batch", [&]() -> Status {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("delete_files_max_key_in_batch", value).empty()) {
                 LOG(WARNING) << "Failed to update delete_files_max_key_in_batch";
                 return Status::InvalidArgument("Failed to update starlet_delete_files_max_key_in_batch.");
             }
-            reteun Status::OK();
+            return Status::OK();
         });
 #endif // USE_STAROS
     });
