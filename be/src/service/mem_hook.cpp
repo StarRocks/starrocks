@@ -26,7 +26,6 @@
 
 #define STARROCKS_MALLOC_SIZE(ptr) je_malloc_usable_size(ptr)
 #define STARROCKS_NALLOX(size, flags) je_nallocx(size, flags)
-#define STARROCKS_MALLOC(size) je_malloc(size)
 #define STARROCKS_FREE(ptr) je_free(ptr)
 #define STARROCKS_REALLOC(ptr, size) je_realloc(ptr, size)
 #define STARROCKS_CALLOC(number, size) je_calloc(number, size)
@@ -53,29 +52,26 @@
     } while (0)
 #define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr))
 #define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(STARROCKS_MALLOC_SIZE(ptr))
-#define TRY_MEM_CONSUME(size, err_ret)                                                                   \
-    do {                                                                                                 \
-        if (LIKELY(starrocks::tls_is_thread_status_init)) {                                              \
-            RETURN_IF_UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size), err_ret);            \
-        } else {                                                                                         \
-            RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
-        }                                                                                                \
-    } while (0)
-#define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
 
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
-    if (IS_BAD_ALLOC_CATCHED()) {
-        assert(false);
-        // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
-        // call the `my_malloc`, and result in a deadloop.
-        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
-        void* ptr = STARROCKS_MALLOC(size);
-        assert(ptr != nullptr);
-        return ptr;
+    if (starrocks::tls_thread_status.is_catched()) {
+        int64_t alloc_size = je_nallocx(size, 0);
+
+        if (starrocks::tls_is_thread_status_init) {
+            if (!starrocks::tls_thread_status.try_mem_consume(alloc_size)) {
+                return nullptr;
+            }
+        } else {
+            if (!starrocks::CurrentThread::try_mem_consume_without_cache(alloc_size)) {
+                return nullptr;
+            }
+        }
+
+        return je_malloc(size);
     } else {
-        void* ptr = STARROCKS_MALLOC(size);
+        void* ptr = je_malloc(size);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
         if (LIKELY(ptr != nullptr)) {
