@@ -1542,4 +1542,16 @@ public class MvUtils {
                 new PhysicalPropertySet(), requiredColumns, columnRefFactory);
         return optimizedViewPlan;
     }
+
+    /*
+     * Trim the input string if its length is larger than maxLength.
+     * @param input the input string
+     * @param maxLength the max length
+     */
+    public static String shrinkToSize(String input, int maxLength) {
+        if (input == null) {
+            return "";
+        }
+        return input.length() > maxLength ? input.substring(0, maxLength) : input;
+    }
 }
