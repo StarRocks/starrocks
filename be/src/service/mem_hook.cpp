@@ -162,40 +162,16 @@ void my_cfree(void* ptr) __THROW {
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
-    if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(size);
-        } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
-        }
-        return ptr;
-    } else {
-        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
-        MEMORY_CONSUME_PTR(ptr);
-        return ptr;
-    }
+    void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
+    MEMORY_CONSUME_PTR(ptr);
+    return ptr;
 }
 
 // aligned_alloc
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
-    if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(size);
-        } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
-        }
-        return ptr;
-    } else {
-        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
-        MEMORY_CONSUME_PTR(ptr);
-        return ptr;
-    }
+    void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
+    MEMORY_CONSUME_PTR(ptr);
+    return ptr;
 }
 
 // valloc
