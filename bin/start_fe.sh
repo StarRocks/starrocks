@@ -183,13 +183,28 @@ export CLASSPATH=${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${S
 pidfile=$PID_DIR/fe.pid
 
 if [ -f $pidfile ]; then
-  oldpid=$(cat $pidfile)
-  # get the full command
-  pscmd=$(ps -q $oldpid -o cmd=)
-  if echo "$pscmd" | grep -q -w StarRocksFE &>/dev/null ; then
-    echo Frontend running as process $oldpid. Stop it first.
-    exit 1
-  fi
+    # check if the binary name can be grepped from the process cmdline.
+    # still it has chances to be false positive, but the possibility is greatly reduced.
+    oldpid=$(cat $pidfile)
+    if ps -p $oldpid > /dev/null 2>&1; then
+        psstatus=$(ps -q $oldpid -o stat=)
+        if [[ "$psstatus" == *Z* ]]; then
+            echo "Process $oldpid is a zombie process. Killing it."
+            kill -9 $oldpid
+            rm -f $pidfile
+        else
+            pscmd=$(ps -q $oldpid -o cmd=)
+            if echo "$pscmd" | grep -q -w StarRocksFE &>/dev/null ; then
+                echo "Frontend running as process $oldpid. Stop it first."
+                exit 1
+            else
+                rm -f $pidfile
+            fi
+        fi
+    else
+        echo "No such process with PID $oldpid. Removing stale pidfile."
+        rm -f $pidfile
+    fi
 fi
 
 if [ ! -f /bin/limit ]; then
