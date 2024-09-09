@@ -893,15 +893,9 @@ public class MaterializedViewRewriter {
      * @param mv: mv's definition
      * @return: ForeignKeyConstraint list associated with the child, empty list if no FK constraint.
      */
-<<<<<<< HEAD
     private List<ForeignKeyConstraint> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
                                                                MaterializedView mv) {
         List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
-=======
-    private List<Pair<Table, ForeignKeyConstraint>> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
-                                                                            MaterializedView mv) {
-        List<Pair<Table, ForeignKeyConstraint>> foreignKeyConstraints = Lists.newArrayList();
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
         Table mvChildTable = mvTableScanDesc.getTable();
         if (mvChildTable.getForeignKeyConstraints() != null) {
             foreignKeyConstraints.addAll(mvChildTable.getForeignKeyConstraints());

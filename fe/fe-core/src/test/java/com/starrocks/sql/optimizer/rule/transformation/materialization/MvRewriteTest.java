@@ -18,22 +18,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.UniqueConstraint;
-=======
-import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvPlanContext;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
-import com.starrocks.common.AnalysisException;
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;

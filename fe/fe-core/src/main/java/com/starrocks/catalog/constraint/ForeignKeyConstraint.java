@@ -20,20 +20,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.BaseTableInfo;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/ForeignKeyConstraint.java
-=======
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang.math.NumberUtils;
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737)):fe/fe-core/src/main/java/com/starrocks/catalog/constraint/ForeignKeyConstraint.java
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,17 +59,11 @@ public class ForeignKeyConstraint extends Constraint {
     // eg: [column1 -> column1', column2 -> column2']
     private final List<Pair<String, String>> columnRefPairs;
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/ForeignKeyConstraint.java
     public ForeignKeyConstraint(
             BaseTableInfo parentTableInfo,
             BaseTableInfo childTableInfo,
             List<Pair<String, String>> columnRefPairs) {
-=======
-    public ForeignKeyConstraint(BaseTableInfo parentTableInfo,
-                                BaseTableInfo childTableInfo,
-                                List<Pair<ColumnId, ColumnId>> columnRefPairs) {
         super(ConstraintType.FOREIGN_KEY, TABLE_PROPERTY_CONSTRAINT);
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737)):fe/fe-core/src/main/java/com/starrocks/catalog/constraint/ForeignKeyConstraint.java
         this.parentTableInfo = parentTableInfo;
         this.childTableInfo = childTableInfo;
         this.columnRefPairs = columnRefPairs;
@@ -96,66 +81,6 @@ public class ForeignKeyConstraint extends Constraint {
         return columnRefPairs;
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/ForeignKeyConstraint.java
-=======
-    public List<Pair<String, String>> getColumnNameRefPairs(Table defaultChildTable) {
-        Table parentTable = getParentTable();
-        Table childTable = defaultChildTable;
-        if (childTableInfo != null) {
-            childTable = getChildTable();
-        }
-        List<Pair<String, String>> result = new ArrayList<>(columnRefPairs.size());
-        for (Pair<ColumnId, ColumnId> pair : columnRefPairs) {
-            Column childColumn = childTable.getColumn(pair.first);
-            Column parentColumn = parentTable.getColumn(pair.second);
-            if (childColumn == null || parentColumn == null) {
-                LOG.warn("can not find column by column id: {} in table: {}, the column may have been dropped",
-                        pair.first, childTableInfo);
-                continue;
-            }
-            result.add(Pair.create(childColumn.getName(), parentColumn.getName()));
-        }
-
-        return result;
-    }
-
-    private Table getParentTable() {
-        if (parentTableInfo.isInternalCatalog()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", parentTableInfo.getTableId());
-            }
-            return table;
-        } else {
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(), parentTableInfo.getTableName());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", parentTableInfo.getTableName());
-            }
-            return table;
-        }
-    }
-
-    private Table getChildTable() {
-        if (childTableInfo.isInternalCatalog()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", childTableInfo.getTableId());
-            }
-            return table;
-        } else {
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(), childTableInfo.getTableName());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", childTableInfo.getTableName());
-            }
-            return table;
-        }
-    }
-
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737)):fe/fe-core/src/main/java/com/starrocks/catalog/constraint/ForeignKeyConstraint.java
     // for olap table, the format is: (column1, column2) REFERENCES default_catalog.dbid.tableid(column1', column2')
     // for materialized view, the format is: catalog1.dbName1.tableName1(column1, column2) REFERENCES
     // catalog2.dbName2.tableName2(column1', column2')

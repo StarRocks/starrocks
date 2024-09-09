@@ -141,7 +141,6 @@ public class BaseTableInfo {
     }
 
     /**
-<<<<<<< HEAD
      * A checked version of getTable, which enforce checking existence of table
      *
      * @return the table if exists
@@ -212,7 +211,10 @@ public class BaseTableInfo {
             return GlobalStateMgr.getCurrentState().getDb(dbId);
         } else {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-=======
+        }
+    }
+
+    /*
      * Called when a table is renamed.
      * @param newTable the new table with the new table name
      */
@@ -227,7 +229,6 @@ public class BaseTableInfo {
                 this.tableId = newTable.getId();
             }
             this.tableName = newTable.getName();
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
         }
     }
 

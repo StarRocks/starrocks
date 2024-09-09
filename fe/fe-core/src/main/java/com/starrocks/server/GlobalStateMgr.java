@@ -67,7 +67,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -99,11 +98,9 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
 import com.starrocks.catalog.View;
-=======
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -577,21 +574,8 @@ public class GlobalStateMgr {
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
-<<<<<<< HEAD
-=======
-    private TemporaryTableMgr temporaryTableMgr;
-    private TemporaryTableCleaner temporaryTableCleaner;
-
-    private final GtidGenerator gtidGenerator;
     private final GlobalConstraintManager globalConstraintManager;
 
-    private final SqlParser sqlParser;
-    private final Analyzer analyzer;
-    private final Authorizer authorizer;
-    private final DDLStmtExecutor ddlStmtExecutor;
-    private final ShowExecutor showExecutor;
-
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -830,14 +814,8 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
 
-<<<<<<< HEAD
-=======
-        this.lockManager = new LockManager();
-
-        this.gtidGenerator = new GtidGenerator();
         this.globalConstraintManager = new GlobalConstraintManager();
 
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
@@ -1119,49 +1097,10 @@ public class GlobalStateMgr {
         return replicationMgr;
     }
 
-<<<<<<< HEAD
-=======
-    public KeyMgr getKeyMgr() {
-        return keyMgr;
-    }
-
-    public LockManager getLockManager() {
-        return lockManager;
-    }
-
-    public void setLockManager(LockManager lockManager) {
-        this.lockManager = lockManager;
-    }
-
-    public SqlParser getSqlParser() {
-        return sqlParser;
-    }
-
-    public Analyzer getAnalyzer() {
-        return analyzer;
-    }
-
-    public Authorizer getAuthorizer() {
-        return authorizer;
-    }
-
-    public DDLStmtExecutor getDdlStmtExecutor() {
-        return ddlStmtExecutor;
-    }
-
-    public ShowExecutor getShowExecutor() {
-        return showExecutor;
-    }
-
-    public GtidGenerator getGtidGenerator() {
-        return gtidGenerator;
-    }
-
     public GlobalConstraintManager getGlobalConstraintManager() {
         return globalConstraintManager;
     }
 
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {

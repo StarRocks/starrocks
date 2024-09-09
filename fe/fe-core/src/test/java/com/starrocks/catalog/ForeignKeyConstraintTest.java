@@ -14,14 +14,7 @@
 
 package com.starrocks.catalog;
 
-<<<<<<< HEAD
-=======
-import com.google.api.client.util.Lists;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
-import com.starrocks.server.GlobalStateMgr;
-import mockit.Expectations;
-import mockit.Mocked;
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
 import org.junit.Assert;
 import org.junit.Test;
 

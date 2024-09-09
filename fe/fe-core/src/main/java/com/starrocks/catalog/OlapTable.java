@@ -2972,14 +2972,10 @@ public class OlapTable extends Table {
     public void onReload() {
         analyzePartitionInfo();
         analyzeRollupIndexMeta();
-<<<<<<< HEAD
-=======
-        tryToAssignIndexId();
 
         // register constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
         globalConstraintManager.registerConstraint(this);
->>>>>>> 8834cd818c ([BugFix] Add GlobalConstraintManager to manage foreign key constraints parent and children relation (#50737))
     }
 
     @Override

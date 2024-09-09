@@ -17,7 +17,6 @@ package com.starrocks.catalog.constraint;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.Sets;
 import org.apache.logging.log4j.LogManager;
@@ -61,7 +60,8 @@ public class GlobalConstraintManager {
             if (parent == null) {
                 continue;
             }
-            MvUtils.getTable(parent).ifPresent(parentTable -> {
+
+            parent.mayGetTable().ifPresent(parentTable -> {
                 globalTableFKConstraintMap.computeIfAbsent(parentTable, k -> Sets.newConcurrentHashSet())
                         .add(TableWithFKConstraint.of(table, fk));
             });
@@ -101,7 +101,7 @@ public class GlobalConstraintManager {
             if (parentTableInfo == null) {
                 continue;
             }
-            MvUtils.getTable(parentTableInfo).ifPresent(parentTable -> {
+            parentTableInfo.mayGetTable().ifPresent(parentTable -> {
                 Set<TableWithFKConstraint> parentChildTables = globalTableFKConstraintMap.get(parentTable);
                 if (CollectionUtils.isEmpty(parentChildTables)) {
                     return;
