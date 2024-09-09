@@ -60,6 +60,10 @@ public class ConnectorAnalyzeTaskQueue {
             if (runningTask != null) {
                 // there is a running task for this table, remove columns which are already in running task
                 task.removeColumns(runningTask.getColumns());
+                if (task.getColumns().isEmpty()) {
+                    LOG.info("Table {} has a running task, skip this task", tableUUID);
+                    return true;
+                }
             }
 
             if (!pendingTasks.containsKey(tableUUID)) {
