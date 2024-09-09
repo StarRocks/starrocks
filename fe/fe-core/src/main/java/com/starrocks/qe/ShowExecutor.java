@@ -1194,7 +1194,7 @@ public class ShowExecutor {
                 List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
                 for (int i = 0; i < descs.size(); i++) {
                     ImportColumnDesc desc = descs.get(i);
-                    createRoutineLoadSql.append(desc.toString());
+                    createRoutineLoadSql.append(desc.toSql());
                     if (descs.size() == 1 || i == descs.size() - 1) {
                         createRoutineLoadSql.append(")");
                     } else {
