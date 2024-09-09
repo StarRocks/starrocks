@@ -20,12 +20,8 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-import com.starrocks.system.BackendCoreStat;
-=======
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.system.BackendResourceStat;
->>>>>>> 01f048a733 ([Enhancement] support constant folding in translating scalarOperator phase (#50734))
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;

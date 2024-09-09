@@ -3203,8 +3203,6 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v6 = 8: v8");
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testOuterJoinOnConstValue() throws Exception {
@@ -3291,5 +3289,4 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason:");
     }
->>>>>>> 01f048a733 ([Enhancement] support constant folding in translating scalarOperator phase (#50734))
 }
