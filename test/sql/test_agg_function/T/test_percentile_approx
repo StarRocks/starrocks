@@ -11,3 +11,5 @@ insert into t1 select generate_series, generate_series from table(generate_serie
 set pipeline_dop=1;
 
 select percentile_approx(c2, 0.5) from t1;
+with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ percentile_approx(c2, v1) from tt;
+with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ percentile_approx(c2, v1, v2 + 1) from tt;
