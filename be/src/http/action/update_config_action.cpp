@@ -118,7 +118,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update datacache disk spaces";
                 return st;
             }
-            Status st = BlockCache::instance()->adjust_disk_spaces(spaces);
+            st = BlockCache::instance()->adjust_disk_spaces(spaces);
             return st;
         });
         _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
