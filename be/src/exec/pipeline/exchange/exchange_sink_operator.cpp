@@ -237,9 +237,8 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
-            TRY_CATCH_BAD_ALLOC(
                     _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
-                                                       _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
+                                                       _parent->_is_pipeline_level_shuffle ? driver_sequence : -1);
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
             COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
@@ -248,7 +247,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
                 _chunk_request->add_driver_sequences(driver_sequence);
             }
             auto pchunk = _chunk_request->add_chunks();
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
+            RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
             _current_request_bytes += pchunk->data().size();
         }
     }
@@ -516,8 +515,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             // 1. create a new chunk PB to serialize
             ChunkPB* pchunk = _chunk_request->add_chunks();
             // 2. serialize input chunk to pchunk
-            TRY_CATCH_BAD_ALLOC(
-                    RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size())));
+                    RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size()));
             _current_request_bytes += pchunk->data().size();
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > config::max_transmit_batched_bytes) {
@@ -672,13 +670,13 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
         if (*is_first_chunk) {
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
             StatusOr<ChunkPB> res = Status::OK();
-            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src, _encode_context));
+            res = serde::ProtobufChunkSerde::serialize(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
             StatusOr<ChunkPB> res = Status::OK();
-            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context));
+            res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }

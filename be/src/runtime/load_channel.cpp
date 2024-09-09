@@ -272,31 +272,31 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 
 Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
-        TRY_CATCH_BAD_ALLOC({
+        {
             serde::ProtobufChunkDeserializer des(_chunk_meta);
             StatusOr<Chunk> res = des.deserialize(pchunk.data());
             if (!res.ok()) return res.status();
             chunk = std::move(res).value();
-        });
+        };
     } else {
         size_t uncompressed_size = 0;
         {
             const BlockCompressionCodec* codec = nullptr;
             RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
             uncompressed_size = pchunk.uncompressed_size();
-            TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
+            uncompressed_buffer->resize(uncompressed_size);
             Slice output{uncompressed_buffer->data(), uncompressed_size};
             RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
         }
         {
-            TRY_CATCH_BAD_ALLOC({
+            {
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta);
                 StatusOr<Chunk> res = Status::OK();
-                TRY_CATCH_BAD_ALLOC(res = des.deserialize(buff));
+                res = des.deserialize(buff);
                 if (!res.ok()) return res.status();
                 chunk = std::move(res).value();
-            });
+            };
         }
     }
     return Status::OK();

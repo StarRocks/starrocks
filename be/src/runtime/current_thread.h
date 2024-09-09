@@ -179,42 +179,6 @@ private:
 
 inline thread_local CurrentThread tls_thread_status;
 
-class CurrentThreadCatchSetter {
-public:
-    explicit CurrentThreadCatchSetter(bool catched) { _prev_catched = tls_thread_status.set_is_catched(catched); }
-
-    ~CurrentThreadCatchSetter() { (void)tls_thread_status.set_is_catched(_prev_catched); }
-
-    CurrentThreadCatchSetter(const CurrentThreadCatchSetter&) = delete;
-    void operator=(const CurrentThreadCatchSetter&) = delete;
-    void operator=(CurrentThreadCatchSetter&&) = delete;
-
-private:
-    bool _prev_catched;
-};
-
-#define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
-
-#define TRY_CATCH_ALLOC_SCOPE_START() \
-    try {                             \
-        SCOPED_SET_CATCHED(true);
-
-#define TRY_CATCH_ALLOC_SCOPE_END()                                                 \
-    }                                                                               \
-    catch (std::bad_alloc const&) {                                                 \
-        tls_thread_status.set_is_catched(false);                                    \
-        return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
-    }                                                                               \
-    catch (std::runtime_error const& e) {                                           \
-        return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));    \
-    }
-
-#define TRY_CATCH_BAD_ALLOC(stmt)               \
-    do {                                        \
-        TRY_CATCH_ALLOC_SCOPE_START() { stmt; } \
-        TRY_CATCH_ALLOC_SCOPE_END()             \
-    } while (0)
-
 // TRY_CATCH_ALL will not set catched=true, only used for catch unexpected crash,
 // cannot be used to control memory usage.
 #define TRY_CATCH_ALL(result, stmt)                                                      \

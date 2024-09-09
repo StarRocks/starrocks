@@ -185,7 +185,6 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     if (_fn_desc->exception_safe) {
         result = _fn_desc->scalar_function(fn_ctx, args);
     } else {
-        SCOPED_SET_CATCHED(false);
         result = _fn_desc->scalar_function(fn_ctx, args);
     }
     RETURN_IF_ERROR(result);
