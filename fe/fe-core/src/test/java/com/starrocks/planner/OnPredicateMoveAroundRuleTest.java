@@ -119,7 +119,7 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
 
         // scene 6
         templateSql = "select * from t0 %s join t1 on v1 = v4 where all_match( x-> x > 1, [v1]) or v1 < 0;";
-        expectPredicate = "(all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))) OR (4: v4 < 0), 4: v4 IS NOT NULL";
+        expectPredicate = "(all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))) OR (4: v4 < 0)";
         argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
         argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
 
