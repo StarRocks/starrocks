@@ -83,9 +83,6 @@ void GlobalDriverExecutor::_worker_thread() {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
-        // Reset TLS state
-        CurrentThread::current().set_pipeline_driver_id(0);
-
         if (current_thread != nullptr) {
             current_thread->set_idle(true);
         }
@@ -107,8 +104,6 @@ void GlobalDriverExecutor::_worker_thread() {
 
         driver->increment_schedule_times();
         _schedule_count++;
-
-        SCOPED_SET_TRACE_INFO(driver->driver_id());
 
         SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
 

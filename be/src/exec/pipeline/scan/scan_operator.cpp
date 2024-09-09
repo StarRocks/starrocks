@@ -378,7 +378,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
     starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
     query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
-    int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
     task.workgroup = _workgroup.get();
@@ -387,13 +386,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
-    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
+    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, 0,
                           io_task_start_nano]() {
         if (auto sp = wp.lock()) {
-            // set driver_id/query_id/fragment_instance_id to thread local
-            // driver_id will be used in some Expr such as regex_replace
-            SCOPED_SET_TRACE_INFO(driver_id);
-
             auto& chunk_source = _chunk_sources[chunk_source_index];
 
             [[maybe_unused]] std::string category;

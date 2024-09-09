@@ -384,8 +384,6 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
         _result_chunks.shutdown();
     }
-    tls_thread_status.set_query_id(TUniqueId());
-    // DO NOT touch any shared variables since here, as they may have been destructed.
 }
 
 Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {

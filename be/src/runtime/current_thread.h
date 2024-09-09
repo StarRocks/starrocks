@@ -104,9 +104,6 @@ public:
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
 
-    void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
-    int32_t get_driver_id() const { return _driver_id; }
-
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
         mem_tracker_ctx_shift();
@@ -176,7 +173,6 @@ private:
     // is invoked, the frequrency is a little bit high, but it does little harm to performance,
     // because operator's MemTracker, which is a dangling MemTracker(withouth parent), has no concurrency conflicts
     MemCacheManager _mem_cache_manager;
-    int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
 };
@@ -198,14 +194,6 @@ private:
 };
 
 #define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
-
-#define SET_TRACE_INFO(driver_id) CurrentThread::current().set_pipeline_driver_id(driver_id);
-
-#define RESET_TRACE_INFO() CurrentThread::current().set_pipeline_driver_id(0);
-
-#define SCOPED_SET_TRACE_INFO(driver_id) \
-    SET_TRACE_INFO(driver_id)            \
-    auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \

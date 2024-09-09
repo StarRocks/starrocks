@@ -77,10 +77,6 @@ struct StringFunctionsState {
     // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
     re2::RE2* get_or_prepare_regex() {
         DCHECK(const_pattern);
-        int32_t driver_id = CurrentThread::current().get_driver_id();
-        if (driver_id == 0) {
-            return regex.get();
-        }
         re2::RE2* res = nullptr;
         driver_regex_map.lazy_emplace_l(
                 driver_id, [&](auto& value) { res = value.get(); },

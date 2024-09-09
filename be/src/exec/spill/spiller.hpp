@@ -147,7 +147,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     _running_flush_tasks++;
     // TODO: handle spill queue
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table), trace = TraceInfo(state)]() {
-        SCOPED_SET_TRACE_INFO({});
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
         SCOPED_TIMER(_spiller->metrics().flush_timer);
@@ -201,7 +200,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         }
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream]() {
-            SCOPED_SET_TRACE_INFO({});
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             DEFER_GUARD_END(guard);
             {
@@ -283,7 +281,6 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
 
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
                  spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)]() {
-        SCOPED_SET_TRACE_INFO({});
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
         RACE_DETECT(detect_flush);
