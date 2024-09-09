@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <iostream>
-
 #include "common/compiler_util.h"
-#include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
 #include "util/failpoint/fail_point.h"
@@ -79,43 +76,10 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
-const size_t large_memory_alloc_report_threshold = 1073741824;
-inline thread_local bool skip_report = false;
-inline void report_large_memory_alloc(size_t size) {
-    if (size > large_memory_alloc_report_threshold && !skip_report) {
-        skip_report = true; // to avoid recursive output log
-        try {
-            auto qid = starrocks::CurrentThread::current().query_id();
-            auto fid = starrocks::CurrentThread::current().fragment_instance_id();
-            LOG(WARNING) << "large memory alloc, query_id:" << print_id(qid) << " instance: " << print_id(fid)
-                         << " acquire:" << size << " bytes, stack:\n"
-                         << starrocks::get_stack_trace();
-        } catch (...) {
-            // do nothing
-        }
-        skip_report = false;
-    }
-}
-#define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) report_large_memory_alloc(size)
-
-DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
-
-#ifdef FIU_ENABLE
-#define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal)                                       \
-    FAIL_POINT_TRIGGER_EXECUTE(mem_alloc_error, {                                       \
-        LOG(INFO) << "inject mem alloc error, stack: " << starrocks::get_stack_trace(); \
-        return retVal;                                                                  \
-    });
-#else
-#define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal) (void)0
-#endif
-
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
         TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
@@ -147,7 +111,6 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
@@ -157,7 +120,6 @@ void* my_realloc(void* p, size_t size) __THROW {
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
 
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0) - old_size, nullptr);
         void* ptr = STARROCKS_REALLOC(p, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -179,7 +141,6 @@ void* my_realloc(void* p, size_t size) __THROW {
 
 // calloc
 void* my_calloc(size_t n, size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(n * size);
     // If size is zero, the behavior is implementation defined (null pointer may be returned
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
@@ -187,7 +148,6 @@ void* my_calloc(size_t n, size_t size) __THROW {
     }
 
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(n * size, nullptr);
         void* ptr = STARROCKS_CALLOC(n, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -214,9 +174,7 @@ void my_cfree(void* ptr) __THROW {
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -235,9 +193,7 @@ void* my_memalign(size_t align, size_t size) __THROW {
 
 // aligned_alloc
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -256,9 +212,7 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 
 // valloc
 void* my_valloc(size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_VALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -277,9 +231,7 @@ void* my_valloc(size_t size) __THROW {
 
 // pvalloc
 void* my_pvalloc(size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_VALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -298,9 +250,7 @@ void* my_pvalloc(size_t size) __THROW {
 
 // posix_memalign
 int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(-1);
         TRY_MEM_CONSUME(size, ENOMEM);
         int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
         if (UNLIKELY(ret != 0)) {
