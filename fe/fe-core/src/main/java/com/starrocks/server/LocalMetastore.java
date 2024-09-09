@@ -133,6 +133,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mv.MVMetaVersionRepairer;
 import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.persist.AddPartitionsInfoV2;
@@ -278,7 +279,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
-public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
+public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
 
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
@@ -5263,5 +5264,45 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     @Override
     public void handleMVRepair(Database db, Table table, List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, table, partitionRepairInfos);
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        List<Object> samples = new ArrayList<>();
+        // get every olap table's first partition
+        for (Database database : idToDb.values()) {
+            database.readLock();
+            try {
+                samples.addAll(database.getPartitionSamples());
+            } finally {
+                database.readUnlock();
+            }
+        }
+        return Lists.newArrayList(Pair.create(samples, totalCount));
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        return ImmutableMap.of("Partition", totalCount);
     }
 }

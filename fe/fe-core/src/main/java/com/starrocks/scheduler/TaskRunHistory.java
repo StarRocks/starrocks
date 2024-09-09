@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 
 public class TaskRunHistory {
     private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
+    private static final int MEMORY_TASK_RUN_SAMPLES = 10;
 
     // Thread-Safe history map: QueryId -> TaskRunStatus
     // The same task-id may contain multi history task run status, so use query_id instead.
@@ -92,5 +93,12 @@ public class TaskRunHistory {
 
     public long getTaskRunCount() {
         return historyTaskRunMap.size();
+    }
+
+    public synchronized List<Object> getSamplesForMemoryTracker() {
+        return historyTaskRunMap.values()
+                .stream()
+                .limit(MEMORY_TASK_RUN_SAMPLES)
+                .collect(Collectors.toList());
     }
 }

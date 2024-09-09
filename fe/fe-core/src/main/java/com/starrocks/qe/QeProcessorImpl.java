@@ -35,8 +35,10 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
@@ -53,7 +55,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.util.Iterator;
 import java.util.List;
@@ -64,8 +65,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
 
 public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
-
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
+    private static final int MEMORY_QUERY_SAMPLES = 10;
     private static final long ONE_MINUTE = 60 * 1000L;
     private final Map<TUniqueId, QueryInfo> coordinatorMap = Maps.newConcurrentMap();
     private final Map<TUniqueId, Long> monitorQueryMap = Maps.newConcurrentMap();
@@ -294,8 +295,12 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(coordinatorMap) + SizeEstimator.estimate(monitorQueryMap);
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = coordinatorMap.values()
+                .stream()
+                .limit(MEMORY_QUERY_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) coordinatorMap.size()));
     }
 
     @Override
