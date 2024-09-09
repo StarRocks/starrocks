@@ -148,6 +148,10 @@ public class ResourceGroupMgr implements Writable {
                 dropResourceGroupUnlocked(wg.getName());
             }
 
+            if (wg.getCpuWeight() == null) {
+                wg.setCpuWeight(0);
+            }
+
             if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
                 wg.setId(ResourceGroup.DEFAULT_WG_ID);
             } else if (ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME.equals(wg.getName())) {
@@ -359,10 +363,10 @@ public class ResourceGroupMgr implements Writable {
 
                 if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
                     if (sumExclusiveCpuCores + exclusiveCpuCores - wg.getNormalizedExclusiveCpuCores() >=
-                            BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
+                            BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe()) {
                         throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
                                 ResourceGroup.EXCLUSIVE_CPU_CORES,
-                                BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
+                                BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe() - 1));
                     }
                     if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
                         throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);

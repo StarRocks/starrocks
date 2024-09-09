@@ -48,7 +48,8 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(97323000)
             .withExecTime(3533000)
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg1");
 
 
     public static final QueryStatisticsInfo QUERY_TWO_LOCAL = new QueryStatisticsInfo()
@@ -65,7 +66,8 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(96576000)
             .withExecTime(2086000)
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg2");
 
     public static final QueryStatisticsInfo QUERY_ONE_REMOTE = new QueryStatisticsInfo()
             .withQueryStartTime(1721866428)
@@ -81,7 +83,8 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(97456000)
             .withExecTime(3687000)
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg3");
 
 
     public static final QueryStatisticsInfo QUERY_TWO_REMOTE = new QueryStatisticsInfo()
@@ -98,7 +101,8 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(96686000)
             .withExecTime(2196000)
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg");
 
     public static List<QueryStatisticsInfo> LOCAL_TEST_QUERIES =
             new ArrayList<>(List.of(QUERY_ONE_LOCAL, QUERY_TWO_LOCAL));
