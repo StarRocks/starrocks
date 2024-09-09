@@ -32,6 +32,7 @@ inline thread_local MemTracker* tls_mem_tracker = nullptr;
 // `tls_singleton_check_mem_tracker` is used when you want to separate the mem tracker and check tracker,
 // you can add a new check tracker by set up `tls_singleton_check_mem_tracker`.
 inline thread_local bool tls_is_thread_status_init = false;
+inline thread_local bool tls_is_catched = false;
 
 class CurrentThread {
 private:
@@ -99,7 +100,10 @@ private:
     };
 
 public:
-    CurrentThread() { tls_is_thread_status_init = true; }
+    CurrentThread() {
+        tls_is_thread_status_init = true;
+        tls_is_catched = false;
+    }
     ~CurrentThread();
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
@@ -118,13 +122,13 @@ public:
 
     static CurrentThread& current();
 
-    bool set_is_catched(bool is_catched) {
-        bool old = _is_catched;
-        _is_catched = is_catched;
+    static bool set_is_catched(bool is_catched) {
+        bool old = tls_is_catched;
+        tls_is_catched = is_catched;
         return old;
     }
 
-    bool is_catched() const { return _is_catched; }
+    static bool is_catched() { return tls_is_catched; }
 
     void mem_consume(int64_t size) { _mem_cache_manager.consume(size); }
 
@@ -173,7 +177,6 @@ private:
     // is invoked, the frequrency is a little bit high, but it does little harm to performance,
     // because operator's MemTracker, which is a dangling MemTracker(withouth parent), has no concurrency conflicts
     MemCacheManager _mem_cache_manager;
-    bool _is_catched = false;
     bool _check = true;
 };
 

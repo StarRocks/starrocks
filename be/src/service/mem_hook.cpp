@@ -56,7 +56,7 @@
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
-    if (starrocks::tls_thread_status.is_catched()) {
+    if (starrocks::CurrentThread::is_catched()) {
         int64_t alloc_size = je_nallocx(size, 0);
 
         if (starrocks::tls_is_thread_status_init) {
