@@ -52,7 +52,6 @@ public abstract class OptimizerTask {
             if (groupExpression.hasRuleExplored(rule)) {
                 continue;
             }
-
             if (!rule.getPattern().matchWithoutChild(groupExpression)) {
                 continue;
             }
