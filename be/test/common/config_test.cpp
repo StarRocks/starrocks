@@ -361,21 +361,21 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_TRUE(config::set_config("cfg_int16_t", "2562").ok());
     ASSERT_EQ(cfg_int16_t, 2562);
     ASSERT_TRUE(config::rollback_config("cfg_int16_t").ok());
-    ASSERT_EQ(cfg_double, 2561);
+    ASSERT_EQ(cfg_int16_t, 2561);
 
     // int32
     ASSERT_EQ(cfg_int32_t, 65536123);
     ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
     ASSERT_EQ(cfg_int32_t, 65536124);
     ASSERT_TRUE(config::rollback_config("cfg_int32_t").ok());
-    ASSERT_EQ(cfg_double, 65536123);
+    ASSERT_EQ(cfg_int32_t, 65536123);
 
     // int64
     ASSERT_EQ(cfg_int64_t, 4294967296123);
     ASSERT_TRUE(config::set_config("cfg_int64_t", "4294967296124").ok());
     ASSERT_EQ(cfg_int64_t, 4294967296124);
     ASSERT_TRUE(config::rollback_config("cfg_int64_t").ok());
-    ASSERT_EQ(cfg_double, 4294967296123);
+    ASSERT_EQ(cfg_int64_t, 4294967296123);
 
     // string
     ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
