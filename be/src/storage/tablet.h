@@ -415,6 +415,9 @@ private:
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
+    // Keep the rowsets committed but not publish which rowset meta without schema
+    std::unordered_map<RowsetId, RowsetSharedPtr> _committed_rs_map;
+
     // gtid -> version
     std::map<int64_t, int64_t> _gtid_to_version_map;
 

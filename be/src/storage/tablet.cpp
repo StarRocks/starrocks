@@ -583,7 +583,11 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
 
     RowsetMetaPB rowset_meta_pb;
-    rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+    if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+        rowset->rowset_meta()->get_meta_pb_without_schema(&rowset_meta_pb);
+    } else {
+        rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+    }
     // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
     // will remove the in-memory txn information if Status::AlreadlyExist, but not the committed rowset meta
     // (RowsetStatePB = COMMITTED) saved in rocksdb. Here modify the rowset to visible, and save it again
@@ -633,6 +637,17 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
                               << " " << st;
     ++_newly_created_rowset_num;
     return Status::OK();
+}
+
+bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+    std::unique_lock wrlock(_meta_lock);
+    if (rowset->rowset_meta()->tablet_schema() != nullptr &&
+        rowset->rowset_meta()->tablet_schema()->id() != TabletSchema::invalid_id() &&
+        rowset->rowset_meta()->tablet_schema()->id() == _max_version_schema->id()) {
+        _committed_rs_map[rowsset->rowset_id()] = rowset;
+        return true;
+    }
+    return false;
 }
 
 void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
@@ -1816,7 +1831,11 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         } else {
             _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
         }
-        _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
+        // TODO(zhangqiang)
+        // get rowset which need to rewrite rowset_meta
+        std::vector<RowsetSharedPtr> rewrite_meta_rs;
+        _get_rewrite_meta_rs(rewrite_meta_rs);
+        _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir);
     }
 }
 

@@ -268,6 +268,7 @@ private:
     // These stale rowsets meta are been removed when rowsets' pathVersion is expired,
     // this policy is judged and computed by TimestampedVersionTracker.
     std::vector<RowsetMetaSharedPtr> _stale_rs_metas;
+    std::map<RowsetId, RowsetMetaSharedPtr> _committed_rs_metas;
 
     DelPredicateArray _del_pred_array;
     bool _in_restore_mode = false;

@@ -201,9 +201,11 @@ Status TabletMeta::save_meta(DataDir* data_dir) {
     return _save_meta(data_dir);
 }
 
-void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir) {
+void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& rewrite_meta_rs, DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
     _schema = tablet_schema;
+    // TODO(zhangqiang)
+    // write rowset meta/tablet meta
     (void)_save_meta(data_dir);
 }
 
@@ -216,6 +218,12 @@ Status TabletMeta::_save_meta(DataDir* data_dir) {
     Status st = TabletMetaManager::save(data_dir, tablet_meta_pb);
     LOG_IF(FATAL, !st.ok()) << "fail to save tablet meta:" << st << ". tablet_id=" << tablet_id()
                             << ", schema_hash=" << schema_hash();
+    for (auto& rs : _rs_metas) {
+        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+    }
+    for (const auto& rs : _inc_rs_metas) {
+        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+    }
     return st;
 }
 

@@ -659,7 +659,11 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                 _ignore_rowset_commit(version, rowset);
             } else {
                 RowsetMetaPB meta_pb;
-                rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+                if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+                    rowset->rowset_meta()->get_meta_pb_without_schema(&meta_pb);
+                } else {
+                    rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+                }
                 st = TabletMetaManager::pending_rowset_commit(
                         _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
                         RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
@@ -669,6 +673,8 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                                  << _debug_string(false, true);
                     return st;
                 }
+                // TODO(zhangqiang)
+                // check rowset meta schema id equal to latest tablet schema
                 VLOG(2) << "add rowset to pending commits tablet:" << _tablet.tablet_id() << " version:" << version
                         << " txn_id: " << rowset->txn_id() << " #pending:" << _pending_commits.size();
             }
@@ -740,7 +746,11 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     rowset->make_commit(version, rowsetid);
     span->AddEvent("save_meta_begin");
     RowsetMetaPB meta_pb;
-    rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+    if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+        rowset->rowset_meta()->get_meta_pb_without_schema(&meta_pb);
+    } else {
+        rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+    }
     auto st = TabletMetaManager::rowset_commit(
             _tablet.data_dir(), _tablet.tablet_id(), _next_log_id, &edit, meta_pb,
             RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
@@ -749,6 +759,8 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
         LOG(WARNING) << "rowset commit failed: " << st << " " << _debug_string(false, false);
         return st;
     }
+    // TODO(zhangqiang)
+    // check rowset meta schema id equal to latest tablet schema
     // apply in-memory state after commit success
     _next_log_id++;
     _next_rowset_id += rowsetid_add;

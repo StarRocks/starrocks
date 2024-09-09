@@ -277,6 +277,10 @@ public:
 
     bool has_tablet_schema_pb() { return _has_tablet_schema_pb; }
 
+    void set_has_tablet_schema_pb(bool has_tablet_schema_pb ) {
+        _has_tablet_schema_pb = has_tablet_schema_pb;
+    }
+
 private:
     bool _deserialize_from_pb(std::string_view value) {
         return _rowset_meta_pb->ParseFromArray(value.data(), value.size());
