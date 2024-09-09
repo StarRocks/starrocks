@@ -77,9 +77,12 @@ if [[ -z ${JAVA_HOME} ]]; then
     if command -v javac &> /dev/null; then
         export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which javac))))"
         echo "Infered JAVA_HOME=$JAVA_HOME"
+    elif command -v java &> /dev/null; then
+        export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which java))))"
     else
       cat << EOF
-Error: The environment variable JAVA_HOME is not set. The FE program requires JDK version $MIN_JDK_VERSION or higher in order to run.
+Error: The environment variable JAVA_HOME is not set, and neither JDK or JRE is found.
+The FE program requires JDK/JRE version $MIN_JDK_VERSION  or higher in order to run.
 Please take the following steps to resolve this issue:
 1. Install OpenJDK $MIN_JDK_VERSION or higher using your Linux distribution's package manager,
    or following the openjdk installation instructions at https://openjdk.org/install/
@@ -87,19 +90,11 @@ Please take the following steps to resolve this issue:
    For example:
    export JAVA_HOME=/usr/lib/jvm/java-$MIN_JDK_VERSION
 3. Try running this script again.
+Note: If you are using a JRE environment, you should set your JAVA_HOME to your JRE directory.
+For full development tools, JDK is recommended.
 EOF
       exit 1
     fi
-fi
-
-# cannot be jre
-if [ ! -f "$JAVA_HOME/bin/javac" ]; then
-  cat << EOF
-Error: It appears that your JAVA_HOME environment variable is pointing to a non-JDK path: $JAVA_HOME
-The FE program requires the full JDK to be installed and configured properly. Please check that JAVA_HOME
-is set to the installation directory of JDK $MIN_JDK_VERSION or higher, rather than the JRE installation directory.
-EOF
-  exit 1
 fi
 
 JAVA=$JAVA_HOME/bin/java
