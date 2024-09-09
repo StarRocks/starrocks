@@ -607,7 +607,7 @@ protected:
             return;
         }
 
-        auto null_first_fn = [src_null_column](size_t i) -> bool { return src_null_column.get_data()[i] == 1; };
+        auto null_first_fn = [&src_null_column](size_t i) -> bool { return src_null_column.get_data()[i] == 1; };
 
         auto begin_of_not_null =
                 std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);
@@ -1171,7 +1171,7 @@ public:
         if constexpr (HasNull) {
             elements_nulls = elements_null_col->get_data().data();
         }
-        const auto& elements_data = GetContainer<ElementType>().get_data(elements);
+        const auto& elements_data = GetContainer<ElementType>::get_data(elements);
 
         auto* offsets_ptr = offsets->get_data().data();
         auto* null_ptr = null_cols->get_data().data();

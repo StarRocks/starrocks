@@ -42,6 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
@@ -51,6 +52,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -67,7 +69,6 @@ import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -148,17 +149,17 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
         if (Config.disable_load_job) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "disable_load_job is set to true, all load jobs are rejected");
         }
 
         if (Config.metadata_enable_recovery_mode) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "The cluster is under recovery mode, all load jobs are rejected");
         }
 
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
-            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "The cluster is under safe mode state, all load jobs are rejected.");
         }
 
@@ -202,13 +203,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
-    private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
+    public static void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
             throws AnalysisException {
         if (timeoutSecond > maxLoadTimeoutSecond ||
                 timeoutSecond < minLoadTimeOutSecond) {
-            throw new AnalysisException("Invalid timeout. Timeout should between "
-                    + minLoadTimeOutSecond + " and " + maxLoadTimeoutSecond
-                    + " seconds");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE, "timeout", timeoutSecond,
+                    String.format("between %d and %d seconds", minLoadTimeOutSecond, maxLoadTimeoutSecond));
         }
     }
 
@@ -283,7 +283,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
             throws UserException {
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbId);
             throw new UserException("Database[" + dbId + "] does not exist");
@@ -307,7 +307,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         List<Long> tableIdList = transactionState.getTableIdList();
 
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE,
+        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE,
                 timeoutMillis, TimeUnit.MILLISECONDS)) {
             String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
                     transactionId, db.getFullName(), timeoutMillis);
@@ -316,7 +316,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
 
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -344,8 +344,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         try {
             return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
         } catch (LockTimeoutException e) {
-            ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            return false;
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 
@@ -443,14 +442,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(
                     "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
         }
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
     }
 
@@ -698,7 +697,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         for (long dbId : dbIds) {
             List<Comparable> info = new ArrayList<Comparable>();
             info.add(dbId);
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -744,14 +743,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         int txnNum = 0;
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             txnNum += dbTransactionMgr.getTransactionNum();
-        }
-        return txnNum;
-    }
-
-    public int getFinishedTransactionNum() {
-        int txnNum = 0;
-        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            txnNum += dbTransactionMgr.getFinishedTxnNums();
         }
         return txnNum;
     }
@@ -835,12 +826,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         dbTransactionMgr.updateDatabaseUsedQuotaData(usedQuotaDataBytes);
     }
 
-    public void saveTransactionStateV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveTransactionStateV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int txnNum = getTransactionNum();
         final int cnt = 2 + txnNum;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
         writer.writeJson(idGenerator);
-        writer.writeJson(txnNum);
+        writer.writeInt(txnNum);
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.unprotectWriteAllTransactionStatesV2(writer);
         }
@@ -866,7 +857,24 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("Txn", (long) getFinishedTransactionNum(),
+        return ImmutableMap.of("Txn", (long) getTransactionNum(),
                 "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> txnSamples = new ArrayList<>();
+        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
+            List<Object> samples = mgr.getSamplesForMemoryTracker();
+            if (samples.size() > 0) {
+                txnSamples.addAll(samples);
+                break;
+            }
+        }
+
+        List<Object> callbackSamples = callbackFactory.getSamplesForMemoryTracker();
+
+        return Lists.newArrayList(Pair.create(txnSamples, (long) getTransactionNum()),
+                Pair.create(callbackSamples, callbackFactory.getCallBackCnt()));
     }
 }

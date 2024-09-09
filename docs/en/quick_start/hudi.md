@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 4
 description: Data Lakehouse with Apache Hudi
 toc_max_heading_level: 3

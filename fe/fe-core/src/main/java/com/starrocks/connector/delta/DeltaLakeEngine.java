@@ -19,8 +19,6 @@ import com.google.common.cache.LoadingCache;
 import com.starrocks.common.Pair;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultEngine;
-import io.delta.kernel.defaults.engine.DefaultJsonHandler;
-import io.delta.kernel.defaults.engine.DefaultParquetHandler;
 import io.delta.kernel.engine.JsonHandler;
 import io.delta.kernel.engine.ParquetHandler;
 import io.delta.kernel.types.StructType;
@@ -49,13 +47,13 @@ public class DeltaLakeEngine extends DefaultEngine {
     @Override
     public JsonHandler getJsonHandler() {
         return properties.isEnableDeltaLakeJsonMetaCache() ? new DeltaLakeJsonHandler(hadoopConf, jsonCache) :
-                new DefaultJsonHandler(hadoopConf);
+                new TraceDefaultJsonHandler(hadoopConf);
     }
 
     @Override
     public ParquetHandler getParquetHandler() {
         return properties.isEnableDeltaLakeCheckpointMetaCache() ? new DeltaLakeParquetHandler(hadoopConf, checkpointCache) :
-                new DefaultParquetHandler(hadoopConf);
+                new TraceDefaultParquetHandler(hadoopConf);
     }
 
     public static DeltaLakeEngine create(Configuration hadoopConf, DeltaLakeCatalogProperties properties,

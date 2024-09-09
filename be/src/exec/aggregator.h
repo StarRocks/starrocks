@@ -42,6 +42,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+#include "runtime/memory/counting_allocator.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
@@ -294,12 +295,13 @@ public:
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
     const int64_t agg_state_memory_usage() const { return _agg_state_mem_usage; }
+    const int64_t allocator_memory_usage() const { return _allocator->memory_usage(); }
 
     const int64_t memory_usage() const {
         if (is_hash_set()) {
-            return hash_set_memory_usage() + agg_state_memory_usage();
+            return hash_set_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
-            return hash_map_memory_usage() + agg_state_memory_usage();
+            return hash_map_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
         } else {
             return 0;
         }
@@ -310,7 +312,7 @@ public:
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
-    const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
+    const Filter& streaming_selection() { return _streaming_selection; }
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
     RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
     RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
@@ -398,6 +400,9 @@ public:
 
     bool is_streaming_all_states() const { return _streaming_all_states; }
 
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
+
     HashTableKeyAllocator _state_allocator;
 
 protected:
@@ -408,6 +413,8 @@ protected:
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+    // used to count heap memory usage of agg states
+    std::unique_ptr<CountingAllocatorWithHook> _allocator;
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
@@ -491,7 +498,7 @@ protected:
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
     bool _is_pending_reset_state = false;
-    std::vector<uint8_t> _streaming_selection;
+    Filter _streaming_selection;
 
     bool _has_udaf = false;
 

@@ -37,7 +37,6 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -100,6 +99,7 @@ import static com.starrocks.catalog.PrimitiveType.SMALLINT;
 import static com.starrocks.catalog.PrimitiveType.TIME;
 import static com.starrocks.catalog.PrimitiveType.TINYINT;
 import static com.starrocks.catalog.PrimitiveType.VARCHAR;
+import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
 
 /**
  * Constant Functions List
@@ -107,8 +107,6 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 public class ScalarOperatorFunctions {
     public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
             ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
-
-    private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
@@ -1250,10 +1248,21 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
     }
 
+    @ConstantFunction(name = "lower", argTypes = {VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator lower(ConstantOperator str) {
+        return ConstantOperator.createVarchar(StringUtils.lowerCase(str.getVarchar()));
+    }
+
+    @ConstantFunction(name = "upper", argTypes = {VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator upper(ConstantOperator str) {
+        return ConstantOperator.createVarchar(StringUtils.upperCase(str.getVarchar()));
+    }
+
     @ConstantFunction(name = "replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator replace(ConstantOperator value, ConstantOperator target,
                                            ConstantOperator replacement) {
-        return ConstantOperator.createVarchar(value.getVarchar().replace(target.getVarchar(), replacement.getVarchar()));
+        return ConstantOperator.createVarchar(
+                StringUtils.replace(value.getVarchar(), target.getVarchar(), replacement.getVarchar()));
     }
 
     private static ConstantOperator createDecimalConstant(BigDecimal result) {

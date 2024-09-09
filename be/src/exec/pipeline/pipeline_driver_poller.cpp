@@ -20,7 +20,7 @@ namespace starrocks::pipeline {
 void PipelineDriverPoller::start() {
     DCHECK(this->_polling_thread.get() == nullptr);
     auto status = Thread::create(
-            "pipeline", "pipeline_poller", [this]() { run_internal(); }, &this->_polling_thread);
+            "pipeline", "pip_poll_" + _name, [this]() { run_internal(); }, &this->_polling_thread);
     if (!status.ok()) {
         LOG(FATAL) << "Fail to create PipelineDriverPoller: error=" << status.to_string();
     }
@@ -39,6 +39,12 @@ void PipelineDriverPoller::shutdown() {
 
 void PipelineDriverPoller::run_internal() {
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
+
+    {
+        std::lock_guard<std::mutex> lock(_global_mutex);
+        CpuUtil::bind_cpus(Thread::current_thread(), _cpud_ids);
+    }
+
     DriverList tmp_blocked_drivers;
     int spin_count = 0;
     std::vector<DriverRawPtr> ready_drivers;
@@ -178,7 +184,7 @@ void PipelineDriverPoller::run_internal() {
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_mutex);
     _blocked_drivers.push_back(driver);
-    _blocked_driver_queue_len++;
+    _num_drivers++;
     driver->_pending_timer_sw->reset();
     driver->driver_acct().clean_local_queue_infos();
     _cond.notify_one();
@@ -191,7 +197,7 @@ void PipelineDriverPoller::park_driver(const DriverRawPtr driver) {
 }
 
 // activate the parked driver from poller
-size_t PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
+size_t PipelineDriverPoller::activate_parked_driver(const ConstDriverPredicator& predicate_func) {
     std::vector<DriverRawPtr> ready_drivers;
 
     {
@@ -213,7 +219,7 @@ size_t PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredica
     return ready_drivers.size();
 }
 
-size_t PipelineDriverPoller::calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const {
+size_t PipelineDriverPoller::calculate_parked_driver(const ConstDriverPredicator& predicate_func) const {
     size_t parked_driver_num = 0;
     auto driver_it = _parked_drivers.begin();
     while (driver_it != _parked_drivers.end()) {
@@ -230,7 +236,7 @@ void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drive
     auto& driver = *driver_it;
     driver->_pending_timer->update(driver->_pending_timer_sw->elapsed_time());
     local_blocked_drivers.erase(driver_it++);
-    _blocked_driver_queue_len--;
+    _num_drivers--;
 }
 
 void PipelineDriverPoller::on_cancel(DriverRawPtr driver, std::vector<DriverRawPtr>& ready_drivers,
@@ -246,11 +252,17 @@ void PipelineDriverPoller::on_cancel(DriverRawPtr driver, std::vector<DriverRawP
     }
 }
 
-void PipelineDriverPoller::iterate_immutable_driver(const IterateImmutableDriverFunc& call) const {
+void PipelineDriverPoller::for_each_driver(const ConstDriverConsumer& call) const {
     std::shared_lock guard(_local_mutex);
     for (auto* driver : _local_blocked_drivers) {
         call(driver);
     }
+}
+
+void PipelineDriverPoller::bind_cpus(const CpuUtil::CpuIds& cpuids) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    _cpud_ids = cpuids;
+    CpuUtil::bind_cpus(_polling_thread.get(), _cpud_ids);
 }
 
 } // namespace starrocks::pipeline

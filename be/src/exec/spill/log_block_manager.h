@@ -52,7 +52,7 @@ public:
     void close() override;
 
     StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
-    Status release_block(const BlockPtr& block) override;
+    Status release_block(BlockPtr block) override;
 
 #ifdef BE_TEST
     void set_dir_manager(DirManager* dir_mgr) { _dir_mgr = dir_mgr; }

@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 
 public class TaskRunHistory {
     private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
+    private static final int MEMORY_TASK_RUN_SAMPLES = 10;
 
     // Thread-Safe history map:
     // QueryId -> TaskRunStatus
@@ -70,7 +71,9 @@ public class TaskRunHistory {
             return;
         }
         TaskRunStatus task = historyTaskRunMap.remove(queryId);
-        taskName2Status.remove(task.getTaskName());
+        if (task != null) {
+            taskName2Status.remove(task.getTaskName());
+        }
     }
 
     // Reserve historyTaskRunMap values to keep the last insert at the first.
@@ -82,6 +85,13 @@ public class TaskRunHistory {
 
     public synchronized long getTaskRunCount() {
         return historyTaskRunMap.size();
+    }
+
+    public synchronized List<Object> getSamplesForMemoryTracker() {
+        return historyTaskRunMap.values()
+                .stream()
+                .limit(MEMORY_TASK_RUN_SAMPLES)
+                .collect(Collectors.toList());
     }
 
     public List<TaskRunStatus> lookupHistoryByTaskNames(String dbName, Set<String> taskNames) {
@@ -214,5 +224,4 @@ public class TaskRunHistory {
         LOG.warn("Too much task metadata triggers forced task_run GC, " +
                 "size before GC:{}, size after GC:{}.", beforeSize, getTaskRunCount());
     }
-
 }

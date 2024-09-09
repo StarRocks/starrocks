@@ -119,6 +119,7 @@ public:
     size_t num_rows_per_row_block_with_max_version() const;
     size_t next_unique_id() const;
     size_t field_index_with_max_version(const string& field_name) const;
+    size_t field_index(const string& field_name, const string& extra_column_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
     bool enable_shortcut_compaction() const;
@@ -130,8 +131,8 @@ public:
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
-                        std::vector<RowsetSharedPtr>* to_replace);
+    void modify_rowsets_without_lock(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                                     std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -141,6 +142,7 @@ public:
     RowsetSharedPtr rowset_with_max_version() const;
 
     Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+    void overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
@@ -237,7 +239,6 @@ public:
     void pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_all_candicate_rowsets(std::vector<RowsetSharedPtr>* candidate_rowsets);
-    void pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
 
     void calculate_cumulative_point();
 
@@ -371,6 +372,7 @@ private:
     // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
+    void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -503,6 +505,10 @@ inline size_t Tablet::next_unique_id() const {
 
 inline size_t Tablet::field_index_with_max_version(const string& field_name) const {
     return tablet_schema()->field_index(field_name);
+}
+
+inline size_t Tablet::field_index(const string& field_name, const string& extra_column_name) const {
+    return tablet_schema()->field_index(field_name, extra_column_name);
 }
 
 inline bool Tablet::enable_shortcut_compaction() const {

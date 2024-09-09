@@ -24,6 +24,7 @@
 #include "common/compiler_util.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/hash_util.hpp"
@@ -430,19 +431,22 @@ void JsonColumn::reset_column() {
     _path_to_index.clear();
 }
 
-bool JsonColumn::capacity_limit_reached(std::string* msg) const {
+Status JsonColumn::capacity_limit_reached() const {
     if (size() > Column::MAX_CAPACITY_LIMIT) {
-        if (msg != nullptr) {
-            msg->append("row count of object column exceed the limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));
-        }
-        return true;
+        return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
     }
-    return false;
+    return Status::OK();
 }
 
 void JsonColumn::check_or_die() const {
-    DCHECK(_flat_column_paths.size() == _flat_columns.size());
-    DCHECK(_flat_column_types.size() == _flat_columns.size());
+    if (has_remain()) {
+        DCHECK(_flat_column_paths.size() + 1 == _flat_columns.size());
+        DCHECK(_flat_column_types.size() + 1 == _flat_columns.size());
+    } else {
+        DCHECK(_flat_column_paths.size() == _flat_columns.size());
+        DCHECK(_flat_column_types.size() == _flat_columns.size());
+    }
     if (!_flat_columns.empty()) {
         size_t rows = _flat_columns[0]->size();
         for (size_t i = 0; i < _flat_columns.size() - 1; i++) {
@@ -471,10 +475,12 @@ std::string JsonColumn::debug_flat_paths() const {
     }
     std::ostringstream ss;
     ss << "[";
-    for (size_t i = 0; i < _flat_column_paths.size() - 1; i++) {
-        ss << _flat_column_paths[i] << ", ";
+    size_t i = 0;
+    for (; i < _flat_column_paths.size() - 1; i++) {
+        ss << _flat_column_paths[i] << "(" << type_to_string(_flat_column_types[i]) << "), ";
     }
-    ss << _flat_column_paths.back() << "]";
+    ss << _flat_column_paths[i] << "(" << type_to_string(_flat_column_types[i]) << ")";
+    ss << (has_remain() ? "]" : "}");
     return ss.str();
 }
 } // namespace starrocks

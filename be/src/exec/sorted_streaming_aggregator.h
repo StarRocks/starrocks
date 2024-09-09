@@ -42,13 +42,12 @@ private:
     Status _update_states(size_t chunk_size, bool is_update_phase);
     // init selector by _cmp_vector
     // return selected_size (distinct num_rows)
-    size_t _init_selector(std::vector<uint8_t>& selector, size_t chunk_size);
+    size_t _init_selector(Filter& selector, size_t chunk_size);
 
-    Status _get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
-                                   Columns& agg_result_columns);
-    void _close_group_by(size_t chunk_size, const std::vector<uint8_t>& selector);
+    Status _get_agg_result_columns(size_t chunk_size, const Filter& selector, Columns& agg_result_columns);
+    void _close_group_by(size_t chunk_size, const Filter& selector);
 
-    Status _build_group_by_columns(size_t chunk_size, size_t selected_size, const std::vector<uint8_t>& selector,
+    Status _build_group_by_columns(size_t chunk_size, size_t selected_size, const Filter& selector,
                                    Columns& agg_group_by_columns);
 
     AggDataPtr _last_state = nullptr;

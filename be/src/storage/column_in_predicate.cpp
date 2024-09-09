@@ -15,13 +15,16 @@
 #include <type_traits>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -365,6 +368,86 @@ private:
     ItemHashSet<Slice> _slices;
 };
 
+class DictionaryCodeInPredicate : public ColumnPredicate {
+private:
+    enum LogicOp { ASSIGN, AND, OR };
+
+public:
+    DictionaryCodeInPredicate(const TypeInfoPtr& type_info, ColumnId id, const std::vector<int32_t>& operands,
+                              size_t size)
+            : ColumnPredicate(type_info, id), _bit_mask(size) {
+        for (auto item : operands) {
+            DCHECK(item < size);
+            _bit_mask[item] = 1;
+        }
+    }
+
+    ~DictionaryCodeInPredicate() override = default;
+
+    template <LogicOp Op>
+    inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+        const Int32Column* dict_code_column = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
+        const auto& data = dict_code_column->get_data();
+        Filter filter(to - from, 1);
+
+        if (column->has_null()) {
+            const NullColumn* null_column = down_cast<const NullableColumn*>(column)->null_column().get();
+            auto null_data = null_column->get_data();
+            for (auto i = from; i < to; i++) {
+                auto index = data[i] >= _bit_mask.size() ? 0 : data[i];
+                filter[i - from] = (!null_data[i]) & _bit_mask[index];
+            }
+        } else {
+            for (auto i = from; i < to; i++) {
+                filter[i - from] = _bit_mask[data[i]];
+            }
+        }
+
+        for (auto i = from; i < to; i++) {
+            if constexpr (Op == ASSIGN) {
+                sel[i] = filter[i - from];
+            } else if constexpr (Op == AND) {
+                sel[i] &= filter[i - from];
+            } else {
+                sel[i] |= filter[i - from];
+            }
+        }
+    }
+
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ASSIGN>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<AND>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<OR>(column, selection, from, to);
+        return Status::OK();
+    }
+
+    bool can_vectorized() const override { return false; }
+
+    PredicateType type() const override { return PredicateType::kInList; }
+
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override {
+        const auto to_type = target_type_info->type();
+        if (to_type == LogicalType::TYPE_INT) {
+            *output = this;
+            return Status::OK();
+        }
+        CHECK(false) << "Not support, from_type=" << LogicalType::TYPE_INT << ", to_type=" << to_type;
+        return Status::OK();
+    }
+
+private:
+    std::vector<uint8_t> _bit_mask;
+};
+
 template <template <typename, size_t...> typename Set, size_t... Args>
 ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, ColumnId id,
                                                  const std::vector<std::string>& strs) {
@@ -504,6 +587,21 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type_info, ColumnId 
         return new_column_in_predicate_generic<ItemHashSet>(type_info, id, strs);
     } else {
         return new_column_in_predicate_small(type_info, id, strs);
+    }
+}
+
+ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
+                                                  const std::vector<int32_t>& operands, size_t size) {
+    DCHECK(is_integer_type(type->type()));
+    if (operands.size() <= 3 || size > 1024) {
+        std::vector<std::string> str_codes;
+        str_codes.reserve(operands.size());
+        for (int code : operands) {
+            str_codes.emplace_back(std::to_string(code));
+        }
+        return new_column_in_predicate(type, id, str_codes);
+    } else {
+        return new DictionaryCodeInPredicate(type, id, operands, size);
     }
 }
 

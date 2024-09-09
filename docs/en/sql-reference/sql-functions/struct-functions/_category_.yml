@@ -1,0 +1,6 @@
+position: 10 # float position is supported
+label: 'Struct'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

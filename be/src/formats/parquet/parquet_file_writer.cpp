@@ -194,6 +194,7 @@ FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileM
         if (column_stat->HasNullCount()) {
             has_null_count = true;
             null_value_counts[field_id] = column_stat->null_count();
+            value_counts[field_id] += column_stat->null_count();
         }
         if (column_stat->HasMinMax()) {
             has_min_max = true;

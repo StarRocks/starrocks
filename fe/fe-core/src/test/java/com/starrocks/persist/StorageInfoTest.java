@@ -23,7 +23,7 @@ import org.junit.Test;
 public class StorageInfoTest {
     @Test
     public void test() {
-        StorageInfo info = new StorageInfo(20);
+        StorageInfo info = new StorageInfo(20, ImageFormatVersion.v2);
         Assert.assertEquals(20, info.getImageJournalId());
     }
 }

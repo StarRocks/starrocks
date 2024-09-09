@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 管理查询
@@ -13,13 +13,13 @@ Property 指针对用户粒度的属性的设置项。设置用户的属性，�
 您可以通过以下命令管理特定用户的客户端到 FE 最大连接数。
 
 ```sql
-SET PROPERTY [FOR 'user'] 'key' = 'value'[, ...];
+ALTER USER '<username>' SET PROPERTIES ("key"="value", ...)
 ```
 
 以下示例修改用户 jack 的最大连接数为 1000。
 
 ```sql
-SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
+ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 ```
 
 您可以通过以下命令查看特定用户的连接数限制。
@@ -90,7 +90,7 @@ ALTER DATABASE db_name SET DATA QUOTA quota;
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
-详细内容，参考 [ALTER DATABASE](../../../sql-reference/sql-statements/data-definition/ALTER_DATABASE.md)
+详细内容，参考 [ALTER DATABASE](../../../sql-reference/sql-statements/Database/ALTER_DATABASE.md)
 
 ## 停止查询
 

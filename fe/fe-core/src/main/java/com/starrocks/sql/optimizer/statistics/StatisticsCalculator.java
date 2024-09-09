@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -140,12 +141,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
+import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -189,6 +190,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         this.expressionContext = expressionContext;
         this.columnRefFactory = columnRefFactory;
         this.optimizerContext = optimizerContext;
+    }
+
+    @VisibleForTesting
+    public StatisticsCalculator() {
+        this.expressionContext = null;
+        this.columnRefFactory = null;
+        this.optimizerContext = null;
     }
 
     public void estimatorStats() {
@@ -719,18 +727,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         Map<String, ColumnRefOperator> colNameMap = Maps.newHashMap();
-        colRefToColumnMetaMap.entrySet().stream()
-                .forEach(e -> colNameMap.put(e.getValue().getName(), e.getKey()));
-        List<ColumnRefOperator> partitionCols = Lists.newArrayList();
-        for (String partitionColName : olapTable.getPartitionColumnNames()) {
-            if (!colNameMap.containsKey(partitionColName)) {
-                return;
-            }
-            partitionCols.add(colNameMap.get(partitionColName));
-        }
+        colRefToColumnMetaMap.entrySet().stream().forEach(e -> colNameMap.put(e.getValue().getName(), e.getKey()));
+        // It might contain null value, if some partition columns are not referenced in the scan
+        List<ColumnRefOperator> partitionCols =
+                olapTable.getPartitionColumnNames().stream()
+                        .map(colNameMap::get)
+                        .collect(Collectors.toList());
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof RangePartitionInfo) {
-            if (partitionCols.size() != 1) {
+            if (partitionCols.size() != 1 || partitionCols.stream().anyMatch(Objects::isNull)) {
                 return;
             }
             if (optimizerContext.getDumpInfo() != null) {
@@ -778,15 +783,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             for (int i = 0; i < partitionCols.size(); i++) {
+                ColumnRefOperator columnRef = partitionCols.get(i);
+                // For multi-column list partition, pruning on any column should adjust the statistics
+                if (columnRef == null) {
+                    continue;
+                }
                 if (optimizerContext.getDumpInfo() != null) {
                     optimizerContext.getDumpInfo().addTableStatistics(olapTable,
                             partitionCols.get(i).getName(),
                             builder.getColumnStatistics(partitionCols.get(i)));
                 }
                 long ndv = extractDistinctPartitionValues(listPartitionInfo, selectedPartitionId, i);
-                ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(partitionCols.get(i)))
+                ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(columnRef))
                         .setDistinctValuesCount(ndv).build();
-                builder.addColumnStatistic(partitionCols.get(i), columnStatistic);
+                builder.addColumnStatistic(columnRef, columnStatistic);
             }
         }
     }
@@ -1677,37 +1687,41 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     // avoid use partition cols filter rows twice
-    private ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
-                                                    OptimizerContext optimizerContext) {
-        if (operator instanceof LogicalIcebergScanOperator && !optimizerContext.isObtainedFromInternalStatistics()) {
-            LogicalIcebergScanOperator icebergScanOperator = operator.cast();
-            List<String> partitionColNames = icebergScanOperator.getTable().getPartitionColumnNames();
+    @VisibleForTesting
+    public ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
+                                                   OptimizerContext optimizerContext) {
+        boolean isTableTypeSupported = operator instanceof LogicalIcebergScanOperator ||
+                isOlapScanListPartitionTable(operator);
+        if (isTableTypeSupported && !optimizerContext.isObtainedFromInternalStatistics()) {
+            LogicalScanOperator scanOperator = operator.cast();
+            List<String> partitionColNames = scanOperator.getTable().getPartitionColumnNames();
+            partitionColNames.addAll(ListPartitionPruner.deduceGenerateColumns(scanOperator));
+
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
             List<ScalarOperator> newPredicates = Lists.newArrayList();
             for (ScalarOperator scalarOperator : conjuncts) {
-                if (scalarOperator instanceof BinaryPredicateOperator) {
-                    BinaryPredicateOperator bop = scalarOperator.cast();
-                    if (bop.getBinaryType().isEqualOrRange()
-                            && bop.getChild(1).isConstantRef()
-                            && isPartitionCol(bop.getChild(0), partitionColNames)) {
-                        // do nothing
-                    } else {
-                        newPredicates.add(scalarOperator);
-                    }
-                } else if (scalarOperator instanceof InPredicateOperator) {
-                    InPredicateOperator inOp = scalarOperator.cast();
-                    if (!inOp.isNotIn()
-                            && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant)
-                            && isPartitionCol(inOp.getChild(0), partitionColNames)) {
-                        // do nothing
-                    } else {
-                        newPredicates.add(scalarOperator);
-                    }
+                if (ListPartitionPruner.canPruneWithConjunct(scalarOperator) &&
+                        isPartitionCol(scalarOperator.getChild(0), partitionColNames)) {
+                    // drop this predicate
+                } else {
+                    newPredicates.add(scalarOperator);
                 }
             }
-            return newPredicates.size() < 1 ? ConstantOperator.TRUE : Utils.compoundAnd(newPredicates);
+            return newPredicates.isEmpty() ? ConstantOperator.TRUE : Utils.compoundAnd(newPredicates);
         }
         return predicate;
+    }
+
+    // NOTE: Why list partition ?
+    // The list partition only have one unique value for each partition, but range partition doesn't.
+    // So only the partition-predicate of list partition can be removed without affect the cardinality estimation
+    private boolean isOlapScanListPartitionTable(Operator operator) {
+        if (!(operator instanceof LogicalOlapScanOperator)) {
+            return false;
+        }
+        LogicalOlapScanOperator scan = operator.cast();
+        OlapTable table = (OlapTable) scan.getTable();
+        return table.getPartitionInfo().isListPartition();
     }
 
     private boolean isPartitionCol(ScalarOperator scalarOperator, Collection<String> partitionColumns) {

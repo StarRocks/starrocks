@@ -28,7 +28,6 @@ public class TableRenameClause extends AlterTableClause {
     public TableRenameClause(String newTableName, NodePosition pos) {
         super(AlterOpType.RENAME, pos);
         this.newTableName = newTableName;
-        this.needTableStable = false;
     }
 
     public String getNewTableName() {

@@ -19,10 +19,12 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.lang3.NotImplementedException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -124,5 +126,23 @@ public class SystemTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    /**
+     * Whether this system table supports evaluation in FE
+     *
+     * @return true if it's supported
+     */
+    public boolean supportFeEvaluation() {
+        return false;
+    }
+
+    /**
+     * Evaluate the system table query with specified predicate
+     * @param predicate can only be conjuncts
+     * @return All columns and rows according to the schema of this table
+     */
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        throw new NotImplementedException("not supported");
     }
 }

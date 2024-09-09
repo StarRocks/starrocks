@@ -170,6 +170,21 @@ public class KillQueryHandleTest {
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
 
+    @Test
+    public void testKillStmtWithCustomQueryId(@Mocked SocketChannel socketChannel) throws Exception {
+        // test killing query successfully
+        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ctx1.getSessionVariable().setCustomQueryId("a_custom_query_id");
+
+        Assert.assertFalse(ctx1.isKilled());
+        ConnectContext ctx = kill("a_custom_query_id", false);
+        // isKilled is set
+        Assert.assertTrue(ctx1.isKilled());
+        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+
+        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+    }
+
     private ConnectContext prepareConnectContext(SocketChannel socketChannel) {
         ConnectContext ctx1 = new ConnectContext(socketChannel) {
             @Override

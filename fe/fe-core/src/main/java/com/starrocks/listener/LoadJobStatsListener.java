@@ -45,12 +45,13 @@ public class LoadJobStatsListener implements LoadJobListener {
 
     @Override
     public void onLoadJobTransactionFinish(TransactionState transactionState) {
-        onTransactionFinish(transactionState, true);
+        // For compatibility reasons, broker load still uses async collect.
+        onTransactionFinish(transactionState, false);
     }
 
     @Override
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
-        StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true);
+        StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
     }
 
     @Override
@@ -79,12 +80,13 @@ public class LoadJobStatsListener implements LoadJobListener {
             List<Table> tables = transactionState.getIdToTableCommitInfos().values().stream()
                     .map(x -> x.getTableId())
                     .distinct()
-                    .map(db::getTable)
+                    .map(tableId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId))
                     .filter(Objects::nonNull)
                     .filter(t -> !t.isMaterializedView()) // skip mvs since its stats will be triggered after refresh
                     .collect(Collectors.toList());
             for (Table table : tables) {
-                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync);
+                // stream load and broker load do not need lock
+                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync, false);
             }
         } catch (Exception t) {
             LOG.warn("refresh mv after publish version failed:", DebugUtil.getStackTrace(t));

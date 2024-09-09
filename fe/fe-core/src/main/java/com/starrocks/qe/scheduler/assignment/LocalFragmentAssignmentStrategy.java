@@ -23,6 +23,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.BackendSelector;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
@@ -33,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -53,13 +55,17 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
     private final Set<Integer> replicatedScanIds = Sets.newHashSet();
 
+    private final boolean useIncrementalScanRanges;
+
     public LocalFragmentAssignmentStrategy(ConnectContext connectContext, WorkerProvider workerProvider,
                                            boolean usePipeline,
-                                           boolean isLoadType) {
+                                           boolean isLoadType,
+                                           boolean useIncrementalScanRanges) {
         this.connectContext = connectContext;
         this.workerProvider = workerProvider;
         this.usePipeline = usePipeline;
         this.isLoadType = isLoadType;
+        this.useIncrementalScanRanges = useIncrementalScanRanges;
     }
 
     @Override
@@ -82,7 +88,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
     private void assignScanRangesToWorker(ExecutionFragment execFragment, ScanNode scanNode) throws UserException {
         BackendSelector backendSelector = BackendSelectorFactory.create(
-                scanNode, isLoadType, execFragment, workerProvider, connectContext, replicatedScanIds);
+                scanNode, isLoadType, execFragment, workerProvider, connectContext, replicatedScanIds, useIncrementalScanRanges);
 
         backendSelector.computeScanRangeAssignment();
 
@@ -181,7 +187,8 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                 FragmentInstance instance = new FragmentInstance(worker, execFragment);
                 execFragment.addInstance(instance);
 
-                // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
+                // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly
+                // when they are in different buckets
                 Set<Integer> instanceReplicatedScanIds = new HashSet<>();
 
                 if (!assignPerDriverSeq) {
@@ -239,7 +246,14 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         final int parallelExecInstanceNum = fragment.getParallelExecNum();
         final int pipelineDop = fragment.getPipelineDop();
 
-        execFragment.getScanRangeAssignment().forEach((workerId, scanRangesPerWorker) -> {
+        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
+        final Map<Long, FragmentInstance> fragmentInstanceMap = new HashMap<>();
+        if (!execFragment.getInstances().isEmpty()) {
+            for (FragmentInstance fragmentInstance : execFragment.getInstances()) {
+                fragmentInstanceMap.put(fragmentInstance.getWorkerId(), fragmentInstance);
+            }
+        }
+        assignment.forEach((workerId, scanRangesPerWorker) -> {
             // 1. Handle normal scan node firstly
             scanRangesPerWorker.forEach((scanId, scanRangesOfNode) -> {
                 if (replicatedScanIds.contains(scanId)) {
@@ -249,12 +263,15 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                 int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
                 List<List<TScanRangeParams>> scanRangesPerInstance =
                         ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
-
                 for (List<TScanRangeParams> scanRanges : scanRangesPerInstance) {
-                    FragmentInstance instance =
-                            new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
-                    execFragment.addInstance(instance);
-
+                    FragmentInstance instance = null;
+                    if (useIncrementalScanRanges && !fragmentInstanceMap.isEmpty()) {
+                        instance = fragmentInstanceMap.get(workerId);
+                    } else {
+                        instance =
+                                new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                        execFragment.addInstance(instance);
+                    }
                     if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
                         fragment.disablePhysicalPropertyOptimize();

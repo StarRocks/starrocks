@@ -25,6 +25,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -587,7 +588,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
-                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
+                    std::ignore = column->append_strings(std::vector<Slice>{Slice{"0"}});
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -614,7 +615,8 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
-                    column->append_strings(std::vector{Slice{"0"}});
+                    Slice s{"0"};
+                    column->append_strings(&s, 1);
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -646,7 +648,8 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
                     if (column->is_binary()) {
-                        column->append_strings(std::vector{Slice{"0"}});
+                        Slice s{"0"};
+                        column->append_strings(&s, 1);
                     } else {
                         column->append_datum(Datum((uint8_t)0));
                     }
@@ -681,7 +684,8 @@ Status JsonReader::_read_file_stream() {
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
-        auto buf = ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
+        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() +
+                                                                     simdjson::SIMDJSON_PADDING));
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
         buf->flip();
         std::swap(buf, _file_stream_buffer);

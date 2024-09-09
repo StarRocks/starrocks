@@ -88,7 +88,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
 
     if (_report_when_finish) {
         /// TODO: report fragment finish to BE coordinator
@@ -165,7 +165,7 @@ void FragmentContext::report_exec_state_if_necessary() {
                 driver->runtime_report_action();
             }
         });
-        state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
     }
 }
 
@@ -181,15 +181,20 @@ void FragmentContext::set_final_status(const Status& status) {
 
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
-            std::stringstream ss;
-            ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
-               << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
-            if (detailed_message == "LimitReach" || detailed_message == "UserCancel" || detailed_message == "TimeOut") {
-                LOG(INFO) << ss.str();
+            std::string cancel_msg =
+                    fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
+                                print_id(_fragment_instance_id), detailed_message);
+            if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
+                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << cancel_msg;
             } else {
-                LOG(WARNING) << ss.str();
+                LOG(WARNING) << cancel_msg;
             }
-            DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
+
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
     }
@@ -254,7 +259,7 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
-        raw_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
+        raw_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
         return raw_ctx;
     }
 }

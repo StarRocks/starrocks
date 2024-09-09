@@ -78,7 +78,7 @@ public class WarehouseManager implements Writable {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             Warehouse warehouse = nameToWh.get(warehouseName);
             if (warehouse == null) {
-                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
             }
             return warehouse;
         }
@@ -88,7 +88,7 @@ public class WarehouseManager implements Writable {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             Warehouse warehouse = idToWh.get(warehouseId);
             if (warehouse == null) {
-                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
             }
             return warehouse;
         }
@@ -115,7 +115,7 @@ public class WarehouseManager implements Writable {
     public List<Long> getAllComputeNodeIds(String warehouseName) {
         Warehouse warehouse = nameToWh.get(warehouseName);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
         }
 
         return getAllComputeNodeIds(warehouse.getId());
@@ -130,7 +130,7 @@ public class WarehouseManager implements Writable {
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
         }
 
         try {
@@ -161,7 +161,7 @@ public class WarehouseManager implements Writable {
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
         }
 
         try {
@@ -187,7 +187,7 @@ public class WarehouseManager implements Writable {
     public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
         Warehouse warehouse = nameToWh.get(warehouseName);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
         }
 
         try {
@@ -231,7 +231,8 @@ public class WarehouseManager implements Writable {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
         if (computeNodeId == null) {
             Warehouse warehouse = idToWh.get(warehouseId);
-            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,
+                    String.format("name: %s", warehouse.getName()));
         }
         Preconditions.checkNotNull(computeNodeId);
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);

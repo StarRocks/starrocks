@@ -129,8 +129,7 @@ public:
     }
 
     void batch_finalize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
-                                       size_t state_offset, Column* to,
-                                       const std::vector<uint8_t>& selection) const override {
+                                       size_t state_offset, Column* to, const Filter& selection) const override {
         DCHECK(to->is_numeric());
         int64_t values[chunk_size];
         size_t selected_length = 0;
@@ -180,7 +179,7 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
-                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                  AggDataPtr* states, const Filter& filter) const override {
         if (columns[0]->has_null()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             const uint8_t* null_data = nullable_column->immutable_null_column_data().data();

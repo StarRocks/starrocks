@@ -33,6 +33,21 @@ select * from hive_sql_test_${uuid0}.test_oss.test_hive_view;
 -- result:
 1
 -- !result
-drop catalog hive_sql_test_${uuid0}
+create external catalog unified_catalog_${uuid0} PROPERTIES ("type"="unified",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}",
+    "unified.metastore.type"="hive"
+);
+-- result:
+-- !result
+refresh external table unified_catalog_${uuid0}.test_oss.test_hive_view;
+-- result:
+-- !result
+drop catalog unified_catalog_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sql_test_${uuid0};
 -- result:
 -- !result

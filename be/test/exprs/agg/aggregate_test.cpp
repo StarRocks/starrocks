@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -23,6 +24,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/group_concat.h"
@@ -65,12 +67,19 @@ public:
     void SetUp() override {
         utils = new FunctionUtils();
         ctx = utils->get_fn_ctx();
+        _allocator = std::make_unique<CountingAllocatorWithHook>();
+        tls_agg_state_allocator = _allocator.get();
     }
-    void TearDown() override { delete utils; }
+    void TearDown() override {
+        delete utils;
+        tls_agg_state_allocator = nullptr;
+        _allocator.reset();
+    }
 
 private:
     FunctionUtils* utils{};
     FunctionContext* ctx{};
+    std::unique_ptr<CountingAllocatorWithHook> _allocator;
 };
 
 class ManagedAggrState {
@@ -129,7 +138,7 @@ template <>
 ColumnPtr gen_input_column1<Slice>() {
     auto column = BinaryColumn::create();
     std::vector<Slice> strings{{"ddd"}, {"ddd"}, {"eeeee"}, {"ff"}, {"ff"}, {"ddd"}};
-    column->append_strings(strings);
+    column->append_strings(strings.data(), strings.size());
     return column;
 }
 
@@ -137,7 +146,7 @@ template <>
 ColumnPtr gen_input_column2<Slice>() {
     auto column2 = BinaryColumn::create();
     std::vector<Slice> strings2{{"kkk"}, {"k"}, {"kk"}, {"kkk"}};
-    column2->append_strings(strings2);
+    column2->append_strings(strings2.data(), strings2.size());
     return column2;
 }
 
@@ -679,7 +688,7 @@ TEST_F(AggregateTest, test_maxby) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -735,7 +744,7 @@ TEST_F(AggregateTest, test_minby) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"ccc"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -795,7 +804,7 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -860,7 +869,7 @@ TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"xxx"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -2671,6 +2680,31 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(26, offsets->get_data().back());
+}
+
+TEST_F(AggregateTest, test_get_aggregate_function_by_type) {
+    {
+        std::vector<TypeDescriptor> arg_types = {
+                AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
+                AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
+        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+        auto* array_agg_func =
+                get_aggregate_function("array_agg2", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(array_agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+        auto* agg_func =
+                get_aggregate_function("group_concat", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
+        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+        auto* agg_func = get_aggregate_function("avg", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
 }
 
 } // namespace starrocks

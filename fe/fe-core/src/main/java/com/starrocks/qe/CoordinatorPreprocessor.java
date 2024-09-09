@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
@@ -36,6 +37,7 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -258,6 +260,14 @@ public class CoordinatorPreprocessor {
         executionDAG.finalizeDAG();
     }
 
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws UserException {
+        execFragment.getScanRangeAssignment().clear();
+        for (FragmentInstance instance : execFragment.getInstances()) {
+            instance.getNode2ScanRanges().clear();
+        }
+        fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
+    }
+
     private void validateExecutionDAG() throws StarRocksPlannerException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             DataSink sink = execFragment.getPlanFragment().getSink();
@@ -296,33 +306,31 @@ public class CoordinatorPreprocessor {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
             return null;
         }
-        SessionVariable sessionVariable = connect.getSessionVariable();
+
+        final ResourceGroupMgr resourceGroupMgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
+        final SessionVariable sessionVariable = connect.getSessionVariable();
         TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
-            if (rgName.equalsIgnoreCase(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME)) {
-                ResourceGroup defaultMVResourceGroup = new ResourceGroup();
-                defaultMVResourceGroup.setId(ResourceGroup.DEFAULT_MV_WG_ID);
-                defaultMVResourceGroup.setName(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
-                defaultMVResourceGroup.setVersion(ResourceGroup.DEFAULT_MV_VERSION);
-                resourceGroup = defaultMVResourceGroup.toThrift();
-            }
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(rgName);
         }
 
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
         if (resourceGroup == null) {
             Set<Long> dbIds = connect.getCurrentSqlDbIds();
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
-                    connect, queryType, dbIds);
+            resourceGroup = resourceGroupMgr.chooseResourceGroup(connect, queryType, dbIds);
+        }
+
+        if (resourceGroup == null) {
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         if (resourceGroup != null) {

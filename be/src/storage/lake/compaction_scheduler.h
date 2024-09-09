@@ -70,6 +70,16 @@ public:
 
     bool allow_partial_success() const;
 
+    void set_last_check_time(int64_t now) {
+        std::lock_guard l(_mtx);
+        _last_check_time = now;
+    }
+
+    int64_t last_check_time() const {
+        std::lock_guard l(_mtx);
+        return _last_check_time;
+    }
+
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
 
@@ -80,6 +90,9 @@ private:
     ::google::protobuf::Closure* _done;
     Status _status;
     int64_t _timeout_deadline_ms;
+    // compaction's last check time in second, initialized when first put into task queue,
+    // used to help check whether it's valid periodically, task's in queue time is considered
+    int64_t _last_check_time;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 

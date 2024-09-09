@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 部署后设置
@@ -74,7 +74,7 @@ displayed_sidebar: "Chinese"
   SET GLOBAL pipeline_dop = 0;
   ```
 
-有关系统变量的更多信息，请参阅 [系统变量](../reference/System_variable.md)。
+有关系统变量的更多信息，请参阅 [系统变量](../sql-reference/System_variable.md)。
 
 ## 设置用户属性
 
@@ -82,7 +82,7 @@ displayed_sidebar: "Chinese"
 
 ```SQL
 -- 将 <username> 替换为需要增加最大连接数的用户名。
-SET PROPERTY FOR '<username>' 'max_user_connections' = '1000';
+ALTER USER '<username>' SET PROPERTIES ("max_user_connections" = "1000");
 ```
 
 ## 下一步

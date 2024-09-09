@@ -17,6 +17,7 @@ package com.starrocks.connector.delta;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import io.delta.kernel.data.ColumnVector;
@@ -25,10 +26,16 @@ import io.delta.kernel.data.Row;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.replay.LogReplay;
 import io.delta.kernel.internal.util.Utils;
+import io.delta.kernel.types.IntegerType;
+import io.delta.kernel.types.StringType;
+import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.spark.util.SizeEstimator;
 import org.assertj.core.util.Sets;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
@@ -39,6 +46,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.connector.delta.DeltaLakeTestBase.getAddFileEntry;
@@ -53,7 +61,9 @@ public class DeltaLakeParquetHandlerTest {
 
     private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>>  checkpointCache = CacheBuilder.newBuilder()
             .expireAfterWrite(3600, TimeUnit.SECONDS)
-            .maximumSize(100)
+            .weigher((key, value) ->
+                    Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+            .maximumWeight(1024 * 1024)
             .build(new CacheLoader<>() {
                 @NotNull
                 @Override
@@ -110,5 +120,49 @@ public class DeltaLakeParquetHandlerTest {
         Assert.assertEquals(18, partitionValues.size());
         Assert.assertFalse(checkpointCache.asMap().isEmpty());
         Assert.assertTrue(checkpointCache.asMap().containsKey(Pair.create(path, readSchema)));
+    }
+
+    @Test
+    public void testCheckpointCache() throws ExecutionException {
+        LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache = CacheBuilder.newBuilder()
+                .expireAfterWrite(3600, TimeUnit.SECONDS)
+                .weigher((key, value) ->
+                        Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .maximumWeight(1024 * 2)
+                .concurrencyLevel(1)
+                .build(new CacheLoader<>() {
+                    @NotNull
+                    @Override
+                    public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first, pair.second, hdfsConfiguration);
+                    }
+                });
+        List<ColumnarBatch> columnarBatches = Lists.newArrayList();
+        new MockUp<DeltaLakeParquetHandler>() {
+            @Mock
+            public List<ColumnarBatch> readParquetFile(@NotNull String path, @NotNull StructType schema,
+                                                       @NotNull Configuration hdfsConfiguration) {
+                return columnarBatches;
+            }
+        };
+
+        List<StructField> fields = ImmutableList.of(
+                new StructField("col1", IntegerType.INTEGER, true),
+                new StructField("col2", StringType.STRING, true)
+        );
+        StructType deltaType = new io.delta.kernel.types.StructType(fields);
+
+        String location1 = "hdfs://127.0.0.1:9000/delta_lake/00000000000000000030.checkpoint.parquet.1";
+        Pair<String, StructType> pair1 = Pair.create(location1, deltaType);
+
+        checkpointCache.get(pair1);
+        Assert.assertEquals(1, checkpointCache.size());
+
+        String location2 = "hdfs://127.0.0.1:9000/delta_lake/00000000000000000030.checkpoint.parquet.2";
+        Pair<String, StructType> pair2 = Pair.create(location2, deltaType);
+        checkpointCache.get(pair2);
+        Assert.assertEquals(1, checkpointCache.size());
+        Assert.assertFalse(checkpointCache.asMap().containsKey(pair1));
+        Assert.assertTrue(checkpointCache.asMap().containsKey(pair2));
     }
 }

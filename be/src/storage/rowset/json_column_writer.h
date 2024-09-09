@@ -53,7 +53,7 @@ protected:
     Status _write_flat_column();
 
 private:
-    Status _flat_column(const Column* json_data);
+    Status _flat_column(std::vector<ColumnPtr>& json_datas);
 
 protected:
     ColumnMetaPB* _json_meta;
@@ -64,6 +64,9 @@ protected:
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
     std::vector<ColumnPtr> _flat_columns;
+
+    std::vector<ColumnPtr> _json_datas;
+    size_t _estimate_size = 0;
 
     bool _has_remain;
     bool _is_flat = false;

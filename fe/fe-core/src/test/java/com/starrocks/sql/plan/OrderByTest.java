@@ -678,12 +678,22 @@ class OrderByTest extends PlanTestBase {
         assertContains(plan, expectedPlan);
     }
 
+    @ParameterizedTest
+    @MethodSource("duplicateAliasSql")
+    void testDuplicateAlias(String sql, String expectedPlan) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, expectedPlan);
+    }
+
     private static Stream<Arguments> allOrderBySql() {
         return Stream.concat(successToStrictSql(), failToStrictSql());
     }
 
     private static Stream<Arguments> successToStrictSql() {
         List<Arguments> list = Lists.newArrayList();
+        list.add(Arguments.of("select *, v1, abs(v1) v1 from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct *, v1, abs(v1) v1 from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1, * from t0  order by 1", "order by: <slot 4> 4: abs ASC"));
         list.add(Arguments.of("select * from t0 order by 1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select abs(v1) v1, * from t0  order by 1", "order by: <slot 4> 4: abs ASC"));
         list.add(Arguments.of("select distinct * from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
@@ -705,9 +715,6 @@ class OrderByTest extends PlanTestBase {
 
     private static Stream<Arguments> failToStrictSql() {
         List<Arguments> list = Lists.newArrayList();
-        list.add(Arguments.of("select *, v1, abs(v1) v1 from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
-        list.add(Arguments.of("select distinct *, v1, abs(v1) v1 from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
-        list.add(Arguments.of("select distinct abs(v1) v1, * from t0  order by 1", "order by: <slot 4> 4: abs ASC"));
         list.add(Arguments.of("select distinct *, v1, abs(v1) v1 from t0  order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select v1, max(v2) v1 from t0 group by v1  order by abs(v1)", "order by: <slot 5> 5: abs ASC"));
         list.add(Arguments.of("select max(v2) v1, v1 from t0 group by v1  order by abs(v1)", "order by: <slot 5> 5: abs ASC"));
@@ -715,10 +722,42 @@ class OrderByTest extends PlanTestBase {
         list.add(Arguments.of("select max(v2) v2, v2 from t0 group by v2  order by max(v2)", "order by: <slot 4> 4: max ASC"));
         list.add(Arguments.of("select upper(v1) v1, *, v1 from t0 order by v1", "order by: <slot 4> 4: upper ASC"));
         list.add(Arguments.of("select *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
-        list.add(Arguments.of("select distinct upper(v1) v1, *, v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct  v1, *, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct upper(v1) v1, *, v1 from t0 order by v1", "order by: <slot 4> 4: upper ASC"));
         list.add(Arguments.of("select distinct *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct abs(v1) v1, v1 from t0 order by v1", "order by: <slot 4> 4: abs ASC"));
 
+        return list.stream();
+    }
+
+    private static Stream<Arguments> duplicateAliasSql() {
+        List<Arguments> list = Lists.newArrayList();
+        list.add(Arguments.of("select *, v1 cc, v2 cc from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select v1 cc, abs(v2) cc from t0 order by v1 ", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct v1 cc, v2 cc from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select v1 cc, v2 cc, abs(v3) ccc from t0 order by abs(ccc)", "order by: <slot 5> 5: abs ASC"));
+        list.add(Arguments.of("select count(v1) cnt, count(v2) cnt from t0 group by v3 order by abs(v3)",
+                "3:SORT\n" +
+                        "  |  order by: <slot 6> 6: abs ASC\n" +
+                        "  |  offset: 0\n" +
+                        "  |  \n" +
+                        "  2:Project\n" +
+                        "  |  <slot 4> : 4: count\n" +
+                        "  |  <slot 5> : 5: count\n" +
+                        "  |  <slot 6> : abs(3: v3)"));
+        list.add(Arguments.of("select v1 cc, v2 cc from (select abs(v1) v1, abs(v2) v2, v3 from t0) t1 order by v3",
+                "2:SORT\n" +
+                        "  |  order by: <slot 3> 3: v3 ASC\n" +
+                        "  |  offset: 0\n" +
+                        "  |  \n" +
+                        "  1:Project\n" +
+                        "  |  <slot 3> : 3: v3\n" +
+                        "  |  <slot 4> : abs(1: v1)\n" +
+                        "  |  <slot 5> : abs(2: v2)"));
+        list.add(Arguments.of("select v1 v3, v2 cc from (select abs(v1) v1, abs(v2) v2, v3 from t0) t1 order by t1.v3",
+                "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select v1, v2 cc from (select abs(v1) v1, abs(v2) v2, v3 from t0) t1 order by t1.v3",
+                "order by: <slot 3> 3: v3 ASC"));
         return list.stream();
     }
 }

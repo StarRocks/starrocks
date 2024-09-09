@@ -1,6 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['analytic']
+sidebar_position: 0.9
 ---
 
 # 使用窗口函数组织过滤数据

@@ -137,7 +137,7 @@ public class RestoreJobPrimaryKeyTest {
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
-            new BlobStorage("broker", Maps.newHashMap()));
+                new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
 
@@ -151,10 +151,6 @@ public class RestoreJobPrimaryKeyTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = id.getAndIncrement();
@@ -264,8 +260,8 @@ public class RestoreJobPrimaryKeyTest {
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+                    jobInfo, false, 3, 100000,
+                    globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
     }
 
     @Ignore
@@ -301,7 +297,7 @@ public class RestoreJobPrimaryKeyTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    task.getSignature(), taskStatus);
+                        task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
@@ -334,7 +330,7 @@ public class RestoreJobPrimaryKeyTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    agentTask.getSignature(), taskStatus);
+                        agentTask.getSignature(), taskStatus);
             request.setDownloaded_tablet_ids(downloadedTabletIds);
             Assert.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
         }
@@ -366,7 +362,7 @@ public class RestoreJobPrimaryKeyTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    agentTask.getSignature(), taskStatus);
+                        agentTask.getSignature(), taskStatus);
             job.finishDirMoveTask((DirMoveTask) agentTask, request);
         }
 

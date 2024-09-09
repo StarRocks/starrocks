@@ -75,6 +75,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
@@ -100,6 +101,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TVectorSearchOptions;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -184,6 +186,8 @@ public class OlapScanNode extends ScanNode {
 
     private Map<Long, Long> scanPartitionVersions = Maps.newHashMap();
 
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -197,6 +201,10 @@ public class OlapScanNode extends ScanNode {
 
     public Map<Long, Long> getScanPartitionVersions() {
         return scanPartitionVersions;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -517,7 +525,7 @@ public class OlapScanNode extends ScanNode {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
-                ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
         }
         for (Tablet tablet : tablets) {
@@ -756,6 +764,13 @@ public class OlapScanNode extends ScanNode {
                 output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation)
                         .append("\n");
             }
+            if (ConnectContext.get() != null && Config.enable_experimental_vector == true) {
+                if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                    output.append(prefix).append("VECTORINDEX: ON").append("\n");
+                } else {
+                    output.append(prefix).append("VECTORINDEX: OFF").append("\n");
+                }
+            }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("PREDICATES: ").append(
                         getExplainString(conjuncts)).append("\n");
@@ -920,7 +935,8 @@ public class OlapScanNode extends ScanNode {
                     col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
                     columnsDesc.add(tColumn);
                 }
-                if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                // process schema has order by columns
+                if (indexMeta.getSortKeyIdxes() != null) {
                     for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                         Column col = indexMeta.getSchema().get(sortKeyIdx);
                         keyColumnNames.add(col.getName());
@@ -1020,6 +1036,18 @@ public class OlapScanNode extends ScanNode {
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.olap_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+            }
+
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                TVectorSearchOptions tVectorSearchOptions = new TVectorSearchOptions();
+                tVectorSearchOptions.setEnable_use_ann(true);
+                tVectorSearchOptions.setVector_limit_k(vectorSearchOptions.getVectorLimitK());
+                tVectorSearchOptions.setVector_distance_column_name(vectorSearchOptions.getVectorDistanceColumnName());
+                tVectorSearchOptions.setQuery_vector(vectorSearchOptions.getQueryVector());
+                tVectorSearchOptions.setVector_range(vectorSearchOptions.getVectorRange());
+                tVectorSearchOptions.setResult_order(vectorSearchOptions.getResultOrder());
+                tVectorSearchOptions.setUse_ivfpq(vectorSearchOptions.isUseIVFPQ());
+                msg.olap_scan_node.setVector_search_options(tVectorSearchOptions);
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);

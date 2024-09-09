@@ -19,8 +19,8 @@
 #include <boost/locale/encoding_utf.hpp>
 #include <memory>
 
-#include "match_operator.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/match_operator.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"

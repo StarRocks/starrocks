@@ -95,11 +95,15 @@ CONF_Int32(push_worker_count_high_priority, "3");
 
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
+// The min count of thread to publish version per transaction
+CONF_mInt32(transaction_publish_version_thread_pool_num_min, "0");
 
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
 CONF_mInt32(get_pindex_worker_count, "0");
+CONF_mInt32(transaction_apply_thread_pool_num_min, "0");
+CONF_Int32(transaction_apply_worker_idle_time_ms, "500");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -782,15 +786,6 @@ CONF_mBool(pipeline_print_profile, "false");
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
 CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
-// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
-// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
-// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
-//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
-CONF_Int64(pipeline_scan_queue_mode, "0");
-// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
-// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
-CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
-CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
@@ -855,6 +850,9 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // value is greater than 0 and less than 1000.
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage specialized for rename_file operation.
+// if this parameter is 0, use object_storage_request_timeout_ms instead.
+CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
@@ -1228,6 +1226,9 @@ CONF_Int64(query_cache_capacity, "536870912");
 // ranges in [1,16], default value is 4.
 CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
+// Used by vector query cache, 500MB in default
+CONF_Int64(vector_query_cache_capacity, "536870912");
+
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
@@ -1253,6 +1254,8 @@ CONF_String(rocksdb_db_options_string, "create_if_missing=true;create_missing_co
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
+// mem limit for partition hash join probe side buffer
+CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
 CONF_mInt64(wait_apply_time, "6000"); // 6s
@@ -1272,11 +1275,15 @@ CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
-// Used by default mv resource group
-CONF_mDouble(default_mv_resource_group_memory_limit, "0.8");
-CONF_mInt32(default_mv_resource_group_cpu_limit, "1");
-CONF_mInt32(default_mv_resource_group_concurrency_limit, "0");
-CONF_mDouble(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
+// Used by default mv resource group.
+// These parameters are deprecated because now FE store and persist default_mv_wg.
+CONF_Double(default_mv_resource_group_memory_limit, "0.8");
+CONF_Int32(default_mv_resource_group_cpu_limit, "1");
+CONF_Int32(default_mv_resource_group_concurrency_limit, "0");
+CONF_Double(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
+
+CONF_Bool(enable_resource_group_bind_cpus, "true");
+CONF_mBool(enable_resource_group_cpu_borrowing, "true");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
@@ -1299,7 +1306,7 @@ CONF_mInt32(finish_publish_version_internal, "100");
 
 CONF_mBool(enable_stream_load_verbose_log, "false");
 
-CONF_mInt32(get_txn_status_internal_sec, "30");
+CONF_mInt32(get_txn_status_internal_sec, "10");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 
@@ -1324,8 +1331,14 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
 CONF_mBool(enable_json_flat, "true");
 
-// extract flat json column when row_num * null_factor < null_row_num
-CONF_mDouble(json_flat_null_factor, "0.4");
+// enable compaction is base on flat json, not whole json
+CONF_mBool(enable_compaction_flat_json, "true");
+
+// direct read flat json
+CONF_mBool(enable_lazy_dynamic_flat_json, "true");
+
+// extract flat json column when row_num * null_factor > null_row_num
+CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
 CONF_mDouble(json_flat_sparsity_factor, "0.9");
@@ -1358,6 +1371,9 @@ CONF_mInt64(jit_lru_cache_size, "0");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
+
+// default not to build the empty index
+CONF_mInt32(config_tenann_default_build_threshold, "0");
 
 // Set to true to enable socket_keepalive option in brpc
 CONF_mBool(brpc_socket_keepalive, "false");
@@ -1400,5 +1416,38 @@ CONF_mString(try_release_resource_before_core_dump, "data_cache");
 
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
+
+// vector index
+// Enable caching index blocks for IVF-family vector indexes
+CONF_mBool(enable_vector_index_block_cache, "true");
+
+// concurrency of building index
+CONF_mInt32(config_vector_index_build_concurrency, "8");
+
+// default not to build the empty index
+CONF_mInt32(config_vector_index_default_build_threshold, "0");
+
+// When upgrade thrift to 0.20.0, the MaxMessageSize member defines the maximum size of a (received) message, in bytes.
+// The default value is represented by a constant named DEFAULT_MAX_MESSAGE_SIZE, whose value is 100 * 1024 * 1024 bytes.
+// This will cause FE to fail during deserialization when the returned result set is larger than 100M. Therefore,
+// we set a default value of 1G and the maximum configurable value is 2G.
+CONF_mInt32(thrift_max_message_size, "1073741824");
+
+// MaxFrameSize limits the size of one frame of data for the TFramedTransport. Since all implementations currently send
+// messages in one frame only if TFramedTransport is used, this value may interfere with MaxMessageSize.
+// In the case of an conflict, the smaller value of the two is used (see remark below). The default value is called
+// DEFAULT_MAX_FRAME_SIZE and has a value of 16384000 bytes. This value is used consistently across all Thrift libraries,
+// so we use the same value with the old version.
+CONF_mInt32(thrift_max_frame_size, "16384000");
+
+// The RecursionLimit defines, how deep structures may be nested into each other. The default named DEFAULT_RECURSION_DEPTH
+// allows for structures nested up to 64 levels deep.
+CONF_mInt32(thrift_max_recursion_depth, "64");
+
+// if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
+// for now, only support non-pk LAKE compaction in size tierd compaction.
+CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// chunk size used by lake compaction
+CONF_mInt32(lake_compaction_chunk_size, "4096");
 
 } // namespace starrocks::config

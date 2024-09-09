@@ -192,7 +192,7 @@ public class SubfieldAccessPathNormalizer {
 
         @Override
         public Optional<AccessPath> visitCall(CallOperator call, List<Optional<AccessPath>> childrenAccessPaths) {
-            if (!PruneSubfieldRule.SUPPORT_FUNCTIONS.contains(call.getFnName())) {
+            if (!PruneSubfieldRule.PRUNE_FUNCTIONS.contains(call.getFnName())) {
                 return Optional.empty();
             }
 

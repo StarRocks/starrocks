@@ -1,0 +1,12 @@
+diff --git a/src/client/linux/handler/minidump_descriptor.h b/src/client/linux/handler/minidump_descriptor.h
+index c7e4f2b..f30ce91 100644
+--- a/src/client/linux/handler/minidump_descriptor.h
++++ b/src/client/linux/handler/minidump_descriptor.h
+@@ -34,6 +34,7 @@
+ #include <sys/types.h>
+ 
+ #include <string>
++#include <cstdint>
+ 
+ #include "client/linux/handler/microdump_extra_info.h"
+ #include "common/using_std_string.h"

@@ -101,11 +101,11 @@ public:
     void swap_column(Column& rhs) override;
     void reset_column() override;
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override;
+    Status capacity_limit_reached() const override;
     void check_or_die() const override;
 
     // support flat json on storage
-    bool is_flat_json() const { return !_flat_column_paths.empty(); }
+    bool is_flat_json() const { return !_flat_columns.empty(); }
 
     ColumnPtr& get_flat_field(const std::string& path);
 

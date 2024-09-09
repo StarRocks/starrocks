@@ -23,6 +23,8 @@ import java.lang.reflect.Field;
  */
 public final class Platform {
 
+    public static final String UT_KEY = "starrocks.fe.test";
+
     private static final Unsafe _UNSAFE;
 
     public static final int BOOLEAN_ARRAY_OFFSET;
@@ -96,8 +98,7 @@ public final class Platform {
     }
 
     public static boolean isTesting() {
-        return System.getProperties().containsKey("starrocks.fe.test") &&
-                System.getProperty("starrocks.fe.test").equals("1");
+        return System.getProperties().containsKey(UT_KEY) && Boolean.parseBoolean(System.getProperty(UT_KEY));
     }
 
     public static void freeMemory(long address) {

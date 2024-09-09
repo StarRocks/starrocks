@@ -183,6 +183,20 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testGetTableThrowConnectorException() {
+        new Expectations(hmsOps) {
+            {
+                hmsOps.getTable("acid_db", "acid_table");
+                result = new StarRocksConnectorException("hive acid table is not supported");
+                minTimes = 1;
+            }
+        };
+
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> hiveMetadata.getTable("acid_db", "acid_table"));
+    }
+
+    @Test
     public void testTableExists() {
         boolean exists = hiveMetadata.tableExists("db1", "tbl1");
         Assert.assertTrue(exists);
@@ -270,7 +284,7 @@ public class HiveMetadataTest {
                 "  `col2` int(11) DEFAULT NULL,\n" +
                 "  `col1` int(11) DEFAULT NULL\n" +
                 ")\n" +
-                "PARTITION BY ( col1 )\n" +
+                "PARTITION BY (col1)\n" +
                 "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
@@ -722,7 +736,7 @@ public class HiveMetadataTest {
 
             @Mock
             public boolean tableExists(String dbName, String tableName) {
-                return true;
+                return false;
             }
         };
 
@@ -743,6 +757,12 @@ public class HiveMetadataTest {
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
 
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
         Assert.assertTrue(hiveMetadata.createTable(createTableStmt));
     }
 

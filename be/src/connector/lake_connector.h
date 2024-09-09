@@ -69,6 +69,9 @@ private:
     void update_realtime_counter(Chunk* chunk);
     void update_counter();
 
+    Status init_column_access_paths(Schema* schema);
+    Status prune_schema_by_access_paths(Schema* schema);
+
 private:
     const LakeDataSourceProvider* _provider;
     const TInternalScanRange _scan_range;
@@ -77,7 +80,7 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     PredicateTree _non_pushdown_pred_tree;
-    std::vector<uint8_t> _selection;
+    Filter _selection;
 
     ObjectPool _obj_pool;
 
@@ -101,6 +104,8 @@ private:
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
+
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
@@ -174,6 +179,10 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+
+    RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
+    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
+    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };
 
 // ================================

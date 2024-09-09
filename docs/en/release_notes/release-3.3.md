@@ -1,8 +1,105 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 3.3
+
+:::warning
+
+After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+
+:::
+
+## 3.3.3
+
+Release date: September 5, 2024
+
+### New Features
+
+- Supports user-level variables. [#48477](https://github.com/StarRocks/starrocks/pull/48477)
+- Supports Delta Lake Catalog metadata cache with manual and periodic refresh strategies. [#46526](https://github.com/StarRocks/starrocks/pull/46526) [#49069](https://github.com/StarRocks/starrocks/pull/49069)
+- Supports loading JSON types from Parquet files. [#49385](https://github.com/StarRocks/starrocks/pull/49385)
+- JDBC SQL Server Catalog supports queries with LIMIT.  [#48248](https://github.com/StarRocks/starrocks/pull/48248)
+- Shared-data clusters support Partial Updates with INSERT INTO. [#49336](https://github.com/StarRocks/starrocks/pull/49336)
+
+### Improvements
+
+- Optimized error messages for loading:
+  - When memory limits are reached during loading, the IP of the corresponding BE node is returned for easier troubleshooting. [#49335](https://github.com/StarRocks/starrocks/pull/49335)
+  - Detailed messages are provided when CSV data is loaded to target table columns that are not long enough. [#49713](https://github.com/StarRocks/starrocks/pull/49713)
+  - Specific node information is provided when Kerberos authentication fails in Broker Load. [#46085](https://github.com/StarRocks/starrocks/pull/46085)
+- Optimized the partitioning mechanism during data loading to reduce memory usage in the initial stage. [#47976](https://github.com/StarRocks/starrocks/pull/47976)
+- Optimized memory usage for shared-nothing clusters by limiting metadata memory usage to avoid issues when there are too many Tablets or Segment files. [#49170](https://github.com/StarRocks/starrocks/pull/49170)
+- Optimized the performance of queries using `max(partition_column)`. [#49391](https://github.com/StarRocks/starrocks/pull/49391)
+- Partition pruning is used to optimize query performance when the partition column is a generated column (a column that is calculated based on a native column in the table), and the query predicate filter condition includes the native column. [#48692](https://github.com/StarRocks/starrocks/pull/48692)
+- Supports masking authentication information for Files() and PIPE. [#47629](https://github.com/StarRocks/starrocks/pull/47629)
+- Introduced a new statement `show proc '/global_current_queries'` to view queries running on all FE nodes. `show proc '/current_queries'` only shows queries running on the current FE node. [#49826](https://github.com/StarRocks/starrocks/pull/49826)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The source cluster's BE nodes were mistakenly added to the current cluster when exporting data to the destination cluster via StarRocks external tables. [#49323](https://github.com/StarRocks/starrocks/pull/49323)
+- TINYINT data type returned NULL when StarRocks reads ORC files using `select * from files` from clusters deployed on aarch64 machines. [#49517](https://github.com/StarRocks/starrocks/pull/49517)
+- Stream Load fails when loading JSON files containing large Integer types. [#49927](https://github.com/StarRocks/starrocks/pull/49927)
+- Incorrect schema is returned due to improper handling of invisible characters when users load CSV files with Files(). [#49718](https://github.com/StarRocks/starrocks/pull/49718)
+- An issue with temporary partition replacement in tables with multiple partition columns. [#49764](https://github.com/StarRocks/starrocks/pull/49764)
+
+### Behavior Changes
+
+- Introduced a new parameter `object_storage_rename_file_request_timeout_ms` to better accommodate backup scenarios with cloud object storage. This parameter will be used as the backup timeout, with a default value of 30 seconds. [#49706](https://github.com/StarRocks/starrocks/pull/49706)
+- `to_json`, `CAST(AS MAP)`, and `STRUCT AS JSON` will return NULL instead of throwing an error by default when the conversion fails. You can allow errors by setting the system variable `sql_mode` to `ALLOW_THROW_EXCEPTION`. [#50157](https://github.com/StarRocks/starrocks/pull/50157)
+
+## 3.3.2
+
+Release date: August 8, 2024
+
+### New Features
+
+- Supports renaming columns within StarRocks internal tables. [#47851](https://github.com/StarRocks/starrocks/pull/47851)
+- Supports reading Iceberg views. Currently, only Iceberg views created through StarRocks are supported. [#46273](https://github.com/StarRocks/starrocks/issues/46273)
+- [Experimental] Supports adding and removing fields of STRUCT-type data. [#46452](https://github.com/StarRocks/starrocks/issues/46452)
+- Supports specifying the compression level for ZSTD compression format during table creation. [#46839](https://github.com/StarRocks/starrocks/issues/46839)
+- Added the following FE dynamic parameters to limit table boundaries. [#47896](https://github.com/StarRocks/starrocks/pull/47869)
+
+  Including:
+
+  - `auto_partition_max_creation_number_per_load`
+  - `max_partition_number_per_table`
+  - `max_bucket_number_per_partition`
+  - `max_column_number_per_table`
+
+- Supports runtime optimization of table data distribution, ensuring optimization tasks do not conflict with DML operations on the table. [#43747](https://github.com/StarRocks/starrocks/pull/43747)
+- Added an observability interface for the global hit rate of Data Cache. [#48450](https://github.com/StarRocks/starrocks/pull/48450)
+- Added the SQL function array_repeat. [#47862](https://github.com/StarRocks/starrocks/pull/47862)
+
+### Improvements
+
+- Optimized the error messages for Routine Load failures due to Kafka authentication failures. [#46136](https://github.com/StarRocks/starrocks/pull/46136) [#47649](https://github.com/StarRocks/starrocks/pull/47649)
+- Stream Load supports using `\t` and `\n` as row and column delimiters. Users do not need to convert them to their hexadecimal ASCII codes. [#47302](https://github.com/StarRocks/starrocks/pull/47302)
+- Optimized the asynchronous statistics collection method for write operators, addressing the issue of increased latency when there are many import tasks. [#48162](https://github.com/StarRocks/starrocks/pull/48162)
+- Added the following BE dynamic parameters to control resource hard limits during loading, reducing the impact on BE stability when writing a large number of tablets. [#48495](https://github.com/StarRocks/starrocks/pull/48495)
+
+  Including:
+
+  - `load_process_max_memory_hard_limit_ratio`
+  - `enable_new_load_on_memory_limit_exceeded`
+
+- Added consistency checks for Column IDs within the same table to prevent Compaction errors. [#48498](https://github.com/StarRocks/starrocks/pull/48628)
+- Supports persisting PIPE metadata to prevent metadata loss due to FE restarts. [#48852](https://github.com/StarRocks/starrocks/pull/48852)
+
+### Bug Fixes
+
+- The process could not end when creating a dictionary from an FE Follower. [#47802](https://github.com/StarRocks/starrocks/pull/47802)
+- Inconsistent information returned by the SHOW PARTITIONS command in shared-data clusters and shared-nothing clusters. [#48647](https://github.com/StarRocks/starrocks/pull/48647)
+- Data errors caused by incorrect type handling when loading data from JSON fields to `ARRAY<BOOLEAN>` columns. [#48387](https://github.com/StarRocks/starrocks/pull/48387)
+- The `query_id` column in `information_schema.task_runs` cannot be queried. [#48876](https://github.com/StarRocks/starrocks/pull/48879)
+- During Backup, multiple requests for the same operation are submitted to different Brokers, causing request errors. [#48856](https://github.com/StarRocks/starrocks/pull/48856)
+- Downgrading to versions earlier than v3.1.11 or v3.2.4 causes Primary Key table index decompression failures, leading to query errors. [#48659](https://github.com/StarRocks/starrocks/pull/48659)
+
+### Downgrade Notes
+
+If you have used the renaming column feature, you must rename the columns to their original names before downgrading your cluster to an earlier version. You can check the audit log of your cluster after upgrading to identify any `ALTER TABLE RENAME COLUMN` operations and the original names of the columns.
 
 ## 3.3.1 (Yanked)
 

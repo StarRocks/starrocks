@@ -479,6 +479,8 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
         return "InternalError";
     case TIMEOUT:
         return "TimeOut";
+    case QUERY_FINISHED:
+        return "QueryFinished";
     default:
         return "UnknownReason";
     }
@@ -615,7 +617,7 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
             return;
         }
-        pipeline::DriverExecutor* driver_executor = _exec_env->wg_driver_executor();
+        pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
         driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
     }
 }

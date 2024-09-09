@@ -214,7 +214,7 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
-                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                  AggDataPtr* states, const Filter& filter) const override {
         auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
         std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
@@ -320,7 +320,7 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
-                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                 AggDataPtr* states, const Filter& filter) const override {
         // batch merge
         auto& helper = JVMFunctionHelper::getInstance();
 

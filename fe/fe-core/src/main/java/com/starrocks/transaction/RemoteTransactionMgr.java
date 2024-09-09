@@ -53,14 +53,15 @@ public class RemoteTransactionMgr {
 
         switch (sourceType) {
             case BACKEND_STREAMING:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
+                GlobalTransactionMgr.checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
                         Config.min_load_timeout_second);
                 break;
             case LAKE_COMPACTION:
                 // skip transaction timeout range check for lake compaction
                 break;
             default:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
+                GlobalTransactionMgr.checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second,
+                        Config.min_load_timeout_second);
         }
 
 
@@ -179,16 +180,6 @@ public class RemoteTransactionMgr {
             throw new AbortTransactionException(errStr);
         } else {
             LOG.info("abort remote, txn_id: {}", transactionId);
-        }
-    }
-
-    private static void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
-            throws AnalysisException {
-        if (timeoutSecond > maxLoadTimeoutSecond ||
-                timeoutSecond < minLoadTimeOutSecond) {
-            throw new AnalysisException("Invalid timeout. Timeout should between "
-                    + minLoadTimeOutSecond + " and " + maxLoadTimeoutSecond
-                    + " seconds");
         }
     }
 }

@@ -248,10 +248,18 @@ add_library(Storage STATIC
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
     index/inverted/inverted_index_iterator.cpp
-    index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
     index/inverted/clucene/clucene_plugin.cpp
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
-    index/inverted/clucene/match_operator.cpp)
+    index/inverted/clucene/match_operator.cpp
+    index/vector/empty_index_reader.cpp
+    index/vector/vector_index_builder_factory.cpp
+    index/vector/vector_index_writer.cpp
+    index/vector/vector_index_builder.cpp
+    index/vector/vector_index_reader_factory.cpp
+    index/vector/tenann_index_reader.cpp
+    index/vector/tenann/del_id_filter.cpp
+    index/vector/tenann/tenann_index_builder.cpp
+    index/vector/tenann/tenann_index_utils.cpp)

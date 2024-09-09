@@ -44,7 +44,7 @@ index 88d793f..8b90782 100644
  #  include "glog/export.h"
  #endif
 diff --git a/src/logging.cc b/src/logging.cc
-index fc63995..16b2cb1 100644
+index fc63995..970cba1 100644
 --- a/src/logging.cc
 +++ b/src/logging.cc
 @@ -31,6 +31,7 @@
@@ -99,22 +99,24 @@ index fc63995..16b2cb1 100644
      if (log != nullptr) {
        log->logger_->Flush();
      }
-@@ -904,8 +919,12 @@ inline void LogDestination::LogToAllLogfiles(
+@@ -903,10 +918,12 @@ inline void LogDestination::LogToAllLogfiles(
+   } else if (FLAGS_logtostderr) {  // global flag: never log to file
      ColoredWriteToStderr(severity, message, len);
    } else {
-     for (int i = severity; i >= 0; --i) {
+-    for (int i = severity; i >= 0; --i) {
 -      LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(i), timestamp,
 -                                        message, len);
-+      if (severity >= 1) {
-+          LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(1), timestamp, message, len);
-+          LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(0), timestamp, message, len);
-+      } else if (severity == 0) {
-+          LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(0), timestamp, message, len);
-+      } else {}
-     }
+-    }
++    if (severity >= 1) {
++        LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(1), timestamp, message, len);
++        LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(0), timestamp, message, len);
++    } else if (severity == 0) {
++        LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(0), timestamp, message, len);
++    } else {}
    }
  }
-@@ -997,7 +1016,8 @@ LogFileObject::LogFileObject(LogSeverity severity, const char* base_filename)
+ 
+@@ -997,7 +1014,8 @@ LogFileObject::LogFileObject(LogSeverity severity, const char* base_filename)
        filename_extension_(),
        severity_(severity),
        rollover_attempt_(kRolloverAttemptFrequency - 1),
@@ -124,7 +126,7 @@ index fc63995..16b2cb1 100644
  
  LogFileObject::~LogFileObject() {
    std::lock_guard<std::mutex> l{mutex_};
-@@ -1058,14 +1078,9 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
+@@ -1058,14 +1076,9 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
    }
    string_filename += filename_extension_;
    const char* filename = string_filename.c_str();
@@ -142,7 +144,7 @@ index fc63995..16b2cb1 100644
    if (!fd) return false;
  #ifdef HAVE_FCNTL
    // Mark the file close-on-exec. We don't really care if this fails
-@@ -1112,6 +1127,9 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
+@@ -1112,6 +1125,9 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
      }
    }
  #endif
@@ -152,7 +154,7 @@ index fc63995..16b2cb1 100644
    // We try to create a symlink called <program_name>.<severity>,
    // which is easier to use.  (Every time we create a new logfile,
    // we destroy the old symlink and create a new one, so it always
-@@ -1155,6 +1173,55 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
+@@ -1155,6 +1171,55 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
    return true;  // Everything worked
  }
  
@@ -208,7 +210,7 @@ index fc63995..16b2cb1 100644
  void LogFileObject::Write(
      bool force_flush, const std::chrono::system_clock::time_point& timestamp,
      const char* message, size_t message_len) {
-@@ -1171,16 +1238,58 @@ void LogFileObject::Write(
+@@ -1171,16 +1236,58 @@ void LogFileObject::Write(
                        filename_extension_);
      }
    };
@@ -268,7 +270,7 @@ index fc63995..16b2cb1 100644
    // If there's no destination file, make one before outputting
    if (file_ == nullptr) {
      // Try to rollover the log file every 32 log messages.  The only time
-@@ -1190,21 +1299,35 @@ void LogFileObject::Write(
+@@ -1190,21 +1297,35 @@ void LogFileObject::Write(
      rollover_attempt_ = 0;
  
      struct ::tm tm_time;
@@ -312,7 +314,7 @@ index fc63995..16b2cb1 100644
      const string& time_pid_string = time_pid_stream.str();
  
      if (base_filename_selected_) {
-@@ -1238,8 +1361,8 @@ void LogFileObject::Write(
+@@ -1238,8 +1359,8 @@ void LogFileObject::Write(
        // deadlock. Simply use a name like invalid-user.
        if (uidname.empty()) uidname = "invalid-user";
  
@@ -323,7 +325,7 @@ index fc63995..16b2cb1 100644
        // We're going to (potentially) try to put logs in several different dirs
        const vector<string>& log_dirs = GetLoggingDirectories();
  
-@@ -1263,7 +1386,7 @@ void LogFileObject::Write(
+@@ -1263,7 +1384,7 @@ void LogFileObject::Write(
      }
  
      // Write a header message into the log file

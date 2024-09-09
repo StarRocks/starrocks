@@ -297,7 +297,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void releaseBeSlot(RoutineLoadTaskInfo routineLoadTaskInfo) {
         // release the BE slot
-        routineLoadManager.releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
+        routineLoadManager.releaseBeTaskSlot(
+                routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
         // set beId to INVALID_BE_ID to avoid release slot repeatedly,
         // when job set to paused/cancelled, the slot will be release again if beId is not INVALID_BE_ID
         routineLoadTaskInfo.setBeId(RoutineLoadTaskInfo.INVALID_BE_ID);
@@ -356,7 +357,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     private boolean allocateTaskToBe(RoutineLoadTaskInfo routineLoadTaskInfo) {
         if (routineLoadTaskInfo.getPreviousBeId() != -1L) {
             if (routineLoadManager.takeNodeById(routineLoadTaskInfo.getWarehouseId(),
-                    routineLoadTaskInfo.getPreviousBeId()) != -1L) {
+                    routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getPreviousBeId()) != -1L) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                             .add("job_id", routineLoadTaskInfo.getJobId())
@@ -370,7 +371,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId);
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId, routineLoadTaskInfo.getJobId());
         if (beId < 0) {
             return false;
         }

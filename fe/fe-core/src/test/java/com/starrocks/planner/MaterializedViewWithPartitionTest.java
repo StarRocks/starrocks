@@ -45,6 +45,16 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 " PARTITION p5 values less than (\"3000\"))" +
                 " distributed by hash(c1)" +
                 " properties (\"replication_num\"=\"1\");");
+
+        starRocksAssert.withTable("create table test_base_part3(c1 int, c2 bigint, c3 date, c4 bigint)" +
+                " partition by range(c3) (" +
+                " partition p1 values less than (\"20240603\")," +
+                " partition p2 values less than (\"20240604\")," +
+                " partition p3 values less than (\"20240605\")," +
+                " PARTITION p4 values less than (\"20240606\")," +
+                " PARTITION p5 values less than (\"20240607\"))" +
+                " distributed by hash(c1)" +
+                " properties (\"replication_num\"=\"1\");");
     }
 
     // MV's partition columns is the same with the base table, and mv has partition filter predicates.
@@ -491,6 +501,25 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=5/5");
 
         starRocksAssert.dropMaterializedView("partial_mv_8");
+    }
+
+    @Test
+    public void testPartitionPrune_WithFunc() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `partial_mv_14`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`c3`)\n" +
+                "REFRESH MANUAL\n" +
+                "AS SELECT `c3`, sum(`c4`) AS `total`\n" +
+                "FROM `test_mv`.`test_base_part3`\n" +
+                "GROUP BY `c3`;");
+        refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_14");
+
+        sql("select c3, sum(c4) from test_base_part3 where date_format(c3,'%Y%m%d')='20240602' group by c3")
+                .contains("TABLE: partial_mv_14\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: '%Y%m%d') = '20240602', date_format(col$: c3\n" +
+                        "     partitions=1/5");
+        starRocksAssert.dropMaterializedView("partial_mv_14");
     }
 
     @Test

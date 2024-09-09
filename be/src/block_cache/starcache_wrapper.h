@@ -38,6 +38,8 @@ public:
 
     Status read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) override;
 
+    bool exist(const std::string& key) const override;
+
     Status remove(const std::string& key) override;
 
     Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;

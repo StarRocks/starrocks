@@ -38,6 +38,11 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @SerializedName(value = "metaValue")
     private boolean metaValue;
 
+    // for deserialization
+    public LakeTableAlterMetaJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
+
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);

@@ -388,6 +388,17 @@ public class RangePartitionInfo extends PartitionInfo {
         return sortedList;
     }
 
+    @Override
+    public List<Long> getSortedPartitions(boolean asc) {
+        Map<Long, Range<PartitionKey>> tmpMap = idToRange;
+        List<Map.Entry<Long, Range<PartitionKey>>> sortedList = Lists.newArrayList(tmpMap.entrySet());
+        sortedList.sort(asc ? RangeUtils.RANGE_MAP_ENTRY_COMPARATOR : RangeUtils.RANGE_MAP_ENTRY_COMPARATOR.reversed());
+        if (sortedList.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        return sortedList.stream().map(Map.Entry::getKey).collect(Collectors.toList());
+    }
+
     // get a sorted range list, exclude partitions which ids are in 'excludePartitionIds'
     public List<Range<PartitionKey>> getRangeList(Set<Long> excludePartitionIds, boolean isTemp) {
         Map<Long, Range<PartitionKey>> tmpMap = idToRange;

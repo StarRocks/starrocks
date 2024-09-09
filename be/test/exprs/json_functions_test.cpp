@@ -28,6 +28,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -779,7 +780,9 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
         return;
     }
 
+    config::enable_lazy_dynamic_flat_json = false;
     auto ret = JsonFunctions::json_exists(ctx.get(), columns);
+    config::enable_lazy_dynamic_flat_json = true;
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
                         ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());

@@ -95,13 +95,13 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
         // build hive column names index.
         int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
         for (int i = 0; i < size; i++) {
-            std::string col_name = format_column_name(hive_column_names->at(i), case_sensitive);
+            std::string col_name = Utils::format_name(hive_column_names->at(i), case_sensitive);
             name_set->insert(col_name);
         }
     } else {
         // build orc column names index.
         for (int i = 0; i < root_type.getSubtypeCount(); i++) {
-            std::string col_name = format_column_name(root_type.getFieldName(i), case_sensitive);
+            std::string col_name = Utils::format_name(root_type.getFieldName(i), case_sensitive);
             name_set->insert(col_name);
         }
     }

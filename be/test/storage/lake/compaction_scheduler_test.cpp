@@ -120,7 +120,7 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, true /* is_checker */, cb);
-        ctx.last_check_time = 0;
+        cb->set_last_check_time(0);
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
     }
 }

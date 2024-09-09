@@ -169,6 +169,8 @@ public:
     // For UT test now
     const std::vector<BatchPKsPtr>& upserts() const { return _upserts; }
 
+    static int64_t calc_upt_memory_usage_per_row(Rowset* rowset);
+
 private:
     Status _load_upserts(Rowset* rowset, MemTracker* update_mem_tracker, uint32_t start_idx, uint32_t* end_idx);
 
@@ -246,6 +248,7 @@ private:
     // when generate delta column group finish, these fields will be filled
     bool _finalize_finished = false;
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
+    std::map<string, string> _column_to_expr_value;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {

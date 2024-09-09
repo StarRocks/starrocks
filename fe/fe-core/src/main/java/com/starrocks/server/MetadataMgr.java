@@ -54,6 +54,8 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -519,14 +521,6 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-    public Table getTable(Long databaseId, Long tableId) {
-        Database database = localMetastore.getDb(databaseId);
-        if (database == null) {
-            return null;
-        }
-        return database.getTable(tableId);
-    }
-
     public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
@@ -545,7 +539,7 @@ public class MetadataMgr {
 
     public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
-            return Optional.ofNullable(getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+            return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
         } else {
             return Optional.ofNullable(
                     getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
@@ -586,7 +580,7 @@ public class MetadataMgr {
         if (database == null) {
             return null;
         }
-        return database.getTable(tableId);
+        return localMetastore.getTable(database.getId(), tableId);
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {
@@ -694,7 +688,7 @@ public class MetadataMgr {
                 connectorTableColumnStats = new ConnectorTableColumnStats(
                         ColumnStatistic.buildFrom(columnStatisticList.get(i).getColumnStatistic()).
                                 setHistogram(histogram).build(),
-                        columnStatisticList.get(i).getRowCount());
+                        columnStatisticList.get(i).getRowCount(), columnStatisticList.get(i).getUpdateTime());
             } else {
                 connectorTableColumnStats = columnStatisticList.get(i);
             }
@@ -792,6 +786,19 @@ public class MetadataMgr {
             }
         }
         return new ArrayList<>();
+    }
+
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getRemoteFilesAsync(table, params);
+            } catch (Exception e) {
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return RemoteFileInfoDefaultSource.EMPTY;
     }
 
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {

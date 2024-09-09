@@ -109,12 +109,8 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
         predicate = obj_pool.add(
                 new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
     } else {
-        std::vector<std::string> str_codes;
-        str_codes.reserve(dict_codes.size());
-        for (int code : dict_codes) {
-            str_codes.emplace_back(std::to_string(code));
-        }
-        predicate = obj_pool.add(new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
+        predicate = obj_pool.add(new_dictionary_code_in_predicate(get_type_info(kDictCodeFieldType), slot_id,
+                                                                  dict_codes, dict_value_column->size()));
     }
 
     // deal with if NULL works or not.

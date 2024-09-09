@@ -64,7 +64,7 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         Long timeoutMillis = txnOperationParams.getTimeoutMillis();
         LOG.info("Handle transaction without channel info, label: {}", label);
 
-        Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(dbName))
+        Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
                 .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
 
         TransactionResult result = null;

@@ -63,7 +63,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (scan.hasTableHints()) {
                 return false;
             }
-            // Avoid rewrite the query repeat, add a shortcut.
+            // Avoid rewriting the query repeat, add a shortcut.
             Table table = scan.getTable();
             if ((table instanceof MaterializedView) && ((MaterializedView) (table)).getRefreshScheme().isSync()) {
                 return false;
@@ -227,6 +227,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             IMaterializedViewMetricsEntity mvEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
             mvEntity.increaseQueryMatchedCount(1L);
+            // mark: query has been rewritten by mv success.
+            context.getQueryMaterializationContext().markRewriteSuccess(true);
 
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();

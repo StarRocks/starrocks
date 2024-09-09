@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Post-deployment setup
@@ -77,7 +77,7 @@ To allow your StarRocks cluster to work properly in production, you need to set 
   SET GLOBAL pipeline_dop = 0;
   ```
 
-For more information about system variables, see [System variables](../reference/System_variable.md).
+For more information about system variables, see [System variables](../sql-reference/System_variable.md).
 
 ## Set user property
 
@@ -85,7 +85,7 @@ If you have created new users in your cluster, you need to enlarge their maximum
 
 ```SQL
 -- Replace <username> with the username you want to enlarge the maximum connection number for.
-SET PROPERTY FOR '<username>' 'max_user_connections' = '1000';
+ALTER USER '<username>' SET PROPERTIES ("max_user_connections" = "1000");
 ```
 
 ## What to do next
