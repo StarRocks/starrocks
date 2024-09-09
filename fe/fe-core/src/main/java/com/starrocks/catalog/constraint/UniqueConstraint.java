@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.catalog;
+package com.starrocks.catalog.constraint;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
@@ -28,12 +28,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// unique constraint is used to guide optimizer rewrite for now,
-// and is not enforced during ingestion.
-// the unique property of data should be guaranteed by user.
-//
-// a table may have multi unique constraints.
-public class UniqueConstraint {
+// Unique constraint is used to guide optimizer rewrite for now, and is not enforced during ingestion.
+// User should guarantee the unique property of data.
+// A table may have multi unique constraints.
+public class UniqueConstraint extends Constraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
@@ -41,9 +39,10 @@ public class UniqueConstraint {
 
     private final String catalogName;
     private final String dbName;
-    private final String tableName;
+    private String tableName;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<String> uniqueColumns) {
+        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
@@ -173,5 +172,15 @@ public class UniqueConstraint {
         }
 
         uniqueConstraints.add(new UniqueConstraint(catalogName, dbName, tableName, uniqueConstraintColumns));
+    }
+
+    public void onTableRename(Table newTable, String oldTableName) {
+        LOG.info("UniqueConstraint onTableRename: {} -> {}", oldTableName, newTable.getName());
+        if (this.tableName.equals(oldTableName)) {
+            this.tableName = newTable.getName();
+        } else {
+            LOG.warn("UniqueConstraint onTableRename: old table name not match, old: {}, new: {}",
+                    oldTableName, newTable.getName());
+        }
     }
 }

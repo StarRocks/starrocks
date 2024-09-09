@@ -14,8 +14,8 @@
 package com.starrocks.sql.optimizer.operator;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.ForeignKeyConstraint;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;

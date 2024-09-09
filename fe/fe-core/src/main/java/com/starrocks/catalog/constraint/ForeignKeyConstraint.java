@@ -12,30 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.catalog;
+package com.starrocks.catalog.constraint;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-// foreign key constraint is used to guide optimizer rewrite for now,
-// and is not enforced during ingestion.
-// the foreign key property of data should be guaranteed by user.
-//
-// a table may have multi foreign key constraints.
-public class ForeignKeyConstraint {
+// Foreign-key constraint is used to guide optimizer rewrite for now, and is not enforced during ingestion.
+// User should guarantee the foreign key property of data.
+// A table may have multi-foreign-key constraints.
+public class ForeignKeyConstraint extends Constraint {
     private static final Logger LOG = LogManager.getLogger(ForeignKeyConstraint.class);
 
     private static final String FOREIGN_KEY_REGEX = "((\\.?\\w+:?-?)*)\\s*\\(((,?\\s*\\w+\\s*)+)\\)\\s+((?i)REFERENCES)\\s+" +
@@ -59,6 +63,7 @@ public class ForeignKeyConstraint {
             BaseTableInfo parentTableInfo,
             BaseTableInfo childTableInfo,
             List<Pair<String, String>> columnRefPairs) {
+        super(ConstraintType.FOREIGN_KEY, TABLE_PROPERTY_CONSTRAINT);
         this.parentTableInfo = parentTableInfo;
         this.childTableInfo = childTableInfo;
         this.columnRefPairs = columnRefPairs;
@@ -205,5 +210,65 @@ public class ForeignKeyConstraint {
 
         sb.append(Joiner.on(";").join(constraintStrs));
         return sb.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(columnRefPairs, parentTableInfo, childTableInfo);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || !(obj instanceof ForeignKeyConstraint)) {
+            return false;
+        }
+        ForeignKeyConstraint that = (ForeignKeyConstraint) obj;
+        return Objects.equals(columnRefPairs, that.columnRefPairs) &&
+                Objects.equals(parentTableInfo, that.parentTableInfo) &&
+                Objects.equals(childTableInfo, that.childTableInfo);
+    }
+
+    public void onTableRename(Table table, String oldTableName) {
+        LOG.info("ForeignKeyConstraint onTableRename, table: {}, oldTableName: {}, parentTableInfo: {}, childTableInfo: {}",
+                table.getName(), oldTableName, parentTableInfo, childTableInfo);
+        // parentTableInfo: how to know which other tables that ref for this table?
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        Set<TableWithFKConstraint> refConstraints = globalConstraintManager.getRefConstraints(table);
+        if (!CollectionUtils.isEmpty(refConstraints)) {
+            for (TableWithFKConstraint tableWithFKConstraint : refConstraints) {
+                Table childTable = tableWithFKConstraint.getChildTable();
+                if (childTable == null) {
+                    continue;
+                }
+                List<ForeignKeyConstraint> fks = childTable.getForeignKeyConstraints();
+                if (!CollectionUtils.isEmpty(fks)) {
+                    // refresh child table's foreign key constraints
+                    List<ForeignKeyConstraint> newFKConstraints = Lists.newArrayList();
+                    boolean isChanged = false;
+                    for (ForeignKeyConstraint fk : fks) {
+                        if (fk.parentTableInfo != null) {
+                            fk.parentTableInfo.onTableRename(table, oldTableName);
+                            isChanged = true;
+                        }
+                        newFKConstraints.add(fk);
+                    }
+                    if (isChanged) {
+                        LOG.info("refresh child table's foreign key constraints, parent table, child table: {}, " +
+                                "newFKConstraints: {}", table.getName(), childTable.getName(), newFKConstraints);
+                        childTable.setForeignKeyConstraints(newFKConstraints);
+                    }
+                }
+            }
+        }
+
+        // childTableInfo
+        if (childTableInfo != null) {
+            childTableInfo.onTableRename(table, oldTableName);
+        }
+
+        // columnRefPairs: no needs to change after table rename
     }
 }

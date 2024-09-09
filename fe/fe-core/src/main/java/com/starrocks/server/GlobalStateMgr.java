@@ -67,7 +67,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -100,6 +99,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -573,6 +574,8 @@ public class GlobalStateMgr {
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
+    private final GlobalConstraintManager globalConstraintManager;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -810,6 +813,8 @@ public class GlobalStateMgr {
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
+
+        this.globalConstraintManager = new GlobalConstraintManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1090,6 +1095,10 @@ public class GlobalStateMgr {
 
     public ReplicationMgr getReplicationMgr() {
         return replicationMgr;
+    }
+
+    public GlobalConstraintManager getGlobalConstraintManager() {
+        return globalConstraintManager;
     }
 
     // Use tryLock to avoid potential deadlock
