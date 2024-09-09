@@ -69,6 +69,7 @@ public class TabletSchedCtxTest {
             .createType(PrimitiveType.TINYINT), true, null, "", "key1"));
 
     private static int TABLET_ID_1 = 50000;
+    private static int TABLET_ID_2 = 51000;
 
     private Backend be1;
     private Backend be2;
