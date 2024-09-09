@@ -659,8 +659,10 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                 _ignore_rowset_commit(version, rowset);
             } else {
                 RowsetMetaPB meta_pb;
-                if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
-                    rowset->rowset_meta()->get_meta_pb_without_schema(&meta_pb);
+                if (_tablet.is_update_schema_running()) {
+                    rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+                } else if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+                    meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
                 } else {
                     rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
                 }
@@ -746,8 +748,10 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     rowset->make_commit(version, rowsetid);
     span->AddEvent("save_meta_begin");
     RowsetMetaPB meta_pb;
-    if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
-        rowset->rowset_meta()->get_meta_pb_without_schema(&meta_pb);
+    if (_tablet.is_update_schema_running()) {
+        rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+    } else if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+        meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     } else {
         rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
     }
@@ -1677,6 +1681,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                             new_del_vecs, *index_meta, enable_persistent_index,
                                                             &full_rowset_meta_pb);
+                rowset->rowset_meta()->set_has_tablet_schema_pb(true);
             } else {
                 st.update(r.status());
             }
@@ -2618,6 +2623,13 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
             }
             min_readable_version = _edit_version_infos[0]->version.major_number();
         }
+    }
+
+    // rewrite rowset meta which without tablet schema to avoid `update_tablet_schema` cost
+    // too much time.
+    {
+        std::unique_lock wrlock(_tablet.get_header_lock());
+        rewrite_rs_meta();
     }
 
     // GC works that can be done outside of lock
@@ -5664,6 +5676,52 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
         }
     }
     _update_total_stats(version_info_apply.rowsets, nullptr, nullptr);
+}
+
+void TabletUpdates::rewrite_rs_meta() {
+    std::unordered_map<int64_t, RowsetSharedPtr> pending_rs;
+    std::vector<RowsetSharedPtr> published_rs;
+    {
+        std::lock_guard lg(_lock);
+        for (auto& [_, rs] : _rowsets) {
+            if (!rs->rowset_meta()->has_tablet_schema_pb()) {
+                published_rs.emplace_back(rs);
+            }
+        }
+
+        for (auto& [version, rs] : _pending_commits) {
+            if (!rs->rowset_meta()->has_tablet_schema_pb()) {
+                pending_rs[version] = rs;
+            }
+        }
+    }
+
+    for (auto& [version, rs] : _pending_commits) {
+        RowsetMetaPB meta_pb;
+        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+        Status st = TabletMetaManager::pending_rowset_commit(
+                _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
+                RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rs->rowset_id()));
+        LOG_IF(FATAL, !st.ok()) << "fail to save pending rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
+                                << ", rowset_id=" << rs->rowset_id();
+        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+    }
+
+    auto kv_store = _tablet.data_dir()->get_meta();
+    rocksdb::WriteBatch wb;
+    for (auto& rs : published_rs) {
+        RowsetMetaPB meta_pb;
+        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+        Status st = TabletMetaManager::put_rowset_meta(_tablet.data_dir(), &wb, _tablet.tablet_id(), meta_pb);
+        LOG_IF(FATAL, !st.ok()) << "fail to put published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
+                                << ", rowset_id=" << rs->rowset_id();
+    }
+    Status st = kv_store->write_batch(&wb);
+    LOG_IF(FATAL, !st.ok()) << "fail to write published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
+                            << ", rowset nul=" << published_rs.size();
+    for (auto& rs : published_rs) {
+        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+    }
 }
 
 } // namespace starrocks

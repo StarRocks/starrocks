@@ -335,6 +335,13 @@ public:
     // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
     void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
 
+    [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
+    std::shared_mutex& get_schema_lock() { return _schema_lock; }
+    bool add_committed_rowset_unlock(const RowsetSharedPtr& rowset);
+    bool add_committed_rowset(const RowsetSharedPtr& rowset);
+    void erase_committed_rowset_unlock(const RowsetSharedPtr& rowset);
+    void erase_committed_rowset(const RowsetSharedPtr& rowset);
+
     void on_shutdown() override;
 
 private:
@@ -372,6 +379,7 @@ private:
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
     void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
+    void _get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -416,7 +424,7 @@ private:
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
     // Keep the rowsets committed but not publish which rowset meta without schema
-    std::unordered_map<RowsetId, RowsetSharedPtr> _committed_rs_map;
+    std::map<RowsetId, RowsetSharedPtr> _committed_rs_map;
 
     // gtid -> version
     std::map<int64_t, int64_t> _gtid_to_version_map;
@@ -459,6 +467,7 @@ private:
     bool _will_be_force_replaced = false;
 
     std::atomic<bool> _is_dropping{false};
+    std::atomic<bool> _update_schema_running{false};
 };
 
 inline bool Tablet::init_succeeded() {

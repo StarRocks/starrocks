@@ -584,7 +584,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 
     RowsetMetaPB rowset_meta_pb;
     if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
-        rowset->rowset_meta()->get_meta_pb_without_schema(&rowset_meta_pb);
+        rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     } else {
         rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
     }
@@ -639,15 +639,28 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     return Status::OK();
 }
 
-bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
-    std::unique_lock wrlock(_meta_lock);
+bool Tablet::add_committed_rowset_unlock(const RowsetSharedPtr& rowset) {
     if (rowset->rowset_meta()->tablet_schema() != nullptr &&
         rowset->rowset_meta()->tablet_schema()->id() != TabletSchema::invalid_id() &&
         rowset->rowset_meta()->tablet_schema()->id() == _max_version_schema->id()) {
-        _committed_rs_map[rowsset->rowset_id()] = rowset;
+        _committed_rs_map[rowset->rowset_id()] = rowset;
         return true;
     }
     return false;
+}
+
+bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+    std::shared_lock l(_schema_lock);
+    return add_committed_rowset_unlock(rowset);
+}
+
+void Tablet::erase_committed_rowset_unlock(const RowsetSharedPtr& rowset) {
+    _committed_rs_map.erase(rowset->rowset_id());
+}
+
+void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
+    std::shared_lock l(_schema_lock);
+    return erase_committed_rowset_unlock(rowset);
 }
 
 void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
@@ -1821,9 +1834,27 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
+// for non-pk tablet, all published rowset will be rewrite when save `tablet_meta`
+// for pk tablet, we need to get the rowset which without `tablet_schema` and rewrite
+// the rowsets in `_committed_rs_map` is committed success but not publish yet, so if we update the
+// tablet schema, we need to rewrite.
+void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs) {
+    for (auto& [_, rs] : _committed_rs_map) {
+        if (!rs->rowset_meta()->has_tablet_schema_pb()) {
+            rewrite_meta_rs.emplace_back(rs);
+        }
+    }
+
+    if (_updates) {
+        _updates->rewrite_rs_meta();
+    }
+}
+
 void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard l0(_meta_lock);
     std::lock_guard l1(_schema_lock);
+    DeferOp defer([&]() { _update_schema_running.store(false); });
+    _update_schema_running.store(true);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
         if (tablet_schema->id() == TabletSchema::invalid_id()) {
@@ -1836,6 +1867,7 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         std::vector<RowsetSharedPtr> rewrite_meta_rs;
         _get_rewrite_meta_rs(rewrite_meta_rs);
         _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir);
+        _committed_rs_map.clear();
     }
 }
 

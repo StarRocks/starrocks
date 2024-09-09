@@ -264,7 +264,6 @@ public:
             // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
             _schema = TabletSchema::copy(*tablet_schema_ptr);
         }
-        _has_tablet_schema_pb = true;
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }
@@ -277,9 +276,7 @@ public:
 
     bool has_tablet_schema_pb() { return _has_tablet_schema_pb; }
 
-    void set_has_tablet_schema_pb(bool has_tablet_schema_pb ) {
-        _has_tablet_schema_pb = has_tablet_schema_pb;
-    }
+    void set_has_tablet_schema_pb(bool has_tablet_schema_pb) { _has_tablet_schema_pb = has_tablet_schema_pb; }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {

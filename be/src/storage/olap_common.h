@@ -353,6 +353,8 @@ struct RowsetId {
     int64_t mi = 0;
     int64_t lo = 0;
 
+    RowsetId() = default;
+
     void init(std::string_view rowset_id_str);
 
     // to compatiable with old version

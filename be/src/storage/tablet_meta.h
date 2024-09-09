@@ -164,7 +164,8 @@ public:
     const TabletSchema& tablet_schema() const;
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
-    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
+    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
+                            DataDir* data_dir);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
     const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
@@ -268,7 +269,6 @@ private:
     // These stale rowsets meta are been removed when rowsets' pathVersion is expired,
     // this policy is judged and computed by TimestampedVersionTracker.
     std::vector<RowsetMetaSharedPtr> _stale_rs_metas;
-    std::map<RowsetId, RowsetMetaSharedPtr> _committed_rs_metas;
 
     DelPredicateArray _del_pred_array;
     bool _in_restore_mode = false;

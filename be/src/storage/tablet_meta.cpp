@@ -41,6 +41,7 @@
 #include "storage/metadata_util.h"
 #include "storage/olap_common.h"
 #include "storage/protobuf_file.h"
+#include "storage/rowset/rowset_meta_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/tablet_updates.h"
@@ -201,11 +202,20 @@ Status TabletMeta::save_meta(DataDir* data_dir) {
     return _save_meta(data_dir);
 }
 
-void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& rewrite_meta_rs, DataDir* data_dir) {
+void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
+                                    DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
     _schema = tablet_schema;
     // TODO(zhangqiang)
-    // write rowset meta/tablet meta
+    // write rowset_meta in batch
+    for (auto& rs : committed_rs) {
+        RowsetMetaPB meta_pb;
+        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+        Status res = RowsetMetaManager::save(data_dir->get_meta(), tablet_uid(), meta_pb);
+        LOG_IF(FATAL, !res.ok()) << "failed to save rowset " << rs->rowset_id() << " to local meta store: " << res;
+        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+    }
+
     (void)_save_meta(data_dir);
 }
 
@@ -219,10 +229,10 @@ Status TabletMeta::_save_meta(DataDir* data_dir) {
     LOG_IF(FATAL, !st.ok()) << "fail to save tablet meta:" << st << ". tablet_id=" << tablet_id()
                             << ", schema_hash=" << schema_hash();
     for (auto& rs : _rs_metas) {
-        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+        rs->set_has_tablet_schema_pb(true);
     }
     for (const auto& rs : _inc_rs_metas) {
-        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+        rs->set_has_tablet_schema_pb(true);
     }
     return st;
 }

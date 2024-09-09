@@ -46,6 +46,7 @@
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "util/runtime_profile.h"
 #include "util/scoped_cleanup.h"
@@ -272,43 +273,39 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
             return Status::InternalError("tablet not exist during commit txn");
         }
 
-        bool skip_schema = tablet->add_committed_rowset(rowset_ptr);
-        if (skip_schema) {
-            rowset_ptr->rowset_meta()->set_has_tablet_schema_pb(false);
-        }
+        Status st;
         RowsetMetaPB rowset_meta_pb;
-        if (skip_schema) {
-            rowset_ptr->rowset_meta()->get_meta_pb_without_schema(&rowset_meta_pb);
+        bool skip_schema_in_rowset_meta = config::skip_schema_in_rowset_meta;
+        if (skip_schema_in_rowset_meta) {
+            // avoid `update_max_version_schema` and `commit_txn` run concurrency, so hold a read
+            // lock for `schema_lock` is enough
+            std::shared_lock l(tablet->get_schema_lock());
+            bool is_partial_update = rowset_ptr->rowset_meta()->get_meta_pb_without_schema().has_txn_meta();
+            if (!is_partial_update) {
+                bool skip_schema = tablet->add_committed_rowset_unlock(rowset_ptr);
+                if (skip_schema) {
+                    rowset_ptr->rowset_meta()->set_has_tablet_schema_pb(false);
+                    rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb_without_schema();
+                } else {
+                    rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+                }
+            } else {
+                rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+            }
+            st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         } else {
             rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+            st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         }
-        
-        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         if (!st.ok()) {
-            tablet->erase_committed_rowset(rowset_ptr);
+            if (skip_schema_in_rowset_meta) {
+                tablet->erase_committed_rowset_unlock(rowset_ptr);
+            }
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
                          << ", rowset_id: " << rowset_ptr->rowset_id();
             return Status::InternalError(
                     fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id, key.second));
-        }
-
-        // make sure no tablet schema update between `add_committed_rowset` and `save_rowset_meta`
-        // I think it is small probability, so add a check to avoid holding a meta lock for a long time
-        if (skip_schema) {
-            if (rowset_ptr->rowset_meta()->tablet_schema()->id() != tablet->tablet_schema()->id()) {
-                tablet->erase_committed_rowset(rowset_ptr);
-                RowsetMetaPB full_rowset_meta_pb;
-                rowset_ptr->rowset_meta()->get_full_meta_pb(&full_rowset_meta_pb);
-                st = RowsetMetaManager::save(meta, tablet_uid, full_rowset_meta_pb);
-                if (!st.ok()) {
-                    LOG(WARNING) << "Fail to save committed rowset. "
-                                 << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
-                                 << ", rowset_id: " << rowset_ptr->rowset_id();
-                    return Status::InternalError(
-                            fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id, key.second));
-                }
-            }
         }
     }
 
