@@ -3363,7 +3363,6 @@ Status PersistentIndex::_build_commit(TabletLoader* loader, PersistentIndexMetaP
 
 Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema,
                                         std::unique_ptr<Column> pk_column) {
-    CHECK_MEM_LIMIT("PersistentIndex::_insert_rowsets");
     std::vector<uint32_t> rowids;
     TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
     ChunkUniquePtr chunk_shared_ptr;

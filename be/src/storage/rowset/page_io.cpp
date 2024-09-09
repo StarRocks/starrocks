@@ -130,10 +130,6 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
 
 Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                         PageFooterPB* footer) {
-    // the function will be used by query or load, current load is not allowed to fail when memory reach the limit,
-    // so don't check when tls_thread_state.check is set to false
-    CHECK_MEM_LIMIT("read and decompress page");
-
     opts.sanity_check();
     opts.stats->total_pages_num++;
 

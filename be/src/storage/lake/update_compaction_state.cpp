@@ -33,7 +33,6 @@ CompactionState::~CompactionState() {
 
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
                                       const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
-    CHECK_MEM_LIMIT("CompactionState::load_segments");
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
     std::lock_guard<std::mutex> lg(_state_lock);
     if (pk_cols.empty() && rowset->num_segments() > 0) {

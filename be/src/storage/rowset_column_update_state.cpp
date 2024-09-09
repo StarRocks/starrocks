@@ -76,7 +76,6 @@ void RowsetColumnUpdateState::_release_upserts(uint32_t start_idx, uint32_t end_
 
 Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update_mem_tracker, uint32_t start_idx,
                                               uint32_t* end_idx) {
-    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_load_upserts");
     RowsetReleaseGuard guard(rowset->shared_from_this());
     if (_upserts.size() == 0) {
         _upserts.resize(rowset->num_update_files());
@@ -177,7 +176,6 @@ Status RowsetColumnUpdateState::_do_load(Tablet* tablet, Rowset* rowset, MemTrac
 
 Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t start_idx,
                                                                uint32_t end_idx, bool need_lock) {
-    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_prepare_partial_update_states");
     if (_partial_update_states.size() == 0) {
         _partial_update_states.resize(rowset->num_update_files());
     } else {
@@ -222,7 +220,6 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t start_idx,
                                                   uint32_t end_idx, EditVersion latest_applied_version,
                                                   const PrimaryIndex& index) {
-    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_resolve_conflict");
     int64_t t_start = MonotonicMillis();
     // rebuild src_rss_rowids;
     TRY_CATCH_BAD_ALLOC(_upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0));
@@ -313,7 +310,6 @@ static Status read_from_source_segment_and_update(
         Rowset* rowset, const Schema& schema, Tablet* tablet, OlapReaderStatistics* stats, int64_t version,
         RowsetSegmentId rowset_seg_id, const std::string& path,
         const std::function<Status(StreamChunkContainer, bool, int64_t)>& update_func) {
-    CHECK_MEM_LIMIT("RowsetColumnUpdateState::read_from_source_segment");
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     // We need to estimate each update rows size before it has been actually updated.
     const int64_t upt_memory_usage_per_row = RowsetColumnUpdateState::calc_upt_memory_usage_per_row(rowset);
@@ -455,7 +451,6 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
                                                             const Schema& partial_schema, Rowset* rowset,
                                                             OlapReaderStatistics* stats, MemTracker* tracker,
                                                             StreamChunkContainer container) {
-    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_update_source_chunk_by_upt");
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
@@ -664,7 +659,6 @@ static std::vector<T> append_fixed_batch(const std::vector<T>& base_array, size_
 Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
                                          PersistentIndexMetaPB& index_meta, MemTracker* tracker,
                                          vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index) {
-    CHECK_MEM_LIMIT("RowsetColumnUpdateState::finalize");
     if (_finalize_finished) return Status::OK();
     std::stringstream cost_str;
     MonotonicStopWatch watch;

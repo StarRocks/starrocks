@@ -994,7 +994,6 @@ Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_ver
 
 Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& version_info,
                                                           const RowsetSharedPtr& rowset) {
-    CHECK_MEM_LIMIT("TabletUpdates::_apply_column_partial_update_commit");
     auto span = Tracer::Instance().start_trace_tablet("apply_column_partial_update_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
     Status apply_st;
@@ -1205,7 +1204,6 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
 }
 
 Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
-    CHECK_MEM_LIMIT("TabletUpdates::_apply_normal_rowset_commit");
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
     Status apply_st;
@@ -2141,7 +2139,6 @@ Status TabletUpdates::_light_apply_compaction_commit(const EditVersion& version,
 }
 
 Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
-    CHECK_MEM_LIMIT("TabletUpdates::_apply_compaction_commit");
     const uint32_t rowset_id = version_info.compaction->output;
     Rowset* output_rowset = get_rowset(rowset_id).get();
     Status apply_st;

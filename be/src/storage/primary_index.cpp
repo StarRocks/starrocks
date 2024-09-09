@@ -123,7 +123,6 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
-        CHECK_MEM_LIMIT("HashIndexImpl::insert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -147,7 +146,6 @@ public:
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
-        CHECK_MEM_LIMIT("HashIndexImpl::insert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -163,7 +161,6 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes) override {
-        CHECK_MEM_LIMIT("HashIndexImpl::upsert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -187,7 +184,6 @@ public:
     [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                         const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                         vector<uint32_t>* failed) override {
-        CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -207,7 +203,6 @@ public:
 
     Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                        uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
-        CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -224,7 +219,6 @@ public:
     }
 
     Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
-        CHECK_MEM_LIMIT("HashIndexImpl::erase");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
@@ -240,7 +234,6 @@ public:
     }
 
     Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
-        CHECK_MEM_LIMIT("HashIndexImpl::get");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
@@ -307,7 +300,6 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
-        CHECK_MEM_LIMIT("FixSliceHashIndex::insert");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -362,7 +354,6 @@ public:
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
-        CHECK_MEM_LIMIT("FixSliceHashIndex::replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -377,7 +368,6 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes) override {
-        CHECK_MEM_LIMIT("FixSliceHashIndex::upsert");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -429,7 +419,6 @@ public:
     [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                         const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                         vector<uint32_t>* failed) override {
-        CHECK_MEM_LIMIT("FixSliceHashIndex::try_replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -475,7 +464,6 @@ public:
 
     Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                        uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
-        CHECK_MEM_LIMIT("FixSliceHashIndex::try_replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -520,7 +508,6 @@ public:
     }
 
     Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
-        CHECK_MEM_LIMIT("FixSliceHashIndex::erase");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -560,7 +547,6 @@ public:
     }
 
     Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
-        CHECK_MEM_LIMIT("FixSliceHashIndex::get");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -635,7 +621,6 @@ public:
     void reserve(size_t size) override { _map.reserve(size); }
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
-        CHECK_MEM_LIMIT("SliceHashIndex::insert");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
@@ -659,7 +644,6 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes) override {
-        CHECK_MEM_LIMIT("SliceHashIndex::upsert");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -682,7 +666,6 @@ public:
 
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes, uint32_t idx_begin,
                    uint32_t idx_end, const Column& pks) override {
-        CHECK_MEM_LIMIT("SliceHashIndex::replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
@@ -700,7 +683,6 @@ public:
     [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                         const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                         vector<uint32_t>* failed) override {
-        CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -718,7 +700,6 @@ public:
 
     Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                        uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
-        CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
@@ -735,7 +716,6 @@ public:
     }
 
     Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
-        CHECK_MEM_LIMIT("SliceHashIndex::erase");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
@@ -750,7 +730,6 @@ public:
     }
 
     Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
-        CHECK_MEM_LIMIT("SliceHashIndex::get");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
@@ -1167,7 +1146,6 @@ Status PrimaryIndex::abort() {
 }
 
 Status PrimaryIndex::_do_load(Tablet* tablet) {
-    CHECK_MEM_LIMIT("PrimaryIndex::_do_load");
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
     auto span = Tracer::Instance().start_trace_tablet("primary_index_load", tablet->tablet_id());

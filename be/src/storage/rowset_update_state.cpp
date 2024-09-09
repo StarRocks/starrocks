@@ -61,7 +61,6 @@ Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
 }
 
 Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk_column) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_load_deletes");
     DCHECK(_deletes.size() >= idx);
     // always one file for now.
     if (_deletes.size() == 0) {
@@ -89,7 +88,6 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
 }
 
 Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk_column) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_load_upserts");
     RowsetReleaseGuard guard(rowset->shared_from_this());
     DCHECK(_upserts.size() >= idx);
     if (_upserts.size() == 0) {
@@ -151,7 +149,6 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
 
 Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rowset_update_state_load");
-    CHECK_MEM_LIMIT("RowsetUpdateState::_do_load");
     auto span = Tracer::Instance().start_trace_txn_tablet("rowset_update_state_load", rowset->txn_id(),
                                                           tablet->tablet_id());
     _tablet_id = tablet->tablet_id();
@@ -315,7 +312,6 @@ void RowsetUpdateState::plan_read_by_rssid(const vector<uint64_t>& rowids, size_
 Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, Rowset* rowset, uint32_t idx,
                                                                 const std::vector<uint32_t>& update_column_ids,
                                                                 const TabletSchemaCSPtr& tablet_schema) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_value_columns");
     if (_partial_update_value_column_ids.empty()) {
         // need to init
         for (uint32_t cid : update_column_ids) {
@@ -362,7 +358,6 @@ Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, 
 // The caller should make sure `load_upserts` has been called success before call this function
 Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock,
                                                          const TabletSchemaCSPtr& tablet_schema) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_states");
     if (_partial_update_states.size() == 0) {
         _partial_update_states.resize(rowset->num_segments());
     }
@@ -579,7 +574,6 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
                                                       uint32_t segment_id, EditVersion latest_applied_version,
                                                       std::vector<uint32_t>& read_column_ids, const PrimaryIndex& index,
                                                       const TabletSchemaCSPtr& tablet_schema) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_check_and_resolve_conflict");
     if (_partial_update_states.size() <= segment_id || !_partial_update_states[segment_id].inited) {
         std::string msg = strings::Substitute(
                 "_check_and_reslove_conflict tablet:$0 rowset:$1 segment:$2 failed, partial_update_states size:$3",
@@ -704,7 +698,6 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                                 uint32_t rowset_id, uint32_t segment_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index, std::unique_ptr<Column>& delete_pks,
                                 int64_t* append_column_size) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::apply");
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();

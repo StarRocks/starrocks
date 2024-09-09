@@ -171,7 +171,6 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
 }
 
 Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_do_load_upserts");
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
@@ -236,7 +235,6 @@ static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
                                                                         const RowsetUpdateStateParams& params,
                                                                         bool need_lock) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_auto_increment_partial_update_states");
     const auto& txn_meta = params.op_write.txn_meta();
 
     uint32_t auto_increment_column_id = 0;
@@ -352,7 +350,6 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
 Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                                          bool need_lock) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_states");
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
 
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
@@ -406,7 +403,6 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                           std::map<int, FileInfo>* replace_segments,
                                           std::vector<std::string>* orphan_files) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::rewrite_segment");
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
     auto root_path = params.tablet->metadata_root_location();
@@ -496,7 +492,6 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
 
 Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                             int64_t base_version) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::_resolve_conflict");
     // There are two cases that we must resolve conflict here:
     // 1. Current transaction's base version isn't equal latest base version, which means that conflict happens.
     // 2. We use batch publish here. This transaction may conflict with a transaction in the same batch.
@@ -699,7 +694,6 @@ void RowsetUpdateState::release_segment(uint32_t segment_id) {
 }
 
 Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStateParams& params) {
-    CHECK_MEM_LIMIT("RowsetUpdateState::load_delete");
     // always one file for now.
     TRACE_COUNTER_SCOPE_LATENCY_US("load_delete_us");
     _deletes.resize(params.op_write.dels_size());

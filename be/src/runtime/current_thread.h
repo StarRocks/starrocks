@@ -34,18 +34,6 @@
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
 
-#define CHECK_MEM_LIMIT(err_msg)                                                                         \
-    do {                                                                                                 \
-        if (tls_thread_status.check_mem_limit()) {                                                       \
-            if (CurrentThread::mem_tracker() != nullptr) {                                               \
-                RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg));                 \
-            }                                                                                            \
-            if (CurrentThread::singleton_check_mem_tracker() != nullptr) {                               \
-                RETURN_IF_ERROR(CurrentThread::singleton_check_mem_tracker()->check_mem_limit(err_msg)); \
-            }                                                                                            \
-        }                                                                                                \
-    } while (0)
-
 namespace starrocks {
 
 class TUniqueId;
