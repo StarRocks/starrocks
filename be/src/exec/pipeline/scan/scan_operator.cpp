@@ -386,8 +386,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
-    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, 0,
-                          io_task_start_nano]() {
+    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, io_task_start_nano]() {
         if (auto sp = wp.lock()) {
             auto& chunk_source = _chunk_sources[chunk_source_index];
 
