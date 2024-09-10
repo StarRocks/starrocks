@@ -16,6 +16,7 @@ select * from files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}
 
 -- check schema
 desc t1;
+desc files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}/*', 'format'='csv', "csv.column_separator"=",","csv.row_delimiter"="\n");
 
 -- clean
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

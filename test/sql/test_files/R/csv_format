@@ -38,4 +38,12 @@ $3	decimal(38,9)	YES	false	None
 $4	boolean	YES	false	None	
 -- !result
 
+desc files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}/*', 'format'='csv', "csv.column_separator"=",","csv.row_delimiter"="\n");
+-- result:
+$1	bigint	YES
+$2	varchar(1048576)	YES
+$3	double	YES
+$4	boolean	YES
+-- !result
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
