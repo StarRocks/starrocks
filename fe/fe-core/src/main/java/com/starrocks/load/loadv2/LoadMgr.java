@@ -234,12 +234,10 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long registerLoadJob(String label, String dbName, long tableId, long txnId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows,
-                                int estimateFileNum, long estimateFileSize,
-                                TLoadJobType type, long timeout, Coordinator coordinator)
-            throws UserException {
-
+    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId,
+                                               EtlJobType jobType, long createTimestamp, long estimateScanRows,
+                                               int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
+                                               Coordinator coordinator) throws UserException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
@@ -258,7 +256,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         addLoadJob(loadJob);
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
-        return loadJob.getId();
+        return loadJob;
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {

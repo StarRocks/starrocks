@@ -39,6 +39,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -99,6 +100,7 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PARTITION_BY = "partition_by";
 
     public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
+    private static final String PROPERTY_STRICT_MODE = LoadStmt.STRICT_MODE;
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
@@ -119,6 +121,7 @@ public class TableFunctionTable extends Table {
     private int autoDetectSampleRows;
 
     private List<String> columnsFromPath = new ArrayList<>();
+    private boolean strictMode = false;
     private final Map<String, String> properties;
 
     private Optional<List<Integer>> partitionColumnIDs = Optional.empty();
@@ -248,6 +251,10 @@ public class TableFunctionTable extends Table {
             for (String col : colsFromPath) {
                 columnsFromPath.add(col.trim());
             }
+        }
+
+        if (properties.containsKey(PROPERTY_STRICT_MODE)) {
+            strictMode = Boolean.parseBoolean(properties.get(PROPERTY_STRICT_MODE));
         }
 
         if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
@@ -485,6 +492,10 @@ public class TableFunctionTable extends Table {
 
     public List<String> getColumnsFromPath() {
         return columnsFromPath;
+    }
+
+    public boolean isStrictMode() {
+        return strictMode;
     }
 
     @Override
