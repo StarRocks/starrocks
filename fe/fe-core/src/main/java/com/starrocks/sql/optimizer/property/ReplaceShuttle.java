@@ -50,6 +50,6 @@ public class ReplaceShuttle extends BaseScalarOperatorShuttle {
         if (replaceMap.containsKey(call)) {
             return replaceMap.get(call);
         }
-        return call;
+        return super.visitCall(call, context);
     }
 }
