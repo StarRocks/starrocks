@@ -66,7 +66,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -957,7 +956,7 @@ public class ConnectContext {
     }
 
     private boolean isExecLoadType() {
-        return executor != null && executor.getParsedStmt() instanceof DmlStmt;
+        return executor != null && executor.isExecLoadType();
     }
 
     public void checkTimeout(long now) {

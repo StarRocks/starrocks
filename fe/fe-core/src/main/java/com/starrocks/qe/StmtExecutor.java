@@ -470,6 +470,26 @@ public class StmtExecutor {
         return parsedStmt;
     }
 
+    public int getExecTimeout() {
+        return parsedStmt.getTimeout();
+    }
+
+    public String getExecType() {
+        if (parsedStmt instanceof InsertStmt || parsedStmt instanceof CreateTableAsSelectStmt) {
+            return "Insert";
+        } else if (parsedStmt instanceof UpdateStmt) {
+            return "Update";
+        } else if (parsedStmt instanceof DeleteStmt) {
+            return "Delete";
+        } else {
+            return "Query";
+        }
+    }
+
+    public boolean isExecLoadType() {
+        return parsedStmt instanceof DmlStmt || parsedStmt instanceof CreateTableAsSelectStmt;
+    }
+
     // Execute one statement.
     // Exception:
     //  IOException: talk with client failed.
@@ -2814,30 +2834,5 @@ public class StmtExecutor {
         queryDetail.setCatalog(ctx.getCurrentCatalog());
 
         QueryDetailQueue.addQueryDetail(queryDetail);
-    }
-
-    public int getExecTimeout() {
-        if (parsedStmt instanceof DmlStmt) {
-            int timeout = ((DmlStmt) parsedStmt).getTimeout();
-            return timeout != -1 ? timeout : context.getSessionVariable().getInsertTimeoutS();
-        }
-        if (parsedStmt instanceof CreateTableAsSelectStmt) {
-            InsertStmt insertStmt = ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt();
-            int timeout = insertStmt.getTimeout();
-            return timeout != -1 ? timeout : context.getSessionVariable().getInsertTimeoutS();
-        }
-        return context.getSessionVariable().getQueryTimeoutS();
-    }
-
-    public String getExecType() {
-        if (parsedStmt instanceof InsertStmt || parsedStmt instanceof CreateTableAsSelectStmt) {
-            return "Insert";
-        } else if (parsedStmt instanceof UpdateStmt) {
-            return "Update";
-        } else if (parsedStmt instanceof DeleteStmt) {
-            return "Delete";
-        } else {
-            return "Query";
-        }
     }
 }
