@@ -149,53 +149,16 @@ struct ArrowConverter {
     }
 };
 
-static void simd_offsets_copy(uint32_t* dst_array, const int32_t* src_array, const size_t num_elements,
-                              const uint32_t dst_base, const uint32_t src_base) {
-    static constexpr size_t element_size = sizeof(uint32_t);
-    const size_t num_bytes = element_size * num_elements;
-    const char* src_begin = (const char*)src_array;
-    const char* src_end = src_begin + num_bytes;
-    const char* src_p = src_begin;
-    char* dst_p = (char*)dst_array;
-    uint32_t base_diff = dst_base - src_base;
-#if defined(__AVX2__)
-    static constexpr size_t avx2_size = sizeof(__m256i);
-    const char* src_end_avx2 = src_begin + (num_bytes & ~(avx2_size - 1));
-    const __m256i diffs = _mm256_set1_epi32(base_diff);
-    for (; src_p < src_end_avx2; src_p += avx2_size, dst_p += avx2_size) {
-        _mm256_storeu_si256((__m256i_u*)dst_p, _mm256_add_epi32(_mm256_loadu_si256((const __m256i_u*)src_p), diffs));
-    }
-#elif defined(__SSE2__)
-    static constexpr size_t sse2_size = sizeof(__m128i);
-    const char* src_end_sse2 = src_begin + (num_bytes & ~(sse2_size - 1));
-    const __m128i diffs = _mm_set1_epi32(dst_base - src_base);
-    for (; src_p < src_end_sse2; src_p += sse2_size, dst_p += sse2_size) {
-        _mm_storeu_si128((__m128i_u*)dst_p, _mm_add_epi32(_mm_loadu_si128((const __m128i_u*)src_p), diffs));
-    }
-#endif
-    for (; src_p < src_end; src_p += element_size, dst_p += element_size) {
-        *(uint32_t*)dst_p = *(uint32_t*)src_p + base_diff;
-    }
-}
-
-// for BinaryColumn and ArrowColumn, data transposition optimization can be employed to speedup converting,
-// in such cases, underlying data is copied verbatim from arrow to column, but the each element of offsets
-// must be added a const diff to. when arrow offset_type is as wide as column's counterpart, SIMD
-// optimization can be used to speed up offsets copying.
 // {List, Binary, String}Type in arrow use int32_t as offset type, so offsets can be copied via SIMD,
 // Large{List, Binary, String}Type use int64_t, so must copy offset elements one by one.
 template <typename T>
-void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_elements, uint32_t* offsets_data,
-                  uint32_t base_offset) {
-    if constexpr (sizeof(T) == sizeof(uint32_t)) {
-        simd_offsets_copy(offsets_data, arrow_offsets_data, num_elements, base_offset, arrow_base_offset);
-    } else {
-        for (auto i = 0; i < num_elements; ++i) {
-            // never change following code to
-            // base_offsets - arrow_base_offset + arrow_offsets_data[i],
-            // that would cause underflow for unsigned int;
-            offsets_data[i] = base_offset + (arrow_offsets_data[i] - arrow_base_offset);
-        }
+void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, size_t num_elements,
+                  uint32_t* __restrict offsets_data, uint32_t base_offset) {
+    for (auto i = 0; i < num_elements; ++i) {
+        // never change following code to
+        // base_offsets - arrow_base_offset + arrow_offsets_data[i],
+        // that would cause underflow for unsigned int;
+        offsets_data[i] = base_offset + (arrow_offsets_data[i] - arrow_base_offset);
     }
 }
 
@@ -416,11 +379,7 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
         if constexpr (is_aligned) {
             *dst = *(int128_t*)src;
         } else {
-#if defined(__SSE2__)
-            _mm_store_si128((__m128i*)dst, _mm_loadu_si128((__m128i_u*)src));
-#else
-            strings::memcpy_inlined(dst, src, sizeof(int128_t));
-#endif
+            memcpy(dst, src, sizeof(int128_t));
         }
     }
 
