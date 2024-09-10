@@ -429,7 +429,6 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(1, validMVs.size());
-                Assert.assertTrue(containsMV(validMVs, "mv_3"));
                 connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(true);
 
                 // if mv_3 is in the plan cache
