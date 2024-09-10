@@ -30,6 +30,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -430,8 +431,13 @@ public class QueryAnalyzer {
                 FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
                 Table table = resolveTableFunctionTable(
                         tableFunctionRelation.getProperties(), tableFunctionRelation.getPushDownSchemaFunc());
-                tableFunctionRelation.setTable(table);
-                return relation;
+                TableFunctionTable tableFunctionTable = (TableFunctionTable) table;
+                if (tableFunctionTable.isListFilesOnly()) {
+                    return convertFileTableFunctionRelation(tableFunctionTable);
+                } else {
+                    tableFunctionRelation.setTable(table);
+                    return relation;
+                }
             } else if (relation instanceof TableRelation) {
                 TableRelation tableRelation = (TableRelation) relation;
                 TableName tableName = tableRelation.getName();
@@ -554,6 +560,26 @@ public class QueryAnalyzer {
                 }
                 return relation;
             }
+        }
+
+        // convert FileTableFunctionRelation to ValuesRelation if only list files
+        private ValuesRelation convertFileTableFunctionRelation(TableFunctionTable table) {
+            List<Column> columns = table.getFullSchema();
+            List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+            List<List<Expr>> rows = Lists.newArrayList();
+            for (List<String> fileInfo : table.listFilesAndDirs()) {
+                Preconditions.checkState(columns.size() == fileInfo.size());
+                List<Expr> row = Lists.newArrayList();
+                for (int i = 0; i < columns.size(); ++i) {
+                    try {
+                        row.add(LiteralExpr.create(fileInfo.get(i), columns.get(i).getType()));
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
+                rows.add(row);
+            }
+            return new ValuesRelation(rows, columnNames);
         }
 
         @Override
