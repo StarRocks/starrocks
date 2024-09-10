@@ -10,15 +10,15 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <fmt/format.h>
-#include <limits.h>
-#include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
 #include <cerrno>
+#include <climits>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 
@@ -535,8 +535,8 @@ public:
         // all the other platforms.
         if (std::filesystem::is_symlink(dirname)) {
             char real_path[PATH_MAX];
-            char* result = realpath(dirname, real_path);
-            if (result == NULL) {
+            char* result = realpath(dirname.c_str(), real_path);
+            if (result == nullptr) {
                 return io_error(fmt::format("create {} recursively", dirname), errno);
             }
             if (std::filesystem::is_directory(real_path)) {
