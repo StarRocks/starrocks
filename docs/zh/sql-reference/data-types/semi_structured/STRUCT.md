@@ -82,7 +82,7 @@ select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- 返回 {"a":1
 
 可以使用两种方式导入 STRUCT 数据到 StarRocks：[INSERT INTO](../../sql-statements/loading_unloading/INSERT.md) 和 [ORC/Parquet 文件导入](../../sql-statements/loading_unloading/BROKER_LOAD.md)。
 
-导入过程中 StarRocks 会对重复的 Key 值进行删除。
+导入过程中 StarRocks 会对重复的 Key 值进行删除。导入 named struct 列时，请保证 struct 内字段名称顺序与建表时指定的一致。
 
 ### INSERT INTO 导入
 
