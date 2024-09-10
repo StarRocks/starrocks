@@ -61,7 +61,7 @@ public class MVPCTRefreshPlanBuilder {
     private final MaterializedView mv;
     private final MvTaskRunContext mvContext;
     private final MVPCTRefreshPartitioner mvRefreshPartitioner;
-    private final boolean isRefreshFailOnFilterData;
+    private final boolean isEnableInsertStrict;
 
     public MVPCTRefreshPlanBuilder(MaterializedView mv,
                                    MvTaskRunContext mvContext,
@@ -69,7 +69,7 @@ public class MVPCTRefreshPlanBuilder {
         this.mv = mv;
         this.mvContext = mvContext;
         this.mvRefreshPartitioner = mvRefreshPartitioner;
-        this.isRefreshFailOnFilterData = mvContext.getCtx().getSessionVariable().getInsertMaxFilterRatio() == 0;
+        this.isEnableInsertStrict = mvContext.getCtx().getSessionVariable().getEnableInsertStrict();
     }
 
     public InsertStmt analyzeAndBuildInsertPlan(InsertStmt insertStmt,
@@ -382,7 +382,7 @@ public class MVPCTRefreshPlanBuilder {
         LOG.warn("Cannot generate partition predicate for mv refresh {} and there " +
                         "are no predicate push down tables, refBaseTableSize:{}, numOfPushDownIntoTables:{}", mv.getName(),
                 refBaseTableSize, numOfPushDownIntoTables);
-        if (isRefreshFailOnFilterData) {
+        if (isEnableInsertStrict) {
             throw new AnalysisException(String.format("Cannot generate partition predicate for mv refresh %s",
                     mv.getName()));
         }

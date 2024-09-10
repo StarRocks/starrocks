@@ -1056,14 +1056,8 @@ partitionRenameClause
 
 insertStatement
     : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
-        insertLabelOrColumnAliases* properties?
+        (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
-    ;
-
-// for compatibility with the case 'LABEL before columnAliases'
-insertLabelOrColumnAliases
-    : WITH LABEL label=identifier
-    | columnAliases
     ;
 
 updateStatement

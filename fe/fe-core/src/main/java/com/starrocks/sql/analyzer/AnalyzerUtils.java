@@ -711,12 +711,6 @@ public class AnalyzerUtils {
         return allTableAndViewRelations;
     }
 
-    public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
-        List<FileTableFunctionRelation> fileTableFunctionRelations = Lists.newArrayList();
-        new AnalyzerUtils.FileTableFunctionRelationsCollector(fileTableFunctionRelations).visit(statementBase);
-        return fileTableFunctionRelations;
-    }
-
     /**
      * CopySafe:
      * 1. OlapTable & MaterializedView, that support the copyOnlyForQuery interface
@@ -1091,21 +1085,6 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            return null;
-        }
-    }
-
-    private static class FileTableFunctionRelationsCollector extends AstTraverser<Void, Void> {
-
-        private final List<FileTableFunctionRelation> fileTableFunctionRelations;
-
-        public FileTableFunctionRelationsCollector(List<FileTableFunctionRelation> fileTableFunctionRelations) {
-            this.fileTableFunctionRelations = fileTableFunctionRelations;
-        }
-
-        @Override
-        public Void visitFileTableFunction(FileTableFunctionRelation node, Void context) {
-            fileTableFunctionRelations.add(node);
             return null;
         }
     }

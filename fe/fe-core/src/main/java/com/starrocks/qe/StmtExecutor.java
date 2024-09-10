@@ -91,7 +91,6 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
-import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -2073,11 +2072,9 @@ public class StmtExecutor {
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
-            InsertLoadJob loadJob = null;
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                     targetTable.isBlackHoleTable())) {
-                // insert, update and delete job
-                loadJob = context.getGlobalStateMgr().getLoadMgr().registerInsertLoadJob(
+                jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
                         database.getFullName(),
                         targetTable.getId(),
@@ -2090,8 +2087,6 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         coord);
-                loadJob.setJobProperties(stmt.getProperties());
-                jobId = loadJob.getId();
             }
 
             coord.setLoadJobId(jobId);
@@ -2168,32 +2163,37 @@ public class StmtExecutor {
                 loadedBytes = Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES));
             }
 
-            if (loadJob != null) {
-                loadJob.updateLoadingStatus(coord.getLoadCounters());
-            }
-
-            // insert will fail if 'filtered rows / total rows' exceeds max_filter_ratio
-            if (loadJob != null && !loadJob.checkDataQuality()) {
-                if (targetTable instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    RemoteTransactionMgr.abortRemoteTransaction(externalTable.getSourceTableDbId(), transactionId,
-                            externalTable.getSourceTableHost(), externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
-                            coord == null ? Collections.emptyList() : coord.getCommitInfos(),
-                            coord == null ? Collections.emptyList() : coord.getFailInfos());
-                } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() || targetTable.isIcebergTable() ||
-                        targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
-                    // schema table does not need txn
-                } else {
-                    transactionMgr.abortTransaction(database.getId(), transactionId,
-                            TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
-                            Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
+            // if in strict mode, insert will fail if there are filtered rows
+            if (context.getSessionVariable().getEnableInsertStrict()) {
+                if (filteredRows > 0) {
+                    if (targetTable instanceof ExternalOlapTable) {
+                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                        RemoteTransactionMgr.abortRemoteTransaction(
+                                externalTable.getSourceTableDbId(), transactionId,
+                                externalTable.getSourceTableHost(),
+                                externalTable.getSourceTablePort(),
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
+                                coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                                coord == null ? Collections.emptyList() : coord.getFailInfos()
+                        );
+                    } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
+                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable() ||
+                            targetTable.isBlackHoleTable()) {
+                        // schema table does not need txn
+                    } else {
+                        transactionMgr.abortTransaction(
+                                database.getId(),
+                                transactionId,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
+                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
+                    }
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
+                            " tracking sql = " + trackingSql);
+                    insertError = true;
+                    return;
                 }
-                context.getState().setError(
-                        TransactionCommitFailedException.FILTER_DATA_ERR + ", txn_id = " + transactionId +
-                                ", tracking sql = " + trackingSql);
-                insertError = true;
-                return;
             }
 
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
