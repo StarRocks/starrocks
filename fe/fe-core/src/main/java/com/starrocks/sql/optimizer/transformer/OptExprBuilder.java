@@ -55,6 +55,13 @@ public class OptExprBuilder {
         return expressionMapping.getGeneratedColumnExprOpToColumnRef();
     }
 
+    public Map<ColumnRefOperator, ScalarOperator> getColumnRefToConstOperators() {
+        if (expressionMapping == null) {
+            return null;
+        }
+        return expressionMapping.getColumnRefToConstOperators();
+    }
+
     public void setExpressionMapping(ExpressionMapping expressionMapping) {
         this.expressionMapping = expressionMapping;
     }
