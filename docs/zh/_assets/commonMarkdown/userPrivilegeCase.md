@@ -51,7 +51,44 @@
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
+<<<<<<< HEAD
 4. 全局、数据库级、表级以及分区级备份恢复权限
+=======
+   :::tip
+   对于外部数据目录下的视图，当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
+   :::
+
+4. 指定外部数据目录（External Catalog）下的写权限
+
+   当前仅支持写入数据到 Iceberg 表 (自 3.1 版本起) 和 Hive 表（自 3.2 版本起）。
+
+   ```SQL
+   -- 创建自定义角色。
+   CREATE ROLE write_catalog_only;
+   -- 赋予角色目标 Catalog 的 USAGE 权限。
+   GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
+   -- 切换到对应数据目录。
+   SET CATALOG iceberg_catalog;
+   -- 赋予角色所有 Iceberg 表的写入权限。
+   GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
+   ```
+
+5. 指定数据库的管理员权限
+
+   ```SQL
+   -- 创建自定义角色。
+   CREATE ROLE db1_admin;
+   -- 赋予角色 db1 的全部权限。用户可以在 db1 内创建表、视图、物化视图、用户自定义函数，并删除、更改 db1。
+   GRANT ALL ON DATABASE db1 TO ROLE db1_admin;
+   -- 赋予角色 db1 下所有表、视图、物化视图、用户自定义函数的所有权限。
+   GRANT ALL ON ALL TABLES IN DATABASE db1 TO ROLE db1_admin;
+   GRANT ALL ON ALL VIEWS IN DATABASE db1 TO ROLE db1_admin;
+   GRANT ALL ON ALL MATERIALIZED VIEWS IN DATABASE db1 TO ROLE db1_admin;
+   GRANT ALL ON ALL FUNCTIONS IN DATABASE db1 TO ROLE db1_admin;
+   ```
+
+6. 全局、数据库级、表级以及分区级备份恢复权限
+>>>>>>> 36b4f8755c ([Doc]Update userPrivilegeCase.md (#48516))
 
    - 全局备份恢复权限
 
