@@ -55,7 +55,6 @@ void CompactionManager::schedule() {
     Thread::set_thread_name(_dispatch_update_candidate_thread, "dispatch_candidate");
 
     st = ThreadPoolBuilder("compact_pool")
-                 .set_min_threads(1)
                  .set_max_threads(std::max(1, max_task_num()))
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
@@ -561,17 +560,23 @@ std::unordered_set<CompactionTask*> CompactionManager::get_running_task(const Ta
     return res;
 }
 
-int32_t CompactionManager::compute_max_compaction_concurrency() {
-    int32_t max_compaction_concurrency = 0;
-    const auto data_dir_num = StorageEngine::instance()->get_store_num();
+int32_t CompactionManager::compute_max_compaction_concurrency() const {
+    int32_t max_task_num = 0;
+    // new compaction framework
     if (config::base_compaction_num_threads_per_disk >= 0 && config::cumulative_compaction_num_threads_per_disk >= 0) {
-        max_compaction_concurrency =
-                static_cast<int32_t>(data_dir_num * (config::cumulative_compaction_num_threads_per_disk +
-                                                     config::base_compaction_num_threads_per_disk));
+        max_task_num = static_cast<int32_t>(
+                StorageEngine::instance()->get_store_num() *
+                (config::cumulative_compaction_num_threads_per_disk + config::base_compaction_num_threads_per_disk));
     } else {
-        max_compaction_concurrency = std::min(20, static_cast<int32_t>(data_dir_num * 5));
+        // When cumulative_compaction_num_threads_per_disk or config::base_compaction_num_threads_per_disk is less than 0,
+        // there is no limit to _max_task_num if max_compaction_concurrency is also less than 0, and here we set maximum value to be 20.
+        max_task_num = std::min(20, static_cast<int32_t>(StorageEngine::instance()->get_store_num() * 5));
     }
-    return max_compaction_concurrency;
+    if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < max_task_num) {
+        max_task_num = config::max_compaction_concurrency;
+    }
+
+    return max_task_num;
 }
 
 Status CompactionManager::update_max_threads(int max_threads) {
