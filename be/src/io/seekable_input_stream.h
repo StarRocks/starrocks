@@ -82,6 +82,8 @@ public:
 
     virtual bool is_cache_hit() const { return false; };
 
+    virtual bool is_encrypted() const { return false; };
+
 protected:
     std::string _filename = "";
 };
@@ -133,6 +135,8 @@ public:
     void set_size(int64_t value) override { return _impl->set_size(value); }
 
     StatusOr<std::string> read_all() override { return _impl->read_all(); }
+
+    bool is_encrypted() const override { return _impl->is_encrypted(); };
 
 private:
     SeekableInputStream* _impl;

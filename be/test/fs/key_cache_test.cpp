@@ -17,6 +17,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "script/script.h"
+
 namespace starrocks {
 
 // Test EncryptionKey constructor with EncryptionKeyPB and accessors
@@ -87,6 +89,8 @@ TEST_F(KeyCacheTest, AddKey) {
     key->set_id(2);
     cache.add_key(key);
     ASSERT_EQ(2, cache.size());
+    std::string result;
+    ASSERT_TRUE(execute_script("System.print(ExecEnv.key_cache_info())", result).ok());
 }
 
 static void wrap_unwrap_test(int num_level) {
