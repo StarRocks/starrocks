@@ -123,6 +123,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
         _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
+            if (!config::enable_event_based_compaction_framework) {
+                return Status::InvalidArgument(
+                        "This parameter is mutable when the Event-based Compaction Framework is enabled.");
+            }
             Status st = StorageEngine::instance()->compaction_manager()->update_max_threads(
                     config::max_compaction_concurrency);
             return st;
