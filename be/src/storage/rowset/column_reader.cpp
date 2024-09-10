@@ -845,12 +845,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
     }
 
     bool need_remain = false;
+    std::set<std::string> check_paths;
     for (size_t k = 0; k < target_paths.size(); k++) {
         auto& target = target_paths[k];
         size_t i = start;
         for (; i < end; i++) {
             const auto& rd = (*_sub_readers)[i];
             std::string name = rd->name();
+            if (check_paths.contains(name)) {
+                continue;
+            }
             // target: b.b2.b3
             // source: b.b2
             if (target == name || target.starts_with(name + ".")) {
@@ -858,6 +862,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
                 source_paths.emplace_back(name);
                 source_types.emplace_back(rd->column_type());
                 all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
                 break;
             } else if (name.starts_with(target + ".")) {
                 // target: b.b2
@@ -878,6 +883,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
                 source_paths.emplace_back(name);
                 source_types.emplace_back(rd->column_type());
                 all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
             }
         }
         need_remain |= (i == end);

@@ -546,6 +546,30 @@ void ChunkAccumulator::finalize() {
     _accumulate_count = 0;
 }
 
+bool ChunkPipelineAccumulator::_check_json_schema_equallity(const Chunk* one, const Chunk* two) {
+    if (one->num_columns() != two->num_columns()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < one->num_columns(); i++) {
+        auto& c1 = one->get_column_by_index(i);
+        auto& c2 = two->get_column_by_index(i);
+
+        if (c1->is_json() && c2->is_json()) {
+            auto json1 = down_cast<JsonColumn*>(c1.get());
+            if (!json1->is_equallity_schema(c2.get())) {
+                return false;
+            }
+        } else if (c1->is_json() || c2->is_json()) {
+            // never hit
+            DCHECK_EQ(c1->is_json(), c2->is_json());
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
     chunk->check_or_die();
     DCHECK(_out_chunk == nullptr);
@@ -553,7 +577,8 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
         _in_chunk = chunk;
         _mem_usage = chunk->bytes_usage();
     } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size ||
-               _in_chunk->owner_info() != chunk->owner_info() || _in_chunk->owner_info().is_last_chunk()) {
+               _in_chunk->owner_info() != chunk->owner_info() || _in_chunk->owner_info().is_last_chunk() ||
+               !_check_json_schema_equallity(chunk.get(), _in_chunk.get())) {
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
         _mem_usage = chunk->bytes_usage();
