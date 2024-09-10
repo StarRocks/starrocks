@@ -82,6 +82,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -304,6 +305,7 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
             .registerSubtype(EsTable.class, "EsTable")
+            .registerSubtype(ExternalOlapTable.class, "ExternalOlapTable")
             .registerSubtype(FileTable.class, "FileTable")
             .registerSubtype(HiveTable.class, "HiveTable")
             .registerSubtype(HudiTable.class, "HudiTable")
