@@ -335,3 +335,18 @@ FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_TYPE = 'BASE TABLE' 
 ORDER BY TABLE_NAME;
 ```
+
+
+## Q&A
+
+### Q1: Why did only the table schemas get synchronized?
+
+If you have enabled the firewall, you must open these ports:
+
+| **Component** | **Port**     | **Default** |
+| ----------- | -------------- | ----------- |
+| FE          | query_port     | 9030 |
+| FE          | http_port      | 8030 |
+| FE          | rpc_port       | 9020 |
+| BE          | be_http_port   | 8040 |
+| BE          | be_port        | 9060 |

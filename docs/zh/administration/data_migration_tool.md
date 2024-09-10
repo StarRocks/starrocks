@@ -335,3 +335,17 @@ FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_TYPE = 'BASE TABLE' 
 ORDER BY TABLE_NAME;
 ```
+
+## Q&A
+
+### Q1：为什么只能同步表结构？
+
+如果您开启了防火墙，则需要开通以下端口：
+
+| **组件**     | **端口**       | **默认端口**  |
+| ----------- | -------------- | ----------- |
+| FE          | query_port     | 9030 |
+| FE          | http_port      | 8030 |
+| FE          | rpc_port       | 9020 |
+| BE          | be_http_port   | 8040 |
+| BE          | be_port        | 9060 |
