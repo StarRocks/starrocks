@@ -18,9 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -30,8 +32,10 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -46,6 +50,9 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.iceberg.SnapshotRef;
@@ -55,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -79,9 +87,18 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        boolean isLockTaken = false;
         try {
             // insert properties
             analyzeProperties(insertStmt, session);
+
+            // push down schema to files
+            // should lock because this needs target table schema, only affacts insert from files()
+            if (pushDownTargetTableSchemaToFiles(insertStmt, session)) {
+                // Take the PlannerMetaLock
+                takeLock.run();
+                isLockTaken = true;
+            }
 
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
@@ -90,10 +107,11 @@ public class InsertAnalyzer {
             tables.stream().map(table -> (HiveTable) table)
                     .forEach(table -> table.useMetadataCache(false));
         } finally {
-            // Take the PlannerMetaLock
-            takeLock.run();
+            if (!isLockTaken) {
+                // Take the PlannerMetaLock
+                takeLock.run();
+            }
         }
-
 
         /*
          *  Target table
@@ -320,6 +338,108 @@ public class InsertAnalyzer {
                 }
             }
         }
+    }
+
+    /**
+     * files() schema infer is not strict.
+     * for example, integer in csv will be inferred to bigint type.
+     * when the target table column is tinyint, the data may be filtered because it is bigger than tinyint.
+     * but strict mode will not take effect in file scan if using bigint type.
+     *
+     * only push down slot ref select column to files.
+     *
+     * @return true if can push down schema, else false.
+     */
+    private static boolean pushDownTargetTableSchemaToFiles(InsertStmt insertStmt, ConnectContext session) {
+        if (!Config.files_enable_insert_push_down_schema) {
+            return false;
+        }
+
+        if (insertStmt.useTableFunctionAsTargetTable() || insertStmt.useBlackHoleTableAsTargetTable()) {
+            return false;
+        }
+
+        // check insert native table from files()
+        Table targetTable = getTargetTable(insertStmt, session);
+        if (!targetTable.isNativeTable()) {
+            return false;
+        }
+
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+        if (!(queryRelation instanceof SelectRelation)) {
+            return false;
+        }
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        Relation fromRelation = selectRelation.getRelation();
+        if (!(fromRelation instanceof FileTableFunctionRelation)) {
+            return false;
+        }
+
+        Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
+            // get target column names
+            List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+            if (targetColumnNames == null) {
+                targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
+                        .map(Column::getName).collect(Collectors.toList());
+            }
+
+            // get select column names, null if it is not slot ref column
+            List<String> selectColumnNames = Lists.newArrayList();
+            List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
+            for (SelectListItem item : listItems) {
+                if (item.isStar()) {
+                    selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
+                            .collect(Collectors.toList()));
+                    continue;
+                }
+
+                Expr expr = item.getExpr();
+                if (expr instanceof SlotRef) {
+                    selectColumnNames.add(((SlotRef) expr).getColumnName());
+                    continue;
+                }
+
+                selectColumnNames.add(null);
+            }
+
+            if (targetColumnNames.size() != selectColumnNames.size()) {
+                return;
+            }
+
+            // update files table schema according to target table schema
+            Map<String, Column> targetTableColumns = targetTable.getNameToColumn();
+            Map<String, Column> newFileTableColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            newFileTableColumns.putAll(fileTable.getNameToColumn());
+            for (int i = 0; i < selectColumnNames.size(); ++i) {
+                String selectColumnName = selectColumnNames.get(i);
+                if (selectColumnName == null) {
+                    continue;
+                }
+
+                String columnName = targetColumnNames.get(i);
+                if (!targetTableColumns.containsKey(columnName)) {
+                    continue;
+                }
+
+                Column oldCol = newFileTableColumns.get(selectColumnName);
+                Column newCol = targetTableColumns.get(columnName).deepCopy();
+                // bad case: complex types may fail to convert in scanner.
+                // such as parquet json -> array<varchar>
+                if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
+                    continue;
+                }
+
+                newCol.setName(selectColumnName);
+                newFileTableColumns.put(selectColumnName, newCol);
+            }
+
+            List<Column> newFileTableSchema = fileTable.getFullSchema().stream()
+                    .map(col -> newFileTableColumns.get(col.getName())).collect(Collectors.toList());
+            fileTable.setNewFullSchema(newFileTableSchema);
+        };
+
+        ((FileTableFunctionRelation) fromRelation).setPushDownSchemaFunc(pushDownSchemaFunc);
+        return true;
     }
 
     private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {

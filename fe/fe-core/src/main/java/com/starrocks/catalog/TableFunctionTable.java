@@ -69,6 +69,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -141,8 +142,13 @@ public class TableFunctionTable extends Table {
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
-    // Ctor for load data via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
+        this(properties, null);
+    }
+
+    // Ctor for load data via table function
+    public TableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc)
+            throws DdlException {
         super(TableType.TABLE_FUNCTION);
         super.setId(-1);
         super.setName("table_function_table");
@@ -151,7 +157,7 @@ public class TableFunctionTable extends Table {
         parseProperties();
         parseFiles();
 
-
+        // infer schema from files
         List<Column> columns = new ArrayList<>();
         if (path.startsWith(FAKE_PATH)) {
             columns.add(new Column("col_int", Type.INT));
@@ -163,6 +169,10 @@ public class TableFunctionTable extends Table {
         columns.addAll(getSchemaFromPath());
 
         setNewFullSchema(columns);
+
+        if (pushDownSchemaFunc != null) {
+            pushDownSchemaFunc.accept(this);
+        }
     }
 
     // Ctor for unload data via table function
