@@ -107,6 +107,7 @@ import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
@@ -456,6 +457,7 @@ public class GlobalStateMgr {
     private final CatalogMgr catalogMgr;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
+    private ConnectorTableTriggerAnalyzeMgr connectorTableTriggerAnalyzeMgr;
 
     private final TaskManager taskManager;
     private final InsertOverwriteJobMgr insertOverwriteJobMgr;
@@ -739,6 +741,7 @@ public class GlobalStateMgr {
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+        this.connectorTableTriggerAnalyzeMgr = new ConnectorTableTriggerAnalyzeMgr();
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
@@ -997,6 +1000,10 @@ public class GlobalStateMgr {
 
     public MetadataMgr getMetadataMgr() {
         return metadataMgr;
+    }
+
+    public ConnectorTableTriggerAnalyzeMgr getConnectorTableTriggerAnalyzeMgr() {
+        return connectorTableTriggerAnalyzeMgr;
     }
 
     @VisibleForTesting
@@ -1488,6 +1495,7 @@ public class GlobalStateMgr {
         }
         temporaryTableCleaner.start();
 
+        connectorTableTriggerAnalyzeMgr.start();
     }
 
     // start threads that should run on all FE
