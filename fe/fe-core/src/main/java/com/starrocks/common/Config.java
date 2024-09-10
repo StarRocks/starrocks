@@ -2679,6 +2679,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
+    @ConfField(mutable = true, comment =
+            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
+    public static boolean lake_enable_balance_tablets_between_workers = false;
+
+    @ConfField(mutable = true, comment =
+            "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
+                    "calculated as f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets), " +
+                    "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
+    public static double lake_balance_tablets_threshold = 0.15;
+
     /**
      * Default lake compaction txn timeout
      */
