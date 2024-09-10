@@ -137,7 +137,7 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
                     "t_uk join t_fk on t_uk.v1 = t_fk.v1 and t_fk.v1 = 5";
             String plan = getFragmentPlan(sql);
             assertNotContains(plan, "HASH JOIN");
-            assertNotContains(plan, "v1 IS NOT NULL");
+            assertContains(plan, "v1 IS NOT NULL");
             assertContains(plan, "4: v1 = 5");
         }
     }
