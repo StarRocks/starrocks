@@ -85,6 +85,47 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testCreateMVProperties() throws Exception {
+        starRocksAssert
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
+                "PARTITION BY date_trunc('day', k1)\n"
+                + "PROPERTIES (\n"
+                + "\"excluded_refresh_base_tables\" = \"t2\"\n"
+                + ")\n"
+                + "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+            boolean t1 = mv.shouldRefreshBaseTable("t1");
+            boolean t2 = mv.shouldRefreshBaseTable("t2");
+            Assert.assertTrue(t1);
+            Assert.assertFalse(t2);
+        });
+    }
+
+    @Test
     public void testNormal() throws Exception {
         String refreshMvSql = "refresh materialized view test.mv_to_refresh";
         RefreshMaterializedViewStatement alterMvStmt =
