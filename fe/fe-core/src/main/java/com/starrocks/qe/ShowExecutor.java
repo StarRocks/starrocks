@@ -86,6 +86,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
@@ -499,6 +500,46 @@ public class ShowExecutor {
                     if (!baseTableHasPrivilege.get()) {
                         continue;
                     }
+<<<<<<< HEAD
+=======
+                    final String columnName = col.getName();
+                    final String columnType = col.getType().canonicalName().toLowerCase();
+                    final String isAllowNull = col.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO;
+                    final String isKey = col.isKey() ? SchemaConstants.YES : SchemaConstants.NO;
+                    String defaultValue = null;
+                    if (!col.getType().isOnlyMetricType()) {
+                        defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
+                    }
+                    final String aggType = col.getAggregationType() == null
+                            || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
+                    if (statement.isVerbose()) {
+                        // Field Type Collation Null Key Default Extra
+                        // Privileges Comment
+                        rows.add(Lists.newArrayList(columnName,
+                                columnType,
+                                "",
+                                isAllowNull,
+                                isKey,
+                                defaultValue,
+                                aggType,
+                                "",
+                                col.getDisplayComment()));
+                    } else {
+                        // Field Type Null Key Default Extra
+                        rows.add(Lists.newArrayList(columnName,
+                                columnType,
+                                isAllowNull,
+                                isKey,
+                                defaultValue,
+                                aggType));
+                    }
+                }
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+>>>>>>> 34bd0d3482 ([Enhancement] Support describe files() (#50527))
 
                     try {
                         Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),

@@ -22,6 +22,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.SchemaConstants;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -56,7 +57,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                     columnSet.getInt("DECIMAL_DIGITS"));
             String columnName = columnSet.getString("COLUMN_NAME");
             fullSchema.add(new Column(columnName, type,
-                    columnSet.getString("IS_NULLABLE").equals("YES")));
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
         }
         return fullSchema;
     }

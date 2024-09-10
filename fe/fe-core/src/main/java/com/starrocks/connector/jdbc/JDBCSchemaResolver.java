@@ -22,6 +22,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.sql.Connection;
@@ -90,7 +91,11 @@ public abstract class JDBCSchemaResolver {
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
             fullSchema.add(new Column(columnSet.getString("COLUMN_NAME"), type,
+<<<<<<< HEAD
                     columnSet.getString("IS_NULLABLE").equals("YES")));
+=======
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
+>>>>>>> 34bd0d3482 ([Enhancement] Support describe files() (#50527))
         }
         return fullSchema;
     }
