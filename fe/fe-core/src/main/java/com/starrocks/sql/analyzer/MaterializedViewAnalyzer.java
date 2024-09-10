@@ -862,7 +862,7 @@ public class MaterializedViewAnalyzer {
                 // still use range partition.
                 // TODO: remove this compatibility code in the future, use list partition directly later.
                 if (partitionExprType.isStringType() && (partitionByExpr instanceof SlotRef) &&
-                        !MvUtils.isStr2Date(partitionRefTableExpr)) {
+                        !(partitionRefTableExpr instanceof FunctionCallExpr)) {
                     statement.setPartitionType(PartitionType.LIST);
                 } else {
                     statement.setPartitionType(PartitionType.RANGE);
