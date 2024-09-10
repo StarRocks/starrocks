@@ -57,6 +57,7 @@
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -99,7 +100,7 @@ public:
     void register_tablet_into_dir();
     void deregister_tablet_from_dir();
 
-    void save_meta();
+    void save_meta(bool skip_tablet_schema = false);
     // Used in clone task, to update local meta when finishing a clone job
     Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
@@ -337,9 +338,9 @@ public:
 
     [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
     std::shared_mutex& get_schema_lock() { return _schema_lock; }
-    bool add_committed_rowset_unlock(const RowsetSharedPtr& rowset);
+    //bool add_committed_rowset_unlock(const RowsetSharedPtr& rowset);
     bool add_committed_rowset(const RowsetSharedPtr& rowset);
-    void erase_committed_rowset_unlock(const RowsetSharedPtr& rowset);
+    //void erase_committed_rowset_unlock(const RowsetSharedPtr& rowset);
     void erase_committed_rowset(const RowsetSharedPtr& rowset);
 
     void on_shutdown() override;
@@ -424,7 +425,10 @@ private:
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
     // Keep the rowsets committed but not publish which rowset meta without schema
-    std::map<RowsetId, RowsetSharedPtr> _committed_rs_map;
+    phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
+                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5,
+                                  phmap::NullMutex, true>
+            _committed_rs_map;
 
     // gtid -> version
     std::map<int64_t, int64_t> _gtid_to_version_map;

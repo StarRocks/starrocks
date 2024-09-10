@@ -172,8 +172,11 @@ Status TabletUpdates::_load_rowsets_and_check_consistency(std::set<uint32_t>& un
     _rowsets.clear();
     RETURN_IF_ERROR(TabletMetaManager::rowset_iterate(
             _tablet.data_dir(), _tablet.tablet_id(), [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
+                if (!rowset_meta->tablet_schema()) {
+                    rowset_meta->set_tablet_schema(_tablet.tablet_schema());
+                    rowset_meta->set_skip_tablet_schema(true);
+                }
                 RowsetSharedPtr rowset;
-
                 auto st = RowsetFactory::create_rowset(_tablet.tablet_schema(), _tablet.schema_hash_path(), rowset_meta,
                                                        &rowset);
                 if (st.ok()) {
@@ -661,7 +664,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                 RowsetMetaPB meta_pb;
                 if (_tablet.is_update_schema_running()) {
                     rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
-                } else if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+                } else if (rowset->rowset_meta()->skip_tablet_schema()) {
                     meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
                 } else {
                     rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
@@ -750,7 +753,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     RowsetMetaPB meta_pb;
     if (_tablet.is_update_schema_running()) {
         rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
-    } else if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+    } else if (rowset->rowset_meta()->skip_tablet_schema()) {
         meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     } else {
         rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
@@ -1681,7 +1684,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                             new_del_vecs, *index_meta, enable_persistent_index,
                                                             &full_rowset_meta_pb);
-                rowset->rowset_meta()->set_has_tablet_schema_pb(true);
             } else {
                 st.update(r.status());
             }
@@ -3890,7 +3892,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         // use src_rowset's meta as base, change some fields to new tablet
         auto& rowset_meta_pb = new_rowset_info.rowset_meta_pb;
         // reset rowset schema to the latest one
-        src_rowset.rowset_meta()->get_full_meta_pb(&rowset_meta_pb, _tablet.tablet_schema());
+        src_rowset.rowset_meta()->get_full_meta_pb(&rowset_meta_pb, false, _tablet.tablet_schema());
         rowset_meta_pb.set_deprecated_rowset_id(0);
         rowset_meta_pb.set_rowset_id(rid.to_string());
         rowset_meta_pb.set_rowset_seg_id(new_rowset_info.rowset_id);
@@ -5684,13 +5686,13 @@ void TabletUpdates::rewrite_rs_meta() {
     {
         std::lock_guard lg(_lock);
         for (auto& [_, rs] : _rowsets) {
-            if (!rs->rowset_meta()->has_tablet_schema_pb()) {
+            if (rs->rowset_meta()->skip_tablet_schema()) {
                 published_rs.emplace_back(rs);
             }
         }
 
         for (auto& [version, rs] : _pending_commits) {
-            if (!rs->rowset_meta()->has_tablet_schema_pb()) {
+            if (rs->rowset_meta()->skip_tablet_schema()) {
                 pending_rs[version] = rs;
             }
         }
@@ -5704,7 +5706,7 @@ void TabletUpdates::rewrite_rs_meta() {
                 RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rs->rowset_id()));
         LOG_IF(FATAL, !st.ok()) << "fail to save pending rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
                                 << ", rowset_id=" << rs->rowset_id();
-        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+        rs->rowset_meta()->set_skip_tablet_schema(false);
     }
 
     auto kv_store = _tablet.data_dir()->get_meta();
@@ -5720,7 +5722,7 @@ void TabletUpdates::rewrite_rs_meta() {
     LOG_IF(FATAL, !st.ok()) << "fail to write published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
                             << ", rowset nul=" << published_rs.size();
     for (auto& rs : published_rs) {
-        rs->rowset_meta()->set_has_tablet_schema_pb(true);
+        rs->rowset_meta()->set_skip_tablet_schema(false);
     }
 }
 

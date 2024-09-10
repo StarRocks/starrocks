@@ -405,6 +405,17 @@ struct RowsetId {
     }
 };
 
+struct HashOfRowsetId {
+    size_t operator()(const RowsetId& rowset_id) const {
+        size_t seed = 0;
+        size_t h1 = HashUtil::hash64(&rowset_id.hi, sizeof(rowset_id.hi), seed);
+        size_t h2 = HashUtil::hash64(&rowset_id.mi, sizeof(rowset_id.mi), seed);
+        size_t h3 = HashUtil::hash64(&rowset_id.lo, sizeof(rowset_id.lo), seed);
+        // Combine the three hash values (hi, mi, lo)
+        return h1 ^ (h2 << 1) ^ (h3 << 2);
+    }
+};
+
 struct TabletSegmentId {
     int64_t tablet_id = INT64_MAX;
     uint32_t segment_id = UINT32_MAX;

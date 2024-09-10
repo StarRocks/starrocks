@@ -172,8 +172,8 @@ Status Tablet::init() {
 
 // should save tablet meta to remote meta store
 // if it's a primary replica
-void Tablet::save_meta() {
-    auto st = _tablet_meta->save_meta(_data_dir);
+void Tablet::save_meta(bool skip_tablet_schema) {
+    auto st = _tablet_meta->save_meta(_data_dir, skip_tablet_schema);
     CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
@@ -583,7 +583,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
 
     RowsetMetaPB rowset_meta_pb;
-    if (!rowset->rowset_meta()->has_tablet_schema_pb()) {
+    if (rowset->rowset_meta()->skip_tablet_schema()) {
         rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     } else {
         rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
@@ -639,7 +639,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     return Status::OK();
 }
 
-bool Tablet::add_committed_rowset_unlock(const RowsetSharedPtr& rowset) {
+bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
     if (rowset->rowset_meta()->tablet_schema() != nullptr &&
         rowset->rowset_meta()->tablet_schema()->id() != TabletSchema::invalid_id() &&
         rowset->rowset_meta()->tablet_schema()->id() == _max_version_schema->id()) {
@@ -648,20 +648,21 @@ bool Tablet::add_committed_rowset_unlock(const RowsetSharedPtr& rowset) {
     }
     return false;
 }
-
+/*
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
-    std::shared_lock l(_schema_lock);
+    std::unique_lock l(_schema_lock);
     return add_committed_rowset_unlock(rowset);
 }
-
-void Tablet::erase_committed_rowset_unlock(const RowsetSharedPtr& rowset) {
+*/
+void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
     _committed_rs_map.erase(rowset->rowset_id());
 }
-
+/*
 void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
     std::shared_lock l(_schema_lock);
     return erase_committed_rowset_unlock(rowset);
 }
+*/
 
 void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     std::unique_lock wrlock(_meta_lock);
@@ -1840,7 +1841,7 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
 // tablet schema, we need to rewrite.
 void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs) {
     for (auto& [_, rs] : _committed_rs_map) {
-        if (!rs->rowset_meta()->has_tablet_schema_pb()) {
+        if (rs->rowset_meta()->skip_tablet_schema()) {
             rewrite_meta_rs.emplace_back(rs);
         }
     }

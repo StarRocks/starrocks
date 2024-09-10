@@ -275,20 +275,17 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 
         Status st;
         RowsetMetaPB rowset_meta_pb;
-        bool skip_schema_in_rowset_meta = config::skip_schema_in_rowset_meta;
-        if (skip_schema_in_rowset_meta) {
+        bool skip_schema = config::skip_schema_in_rowset_meta &&
+                           !rowset_ptr->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() &&
+                           !tablet->is_update_schema_running();
+        if (skip_schema) {
             // avoid `update_max_version_schema` and `commit_txn` run concurrency, so hold a read
             // lock for `schema_lock` is enough
             std::shared_lock l(tablet->get_schema_lock());
-            bool is_partial_update = rowset_ptr->rowset_meta()->get_meta_pb_without_schema().has_txn_meta();
-            if (!is_partial_update) {
-                bool skip_schema = tablet->add_committed_rowset_unlock(rowset_ptr);
-                if (skip_schema) {
-                    rowset_ptr->rowset_meta()->set_has_tablet_schema_pb(false);
-                    rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb_without_schema();
-                } else {
-                    rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
-                }
+            skip_schema = tablet->add_committed_rowset(rowset_ptr);
+            if (skip_schema) {
+                rowset_ptr->rowset_meta()->set_skip_tablet_schema(true);
+                rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb_without_schema();
             } else {
                 rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
             }
@@ -298,8 +295,8 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
             st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         }
         if (!st.ok()) {
-            if (skip_schema_in_rowset_meta) {
-                tablet->erase_committed_rowset_unlock(rowset_ptr);
+            if (skip_schema) {
+                tablet->erase_committed_rowset(rowset_ptr);
             }
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
