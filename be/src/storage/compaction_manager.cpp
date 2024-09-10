@@ -587,8 +587,7 @@ Status CompactionManager::update_max_threads(int max_threads) {
             return _compaction_pool->update_max_threads(std::max(1, max_task_num()));
         }
         if (max_threads == 0) {
-            //Just to pass the admit test, it doesn't make sense to set max_compaction_concurrency=0 via a dynamic parameter.
-            Status st = _compaction_pool->update_max_threads(1);
+            Status st = _compaction_pool->update_max_threads(0);
             if (!st.ok()) {
                 return st;
             }
