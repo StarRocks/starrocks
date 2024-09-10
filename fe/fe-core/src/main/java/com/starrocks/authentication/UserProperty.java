@@ -208,7 +208,7 @@ public class UserProperty {
         }
         // check whether the variable exists
         SystemVariable variable = new SystemVariable(sessionKey, new StringLiteral(value));
-        VariableMgr.checkSystemVariableExist(variable);
+        GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
 
         // check whether the value is valid
         Field field = VariableMgr.getField(sessionKey);
@@ -217,7 +217,7 @@ public class UserProperty {
         }
 
         // check flags of the variable, e.g. whether the variable is read-only
-        VariableMgr.checkUpdate(variable);
+        GlobalStateMgr.getCurrentState().getVariableMgr().checkUpdate(variable);
     }
 
     // check whether the catalog exist

@@ -185,7 +185,9 @@ public class UserPropertyTest {
             userProperty = new UserProperty();
             userProperty.update("root", properties);
             Assert.assertEquals(UserProperty.MAX_CONN_DEFAULT_VALUE, userProperty.getMaxConn());
-            Assert.assertEquals(VariableMgr.getDefaultValue(SessionVariable.CATALOG), userProperty.getCatalog());
+            Assert.assertEquals(
+                    GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(SessionVariable.CATALOG),
+                    userProperty.getCatalog());
             Assert.assertEquals(0, userProperty.getSessionVariables().size());
         } catch (Exception e) {
             throw e;

@@ -96,7 +96,7 @@ public class SetStmtAnalyzer {
 
         if (unResolvedExpression == null) {
             // SET var = DEFAULT
-            resolvedExpression = new StringLiteral(VariableMgr.getDefaultValue(var.getVariable()));
+            resolvedExpression = new StringLiteral(GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(var.getVariable()));
         } else if (unResolvedExpression instanceof SlotRef) {
             resolvedExpression = new StringLiteral(((SlotRef) unResolvedExpression).getColumnName());
         } else {

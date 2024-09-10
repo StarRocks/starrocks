@@ -894,7 +894,7 @@ public class EditLog {
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
-                    VariableMgr.replayGlobalVariableV2(info);
+                    globalStateMgr.getVariableMgr().replayGlobalVariableV2(info);
                     break;
                 }
                 case OperationType.OP_SWAP_TABLE: {

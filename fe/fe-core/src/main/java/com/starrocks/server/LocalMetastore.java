@@ -2969,11 +2969,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // validate hint
         Map<String, String> optHints = Maps.newHashMap();
         if (stmt.isExistQueryScopeHint()) {
-            SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+            SessionVariable sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
             for (HintNode hintNode : stmt.getAllQueryScopeHints()) {
                 if (hintNode instanceof SetVarHint) {
                     for (Map.Entry<String, String> entry : hintNode.getValue().entrySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
+                        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(sessionVariable,
                                 new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
                         optHints.put(entry.getKey(), entry.getValue());
                     }

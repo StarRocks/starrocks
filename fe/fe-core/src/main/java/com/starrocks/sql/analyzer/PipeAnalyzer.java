@@ -94,7 +94,7 @@ public class PipeAnalyzer {
             if (propertyName.toUpperCase().startsWith(TASK_VARIABLES_PREFIX)) {
                 // Task execution variable
                 String taskVariableName = StringUtils.removeStartIgnoreCase(propertyName, TASK_VARIABLES_PREFIX);
-                if (!VariableMgr.containsVariable(taskVariableName)) {
+                if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(taskVariableName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
                 }
                 continue;

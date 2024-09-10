@@ -169,7 +169,8 @@ public class CachedStatisticStorage implements StatisticStorage {
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> result =
                     connectorTableCachedStatistics.getAll(cacheKeys);
 
-            SessionVariable sessionVariable = ConnectContext.get() == null ? VariableMgr.newSessionVariable() :
+            SessionVariable sessionVariable = ConnectContext.get() == null ?
+                    GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable() :
                     ConnectContext.get().getSessionVariable();
             result.whenCompleteAsync((res, e) -> {
                 if (e != null) {

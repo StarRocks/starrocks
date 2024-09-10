@@ -1456,7 +1456,7 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
-                VariableMgr.fillValue(session.getSessionVariable(), node);
+                GlobalStateMgr.getCurrentState().getVariableMgr().fillValue(session.getSessionVariable(), node);
                 if (!Strings.isNullOrEmpty(node.getName()) &&
                         node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
                     node.setType(Type.VARCHAR);

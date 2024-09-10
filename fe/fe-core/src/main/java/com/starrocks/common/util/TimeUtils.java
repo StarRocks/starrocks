@@ -45,6 +45,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -144,7 +145,7 @@ public class TimeUtils {
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
         } else {
-            timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
+            timezone = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
         }
         return TimeZone.getTimeZone(ZoneId.of(timezone, TIME_ZONE_ALIAS_MAP));
     }
@@ -353,7 +354,7 @@ public class TimeUtils {
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
         } else {
-            timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
+            timezone = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
         }
         return timezone;
     }

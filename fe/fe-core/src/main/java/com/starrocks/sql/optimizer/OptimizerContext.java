@@ -95,7 +95,7 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
-        this.sessionVariable = VariableMgr.newSessionVariable();
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
         this.queryId = UUID.randomUUID();
         this.allLogicalOlapScanOperators = Collections.emptyList();

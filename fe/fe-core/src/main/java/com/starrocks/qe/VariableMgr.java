@@ -127,21 +127,20 @@ public class VariableMgr {
 
     // Map variable name to variable context which have enough information to change variable value.
     // This map contains info of all session and global variables.
-    private static final ImmutableMap<String, VarContext> CTX_BY_VAR_NAME;
+    private final ImmutableMap<String, VarContext> CTX_BY_VAR_NAME;
 
-    private static final ImmutableMap<String, String> ALIASES;
+    private final ImmutableMap<String, String> ALIASES;
 
     // This variable is equivalent to the default value of session variables.
     // Whenever a new session is established, the value in this object is copied to the session-level variable.
-    private static final SessionVariable DEFAULT_SESSION_VARIABLE;
+    private final SessionVariable DEFAULT_SESSION_VARIABLE;
 
     // Global read/write lock to protect access of globalSessionVariable.
-    private static final ReadWriteLock RWLOCK = new ReentrantReadWriteLock();
-    private static final Lock RLOCK = RWLOCK.readLock();
-    private static final Lock WLOCK = RWLOCK.writeLock();
+    private final ReadWriteLock RWLOCK = new ReentrantReadWriteLock();
+    private final Lock RLOCK = RWLOCK.readLock();
+    private final Lock WLOCK = RWLOCK.writeLock();
 
-    // Form map from variable name to its field in Java class.
-    static {
+    public VariableMgr() {
         // Session value
         DEFAULT_SESSION_VARIABLE = new SessionVariable();
         ImmutableSortedMap.Builder<String, VarContext> ctxBuilder =
@@ -188,12 +187,12 @@ public class VariableMgr {
         ALIASES = aliasBuilder.build();
     }
 
-    public static SessionVariable getDefaultSessionVariable() {
+    public SessionVariable getDefaultSessionVariable() {
         return DEFAULT_SESSION_VARIABLE;
     }
 
     // Set value to a variable
-    private static boolean setValue(Object obj, Field field, String value) throws DdlException {
+    private boolean setValue(Object obj, Field field, String value) throws DdlException {
         VarAttr attr = field.getAnnotation(VarAttr.class);
 
         String variableName;
@@ -253,18 +252,18 @@ public class VariableMgr {
         return true;
     }
 
-    public static SessionVariable newSessionVariable() {
+    public SessionVariable newSessionVariable() {
         return (SessionVariable) DEFAULT_SESSION_VARIABLE.clone();
     }
 
     // Check if this sessionVariable can be set correctly
-    public static void checkUpdate(SystemVariable sessionVariable) throws DdlException {
-        VarContext ctx = VariableMgr.getVarContext(sessionVariable.getVariable());
+    public void checkUpdate(SystemVariable sessionVariable) throws DdlException {
+        VarContext ctx = getVarContext(sessionVariable.getVariable());
         checkUpdate(sessionVariable, ctx.getFlag());
     }
 
     // Check if this setVar can be set correctly
-    private static void checkUpdate(SystemVariable setVar, int flag) throws DdlException {
+    private void checkUpdate(SystemVariable setVar, int flag) throws DdlException {
         if ((flag & READ_ONLY) != 0) {
             ErrorReport.reportDdlException(ErrorCode.ERR_VARIABLE_IS_READONLY, setVar.getVariable());
         }
@@ -276,7 +275,7 @@ public class VariableMgr {
         }
     }
 
-    public static void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
+    public void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
@@ -284,7 +283,7 @@ public class VariableMgr {
         }
     }
 
-    public static boolean containsVariable(String name) {
+    public boolean containsVariable(String name) {
         return CTX_BY_VAR_NAME.containsKey(name);
     }
 
@@ -292,7 +291,7 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public static void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
+    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
             throws DdlException {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
@@ -338,7 +337,7 @@ public class VariableMgr {
         setValue(sessionVariable, ctx.getField(), value);
     }
 
-    public static void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         Map<String, String> m = new HashMap<>();
         Map<String, String> g = new HashMap<>();
         try {
@@ -402,7 +401,7 @@ public class VariableMgr {
         writer.close();
     }
 
-    public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try {
             int sessionVarSize = reader.readInt();
             for (int i = 0; i < sessionVarSize; ++i) {
@@ -427,7 +426,7 @@ public class VariableMgr {
     }
 
     // this method is used to replace the `replayGlobalVariable()`
-    public static void replayGlobalVariableV2(GlobalVarPersistInfo info) throws DdlException {
+    public void replayGlobalVariableV2(GlobalVarPersistInfo info) throws DdlException {
         WLOCK.lock();
         try {
             String json = info.getPersistJsonString();
@@ -446,7 +445,7 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static void fillValue(SessionVariable var, VariableExpr desc) {
+    public void fillValue(SessionVariable var, VariableExpr desc) {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
@@ -465,7 +464,7 @@ public class VariableMgr {
         }
     }
 
-    private static void fillValue(Object obj, Field field, VariableExpr desc) {
+    private void fillValue(Object obj, Field field, VariableExpr desc) {
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
@@ -511,7 +510,7 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static String getValue(SessionVariable var, VariableExpr desc) {
+    public String getValue(SessionVariable var, VariableExpr desc) {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
@@ -530,7 +529,7 @@ public class VariableMgr {
         }
     }
 
-    private static String getValue(Object obj, Field field) {
+    private String getValue(Object obj, Field field) {
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
@@ -558,7 +557,7 @@ public class VariableMgr {
         return "";
     }
 
-    public static String getDefaultValue(String variable) {
+    public String getDefaultValue(String variable) {
         VarContext ctx = getVarContext(variable);
         if (ctx == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable,
@@ -709,7 +708,7 @@ public class VariableMgr {
         }
     }
 
-    private static VarContext getVarContext(String name) {
+    private VarContext getVarContext(String name) {
         VarContext ctx = CTX_BY_VAR_NAME.get(name);
         if (ctx == null) {
             ctx = CTX_BY_VAR_NAME.get(ALIASES.get(name));

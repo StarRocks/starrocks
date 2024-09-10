@@ -193,7 +193,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                 SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
                 try {
-                    VariableMgr.checkSystemVariableExist(variable);
+                    GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
                 } catch (DdlException e) {
                     throw new SemanticException(e.getMessage());
                 }
