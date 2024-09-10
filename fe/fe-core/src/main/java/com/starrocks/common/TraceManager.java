@@ -14,7 +14,6 @@
 
 package com.starrocks.common;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.internal.TemporaryBuffers;
 import io.opentelemetry.api.trace.Span;
@@ -22,10 +21,12 @@ import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.exporter.jaeger.JaegerGrpcSpanExporter;
+import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.OpenTelemetrySdkBuilder;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.SdkTracerProviderBuilder;
 import io.opentelemetry.sdk.trace.SpanProcessor;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 
@@ -34,29 +35,44 @@ public class TraceManager {
     private static volatile Tracer instance = null;
 
     public static Tracer getTracer() {
-        if (instance == null) {
-            synchronized (TraceManager.class) {
-                if (instance == null) {
-                    if (!Config.jaeger_grpc_endpoint.isEmpty()) {
-                        OpenTelemetrySdkBuilder builder = OpenTelemetrySdk.builder();
-                        SpanProcessor processor = BatchSpanProcessor.builder(
-                                JaegerGrpcSpanExporter.builder().setEndpoint(Config.jaeger_grpc_endpoint)
-                                        .build()).build();
-                        Resource resource = Resource.builder().put("service.name", SERVICE_NAME).build();
-                        SdkTracerProvider sdkTracerProvider = SdkTracerProvider.builder()
-                                .addSpanProcessor(processor)
-                                .setResource(resource)
-                                .build();
-                        builder.setTracerProvider(sdkTracerProvider);
-                        OpenTelemetry openTelemetry = builder.buildAndRegisterGlobal();
-                        instance = openTelemetry.getTracer(SERVICE_NAME);
-                    } else {
-                        instance = GlobalOpenTelemetry.get().getTracer(SERVICE_NAME);
-                    }
-                }
-            }
+        if (instance != null) {
+            return instance;
         }
+        return getOrCreateTracer();
+    }
+
+    private static synchronized Tracer getOrCreateTracer() {
+        if (instance != null) {
+            return instance;
+        }
+        Resource resource = Resource.builder().put("service.name", SERVICE_NAME).build();
+        SdkTracerProviderBuilder tracerProviderBuilder = SdkTracerProvider.builder()
+                .setResource(resource);
+        if (!Config.jaeger_grpc_endpoint.isEmpty()) {
+            SpanProcessor jaegerProcessor = BatchSpanProcessor.builder(
+                    JaegerGrpcSpanExporter.builder()
+                            .setEndpoint(Config.jaeger_grpc_endpoint)
+                            .build()
+            ).build();
+            tracerProviderBuilder.addSpanProcessor(jaegerProcessor);
+        }
+        if (!Config.otlp_exporter_grpc_endpoint.isEmpty()) {
+            SpanProcessor otlpProcessor = BatchSpanProcessor.builder(
+                    OtlpGrpcSpanExporter.builder()
+                            .setEndpoint(Config.otlp_exporter_grpc_endpoint)
+                            .build()
+            ).build();
+            tracerProviderBuilder.addSpanProcessor(otlpProcessor);
+        }
+        OpenTelemetrySdkBuilder otelBuilder = OpenTelemetrySdk.builder();
+        otelBuilder.setTracerProvider(tracerProviderBuilder.build());
+        OpenTelemetry openTelemetry = otelBuilder.build();
+        instance = openTelemetry.getTracer(SERVICE_NAME);
         return instance;
+    }
+
+    protected static void setTracer(Tracer tracer) {
+        instance = tracer;
     }
 
     public static Span startSpan(String name, Span parent) {
