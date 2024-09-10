@@ -41,7 +41,6 @@ import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -55,7 +54,6 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
-import java.util.Map;
 
 public class DeleteAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DeleteAnalyzer.class);
@@ -183,16 +181,7 @@ public class DeleteAnalyzer {
         deleteStatement.setDeleteConditions(deleteConditions);
     }
 
-    private static void analyzeProperties(DeleteStmt deleteStmt, ConnectContext session) {
-        Map<String, String> properties = deleteStmt.getProperties();
-        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
-                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
-        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
-    }
-
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
-        analyzeProperties(deleteStatement, session);
-
         TableName tableName = deleteStatement.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
