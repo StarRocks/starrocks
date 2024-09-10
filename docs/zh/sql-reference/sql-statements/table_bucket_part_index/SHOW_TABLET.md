@@ -61,9 +61,9 @@ SHOW TABLET <tablet_id>
 ### 查看某张表或分区内的所有 tablet
 
 ```plain
-+----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+
-| TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  |
-+----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+
++----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
+| TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  | DiskRootPath  |
++----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
 ```
 
 | **字段**                | **说明**                        |
@@ -89,6 +89,7 @@ SHOW TABLET <tablet_id>
 | PathHash                | Tablet 存储目录的 hash。        |
 | MetaUrl                 | 通过 URL 查询更多的 meta 信息。     |
 | CompactionStatus        | 通过 URL 查询 Compaction 状态。    |
+| DiskRootPath            | 副本所在的磁盘。    |
 
 ### 查看单个 tablet
 
@@ -172,6 +173,7 @@ DISTRIBUTED BY HASH(`k1`, `k2`, `k3`);
                PathHash: 0
                 MetaUrl: http://172.26.92.141:8038/api/meta/header/9588955
        CompactionStatus: http://172.26.92.141:8038/api/compaction/show?tablet_id=9588955
+           DiskRootPath: /storage/disk
     ```
 
 - 查看 id 为 9588955 的 Tablet 的信息。

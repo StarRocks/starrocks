@@ -22,6 +22,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -57,8 +58,24 @@ public class LocalTabletsProcDirTest {
                                                @Mocked SystemInfoService systemInfoService) {
         Map<Long, Backend> idToBackend = Maps.newHashMap();
         long backendId = 20L;
-        idToBackend.put(backendId, new Backend(backendId, "127.0.0.1", 9050));
-        idToBackend.put(backendId, new Backend(backendId + 1, "127.0.0.2", 9050));
+        Backend b1 = new Backend(backendId, "127.0.0.1", 9050);
+        Map<String, DiskInfo> disks1 = Maps.newHashMap();
+        DiskInfo d1 = new DiskInfo("/home/disk1");
+        d1.setPathHash(1L);
+        disks1.put("/home/disk1", d1);
+        ImmutableMap<String, DiskInfo> immutableMap1 = ImmutableMap.copyOf(disks1);
+        b1.setDisks(immutableMap1);
+
+        Backend b2 = new Backend(backendId + 1, "127.0.0.2", 9050);
+        Map<String, DiskInfo> disks2 = Maps.newHashMap();
+        DiskInfo d2 = new DiskInfo("/home/disk2");
+        d2.setPathHash(2L);
+        disks2.put("/home/disk2", d2);
+        ImmutableMap<String, DiskInfo> immutableMap2 = ImmutableMap.copyOf(disks2);
+        b2.setDisks(immutableMap2);
+
+        idToBackend.put(backendId, b1);
+        idToBackend.put(backendId + 1, b2);
 
         new Expectations() {
             {
@@ -87,6 +104,8 @@ public class LocalTabletsProcDirTest {
         // Replica
         Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
         Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
+        replica1.setPathHash(1L);
+        replica2.setPathHash(2L);
 
         // Tablet
         LocalTablet tablet1 = new LocalTablet(tablet1Id);
@@ -127,12 +146,14 @@ public class LocalTabletsProcDirTest {
         System.out.println(result);
         Assert.assertEquals(3, result.size());
         Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
+        Assert.assertEquals(result.get(0).get(21), "/home/disk1");
         Assert.assertEquals((long) result.get(1).get(0), tablet1Id);
         if ((long) result.get(0).get(1) == replicaId) {
             Assert.assertEquals((long) result.get(0).get(2), backendId);
         } else if ((long) result.get(0).get(1) == replicaId + 1) {
             Assert.assertEquals((long) result.get(0).get(2), backendId + 1);
         }
+        Assert.assertEquals(result.get(1).get(21), "/home/disk2");
         Assert.assertEquals((long) result.get(2).get(0), tablet2Id);
         Assert.assertEquals(result.get(2).get(1), -1);
         Assert.assertEquals(result.get(2).get(2), -1);
