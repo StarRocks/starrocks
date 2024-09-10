@@ -24,6 +24,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -39,6 +40,8 @@ import static org.junit.Assert.assertNotNull;
 public class LoadLoadingTaskTest {
     @Injectable
     private ConnectContext connectContext;
+
+    private VariableMgr variableMgr = new VariableMgr();
 
     @Test
     public void testBuilder(
@@ -83,6 +86,10 @@ public class LoadLoadingTaskTest {
 
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 

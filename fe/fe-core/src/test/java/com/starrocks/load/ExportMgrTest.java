@@ -23,6 +23,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -39,20 +40,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class ExportMgrTest {
-    @Mocked
-    GlobalStateMgr globalStateMgr;
-    @Mocked
-    Authorizer authorizer;
 
     @Test
     public void testExpiredJob() throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
         Config.history_job_keep_max_second = 10;
         ExportMgr mgr = new ExportMgr();
 

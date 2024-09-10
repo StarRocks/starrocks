@@ -42,12 +42,15 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.utframe.UtFrameUtils.PseudoImage;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -65,6 +68,7 @@ public class VariableMgrTest {
     @Mocked
     private EditLog editLog;
 
+    private VariableMgr variableMgr = new VariableMgr();
     @Before
     public void setUp() {
         new Expectations() {
@@ -83,6 +87,10 @@ public class VariableMgrTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
     }
@@ -291,5 +299,21 @@ public class VariableMgrTest {
                     e.getMessage());
         }
     }
-}
 
+    @Test
+    public void testImagePersist() throws Exception {
+        UtFrameUtils.PseudoImage.setUpImageVersion();
+        VariableMgr mgr = new VariableMgr();
+        GlobalVarPersistInfo info = new GlobalVarPersistInfo();
+        info.setPersistJsonString("{\"query_timeout\":100}");
+        mgr.replayGlobalVariableV2(info);
+
+        PseudoImage image = new PseudoImage();
+        mgr.save(image.getImageWriter());
+
+        VariableMgr mgr2 = new VariableMgr();
+        mgr2.load(image.getMetaBlockReader());
+
+        Assert.assertEquals(100, mgr2.getDefaultSessionVariable().getQueryTimeoutS());
+    }
+}
