@@ -36,7 +36,6 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.After;
 import org.junit.Test;

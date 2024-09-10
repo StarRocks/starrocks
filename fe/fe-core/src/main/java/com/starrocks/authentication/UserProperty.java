@@ -27,7 +27,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -211,7 +210,7 @@ public class UserProperty {
         GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
 
         // check whether the value is valid
-        Field field = VariableMgr.getField(sessionKey);
+        Field field = GlobalStateMgr.getCurrentState().getVariableMgr().getField(sessionKey);
         if (field == null || !canAssignValue(field, value)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, value);
         }

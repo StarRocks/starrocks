@@ -97,7 +97,7 @@ public class VariableMgrTest {
         Assert.assertEquals(32L, var.getSqlMode());
         Assert.assertEquals(true, var.isInnodbReadOnly());
 
-        List<List<String>> rows = VariableMgr.dump(SetType.SESSION, var, null);
+        List<List<String>> rows = variableMgr.dump(SetType.SESSION, var, null);
         Assert.assertTrue(rows.size() > 5);
         for (List<String> row : rows) {
             if (row.get(0).equalsIgnoreCase("exec_mem_limit")) {
@@ -261,20 +261,21 @@ public class VariableMgrTest {
 
     @Test
     public void testDumpInvisible() {
+        VariableMgr variableMgr = new VariableMgr();
         SessionVariable sv = new SessionVariable();
-        List<List<String>> vars = VariableMgr.dump(SetType.SESSION, sv, null);
+        List<List<String>> vars = variableMgr.dump(SetType.SESSION, sv, null);
         Assert.assertFalse(vars.toString().contains("enable_show_all_variables"));
         Assert.assertFalse(vars.toString().contains("cbo_use_correlated_join_estimate"));
 
         sv.setEnableShowAllVariables(true);
-        vars = VariableMgr.dump(SetType.SESSION, sv, null);
+        vars = variableMgr.dump(SetType.SESSION, sv, null);
         Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
 
-        vars = VariableMgr.dump(SetType.SESSION, null, null);
-        List<List<String>> vars1 = VariableMgr.dump(SetType.GLOBAL, null, null);
+        vars = variableMgr.dump(SetType.SESSION, null, null);
+        List<List<String>> vars1 = variableMgr.dump(SetType.GLOBAL, null, null);
         Assert.assertTrue(vars.size() < vars1.size());
 
-        List<List<String>> vars2 = VariableMgr.dump(SetType.SESSION, null, null);
+        List<List<String>> vars2 = variableMgr.dump(SetType.SESSION, null, null);
         Assert.assertTrue(vars.size() == vars2.size());
     }
 
