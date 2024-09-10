@@ -18,17 +18,23 @@ import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 
 public class AWSCloudConfigurationTest {
 
     @Test
-    public void testUseAWSSDKDefaultBehavior() {
+    public void testUseAWSSDKDefaultBehavior() throws Exception {
         // Test hadoop configuration
         Map<String, String>  properties = new HashMap<>();
         properties.put("aws.s3.use_aws_sdk_default_behavior", "true");
@@ -36,8 +42,20 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider",
+        Assert.assertEquals("com.starrocks.credential.provider.AWSDefaultCredentialsProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
+        S3AFileSystem fs = (S3AFileSystem) FileSystem.get(new URI("s3://hi/a.parquet"), configuration);
+        AWSCredentialProviderList list =  fs.shareCredentials("ut");
+        int previousHashCode = list.getProviders().get(0).hashCode();
+        fs.close();
+
+        fs = (S3AFileSystem) FileSystem.get(new URI("s3://hi/a.parquet"), configuration);
+        list =  fs.shareCredentials("ut");
+        int currentHashCode = list.getProviders().get(0).hashCode();
+        fs.close();
+
+        // Make sure two DefaultCredentialsProviders are different instances
+        Assert.assertTrue(previousHashCode != currentHashCode);
     }
 
     @Test
@@ -50,7 +68,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider",
+        Assert.assertEquals("com.starrocks.credential.provider.AWSDefaultCredentialsProvider",
                 configuration.get("fs.s3a.assumed.role.credentials.provider"));
         Assert.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));

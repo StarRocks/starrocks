@@ -25,6 +25,7 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
+import com.starrocks.credential.provider.AWSDefaultCredentialsProvider;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.Constants;
