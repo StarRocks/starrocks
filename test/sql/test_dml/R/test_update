@@ -107,3 +107,27 @@ select * from pk_tbl1 order by k1;
 drop table if exists pk_tbl1;
 -- result:
 -- !result
+
+create table pk_tbl2 (k1 int, k2 varchar(1)) primary key (k1) distributed by hash(k1);
+-- result:
+-- !result
+insert into pk_tbl2 values (1, "a"), (2, "bb");
+-- result:
+[REGEX].*Insert has filtered data.*
+-- !result
+set insert_max_filter_ratio = 1;
+-- result:
+-- !result
+insert into pk_tbl2 values (1, "a"), (2, "bb");
+-- result:
+-- !result
+select * from pk_tbl2;
+-- result:
+1	a
+-- !result
+set insert_max_filter_ratio = 0;
+-- result:
+-- !result
+drop table if exists pk_tbl2;
+-- result:
+-- !result

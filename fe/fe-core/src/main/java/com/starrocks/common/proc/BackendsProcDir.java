@@ -76,7 +76,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
                 .add("DataUsedPct").add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
                 .add("DataCacheMetrics")
-                .add("Location");
+                .add("Location")
+                .add("StatusCode");
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
@@ -236,6 +237,7 @@ public class BackendsProcDir implements ProcDirInterface {
             }
 
             backendInfo.add(PropertyAnalyzer.convertLocationMapToString(backend.getLocation()));
+            backendInfo.add(backend.getStatus().name());
 
             if (RunMode.isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));

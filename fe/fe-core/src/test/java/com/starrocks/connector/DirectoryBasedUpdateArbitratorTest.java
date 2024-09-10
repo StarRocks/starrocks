@@ -39,7 +39,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -75,7 +74,7 @@ public class DirectoryBasedUpdateArbitratorTest {
 
     @Test
     public void testGetPartitionDataInfos(@Mocked MetadataMgr metadataMgr) {
-        List<RemoteFileInfo> remoteFileInfos = createRemoteFileInfos(4);
+        List<PartitionInfo> partitionInfoList = createRemotePartitions(4);
 
         new Expectations() {
             {
@@ -84,7 +83,7 @@ public class DirectoryBasedUpdateArbitratorTest {
                 minTimes = 0;
 
                 metadataMgr.getRemotePartitions((Table) any, (List<String>) any);
-                result = remoteFileInfos;
+                result = partitionInfoList;
                 minTimes = 0;
             }
         };
@@ -107,7 +106,7 @@ public class DirectoryBasedUpdateArbitratorTest {
 
     @Test
     public void testGetPartitionDataInfosWithLimit(@Mocked MetadataMgr metadataMgr) {
-        List<RemoteFileInfo> remoteFileInfos = createRemoteFileInfos(4);
+        List<PartitionInfo> partitionInfoList = createRemotePartitions(4);
 
         new Expectations() {
             {
@@ -116,7 +115,7 @@ public class DirectoryBasedUpdateArbitratorTest {
                 minTimes = 0;
 
                 metadataMgr.getRemotePartitions((Table) any, (List<String>) any);
-                result = remoteFileInfos;
+                result = partitionInfoList;
                 minTimes = 0;
             }
         };
@@ -133,7 +132,7 @@ public class DirectoryBasedUpdateArbitratorTest {
             Map<String, Optional<HivePartitionDataInfo>> hivePartitionDataInfo = arbitrator.getPartitionDataInfos();
             Assert.assertEquals(2, hivePartitionDataInfo.size());
             Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
-            Assert.assertFalse(hivePartitionDataInfo.get("date=20240503").isPresent());
+            Assert.assertTrue(hivePartitionDataInfo.get("date=20240503").isPresent());
             Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240504"));
             Assert.assertTrue(hivePartitionDataInfo.get("date=20240504").isPresent());
         }
@@ -146,7 +145,7 @@ public class DirectoryBasedUpdateArbitratorTest {
             Map<String, Optional<HivePartitionDataInfo>> hivePartitionDataInfo = arbitrator.getPartitionDataInfos();
             Assert.assertEquals(4, hivePartitionDataInfo.size());
             Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240501"));
-            Assert.assertFalse(hivePartitionDataInfo.get("date=20240501").isPresent());
+            Assert.assertTrue(hivePartitionDataInfo.get("date=20240501").isPresent());
             Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240502"));
             Assert.assertTrue(hivePartitionDataInfo.get("date=20240502").isPresent());
             Assert.assertTrue(hivePartitionDataInfo.containsKey("date=20240503"));
@@ -156,24 +155,19 @@ public class DirectoryBasedUpdateArbitratorTest {
         }
     }
 
-    private List<RemoteFileInfo> createRemoteFileInfos(int num) {
-        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+    private List<PartitionInfo> createRemotePartitions(int num) {
+        List<PartitionInfo> partitionInfoList = Lists.newArrayList();
         long modificationTime = 100;
         for (int i = 0; i < num; i++) {
-            List<RemoteFileDesc> remoteFileDescs = null;
-            if (i != 0) {
-                int fileDescNum = i + 1;
-                remoteFileDescs = Lists.newArrayList();
-                for (int j = 0; j < fileDescNum; j++) {
-                    RemoteFileDesc fileDesc = new RemoteFileDesc("name", "gzip", 100, modificationTime + j, null);
-                    remoteFileDescs.add(fileDesc);
+            final long time = modificationTime + i;
+            partitionInfoList.add(new PartitionInfo() {
+                @Override
+                public long getModifiedTime() {
+                    return time;
                 }
-            }
-
-            RemoteFileInfo remoteFileInfo = new RemoteFileInfo(RemoteFileInputFormat.PARQUET, remoteFileDescs, "fullpath");
-            remoteFileInfos.add(remoteFileInfo);
+            });
         }
-        return remoteFileInfos;
+        return partitionInfoList;
     }
 
     private HiveTable createHiveTable(String location) {

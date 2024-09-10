@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Query Trace Profile
@@ -154,5 +154,5 @@ MySQL > TRACE LOGS OPTIMIZER  SELECT v1 FROM t1 ;
 
 The log will be printed in **fe.log**.
 
-![img](../../assets/query_trace_profile.png)
+![img](../../_assets/query_trace_profile.png)
 

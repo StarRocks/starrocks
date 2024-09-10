@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # covar_samp
@@ -26,7 +26,7 @@ COVAR_SAMP(expr1, expr2)
 
 返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
 
-![covar_samp_formula](../../../assets/covar_samp_formula.png)
+![covar_samp_formula](../../../_assets/covar_samp_formula.png)
 
 <!--$$
 \frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{n-1}

@@ -80,7 +80,6 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     std::atomic<int> runs{0};
     // the first tablet of a compaction request, will ask FE periodically to see if compaction is valid
     bool is_checker;
-    int64_t last_check_time = INT64_MAX;
     Status status;
     Progress progress;
     std::shared_ptr<CompactionTaskCallback> callback;

@@ -45,7 +45,6 @@ import org.apache.logging.log4j.Logger;
 public final class ProcService {
     private static final Logger LOG = LogManager.getLogger(ProcService.class);
     private static ProcService INSTANCE;
-
     private BaseProcDir root;
 
     private ProcService() {
@@ -63,6 +62,7 @@ public final class ProcService {
         root.register("transactions", new TransDbProcDir());
         root.register("monitor", new MonitorProcDir());
         root.register("current_queries", new CurrentQueryStatisticsProcDir());
+        root.register("global_current_queries", new CurrentGlobalQueryStatisticsProcDir());
         root.register("current_backend_instances", new CurrentQueryBackendInstanceProcDir());
         root.register("cluster_balance", new ClusterBalanceProcDir());
         root.register("routine_loads", new RoutineLoadsProcDir());
@@ -71,6 +71,7 @@ public final class ProcService {
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
         root.register("meta_recovery", new MetaRecoveryProdDir());
+        root.register("replications", new ReplicationsProcNode());
     }
 
     // Get the corresponding PROC Node by the specified path

@@ -1,0 +1,6 @@
+position: 70 # float position is supported
+label: 'SQL 黑名单'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

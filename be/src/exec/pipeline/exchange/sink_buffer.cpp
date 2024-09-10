@@ -238,7 +238,7 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     }
     if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
-        LOG(INFO) << fmt::format(
+        VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
                 "_num_sending_rpc {}, chunk is full {}",
                 print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,

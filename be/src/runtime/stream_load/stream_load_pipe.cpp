@@ -78,7 +78,7 @@ Status StreamLoadPipe::append(const char* data, size_t size) {
     // need to allocate a new chunk, min chunk is 64k
     size_t chunk_size = std::max(_min_chunk_size, size - pos);
     chunk_size = BitUtil::RoundUpToPowerOfTwo(chunk_size);
-    _write_buf = ByteBuffer::allocate(chunk_size);
+    ASSIGN_OR_RETURN(_write_buf, ByteBuffer::allocate_with_tracker(chunk_size));
     _write_buf->put_bytes(data + pos, size - pos);
     return Status::OK();
 }
@@ -195,7 +195,7 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
                         // put back the read data to the buf_queue, read the data in the next time
                         size_t chunk_size = bytes_read;
                         chunk_size = BitUtil::RoundUpToPowerOfTwo(chunk_size);
-                        ByteBufferPtr write_buf = ByteBuffer::allocate(chunk_size);
+                        ASSIGN_OR_RETURN(ByteBufferPtr write_buf, ByteBuffer::allocate_with_tracker(chunk_size));
                         write_buf->put_bytes((char*)data, bytes_read);
                         write_buf->flip();
                         // error happens iff pipe is cancelled
@@ -293,7 +293,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     }
 
     if (_decompressed_buffer == nullptr) {
-        _decompressed_buffer = ByteBuffer::allocate(buffer_size);
+        ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::allocate_with_tracker(buffer_size));
     }
 
     ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
@@ -316,7 +316,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     while (!stream_end) {
         // buffer size grows exponentially
         buffer_size = buffer_size < MAX_DECOMPRESS_BUFFER_SIZE ? buffer_size * 2 : MAX_DECOMPRESS_BUFFER_SIZE;
-        auto piece = ByteBuffer::allocate(buffer_size);
+        ASSIGN_OR_RETURN(auto piece, ByteBuffer::allocate_with_tracker(buffer_size));
         RETURN_IF_ERROR(_decompressor->decompress(
                 reinterpret_cast<uint8_t*>(buf->ptr) + total_bytes_read, buf->remaining() - total_bytes_read,
                 &bytes_read, reinterpret_cast<uint8_t*>(piece->ptr), piece->capacity, &bytes_written, &stream_end));
@@ -332,7 +332,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
         if (_decompressed_buffer->remaining() < pieces_size) {
             // align to 1024 bytes.
             auto sz = ALIGN_UP(_decompressed_buffer->pos + pieces_size, 1024);
-            _decompressed_buffer = ByteBuffer::reallocate(_decompressed_buffer, sz);
+            ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::reallocate_with_tracker(_decompressed_buffer, sz));
         }
         for (const auto& piece : pieces) {
             _decompressed_buffer->put_bytes(piece->ptr, piece->pos);

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Downgrade StarRocks
@@ -22,6 +22,12 @@ Review the information in this section before downgrading. Perform any recommend
 
   For compatibility and safety reasons, we strongly recommend you downgrade your StarRocks cluster **consecutively from one minor version to another**. For example, to downgrade a StarRocks v2.5 cluster to v2.2, you need to downgrade it in the following order: v2.5.x --> v2.4.x --> v2.3.x --> v2.2.x.
 
+  :::warning
+
+  After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+
+  :::
+
 - **For major version downgrade**
 
   You can only downgrade your StarRocks v3.0 cluster to v2.5.3 and later versions.
@@ -43,7 +49,7 @@ If you want to downgrade your StarRocks cluster to an earlier minor or major ver
 
 - **Universal compatibility configuration**
 
-Before downgrading your StarRocks cluster, you must disable tablet clone.
+Before downgrading your StarRocks cluster, you must disable tablet clone. You can skip this step if you have disabled the balancer.
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
@@ -93,7 +99,7 @@ After the compatibility configuration and the availability test, you can downgra
 
 1. Create a metadata snapshot.
 
-   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a meatedata snapshot.
+   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) to create a meatedata snapshot.
 
    b. You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized. 
 

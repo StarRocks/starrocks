@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 # where to put generated binaries
@@ -25,6 +21,7 @@ set(EXPR_FILES
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
+  agg/factory/aggregate_resolver_hypothesis_testing.cpp
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp
   agg/factory/aggregate_resolver_sumcount.cpp

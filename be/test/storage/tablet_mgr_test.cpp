@@ -46,6 +46,7 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -453,7 +454,7 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         to_add.push_back(std::move(src_rowset));
     }
 
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 0);
     tmp_list.clear();
     tablet->list_versions(&tmp_list);
@@ -478,11 +479,11 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         to_remove.push_back(to_add[i]);
     }
     to_add.clear();
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 0);
 
     // delete same rowset again
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 0);
 
     // replace stale rowset
@@ -499,7 +500,7 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
         RowsetSharedPtr src_rowset = *rowset_writer->build();
         to_remove.push_back(std::move(src_rowset));
     }
-    tablet->modify_rowsets(to_add, to_remove, &to_replace);
+    tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 3);
 }
 

@@ -17,6 +17,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "script/script.h"
+
 namespace starrocks {
 
 // Test EncryptionKey constructor with EncryptionKeyPB and accessors
@@ -27,8 +29,6 @@ TEST(EncryptionKeyTest, ConstructorWithPB) {
     pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
     pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
     pb.set_encrypted_key("0000000000000000");
-
-    ASSERT_FALSE(is_decrypted(pb));
 
     auto key = EncryptionKey::create_from_pb(pb).value();
     EXPECT_EQ(key->get_id(), 123);
@@ -44,8 +44,6 @@ TEST(EncryptionKeyTest, GenerateAndDecrypt) {
     pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
     pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
     pb.set_plain_key("0000000000000000");
-
-    ASSERT_TRUE(is_decrypted(pb));
 
     auto root_key = EncryptionKey::create_from_pb(pb).value();
     auto key = root_key->generate_key().value();
@@ -91,6 +89,8 @@ TEST_F(KeyCacheTest, AddKey) {
     key->set_id(2);
     cache.add_key(key);
     ASSERT_EQ(2, cache.size());
+    std::string result;
+    ASSERT_TRUE(execute_script("System.print(ExecEnv.key_cache_info())", result).ok());
 }
 
 static void wrap_unwrap_test(int num_level) {

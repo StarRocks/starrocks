@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 AUTO INCREMENT 列构建全局字典以加速精确去重计算和 Join

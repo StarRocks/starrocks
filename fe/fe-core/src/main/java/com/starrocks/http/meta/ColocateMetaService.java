@@ -269,7 +269,7 @@ public class ColocateMetaService {
                 return;
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                 if (table == null) {
@@ -286,7 +286,7 @@ public class ColocateMetaService {
                 response.appendContent("update succeed");
                 sendResult(request, response);
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
     }
@@ -295,7 +295,7 @@ public class ColocateMetaService {
     public static class BucketSeqAction extends ColocateMetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(BucketSeqAction.class);
 
-        BucketSeqAction(ActionController controller) {
+        public BucketSeqAction(ActionController controller) {
             super(controller);
         }
 
@@ -353,11 +353,12 @@ public class ColocateMetaService {
             sendResult(request, response);
         }
 
-        private void updateBackendPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
+        public void updateBackendPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
             colocateIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info2 =
                     ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info2);
+            colocateIndex.markGroupUnstable(groupId, true);
         }
     }
 

@@ -150,6 +150,11 @@ public class FunctionSet {
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
 
+    // Vector Index functions:
+    public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_COSINE_SIMILARITY_NORM = "approx_cosine_similarity_norm";
+    public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
+
     // Geo functions:
     public static final String ST_ASTEXT = "st_astext";
     public static final String ST_ASWKT = "st_aswkt";
@@ -242,6 +247,7 @@ public class FunctionSet {
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
+    public static final String DS_HLL_COUNT_DISTINCT = "ds_hll_count_distinct";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -283,6 +289,7 @@ public class FunctionSet {
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -511,6 +518,8 @@ public class FunctionSet {
 
     public static final String USER = "user";
 
+    public static final String SESSION_USER = "session_user";
+
     public static final String CURRENT_USER = "current_user";
 
     public static final String CURRENT_ROLE = "current_role";
@@ -601,7 +610,7 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
-                    .add(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH)
+                    .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
                     .add(FunctionSet.MD5_SUM_NUMERIC)
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
@@ -624,6 +633,13 @@ public class FunctionSet {
                     .add(SLEEP)
                     .build();
 
+    public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
+            ImmutableSet.<String>builder()
+                    .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_COSINE_SIMILARITY_NORM)
+                    .add(APPROX_L2_DISTANCE)
+                    .build();
+
     // Only use query cache if these time function can be reduced into a constant
     // date/datetime value after applying FoldConstantRule, otherwise BE would yield
     // non-deterministic result when these function is delivered to BE.
@@ -642,6 +658,12 @@ public class FunctionSet {
                     .add(LOCALTIMESTAMP)
                     .add()
                     .build();
+
+    // Contains all non-deterministic functions both time and non-time functions.
+    public static final Set<String> allNonDeterministicFunctions = ImmutableSet.<String>builder()
+            .addAll(nonDeterministicFunctions)
+            .addAll(nonDeterministicTimeFunctions)
+            .build();
 
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.DENSE_RANK)
@@ -713,6 +735,7 @@ public class FunctionSet {
             .add(DATABASE)
             .add(SCHEMA)
             .add(USER)
+            .add(SESSION_USER)
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
             .build();
@@ -928,10 +951,17 @@ public class FunctionSet {
     }
 
     /**
-     * Adds a builtin to this database. The function must not already exist.
+     * Adds a builtin scalar function to this database. The function must not already exist.
      */
     public void addBuiltin(Function fn) {
         addBuiltInFunction(fn);
+    }
+
+    /**
+     * Adds a builtin aggregate function to this database. The function must not already exist.
+     */
+    public void addBuiltin(AggregateFunction aggFunc) {
+        addBuiltInFunction(aggFunc);
     }
 
     // Populate all the aggregate builtins in the globalStateMgr.
@@ -1021,10 +1051,17 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
-            //APPROX_COUNT_DISTINCT_HLL_SKETCH
-            //compute approx count distinct use DataSketches HyperLogLog
-            addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT_HLL_SKETCH,
-                    Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
+            // ds_hll_count_distinct(col)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k, tgt_type)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
             // HLL_RAW
@@ -1206,6 +1243,22 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
+
+        // causal inference functions.
+        registerBuiltinHypothesisTestingFunctions();
+    }
+
+    private void registerBuiltinHypothesisTestingFunctions() {
+        // mann_whitney_u_test
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR, Type.BIGINT), Type.JSON,
+                Type.VARBINARY, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR), Type.JSON,
+                Type.VARBINARY, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN), Type.JSON,
+                Type.VARBINARY, false, false, false));
     }
 
     private void registerBuiltinSumAggFunction(String name) {
@@ -1448,5 +1501,4 @@ public class FunctionSet {
         }
         return builtinFunctions;
     }
-
 }

@@ -14,14 +14,9 @@
 
 #pragma once
 
-#include <exec/hdfs_scanner.h>
-
-#include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
+#include "exec/hdfs_scanner.h"
 #include "io/shared_buffered_input_stream.h"
 namespace starrocks {
 

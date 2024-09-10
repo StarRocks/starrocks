@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: English
+displayed_sidebar: docs
 ---
 
 # StarRocks Migration Tool (SMT) 
@@ -10,13 +10,13 @@ StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to
 
 | Source database | Generate statement to create table in StarRocks | Full data synchronization | Incremental data synchronization |
 | --------------- | ----------------------------------------------- | ------------------------- | -------------------------------- |
-| MySQL           | Support                                         | Support                   | Support                          |
-| PostgreSQL      | Support                                         | Support                   | Support                          |
-| Oracle          | Support                                         | Support                   | Support                          |
-| Hive            | Support                                         | Support                   | Not support                      |
-| ClickHouse      | Support                                         | Support                   | Not support                      |
-| SQL Server      | Support                                         | Support                   | Support                          |
-| TiDB            | Support                                         | Support                   | Support                          |
+| MySQL           | Supported                                         | Supported                   | Supported                          |
+| PostgreSQL      | Supported                                         | Supported                   | Supported                          |
+| Oracle          | Supported                                         | Supported                   | Supported                          |
+| Hive            | Supported                                         | Supported                   | Not supported                      |
+| ClickHouse      | Supported                                         | Supported                   | Not supported                      |
+| SQL Server      | Supported                                         | Supported                   | Supported                          |
+| TiDB            | Supported                                         | Supported                   | Supported                          |
 
 Download link: https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
 
@@ -106,7 +106,7 @@ The generally involved steps are as follows:
 
 Flink CDC connector and SMT can synchronize data from MySQL within subsecond. 
 
-![img](../../assets/load_tools.png)
+![img](../../_assets/load_tools.png)
 
 As shown in the image, SMT can automatically generate CREATE TABLE statements of the Flink's source and sink tables based on the cluster information and table structure of MySQL and StarRocks. Flink CDC connector reads the MySQL Binlog and Flink-connector-starrocks writes data to StarRocks .
 

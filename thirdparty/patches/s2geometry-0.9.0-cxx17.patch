@@ -1,0 +1,11 @@
+--- a/CMakeLists.txt    2024-07-12 11:56:13.164623272 +0000
++++ b/CMakeLists.txt    2024-07-12 11:55:30.791316892 +0000
+@@ -13,7 +13,7 @@
+     set(CMAKE_MACOSX_RPATH TRUE)
+ endif()
+ 
+-set(CMAKE_CXX_STANDARD 11)
++set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ # No compiler-specific extensions, i.e. -std=c++11, not -std=gnu++11.
+ set(CMAKE_CXX_EXTENSIONS OFF)

@@ -482,8 +482,10 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "map_from_arrays([1,2,3], ['a','b','c']))");
 
         sql = "select transform_values(map(array [1, 2, 3], array ['a', 'b', 'c']), (k, v) -> k * k);";
-        assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:CAST(<slot 2> AS SMALLINT) * " +
-                "CAST(<slot 2> AS SMALLINT)}, map_from_arrays([1,2,3], ['a','b','c']))");
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:<slot 6> * <slot 6>}\n" +
+                "        lambda common expressions:{<slot 6> <-> CAST(<slot 2> AS SMALLINT)}\n" +
+                "        , map_from_arrays([1,2,3], ['a','b','c']))");
     }
 
     @Test
@@ -1029,7 +1031,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : trim('  abcd')");
 
         sql = "select trim(trailing 'ER' from upper('worker'));";
-        assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+        assertPlanContains(sql, "<slot 2> : rtrim('WORKER', 'ER')");
 
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
@@ -1213,5 +1215,17 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select rand(10, 100);";
         assertPlanContains(sql, "<slot 2> : floor(random() * 90.0 + 10.0)");
+    }
+
+    @Test
+    public void testCastRowDataType() throws Exception {
+        String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
+        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<X bigint(20), Y double>)");
+    }
+
+    @Test
+    public void testCastArrayDataType() throws Exception {
+        String sql = "select cast(ARRAY[1] as array(int))";
+        assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
     }
 }

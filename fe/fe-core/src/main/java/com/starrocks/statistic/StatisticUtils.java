@@ -46,6 +46,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
@@ -100,11 +102,13 @@ public class StatisticUtils {
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
+        context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
+
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
         context.getSessionVariable().setWarehouseName(warehouse.getName());
@@ -139,7 +143,8 @@ public class StatisticUtils {
         return StatsConstants.AnalyzeType.FULL;
     }
 
-    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
+    public static void triggerCollectionOnFirstLoad(
+            TransactionState txnState, Database db, Table table, boolean sync, boolean useLock) {
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
@@ -157,15 +162,25 @@ public class StatisticUtils {
         }
         // collectPartitionIds contains partition that is first loaded.
         Set<Long> collectPartitionIds = Sets.newHashSet();
-        for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            // partition commit info id is physical partition id.
-            // statistic collect granularity is logic partition.
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition != null) {
-                Partition partition = table.getPartition(physicalPartition.getParentId());
-                if (partition != null && partition.isFirstLoad()) {
-                    collectPartitionIds.add(partition.getId());
+        Locker locker = new Locker();
+        if (useLock) {
+            locker.lockDatabase(db.getId(), LockType.READ);
+        }
+        try {
+            for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+                // partition commit info id is physical partition id.
+                // statistic collect granularity is logic partition.
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition != null) {
+                    Partition partition = table.getPartition(physicalPartition.getParentId());
+                    if (partition != null && partition.isFirstLoad()) {
+                        collectPartitionIds.add(partition.getId());
+                    }
                 }
+            }
+        } finally {
+            if (useLock) {
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         if (collectPartitionIds.isEmpty()) {
@@ -233,8 +248,8 @@ public class StatisticUtils {
         }
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-            if (null != db && null != db.getTable(tableId)) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -246,7 +261,7 @@ public class StatisticUtils {
         if (FeConstants.runningUnitTest) {
             return true;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
@@ -258,7 +273,7 @@ public class StatisticUtils {
 
         for (String tableName : tableNameList) {
             // check table
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 return false;
             }
@@ -388,9 +403,9 @@ public class StatisticUtils {
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
@@ -401,9 +416,9 @@ public class StatisticUtils {
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
@@ -578,7 +593,7 @@ public class StatisticUtils {
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);
         if (base == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
         }
 
         Type baseColumnType = base.getType();

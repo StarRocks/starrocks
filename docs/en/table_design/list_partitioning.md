@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # List partitioning
@@ -10,7 +10,7 @@ Since v3.1, StarRocks supports list partitioning. Data is partitioned based on a
 
 You need to explicitly specify the column values list in each partition. These values do not need to be continuous, unlike the continuous time or numeric range required in Range Partitioning. During data loading, StarRocks will store the data in the corresponding partition based on the mapping between the data's partitioning column values and the predefined column values for each partition.
 
-![list_partitioning](../assets/list_partitioning.png)
+![list_partitioning](../_assets/list_partitioning.png)
 
 List partitioning is suitable for storing data whose columns contain a small number of enum values, and you often query and manage data based on these enum values. For example, columns represent geographical locations, states, and categories. Each value in a column represents an independent category. By partitioning data based on enum values, you can improve query performance and facilitate data management.
 
@@ -54,7 +54,7 @@ value_item ::=
 
 | **Parameters**      | **Parameters** | **Description**                                              |
 | ------------------- | -------------- | ------------------------------------------------------------ |
-| `partition_columns` | YES            | the ames of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partitioning column allows `NULL` values. |
+| `partition_columns` | YES            | the names of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. From v3.3.3, the partitioning column allows `NULL` values. |
 | `partition_name`    | YES            | Partition name. It is recommended to set appropriate partition names based on the business scenario to differentiate the data in different partitions. |
 | `value_list`        | YES            | A list of partitioning column values in a partition.            |
 

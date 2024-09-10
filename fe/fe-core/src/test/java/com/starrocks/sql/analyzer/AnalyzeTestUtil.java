@@ -18,7 +18,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
@@ -358,6 +360,23 @@ public class AnalyzeTestUtil {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
+        }
+    }
+
+    public static void analyzeSetUserVariableFail(String originStmt, String exceptMessage) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            SetStmt setStmt = (SetStmt) statementBase;
+            SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
+            Assert.fail("Miss semantic error exception");
+        } catch (ParsingException | SemanticException | UnsupportedException e) {
+            if (!exceptMessage.equals("")) {
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+            }
+        } catch (Exception e) {
+            Assert.fail("analyze exception: " + e);
         }
     }
 }

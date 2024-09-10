@@ -27,8 +27,6 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -67,6 +65,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     private List<IndexSchemaInfo> schemaInfos;
     private Set<String> partitionsWithSchemaFile = new HashSet<>();
 
+    // for deserialization
+    public LakeTableAsyncFastSchemaChangeJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
+
     LakeTableAsyncFastSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         schemaInfos = new ArrayList<>();
@@ -86,7 +89,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition, MaterializedIndex index, long nodeId,
-            Set<Long> tablets) {
+                                                       Set<Long> tablets) {
         String tag = String.format("%d_%d", partition.getId(), index.getId());
         TabletMetadataUpdateAgentTask task = null;
         for (IndexSchemaInfo info : schemaInfos) {
@@ -103,13 +106,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected void updateCatalog(Database db, LakeTable table) {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            updateCatalogUnprotected(db, table);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
+        updateCatalogUnprotected(db, table);
     }
 
     private void updateCatalogUnprotected(Database db, LakeTable table) {

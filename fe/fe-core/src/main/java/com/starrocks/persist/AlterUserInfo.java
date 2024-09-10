@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
 public class AlterUserInfo implements Writable {
     @SerializedName(value = "u")
@@ -33,9 +34,17 @@ public class AlterUserInfo implements Writable {
     @SerializedName(value = "a")
     UserAuthenticationInfo authenticationInfo;
 
+    @SerializedName(value = "p")
+    Map<String, String> properties;
+
     public AlterUserInfo(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
         this.userIdentity = userIdentity;
         this.authenticationInfo = authenticationInfo;
+    }
+
+    public AlterUserInfo(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo, Map<String, String> properties) {
+        this(userIdentity, authenticationInfo);
+        this.properties = properties;
     }
 
     public UserIdentity getUserIdentity() {
@@ -44,6 +53,10 @@ public class AlterUserInfo implements Writable {
 
     public UserAuthenticationInfo getAuthenticationInfo() {
         return authenticationInfo;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override

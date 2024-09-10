@@ -329,3 +329,85 @@ f	1
 b	1
 None	1
 -- !result
+set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1;
+-- result:
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+5	6	7
+-- !result
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1;
+-- result:
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+6	7	8
+-- !result
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @eVar + 1;
+-- result:
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+6	7	None
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = 5, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+-- result:
+5	6
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = 6, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+-- result:
+6	7
+-- !result
+
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+-- result:
+-- !result
+select @xVar, @yVar, @zVar;
+-- result:
+1	None	1
+-- !result
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+-- result:
+-- !result
+select @xVar, @yVar, @zVar;
+-- result:
+1	2	1
+-- !result
+create table cities (
+    city_id int NOT NULL,
+     population int NOT NULL,
+    city string NOT NULL
+   ) PRIMARY KEY (city_id)
+DISTRIBUTED BY HASH(city_id);
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(1, 2000,"beijing");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(2, 2000,"shanghai");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(3, 2000,"guangzhou");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(4, 1000,"shenzhen");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(5, 2000, "chengdu");
+-- result:
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = (select max(population) from cities), @bVarHint = (select  max(city_id) from cities where population =  @aVarHint)) */  @aVarHint, @bVarHint;
+-- result:
+2000	5
+-- !result
+select @aVarHint, @bVarHint;
+-- result:
+None	None
+-- !result
+set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
+-- result:
+-- !result
+select @secondVar,@thirdVar;
+-- result:
+None	None
+-- !result

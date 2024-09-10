@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Catalogs、databases 和 tables
 
 StarRocks 使用 Internal Catalog 来管理内部数据，使用 External Catalog 来连接数据湖中的数据。存储在 StarRocks 中的数据都包含在 Internal Catalog 下，Internal Catalog 可以包含一个或多个数据库。数据库用于存储、管理和操作 StarRocks 中的数据，可用于管理多种对象，包括表、物化视图、视图等。StarRocks 采用权限系统来管理数据访问权限，定义了用户对哪些对象可以执行哪些操作，提高数据安全性。
 
-![img](../assets/table_design/Catalog_db_tbl.png)
+![img](../_assets/table_design/Catalog_db_tbl.png)
 
 ## [Catalogs](../data_source/catalog/catalog_overview.md)
 
@@ -44,7 +44,7 @@ StarRocks 中的表分为两类：内部表和外部表。
 
 物化视图是特殊的物理表，能够存储基于基表的预计算结果。当您对基表执行复杂查询时，StarRocks 可以自动复用物化视图中的预计算结果，实现查询透明加速、湖仓加速和数据建模等业务需求。物化视图分为同步物化视图和异步物化视图。其中异步物化视图能力更加强大，能够存储基于多个基表（内部表和外部表）的预计算结果，并且支持丰富的聚合算子。
 
-## [视图](../sql-reference/sql-statements/data-definition/CREATE_VIEW.md)
+## [视图](../sql-reference/sql-statements/View/CREATE_VIEW.md)
 
 视图（也叫逻辑视图）是虚拟表，不实际存储数据，其中所展示的数据来自于基表生成的查询结果。每次在查询中引用某个视图时，都会运行定义该视图的查询。
 

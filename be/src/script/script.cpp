@@ -21,7 +21,9 @@
 #include "common/greplog.h"
 #include "common/logging.h"
 #include "common/prof/heap_prof.h"
+#include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
@@ -134,7 +136,7 @@ std::string exec(const std::string& cmd) {
     std::string ret;
 
     FILE* fp = popen(cmd.c_str(), "r");
-    if (fp == NULL) {
+    if (fp == nullptr) {
         ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
         return ret;
     }
@@ -157,7 +159,7 @@ std::string exec(const std::string& cmd) {
 }
 
 static std::string exec_whitelist(const std::string& cmd) {
-    static std::regex legal_cmd("(ls|cat|head|tail|grep|free|echo)[^<>\\|;`\\\\]*");
+    static std::regex legal_cmd(R"((ls|cat|head|tail|grep|free|echo)[^<>\|;`\\]*)");
     std::cmatch m;
     if (!std::regex_match(cmd.c_str(), m, legal_cmd)) {
         return "illegal cmd";
@@ -167,6 +169,10 @@ static std::string exec_whitelist(const std::string& cmd) {
 
 static std::string io_profile_and_get_topn_stats(const std::string& mode, int seconds, size_t topn) {
     return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
+}
+
+static std::string key_cache_info() {
+    return KeyCache::instance().to_string();
 }
 
 void bind_exec_env(ForeignModule& m) {
@@ -201,6 +207,7 @@ void bind_exec_env(ForeignModule& m) {
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+        cls.funcStaticExt<&key_cache_info>("key_cache_info");
     }
     {
         auto& cls = m.klass<GlobalEnv>("GlobalEnv");
@@ -249,6 +256,13 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(HeapProf, snapshot);
         REG_METHOD(HeapProf, to_dot_format);
         REG_METHOD(HeapProf, dump_dot_snapshot);
+    }
+    {
+        auto& cls = m.klass<VLogCntl>("VLogCntl");
+        REG_STATIC_METHOD(VLogCntl, getInstance);
+        REG_METHOD(VLogCntl, enable);
+        REG_METHOD(VLogCntl, disable);
+        REG_METHOD(VLogCntl, setLogLevel);
     }
 }
 
@@ -562,7 +576,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

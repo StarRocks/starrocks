@@ -15,6 +15,7 @@
 #include "table_function_table_sink_operator.h"
 
 #include <boost/algorithm/string.hpp>
+#include <utility>
 
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
@@ -195,18 +196,18 @@ TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partiti
 }
 
 TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
-        const int32_t id, const string& path, const string& file_format, const TCompressionType::type& compression_type,
-        const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
-        const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names,
-        bool write_single_file, const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx)
+        const int32_t id, string path, string file_format, const TCompressionType::type& compression_type,
+        std::vector<ExprContext*> output_exprs, std::vector<ExprContext*> partition_exprs,
+        std::vector<std::string> column_names, std::vector<std::string> partition_column_names, bool write_single_file,
+        const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx)
         : OperatorFactory(id, "table_function_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
-          _path(path),
-          _file_format(file_format),
+          _path(std::move(path)),
+          _file_format(std::move(file_format)),
           _compression_type(compression_type),
-          _output_exprs(output_exprs),
-          _partition_exprs(partition_exprs),
-          _column_names(column_names),
-          _partition_column_names(partition_column_names),
+          _output_exprs(std::move(output_exprs)),
+          _partition_exprs(std::move(partition_exprs)),
+          _column_names(std::move(column_names)),
+          _partition_column_names(std::move(partition_column_names)),
           _write_single_file(write_single_file),
           _cloud_conf(cloud_conf),
           _fragment_ctx(fragment_ctx) {}

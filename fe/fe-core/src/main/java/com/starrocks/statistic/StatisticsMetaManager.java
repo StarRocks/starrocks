@@ -61,14 +61,14 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkDatabaseExist() {
-        return GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
     }
 
     private boolean createDatabase() {
         LOG.info("create statistics db start");
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (UserException e) {
             LOG.warn("Failed to create database ", e);
             return false;
@@ -78,9 +78,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkTableExist(String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
-        return db.getTable(tableName) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName) != null;
     }
 
     private boolean checkReplicateNormal(String tableName) {
@@ -92,9 +92,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return true;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) db.getTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         Preconditions.checkState(table != null);
         if (table.isCloudNativeTableOrMaterializedView()) {
             return true;

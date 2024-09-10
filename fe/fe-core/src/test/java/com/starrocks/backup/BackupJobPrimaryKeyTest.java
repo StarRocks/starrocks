@@ -138,7 +138,7 @@ public class BackupJobPrimaryKeyTest {
     private EditLog editLog;
 
     private Repository repo = new Repository(repoId, "repo_pk", false, "my_repo_pk",
-            new BlobStorage("broker", Maps.newHashMap()));
+                new BlobStorage("broker", Maps.newHashMap()));
 
     @BeforeClass
     public static void start() {
@@ -157,7 +157,7 @@ public class BackupJobPrimaryKeyTest {
             File backupDir = new File(path.toString());
             if (backupDir.exists()) {
                 Files.walk(path, FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                        .forEach(File::delete);
+                            .forEach(File::delete);
             }
         }
     }
@@ -172,11 +172,11 @@ public class BackupJobPrimaryKeyTest {
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
         db = UnitTestUtil.createDbByName(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS,
-                                         testDbName, testTableName);
+                    testDbName, testTableName);
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -187,6 +187,14 @@ public class BackupJobPrimaryKeyTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getLocalMetastore().getTable(testDbName, testTableName);
+                minTimes = 0;
+                result = db.getTable(tblId);
+
+                globalStateMgr.getLocalMetastore().getTable(testDbName, "unknown_tbl");
+                minTimes = 0;
+                result = null;
             }
         };
 
@@ -261,7 +269,7 @@ public class BackupJobPrimaryKeyTest {
         TStatus taskStatus = new TStatus(TStatusCode.OK);
         TBackend tBackend = new TBackend("", 0, 1);
         TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                snapshotTask.getSignature(), taskStatus);
+                    snapshotTask.getSignature(), taskStatus);
         request.setSnapshot_files(snapshotFiles);
         request.setSnapshot_path(snapshotPath);
         Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
@@ -292,7 +300,7 @@ public class BackupJobPrimaryKeyTest {
         Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
         Map<Long, List<String>> tabletFileMap = Maps.newHashMap();
         request = new TFinishTaskRequest(tBackend, TTaskType.UPLOAD,
-                upTask.getSignature(), taskStatus);
+                    upTask.getSignature(), taskStatus);
         request.setTablet_files(tabletFileMap);
 
         Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));

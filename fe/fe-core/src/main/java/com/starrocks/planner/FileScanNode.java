@@ -451,11 +451,7 @@ public class FileScanNode extends LoadScanNode {
 
         if (hasBroker) {
             FsBroker broker = null;
-            try {
-                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
-            } catch (AnalysisException e) {
-                throw new UserException(e.getMessage());
-            }
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
             brokerScanRange.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
         } else {
             brokerScanRange.addToBroker_addresses(new TNetworkAddress("", 0));
@@ -532,7 +528,7 @@ public class FileScanNode extends LoadScanNode {
         // numInstances:
         // min(totalBytes / min_bytes_per_broker_scanner,
         //     backends_size * parallelInstanceNum)
-        numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
+        int numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
         numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
         numInstances = Math.max(1, numInstances);
 
@@ -678,9 +674,6 @@ public class FileScanNode extends LoadScanNode {
             processFileGroup(context, fileStatuses);
         }
 
-        // update numInstances
-        numInstances = locationsList.size();
-
         if (LOG.isDebugEnabled()) {
             for (TScanRangeLocations locations : locationsList) {
                 LOG.debug("Scan range is {}", locations);
@@ -752,10 +745,6 @@ public class FileScanNode extends LoadScanNode {
         }
     }
 
-    @Override
-    public int getNumInstances() {
-        return numInstances;
-    }
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {

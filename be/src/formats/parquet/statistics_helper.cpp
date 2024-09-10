@@ -38,7 +38,7 @@
 
 namespace starrocks::parquet {
 
-Status StatisticsHelper::decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
+Status StatisticsHelper::decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
                                                   const TypeDescriptor& type, const ParquetField* field,
                                                   const std::string& timezone) {
     std::unique_ptr<ColumnConverter> converter;
@@ -162,7 +162,7 @@ bool StatisticsHelper::can_be_used_for_statistics_filter(ExprContext* ctx,
     }
 }
 
-void translate_to_string_value(ColumnPtr col, size_t i, std::string& value) {
+void translate_to_string_value(const ColumnPtr& col, size_t i, std::string& value) {
     if (col->is_date()) {
         value = col->get(i).get_date().to_string();
         return;

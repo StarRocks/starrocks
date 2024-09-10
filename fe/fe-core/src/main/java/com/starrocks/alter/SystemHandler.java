@@ -238,9 +238,9 @@ public class SystemHandler extends AlterHandler {
                                 continue;
                             }
                             Locker locker = new Locker();
-                            locker.lockDatabase(db, LockType.READ);
+                            locker.lockDatabase(db.getId(), LockType.READ);
                             try {
-                                for (Table table : db.getTables()) {
+                                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                                     if (table instanceof OlapTable) {
                                         OlapTable olapTable = (OlapTable) table;
                                         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -262,7 +262,7 @@ public class SystemHandler extends AlterHandler {
                                     }
                                 }
                             } finally {
-                                locker.unLockDatabase(db, LockType.READ);
+                                locker.unLockDatabase(db.getId(), LockType.READ);
                             }
                         }
                     }

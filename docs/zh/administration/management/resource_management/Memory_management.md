@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 管理内存
@@ -36,7 +36,7 @@ http://be_ip:8040/mem_tracker
 > * 将以上 `be_ip` 改为 BE 节点实际的 IP 地址。
 > * BE `be_http_port` 默认为 `8040`。
 
-![MemTracker](../../../assets/memory_management_1.png)
+![MemTracker](../../../_assets/memory_management_1.png)
 
 指标说明：
 

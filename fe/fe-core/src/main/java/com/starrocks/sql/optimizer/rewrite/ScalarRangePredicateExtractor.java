@@ -57,6 +57,7 @@ public class ScalarRangePredicateExtractor {
 
         Set<ScalarOperator> conjuncts = Sets.newLinkedHashSet();
         conjuncts.addAll(Utils.extractConjuncts(predicate));
+        predicate = Utils.compoundAnd(conjuncts);
 
         Map<ScalarOperator, ValueDescriptor> extractMap = extractImpl(predicate);
 
@@ -82,7 +83,6 @@ public class ScalarRangePredicateExtractor {
             return predicate;
         }
 
-        predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
         if (isOnlyOrCompound(predicate)) {
             Set<ColumnRefOperator> c = Sets.newHashSet(Utils.extractColumnRef(predicate));
             if (c.size() == extractMap.size() &&
@@ -95,6 +95,17 @@ public class ScalarRangePredicateExtractor {
             List<ScalarOperator> cs = Utils.extractConjuncts(predicate);
             Set<ColumnRefOperator> cf = new HashSet<>(Utils.extractColumnRef(predicate));
 
+            // getSourceCount = cs.size() means that all and components have the same column ref
+            // and it can be merged into one range predicate. mistakenly, when the predicate is
+            // date_trunc(YEAR, dt) = '2024-01-01' AND mode = 'Buzz' AND
+            // date_trunc(YEAR, dt) = '2024-01-01' AND mode = 'Buzz' //duplicate
+            //
+            // only mode = 'Buzz' is a extractable range predicate, so its corresponding ValueDescriptor's
+            // sourceCount = 2(since it occurs twice), and cs(it is also 2 in this example)are number of
+            // unique column refs of the predicate, the two values are properly equivalent, so it yields
+            // wrong result.
+            //
+            // Components of AND/OR should be deduplicated at first to avoid this issue.
             if (extractMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.getSourceCount() == cs.size())
                     && extractMap.size() == cf.size()) {
                 if (result.size() == conjuncts.size()) {

@@ -179,7 +179,7 @@ public class WarehouseManagerTest {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 if (warehouseId != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-                    ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+                    throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
                 }
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }

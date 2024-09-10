@@ -583,6 +583,12 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
     _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, "SegmentInit");
     _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", "SegmentInit");
+    _get_row_ranges_by_vector_index_timer = ADD_CHILD_TIMER(_scan_profile, "GetVectorRowRangesTime", "SegmentInit");
+    _vector_search_timer = ADD_CHILD_TIMER(_scan_profile, "VectorSearchTime", "SegmentInit");
+    _vector_index_filtered_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexFilterRows", TUnit::UNIT, "SegmentInit");
+    _process_vector_distance_and_id_timer =
+            ADD_CHILD_TIMER(_scan_profile, "ProcessVectorDistanceAndIdTime", "SegmentInit");
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
@@ -751,6 +757,23 @@ StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* sca
     }
 
     return tablet;
+}
+
+StatusOr<std::vector<RowsetSharedPtr>> OlapScanNode::capture_tablet_rowsets(const TabletSharedPtr& tablet,
+                                                                            const TInternalScanRange* scan_range) {
+    std::vector<RowsetSharedPtr> rowsets;
+    if (scan_range->__isset.gtid) {
+        std::shared_lock l(tablet->get_header_lock());
+        RETURN_IF_ERROR(tablet->capture_consistent_rowsets(scan_range->gtid, &rowsets));
+        Rowset::acquire_readers(rowsets);
+    } else {
+        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
+        // Capture row sets of this version tablet.
+        std::shared_lock l(tablet->get_header_lock());
+        RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &rowsets));
+        Rowset::acquire_readers(rowsets);
+    }
+    return rowsets;
 }
 
 int OlapScanNode::estimated_max_concurrent_chunks() const {

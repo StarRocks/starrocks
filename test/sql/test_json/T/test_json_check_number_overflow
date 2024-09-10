@@ -1,0 +1,13 @@
+-- name: test_json_check_number_overflow
+
+create database test_json_check_number_overflow_${uuid0};
+use test_json_check_number_overflow_${uuid0};
+
+create table t1(k1 int, d1 bigint, f1 int) PROPERTIES (
+    "replication_num" = "1"
+);
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/check_number_overflow.json  -H "format: JSON" --header "Expect: 100-continue"   -XPUT -H partial_update:false -H label:test_json_check_number_overflow_${uuid0} ${url}/api/test_json_check_number_overflow_${uuid0}/t1/_stream_load
+sync;
+
+select * from t1 order by k1;

@@ -16,7 +16,7 @@
 
 #include <atomic>
 
-#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"

@@ -99,7 +99,7 @@ public:
         ASSERT_EQ(1024, src_rowset->num_rows());
         to_delete.push_back(src_rowset);
 
-        tablet->modify_rowsets(to_add, to_delete, &to_replace);
+        tablet->modify_rowsets_without_lock(to_add, to_delete, &to_replace);
         ASSERT_EQ(to_replace.size(), 1);
         ASSERT_EQ(to_replace[0]->rowset_id(), to_check->rowset_id());
     }

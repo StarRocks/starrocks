@@ -53,8 +53,6 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DynamicPartitionProperty;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -73,7 +71,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -83,7 +82,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
@@ -100,6 +98,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -116,7 +115,6 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
-import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
@@ -612,7 +610,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         if (fields.isEmpty()) {
             throw new DdlException("Field[" + dropFieldName + "] is the last field of column[" + modifyColumnName +
-                                   "], can not drop any more.");
+                    "], can not drop any more.");
         }
         oriFieldType.updateFields(fields);
 
@@ -1456,6 +1454,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         long baseIndexId = olapTable.getBaseIndexId();
+        Map<Integer, Column> columnUniqueIdToColumn = Maps.newHashMap();
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
         for (Long alterIndexId : indexSchemaMap.keySet()) {
@@ -1577,6 +1576,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
                 dataBuilder.withNewIndexShortKeyCount(alterIndexId,
                         newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
+            }
+
+            // 6. check the uniqueness of column unique id
+            if (olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                for (Column alterColumn : alterSchema) {
+                    Column existedColumn = columnUniqueIdToColumn.putIfAbsent(alterColumn.getUniqueId(), alterColumn);
+                    if (existedColumn != null && !existedColumn.getName().equals(alterColumn.getName())) {
+                        LOG.warn(
+                                "Table {} column {} has same unique id {} with column {}, table max column unique id: {}",
+                                olapTable.getName(), alterColumn.getName(), alterColumn.getUniqueId(),
+                                existedColumn.getName(), olapTable.getMaxColUniqueId());
+                        throw new DdlException("Column " + alterColumn.getName() + " has same unique id "
+                                + alterColumn.getUniqueId() + " with column " + existedColumn.getName());
+                    }
+                }
             }
         } // end for indices
 
@@ -1779,83 +1793,16 @@ public class SchemaChangeHandler extends AlterHandler {
         Map<String, String> propertyMap = new HashMap<>();
         Set<String> modifyFieldColumns = new HashSet<>();
         for (AlterClause alterClause : alterClauses) {
-            Map<String, String> properties = alterClause.getProperties();
-            if (properties != null) {
-                if (propertyMap.isEmpty()) {
-                    propertyMap.putAll(properties);
-                } else {
+            if (alterClause instanceof AlterTableColumnClause) {
+                if (!propertyMap.isEmpty()) {
                     throw new DdlException("reduplicated PROPERTIES");
                 }
-
-                // modification of colocate property is handle alone.
-                // And because there should be only one colocate property modification clause in stmt,
-                // so just return after finished handling.
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
-                    if (olapTable.getLocation() != null) {
-                        ErrorReport.reportDdlException(
-                                ErrorCode.ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL, olapTable.getName());
-                    }
-                    String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
-                    GlobalStateMgr.getCurrentState().getColocateTableIndex()
-                            .modifyTableColocate(db, olapTable, colocateGroup, false, null);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().convertDistributionType(db, olapTable);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
-                    /*
-                     * This is only for fixing bug when upgrading StarRocks from 0.9.x to 0.10.x.
-                     */
-                    sendClearAlterTask(db, olapTable);
-                    return null;
-                } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
-                    if (!olapTable.dynamicPartitionExists()) {
-                        try {
-                            DynamicPartitionUtil
-                                    .checkInputDynamicPartitionProperties(olapTable, properties, olapTable.getPartitionInfo());
-                        } catch (DdlException e) {
-                            // This table is not a dynamic partition table and didn't supply all dynamic partition properties
-                            throw new DdlException("Table " + db.getOriginName() + "." +
-                                    olapTable.getName() + " is not a dynamic partition table.");
-                        }
-                    }
-                    if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
-                        String colocateGroup = olapTable.getColocateGroup();
-                        if (colocateGroup != null) {
-                            throw new DdlException("The table has a colocate group:" + colocateGroup + ". so cannot " +
-                                    "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
-                        }
-                    }
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableDynamicPartition(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                    Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
-                    GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .modifyTableDefaultReplicationNum(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableReplicationNum(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
+                propertyMap.putAll(((AlterTableColumnClause) alterClause).getProperties());
+            } else if (alterClause instanceof ModifyTablePropertiesClause) {
+                if (!propertyMap.isEmpty()) {
+                    throw new DdlException("reduplicated PROPERTIES");
                 }
+                propertyMap.putAll(((ModifyTablePropertiesClause) alterClause).getProperties());
             }
 
             if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
@@ -1896,7 +1843,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof AddFieldClause) {
-                if (RunMode.isSharedDataMode()) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Add field for struct column not support shared-data mode so far");
                 }
                 if (!fastSchemaEvolution) {
@@ -1905,11 +1852,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
-
                 int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
-                if (RunMode.isSharedDataMode()) {
+                if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Drop field for struct column not support shared-data mode so far");
                 }
                 if (!fastSchemaEvolution) {
@@ -2050,13 +1996,11 @@ public class SchemaChangeHandler extends AlterHandler {
         return null;
     }
 
-    public AlterJobV2 createAlterMetaJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
+    public AlterJobV2 createAlterMetaJob(AlterClause alterClause, Database db, OlapTable olapTable)
             throws UserException {
         LakeTableAlterMetaJob alterMetaJob;
-        Preconditions.checkState(alterClauses.size() == 1);
-        AlterClause alterClause = alterClauses.get(0);
-        Map<String, String> properties = alterClause.getProperties();
         if (alterClause instanceof ModifyTablePropertiesClause) {
+            Map<String, String> properties = ((ModifyTablePropertiesClause) alterClause).getProperties();
             // update table meta
             // for now enable_persistent_index
             if (properties.size() > 1) {
@@ -2090,10 +2034,9 @@ public class SchemaChangeHandler extends AlterHandler {
         return alterMetaJob;
     }
 
-    public ShowResultSet processLakeTableAlterMeta(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
+    public ShowResultSet processLakeTableAlterMeta(AlterClause alterClause, Database db, OlapTable olapTable)
             throws UserException {
-
-        AlterJobV2 alterMetaJob = createAlterMetaJob(alterClauses, db, olapTable);
+        AlterJobV2 alterMetaJob = createAlterMetaJob(alterClause, db, olapTable);
         if (alterMetaJob == null) {
             return null;
         }
@@ -2110,45 +2053,19 @@ public class SchemaChangeHandler extends AlterHandler {
         return null;
     }
 
-    private void sendClearAlterTask(Database db, OlapTable olapTable) {
-        AgentBatchTask batchTask = new AgentBatchTask();
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
-        try {
-            for (Partition partition : olapTable.getPartitions()) {
-                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                        for (Tablet tablet : index.getTablets()) {
-                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                ClearAlterTask alterTask = new ClearAlterTask(replica.getBackendId(), db.getId(),
-                                        olapTable.getId(), physicalPartition.getId(), index.getId(), tablet.getId(), schemaHash);
-                                batchTask.addTask(alterTask);
-                            }
-                        }
-                    }
-                }
-            }
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
-        }
-
-        AgentTaskExecutor.submit(batchTask);
-        LOG.info("send clear alter task for table {}, number: {}", olapTable.getName(), batchTask.getTaskNum());
-    }
-
     public void updateTableMeta(Database db, String tableName, Map<String, String> properties,
                                 TTabletMetaType metaType)
             throws DdlException {
         List<Partition> partitions = Lists.newArrayList();
-        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             partitions.addAll(olapTable.getPartitions());
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         boolean metaValue = false;
@@ -2178,6 +2095,16 @@ public class SchemaChangeHandler extends AlterHandler {
             if (bucketSize == olapTable.getAutomaticBucketSize()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.MUTABLE_BUCKET_NUM) {
+            long mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
+            if (mutableBucketNum == olapTable.getMutableBucketNum()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
+            boolean enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
+            if (enableLoadProfile == olapTable.enableLoadProfile()) {
+                return;
+            }
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
                     PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
@@ -2195,11 +2122,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2213,12 +2140,12 @@ public class SchemaChangeHandler extends AlterHandler {
         boolean hasChanged = false;
         boolean isModifiedSuccess = true;
 
-        OlapTable olapTable = (OlapTable) db.getTable(tableId);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (olapTable == null) {
             return false;
         }
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             partitions.addAll(olapTable.getPartitions());
             if (!olapTable.containsBinlogConfig()) {
@@ -2228,7 +2155,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 newBinlogConfig = new BinlogConfig(olapTable.getCurBinlogConfig());
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         // judge whether the attribute has changed
@@ -2262,7 +2189,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return true;
         }
 
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             // check for concurrent modifications by version
             if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
@@ -2293,7 +2220,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.warn("update binlog config of table {} failed", olapTable.getName());
             isModifiedSuccess = false;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
 
         // TODO optimize by asynchronous rpc
@@ -2319,9 +2246,10 @@ public class SchemaChangeHandler extends AlterHandler {
                                              String tableName,
                                              List<String> partitionNames,
                                              Map<String, String> properties) throws DdlException {
-        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), tableName);
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             for (String partitionName : partitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
@@ -2331,7 +2259,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         boolean isInMemory = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
@@ -2362,10 +2290,11 @@ public class SchemaChangeHandler extends AlterHandler {
                                                 TTabletMetaType metaType) throws DdlException {
         // be id -> Set<tablet id>
         Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
-        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
@@ -2384,7 +2313,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletId.keySet().size();
@@ -2448,10 +2377,11 @@ public class SchemaChangeHandler extends AlterHandler {
                                           TTabletMetaType metaType) throws DdlException {
         // be id -> <tablet id>
         Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
-        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), tableName);
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
@@ -2470,7 +2400,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletSet.keySet().size();
@@ -2535,14 +2465,14 @@ public class SchemaChangeHandler extends AlterHandler {
         TableProperty tableProperty;
         OlapTable olapTable;
         try {
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 throw new DdlException(String.format("table:%s does not exist", tableName));
             }
             olapTable = (OlapTable) table;
             tableProperty = olapTable.getTableProperty();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         boolean hasChanged = false;
@@ -2592,11 +2522,11 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!hasChanged) {
             return;
         }
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2613,12 +2543,12 @@ public class SchemaChangeHandler extends AlterHandler {
         Preconditions.checkState(!Strings.isNullOrEmpty(dbName));
         Preconditions.checkState(!Strings.isNullOrEmpty(tableName));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
 
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -2628,7 +2558,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         AlterJobV2 schemaChangeJobV2 = null;
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
@@ -2646,7 +2576,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Table[" + tableName + "] is under SCHEMA_CHANGE but job does not exits.");
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock
@@ -2751,7 +2681,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, Long> indexToNewSchemaId, boolean isReplay)
             throws DdlException, NotImplementedException {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
@@ -2760,6 +2690,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // for now table's state can only be NORMAL
             Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+            olapTable.setState(OlapTableState.UPDATING_META);
             SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), 1000);
             // update base index schema
@@ -2830,7 +2761,8 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("finished modify table's add or drop column(field). table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            olapTable.setState(OlapTableState.NORMAL);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
@@ -2844,14 +2776,14 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Index> indexes = info.getIndexes();
         long jobId = info.getJobId();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Table table = db.getTable(tableId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         Preconditions.checkArgument(table instanceof OlapTable,
                 "Target of light schema change must be olap table");
         OlapTable olapTable = (OlapTable) table;
         Locker locker = new Locker();
         try {
-            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
             modifyTableAddOrDrop(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
                     indexToNewSchemaId, true);
         } catch (DdlException e) {
@@ -2860,7 +2792,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } catch (NotImplementedException e) {
             LOG.error("InternalError", e);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 

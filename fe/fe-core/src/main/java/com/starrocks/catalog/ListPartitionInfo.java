@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -32,10 +33,16 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -99,6 +106,99 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToIsTempPartition = new HashMap<>();
     }
 
+    public static class ListPartitionValue implements Comparable<ListPartitionValue> {
+        public LiteralExpr singleColumnValue;
+        public List<LiteralExpr> multiColumnValues;
+
+        public static ListPartitionValue none() {
+            return null;
+        }
+
+        public static ListPartitionValue of(LiteralExpr single) {
+            ListPartitionValue value = new ListPartitionValue();
+            value.singleColumnValue = single;
+            return value;
+        }
+
+        public static ListPartitionValue of(List<LiteralExpr> multi) {
+            ListPartitionValue value = new ListPartitionValue();
+            value.multiColumnValues = multi;
+            return value;
+        }
+
+        public ConstantOperator toConstant() {
+            Preconditions.checkState(multiColumnValues == null);
+            return (ConstantOperator) SqlToScalarOperatorTranslator.translate(singleColumnValue);
+        }
+
+        @Override
+        public int compareTo(@NotNull ListPartitionValue o) {
+            if (singleColumnValue != null) {
+                return singleColumnValue.compareTo(o.singleColumnValue);
+            }
+            if (multiColumnValues != null) {
+                return compareColumns(multiColumnValues, o.multiColumnValues);
+            }
+            return 0;
+        }
+    }
+
+    /**
+     * Represent a partition cell, which can be single-column or multiple-columns
+     */
+    public static class ListPartitionCell {
+        public static final ListPartitionCell EMPTY = new ListPartitionCell();
+
+        private List<LiteralExpr> singleColumnValues;
+        private List<List<LiteralExpr>> multiColumnValues;
+
+        public static ListPartitionCell single(List<LiteralExpr> values) {
+            ListPartitionCell res = new ListPartitionCell();
+            res.singleColumnValues = values;
+            return res;
+        }
+
+        public static ListPartitionCell multi(List<List<LiteralExpr>> multi) {
+            ListPartitionCell res = new ListPartitionCell();
+            res.multiColumnValues = multi;
+            return res;
+        }
+
+        public boolean isEmpty() {
+            return CollectionUtils.isEmpty(singleColumnValues) && CollectionUtils.isEmpty(multiColumnValues);
+        }
+
+        public ListPartitionValue minValue() {
+            if (singleColumnValues != null) {
+                return ListPartitionValue.of(singleColumnValues.stream().min(LiteralExpr::compareTo).get());
+            }
+            if (multiColumnValues != null) {
+                return ListPartitionValue.of(multiColumnValues.stream().min(ListPartitionInfo::compareColumns).get());
+            }
+            return ListPartitionValue.none();
+        }
+
+        public ListPartitionValue maxValue() {
+            if (singleColumnValues != null) {
+                return ListPartitionValue.of(singleColumnValues.stream().max(LiteralExpr::compareTo).get());
+            }
+            if (multiColumnValues != null) {
+                return ListPartitionValue.of(multiColumnValues.stream().max(ListPartitionInfo::compareColumns).get());
+            }
+            return ListPartitionValue.none();
+        }
+    }
+
+    public ListPartitionCell getPartitionListExpr(long partitionId) {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return ListPartitionCell.single(idToLiteralExprValues.get(partitionId));
+        } else if (MapUtils.isNotEmpty(idToMultiLiteralExprValues)) {
+            return ListPartitionCell.multi(idToMultiLiteralExprValues.get(partitionId));
+        } else {
+            return ListPartitionCell.EMPTY;
+        }
+    }
+
     public void setValues(long partitionId, List<String> values) {
         this.idToValues.put(partitionId, values);
     }
@@ -144,6 +244,21 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public Map<Long, List<LiteralExpr>> getLiteralExprValues() {
         return this.idToLiteralExprValues;
+    }
+
+    /**
+     * Return all unique values for specified partitionIds
+     */
+    public Set<LiteralExpr> getValuesSet(Set<Long> partitionIds) {
+        if (MapUtils.isEmpty(idToLiteralExprValues)) {
+            return Sets.newHashSet();
+        }
+        return idToLiteralExprValues
+                .entrySet()
+                .stream()
+                .filter(x -> partitionIds.contains(x.getKey()))
+                .flatMap(x -> x.getValue().stream())
+                .collect(Collectors.toSet());
     }
 
     public void setMultiValues(long partitionId, List<List<String>> multiValues) {
@@ -369,7 +484,6 @@ public class ListPartitionInfo extends PartitionInfo {
                     long partitionId = partition.getId();
                     PartitionDesc partitionDesc = entry.second;
                     Preconditions.checkArgument(partitionDesc instanceof SinglePartitionDesc);
-                    Preconditions.checkArgument(((SinglePartitionDesc) partitionDesc).isAnalyzed());
                     this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
                     this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
                     this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
@@ -456,7 +570,14 @@ public class ListPartitionInfo extends PartitionInfo {
 
     @Override
     public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) {
-        idToValues.put(partitionId, Collections.emptyList());
+        if (isMultiColumnPartition()) {
+            idToMultiValues.put(partitionId, Collections.emptyList());
+            idToMultiLiteralExprValues.put(partitionId, Collections.emptyList());
+        } else {
+            idToValues.put(partitionId, Collections.emptyList());
+            idToLiteralExprValues.put(partitionId, Collections.emptyList());
+        }
+
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
@@ -479,6 +600,55 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public void setStorageCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
         idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+    }
+
+    @Override
+    public List<Long> getSortedPartitions(boolean asc) {
+        if (MapUtils.isNotEmpty(idToLiteralExprValues)) {
+            return idToLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
+                    .sorted((x, y) -> compareRow(x.getValue(), y.getValue(), asc))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else if (MapUtils.isEmpty(idToMultiLiteralExprValues)) {
+            return idToMultiLiteralExprValues.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
+                    .sorted((x, y) -> compareMultiValueList(x.getValue(), y.getValue(), asc))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            throw new NotImplementedException("todo");
+        }
+    }
+
+    /**
+     * Compare based on the max/min value in the list
+     */
+    private static int compareRow(List<LiteralExpr> lhs, List<LiteralExpr> rhs, boolean asc) {
+        ListPartitionValue lhsValue =
+                asc ? ListPartitionCell.single(lhs).minValue() : ListPartitionCell.single(lhs).maxValue();
+        ListPartitionValue rhsValue =
+                asc ? ListPartitionCell.single(rhs).minValue() : ListPartitionCell.single(rhs).maxValue();
+        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
+    }
+
+    private static int compareColumns(List<LiteralExpr> lhs, List<LiteralExpr> rhs) {
+        assert lhs.size() == rhs.size();
+        for (int i = 0; i < lhs.size(); i++) {
+            int x = lhs.get(i).compareTo(rhs.get(i));
+            if (x != 0) {
+                return x;
+            }
+        }
+        return 0;
+    }
+
+    private static int compareMultiValueList(List<List<LiteralExpr>> lhs, List<List<LiteralExpr>> rhs, boolean asc) {
+        ListPartitionValue lhsValue =
+                asc ? ListPartitionCell.multi(lhs).minValue() : ListPartitionCell.multi(lhs).maxValue();
+        ListPartitionValue rhsValue =
+                asc ? ListPartitionCell.multi(rhs).minValue() : ListPartitionCell.multi(rhs).maxValue();
+        return lhsValue.compareTo(rhsValue) * (asc ? 1 : -1);
     }
 
     @Override

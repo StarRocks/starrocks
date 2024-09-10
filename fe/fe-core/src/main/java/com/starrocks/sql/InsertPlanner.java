@@ -489,7 +489,9 @@ public class InsertPlanner {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
                         targetTable);
             } finally {
-                StatementPlanner.lock(plannerMetaLocker);
+                try (Timer ignore2 = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                }
             }
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
@@ -698,7 +700,6 @@ public class InsertPlanner {
                                              ConnectContext session) {
         Set<Column> baseSchema = Sets.newHashSet(outputBaseSchema);
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-
         for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
             Column targetColumn = outputFullSchema.get(columnIdx);
 
@@ -749,14 +750,6 @@ public class InsertPlanner {
                                     "please check the associated materialized view " + targetIndexMetaName
                                     + " of target table:" + insertStatement.getTargetTable().getName());
                 }
-
-                ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
-                        new Scope(RelationId.anonymous(),
-                                new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
-                                        .map(col -> new Field(col.getName(), col.getType(),
-                                                insertStatement.getTableName(), null))
-                                        .collect(Collectors.toList()))), session);
-
                 ExpressionMapping expressionMapping =
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());

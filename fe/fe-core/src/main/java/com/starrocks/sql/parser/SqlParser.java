@@ -35,7 +35,10 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.atn.ParserATNSimulator;
+import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
+import org.antlr.v4.runtime.dfa.DFA;
 import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,6 +53,7 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
     private static final String EOF = "<EOF>";
+    private static final int MIN_TOKEN_LIMIT = 100;
     private final AstBuilder.AstBuilderFactory astBuilderFactory;
 
     public SqlParser(AstBuilder.AstBuilderFactory astBuilderFactory) {
@@ -224,12 +228,21 @@ public class SqlParser {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
+        int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
         StarRocksParser parser = new StarRocksParser(tokenStream);
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
-                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
+        parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
+        if (!Config.enable_parser_context_cache) {
+            DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
+            for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
+                decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
+            }
+            parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
+        }
+
         try {
             // inspire by https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
             // try SLL mode with BailErrorStrategy firstly

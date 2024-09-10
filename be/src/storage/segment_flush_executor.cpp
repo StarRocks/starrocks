@@ -170,7 +170,7 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
     }
 
     auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
-    auto submit_st = _flush_token->submit(std::move(task));
+    auto submit_st = _flush_token->submit(task);
     if (submit_st.ok()) {
         closure_guard.release();
     } else {

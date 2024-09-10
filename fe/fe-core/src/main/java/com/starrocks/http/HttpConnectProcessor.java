@@ -69,6 +69,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
         Tracers.register(ctx);
+        Tracers.init(ctx, Tracers.Mode.TIMER, null);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
         String sql = parsedStmt.getOrigStmt().originStmt;
@@ -136,7 +137,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
         ctx.setResourceGroup(null);
-        ctx.setErrorCode("");
+        ctx.resetErrorCode();
         this.handleQuery();
         ctx.setStartTime();
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 跨集群数据迁移工具
@@ -281,7 +281,7 @@ TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 
 示例：
 
-![img](../assets/data_migration_tool-1.png)
+![img](../_assets/data_migration_tool-1.png)
 
 主要指标如下：
 

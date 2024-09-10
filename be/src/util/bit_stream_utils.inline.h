@@ -259,6 +259,14 @@ inline bool BatchedBitReader::get_bytes(int num_bytes, T* v) {
     return true;
 }
 
+inline bool BatchedBitReader::skip_bytes(int num_bytes) {
+    if (UNLIKELY(_buffer_pos + num_bytes > _buffer_end)) {
+        return false;
+    }
+    _buffer_pos += num_bytes;
+    return true;
+}
+
 template <typename T>
 inline int BatchedBitReader::unpack_batch(int bit_width, int num_values, T* v) {
     int64_t num_read;

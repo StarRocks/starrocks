@@ -219,3 +219,18 @@ create temporary table `tbl1` (
 ) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
 create temporary table `tbl2` like `t`;
 create temporary table `tbl3` as select * from `t`;
+
+-- name: test_drop_table
+create table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create temporary table `t1` like `t`;
+show temporary tables;
+drop table `t1`;
+show temporary tables;
+create temporary table `t1` like `t`;
+show temporary tables;
+drop temporary table `t1`;
+show temporary tables;

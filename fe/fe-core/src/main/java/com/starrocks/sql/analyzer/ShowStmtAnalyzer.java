@@ -332,12 +332,12 @@ public class ShowStmtAnalyzer {
         }
 
         private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(node.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(node.getDb());
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table = null;
                 try {
@@ -348,7 +348,7 @@ public class ShowStmtAnalyzer {
                 }
                 //if getTable not find table, may be is statement "desc materialized-view-name"
                 if (table == null) {
-                    for (Table tb : db.getTables()) {
+                    for (Table tb : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                         if (tb.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tb;
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
@@ -480,7 +480,7 @@ public class ShowStmtAnalyzer {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
@@ -491,7 +491,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(procString));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s", procString));
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", procString, e.getMessage()));
             }
         }
 
@@ -504,7 +504,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(path));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s", path));
+                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", path, e.getMessage()));
             }
             return null;
         }
@@ -535,7 +535,7 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -543,7 +543,7 @@ public class ShowStmtAnalyzer {
             final String tableName = statement.getTableName();
             final boolean isTempPartition = statement.isTempPartition();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
                 if (!(table instanceof OlapTable)) {
@@ -574,7 +574,7 @@ public class ShowStmtAnalyzer {
                         analyzeOrderBy(statement.getOrderByElements(), statement.getNode());
                 statement.setOrderByPairs(orderByPairs);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
             return null;
         }

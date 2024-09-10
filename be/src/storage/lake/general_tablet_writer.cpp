@@ -32,8 +32,8 @@ namespace starrocks::lake {
 
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                              std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                                             ThreadPool* flush_pool)
-        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool) {}
+                                                             bool is_compaction, ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool) {}
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 
@@ -82,6 +82,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
+    opts.is_compaction = _is_compaction;
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -118,8 +119,9 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
 
 VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                          std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                                         uint32_t max_rows_per_segment, ThreadPool* flush_pool)
-        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool),
+                                                         uint32_t max_rows_per_segment, bool is_compaction,
+                                                         ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
           _max_rows_per_segment(max_rows_per_segment) {}
 
 VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() {
@@ -267,6 +269,7 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
+    opts.is_compaction = _is_compaction;
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());

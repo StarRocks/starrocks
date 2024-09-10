@@ -71,7 +71,7 @@ public:
     bool is_finished() const override;
 
     Status set_finished(RuntimeState* state) override;
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
         return Status::OK();
@@ -81,7 +81,7 @@ public:
         std::lock_guard<std::mutex> l(_chunk_lock);
         return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
     }
-    [[nodiscard]] Status set_epoch_finishing(RuntimeState* state) override {
+    Status set_epoch_finishing(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_epoch_finished = true;
         return Status::OK();

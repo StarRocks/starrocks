@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 同步物化视图
@@ -141,7 +141,7 @@ GROUP BY store_id;
 
 ## 创建同步物化视图
 
-您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md) 语句为特定查询语句创建物化视图。
+您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) 语句为特定查询语句创建物化视图。
 
 以下示例根据上述查询语句，为表 `sales_records` 创建一个”以售卖门店为分组，对每一个售卖门店里的所有交易额求和”的同步物化视图。
 
@@ -164,7 +164,7 @@ GROUP BY store_id;
 
 ## 查看同步物化视图构建状态
 
-创建同步物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建同步物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态。
+创建同步物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建同步物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态。
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
@@ -318,7 +318,7 @@ CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 
 ### 删除已创建的同步物化视图
 
-可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的同步物化视图。
+可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的同步物化视图。
 
 ```SQL
 DROP MATERIALIZED VIEW store_amt;

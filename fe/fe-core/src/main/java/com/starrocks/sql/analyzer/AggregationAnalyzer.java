@@ -264,8 +264,7 @@ public class AggregationAnalyzer {
                         node.getPos());
             }
 
-            if (node.getChildren().stream().anyMatch(argument ->
-                    !analyzeState.getColumnReferences().containsKey(argument) || !isGroupingKey(argument))) {
+            if (node.getChildren().stream().anyMatch(argument -> !analyzeState.getGroupBy().contains(argument))) {
                 throw new SemanticException(PARSER_ERROR_MSG.argsCanOnlyFromGroupBy(), node.getPos());
             }
 

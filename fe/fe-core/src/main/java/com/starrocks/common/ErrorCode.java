@@ -63,6 +63,9 @@ public enum ErrorCode {
     ERR_FIELD_SPECIFIED_TWICE(1110, new byte[] {'4', '2', '0', '0', '0'}, "Column '%s' specified twice"),
     ERR_TABLE_MUST_HAVE_COLUMNS(1113, new byte[] {'4', '2', '0', '0', '0'}, "A table must have at least 1 column"),
     ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
+    ERR_TOO_MANY_COLUMNS(1117, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of columns in a table must be less than or equal to %d," +
+                    " Please decrease the number of columns or increase frontend config 'max_column_number_per_table'."),
     ERR_IP_NOT_ALLOWED(1130, new byte[] {'4', '2', '0', '0', '0'},
             "Host %s is not allowed to connect to this MySQL server"),
     ERR_NONEXISTING_GRANT(1141, new byte[] {'4', '2', '0', '0', '0'},
@@ -93,7 +96,7 @@ public enum ErrorCode {
             "View's SELECT and view's field list have different column counts"),
     ERR_NO_DEFAULT_FOR_FIELD(1364, new byte[] {'H', 'Y', '0', '0', '0'},
             "Field '%s' is not null but doesn't have a default value"),
-    ERR_NO_SUCH_QUERY(1365, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown query id: %s"),
+    ERR_NO_SUCH_QUERY(1365, new byte[] {'4', '2', '0', '0', '0'}, "Unknown query id: %s"),
 
     ERR_CANNOT_USER(1396, new byte[] {'H', 'Y', '0', '0', '0'}, "Operation %s failed for %s"),
     ERR_NON_INSERTABLE_TABLE(1471, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -138,7 +141,7 @@ public enum ErrorCode {
     ERR_BAD_PARTITION_STATE(5015, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition state is not NORMAL: '%s':'%s'"),
     ERR_PARTITION_HAS_LOADING_JOBS(5016, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition has loading jobs: '%s'"),
     ERR_NOT_KEY_COLUMN(5017, new byte[] {'H', 'Y', '0', '0', '0'}, "Column is not a key column: '%s'"),
-    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid value format: '%s'"),
+    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
     ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -298,6 +301,12 @@ public enum ErrorCode {
     ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
             "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
                     "or increase frontend config max_bucket_number_per_partition."),
+    ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE(5511, new byte[] {'4', '2', '0', '0', '0'},
+            "Column renaming is only supported for olap table"),
+    ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB(5512, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column in internal database: %s"),
+    ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column of table in %s state"),
 
     /**
      * 5600 - 5699: DML operation failure
@@ -320,8 +329,6 @@ public enum ErrorCode {
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
-    ERR_ROUTINE_LOAD_PROPERTY_PARTITION_OFFSET_INVALID(5608, new byte[] {'4', '2', '0', '0', '0'},
-            "%s '%s' is invalid. It must be %s"),
 
     /**
      * 5700 - 5799: Partition

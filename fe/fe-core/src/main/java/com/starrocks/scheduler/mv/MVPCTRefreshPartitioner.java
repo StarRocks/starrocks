@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -70,7 +71,7 @@ public abstract class MVPCTRefreshPartitioner {
      * Sync mv and base tables partitions, add if base tables add partitions, drop partitions if base tables drop or changed
      * partitions.
      */
-    public abstract boolean syncAddOrDropPartitions() throws AnalysisException;
+    public abstract boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException;
 
     /**
      * Generate partition predicate for mv refresh according ref base table changed partitions.
@@ -171,6 +172,7 @@ public abstract class MVPCTRefreshPartitioner {
         Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
             Table baseTable = e.getKey();
+            
             // refresh all mv partitions when the ref base table is not supported partition refresh
             if (!isPartitionRefreshSupported(baseTable)) {
                 LOG.info("The ref base table {} is not supported partition refresh, refresh all " +
@@ -257,7 +259,7 @@ public abstract class MVPCTRefreshPartitioner {
         }
         try {
             // check
-            Table mv = db.getTable(materializedView.getId());
+            Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
             if (mv == null) {
                 throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
             }
@@ -275,7 +277,7 @@ public abstract class MVPCTRefreshPartitioner {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     db.getFullName(), materializedView.getName());
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db, materializedView, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
         }
     }
 }

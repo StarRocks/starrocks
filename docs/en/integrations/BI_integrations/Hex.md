@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Hex
@@ -8,7 +8,7 @@ Hex supports querying and visualizing both internal data and external data in St
 
 Add a data connection in Hex. Note that you must select MySQL as the connection type.
 
-![Hex](../../assets/BI_hex_1.png)
+![Hex](../../_assets/BI_hex_1.png)
 
 The parameters that you need to configure are described as follows:
 

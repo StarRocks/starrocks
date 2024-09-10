@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Querybook
@@ -43,7 +43,7 @@ Visit the following URL and add a new query engine:
 https://localhost:10001/admin/query_engine/
 ```
 
-![Querybook](../../assets/BI_querybook_1.png)
+![Querybook](../../_assets/BI_querybook_1.png)
 
 Take note of the following points:
 

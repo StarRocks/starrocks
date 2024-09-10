@@ -512,7 +512,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public String getDbFullName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -524,11 +524,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public String getTableName() throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        Table table = database.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
         if (table == null) {
             throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
         }
@@ -712,7 +712,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                             unprotectRenewTask(System.currentTimeMillis() + taskSchedIntervalS * 1000,
                                     routineLoadTaskInfo);
                     GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                            .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
+                            .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
+                                    routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                     GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newTask);
                     LOG.warn(
                             "routine load task [job name {}, task id {}] timeout, remove old task and generate new one",
@@ -855,18 +856,18 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws UserException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
         }
 
-        Table table = db.getTable(this.tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), this.tableId);
         if (table == null) {
             throw new MetaNotFoundException("table " + this.tableId + " does not exist");
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
@@ -874,28 +875,25 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     new StreamLoadPlanner(db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
-            if (planParams.query_options.enable_profile) {
-                StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
-                StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        taskTimeoutSecond, true, warehouseId);
-                streamLoadTask.setTxnId(txnId);
-                streamLoadTask.setLabel(label);
-                streamLoadTask.setTUniqueId(loadId);
-                streamLoadManager.addLoadTask(streamLoadTask);
+            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table.getName(), label, "", "",
+                    taskTimeoutSecond * 1000, true, warehouseId);
+            streamLoadTask.setTxnId(txnId);
+            streamLoadTask.setLabel(label);
+            streamLoadTask.setTUniqueId(loadId);
+            streamLoadManager.addLoadTask(streamLoadTask);
 
-                Coordinator coord =
-                        getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
-                streamLoadTask.setCoordinator(coord);
+            Coordinator coord =
+                    getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
+            streamLoadTask.setCoordinator(coord);
 
-                QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
+            QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
 
-                LOG.info(new LogBuilder("routine load task create stream load task success").
-                        add("transactionId", txnId).
-                        add("label", label).
-                        add("streamLoadTaskId", streamLoadTask.getId()));
-
-            }
+            LOG.info(new LogBuilder("routine load task create stream load task success").
+                    add("transactionId", txnId).
+                    add("label", label).
+                    add("streamLoadTaskId", streamLoadTask.getId()));
 
             // add table indexes to transaction state
             TransactionState txnState =
@@ -911,7 +909,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             return planParams;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -1001,6 +999,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
                 entity.counterRoutineLoadCommittedTasksTotal.increase(1L);
                 LOG.debug("routine load task committed. task id: {}, job id: {}", txnState.getLabel(), id);
+
+                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                        getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+                if (streamLoadTask != null) {
+                    streamLoadTask.afterCommitted(txnState, txnOperated);
+                }
             }
         } catch (Throwable e) {
             LOG.warn("after committed failed", e);
@@ -1021,6 +1025,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         Preconditions.checkNotNull(txnState.getTxnCommitAttachment(), txnState);
         replayUpdateProgress((RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment());
         this.committedTaskNum++;
+        StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+        if (streamLoadTask != null) {
+            streamLoadTask.replayOnCommitted(txnState);
+        }
         LOG.debug("replay on committed: {}", txnState);
     }
 
@@ -1046,6 +1055,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             if (state != JobState.RUNNING) {
                 // job is not running, nothing need to be done
                 return;
+            }
+
+            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                    getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+            if (streamLoadTask != null) {
+                streamLoadTask.afterVisible(txnState, txnOperated);
             }
 
             Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
@@ -1100,7 +1115,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
             RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(timeToExecuteMs, routineLoadTaskInfo);
             GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
-                    releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
+                    releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
+                            routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
             GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
         } finally {
             writeUnlock();
@@ -1118,6 +1134,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         long taskBeId = -1L;
         try {
             if (txnOperated) {
+                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                        getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+                if (streamLoadTask != null) {
+                    streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
+                }
+
                 // step0: find task in job
                 Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
                         entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
@@ -1196,6 +1218,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             replayUpdateProgress((RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment());
         }
         this.abortedTaskNum++;
+        StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+        if (streamLoadTask != null) {
+            streamLoadTask.replayOnAborted(txnState);
+        }
         LOG.debug("replay on aborted: {}, has attachment: {}", txnState, txnState.getTxnCommitAttachment() == null);
     }
 
@@ -1245,7 +1272,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
                 newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr, true);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
-                        .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
+                        .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(),
+                                routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getBeId());
                 GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
                 LOG.warn(
                         "routine load task [job name {}, task id {}] aborted because of {}, remove old task and generate new one",
@@ -1259,7 +1287,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     protected static void unprotectedCheckMeta(Database db, String tblName, RoutineLoadDesc routineLoadDesc)
             throws UserException {
-        Table table = db.getTable(tblName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
 
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
@@ -1385,7 +1413,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         for (RoutineLoadTaskInfo task : routineLoadTaskInfoList) {
             if (task.getBeId() != RoutineLoadTaskInfo.INVALID_BE_ID) {
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr().
-                        releaseBeTaskSlot(task.getWarehouseId(), task.getBeId());
+                        releaseBeTaskSlot(task.getWarehouseId(), task.getJobId(), task.getBeId());
             }
         }
         routineLoadTaskInfoList.clear();
@@ -1393,7 +1421,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public void update() throws UserException {
         // check if db and table exist
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                     .add("db_id", dbId)
@@ -1412,7 +1440,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // check table belong to database
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id).add("db_id", dbId)
                     .add("table_id", tableId)
@@ -1467,15 +1495,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected abstract String getStatistic();
 
     public List<String> getShowInfo() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         Table tbl = null;
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                tbl = db.getTable(tableId);
+                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
@@ -1557,7 +1585,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public List<String> getShowStatistic() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         readLock();
         try {
             List<String> row = Lists.newArrayList();
@@ -1972,15 +2000,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public TRoutineLoadJobInfo toThrift() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         Table tbl = null;
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                tbl = db.getTable(tableId);
+                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         readLock();
@@ -2044,5 +2072,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public void updateSubstate() throws UserException {
+    }
+
+    @Override
+    public void replayOnVisible(TransactionState txnState) {
+        StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+        if (streamLoadTask != null) {
+            streamLoadTask.replayOnVisible(txnState);
+        }
     }
 }

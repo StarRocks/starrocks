@@ -31,11 +31,14 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.UserException;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -151,6 +154,13 @@ public class BrokerFileGroupTest {
                 result = Lists.newArrayList(k1, k2, k4);
                 hiveTable.getId();
                 result = 10;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
             }
         };
 

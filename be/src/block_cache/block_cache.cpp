@@ -16,15 +16,9 @@
 
 #include <fmt/format.h>
 
-#include <filesystem>
-
-#ifdef WITH_CACHELIB
-#include "block_cache/cachelib_wrapper.h"
-#endif
 #ifdef WITH_STARCACHE
 #include "block_cache/starcache_wrapper.h"
 #endif
-#include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
@@ -33,8 +27,6 @@ namespace starrocks {
 
 namespace fs = std::filesystem;
 
-// The cachelib doesn't support a item (key+valueu+attribute) larger than 4 MB without chain.
-// So, we check and limit the block_size configured by users to avoid unexpected errors.
 // For starcache, in theory we doesn't have a hard limitation for block size, but a very large
 // block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
@@ -51,12 +43,6 @@ BlockCache::~BlockCache() {
 Status BlockCache::init(const CacheOptions& options) {
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
     auto cache_options = options;
-#ifdef WITH_CACHELIB
-    if (cache_options.engine == "cachelib") {
-        _kv_cache = std::make_unique<CacheLibWrapper>();
-        LOG(INFO) << "init cachelib engine, block_size: " << _block_size;
-    }
-#endif
 #ifdef WITH_STARCACHE
     if (cache_options.engine == "starcache") {
         _kv_cache = std::make_unique<StarCacheWrapper>();
@@ -135,6 +121,15 @@ StatusOr<size_t> BlockCache::read_buffer(const CacheKey& cache_key, off_t offset
 
 Status BlockCache::read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options) {
     return _kv_cache->read_object(cache_key, handle, options);
+}
+
+bool BlockCache::exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const {
+    if (size == 0) {
+        return true;
+    }
+    size_t index = offset / _block_size;
+    std::string block_key = fmt::format("{}/{}", cache_key, index);
+    return _kv_cache->exist(block_key);
 }
 
 Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) {

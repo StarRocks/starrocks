@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Flink Connector 读取数据
@@ -20,13 +20,13 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
   Flink 先从 FE 节点获取查询计划 (Query Plan)，然后将获取到的查询计划作为参数，下发至 BE 节点，最后获取 BE 节点返回的数据。
 
-  ![Unload data - Flink Connector](../assets/unload_flink_connector_1.png)
+  ![Unload data - Flink Connector](../_assets/unload_flink_connector_1.png)
 
 - Flink JDBC Connector
 
   Flink JDBC Connector 仅能从 FE 单点上串行读取数据，数据读取效率较低。
 
-  ![Unload data - JDBC Connector](../assets/unload_flink_connector_2.png)
+  ![Unload data - JDBC Connector](../_assets/unload_flink_connector_2.png)
 
 ## 版本要求
 
@@ -101,7 +101,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ### 网络设置
 
-确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/management/BE_configuration.md#be_port) 端口（默认 `9060`）。
 
 ## 参数说明
 

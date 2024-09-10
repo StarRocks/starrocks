@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Tableau Desktop
@@ -8,7 +8,7 @@ Tableau Desktop 支持对 StarRocks 的内部数据和外部数据进行查询�
 
 在 Tableau Desktop 中创建数据库：
 
-![Tableau Desktop](../../assets/BI_tableau_1.png)
+![Tableau Desktop](../../_assets/BI_tableau_1.png)
 
 注意以下几点：
 

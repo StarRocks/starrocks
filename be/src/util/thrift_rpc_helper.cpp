@@ -53,26 +53,20 @@ using apache::thrift::transport::TSocket;
 using apache::thrift::transport::TTransport;
 using apache::thrift::transport::TBufferedTransport;
 
-ExecEnv* ThriftRpcHelper::_s_exec_env;
+ExecEnv* ThriftRpcHelper::_s_exec_env = nullptr;
 
 void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
 }
 
 template <>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback,
                                  ClientConnection<FrontendServiceClient>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
     try {
         callback(client);
         return Status::OK();
-    } catch (apache::thrift::protocol::TProtocolException& e) {
-        if (e.getType() == apache::thrift::protocol::TProtocolException::TProtocolExceptionType::INVALID_DATA) {
-            ss << "FE RPC response parsing failure, address=" << address << ".The FE may be busy, please retry later";
-        } else {
-            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
-        }
     } catch (apache::thrift::TException& e) {
         ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
     }
@@ -81,7 +75,7 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendSer
 }
 
 template <>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<BackendServiceClient>&)> callback,
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<BackendServiceClient>&)>& callback,
                                  ClientConnection<BackendServiceClient>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
@@ -96,7 +90,7 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<BackendServ
 }
 
 template <>
-Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback,
+Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback,
                                  ClientConnection<TFileBrokerServiceClient>& client,
                                  const TNetworkAddress& address) noexcept {
     std::stringstream ss;
@@ -113,6 +107,11 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<TFileBroker
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
+    if (UNLIKELY(_s_exec_env == nullptr)) {
+        return Status::ThriftRpcError(
+                "Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please retry "
+                "later");
+    }
     TNetworkAddress address = make_network_address(ip, port);
     Status status;
     ClientConnection<T> client(_s_exec_env->get_client_cache<T>(), address, timeout_ms, &status);

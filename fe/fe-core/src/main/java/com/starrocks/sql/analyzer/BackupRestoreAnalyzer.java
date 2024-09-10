@@ -85,7 +85,7 @@ public class BackupRestoreAnalyzer {
             // If TableRefs is empty, it means that we do not specify any table in Backup stmt.
             // We should backup all table in current database.
             if (tableRefs.size() == 0) {
-                for (Table tbl : database.getTables()) {
+                for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
                     if (!Config.enable_backup_materialized_view && tbl.isMaterializedView()) {
                         LOG.info("Skip backup materialized view: {} because " +
                                         "`Config.enable_backup_materialized_view=false`", tbl.getName());
@@ -364,7 +364,7 @@ public class BackupRestoreAnalyzer {
     }
 
     public static Database getDatabase(String dbName, ConnectContext context) {
-        Database db = context.getGlobalStateMgr().getDb(dbName);
+        Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -397,14 +397,14 @@ public class BackupRestoreAnalyzer {
         tableName.setDb(dbName);
 
         PartitionNames partitionNames = tableRef.getPartitionNames();
-        Table tbl = db.getTable(tableName.getTbl());
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
         if (null == tbl) {
             throw new SemanticException(ErrorCode.ERR_WRONG_TABLE_NAME.formatErrorMsg(tableName.getTbl()));
         }
 
         String alias = tableRef.getAlias();
         if (!tableName.getTbl().equalsIgnoreCase(alias)) {
-            Table tblAlias = db.getTable(alias);
+            Table tblAlias = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), alias);
             if (tblAlias != null && tbl != tblAlias) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "table [" + alias + "] existed");

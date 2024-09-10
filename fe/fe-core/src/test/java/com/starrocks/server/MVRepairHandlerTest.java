@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
@@ -52,7 +53,7 @@ public class MVRepairHandlerTest {
                         "distributed by hash(k1) buckets 3 refresh async as select k1 from test.t1");
 
         database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        table = database.getTable("t1");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         partition = olapTable.getPartition("t1");
@@ -74,8 +75,8 @@ public class MVRepairHandlerTest {
                 PartitionRepairInfo partitionRepairInfo = partitionRepairInfos.get(0);
                 Assert.assertEquals(partition.getId(), partitionRepairInfo.getPartitionId());
                 Assert.assertEquals(partition.getName(), partitionRepairInfo.getPartitionName());
-                Assert.assertEquals(100, partitionRepairInfo.getVersion());
-                Assert.assertEquals(100, partitionRepairInfo.getVersionTime());
+                Assert.assertEquals(100, partitionRepairInfo.getNewVersion());
+                Assert.assertEquals(100, partitionRepairInfo.getNewVersionTime());
             }
         };
 

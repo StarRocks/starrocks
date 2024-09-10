@@ -58,11 +58,6 @@ public class ErrorReport {
         return errMsg;
     }
 
-    public static void reportAnalysisException(String pattern, Object... objs)
-            throws AnalysisException {
-        throw new AnalysisException(reportCommon(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs));
-    }
-
     public static void reportAnalysisException(ErrorCode errorCode, Object... objs)
             throws AnalysisException {
         reportAnalysisException(null, errorCode, objs);

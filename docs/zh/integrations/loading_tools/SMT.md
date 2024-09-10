@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks migration tool（SMT）
@@ -103,7 +103,7 @@ StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工�
 
 通过 Flink CDC connector 和 SMT 可以实现 MySQL 数据的秒级同步。
 
-![img](../../assets/load_tools.png)
+![img](../../_assets/load_tools.png)
 
 如图所示，SMT 可以根据 MySQL 和 StarRocks 的集群信息和表结构自动生成 source table 和 sink table 的建表语句。
 

@@ -1,19 +1,19 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 基于 Azure Blob 部署
 
-import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
-import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
-import SharedDataUseIntro from '../../assets/commonMarkdown/sharedDataUseIntro.md'
-import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
+import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
+import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
+import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.md'
+import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 
 <SharedDataIntro />
 
 ## 系统架构
 
-![Shared-data Architecture](../../assets/share_data_arch.png)
+![Shared-data Architecture](../../_assets/share_data_arch.png)
 
 ## 部署 StarRocks 存算分离集群
 

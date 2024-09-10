@@ -106,7 +106,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testOlapTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -153,7 +153,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testLakeTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newLakeTable(
                 TB_LAKE_TABLE_ID, TB_LAKE_TABLE_NAME, PARTITION_SIZE));
 
@@ -200,7 +200,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testPages() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -314,8 +314,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static OlapTable newOlapTable(Long tableId, String tableName, int partitionSize) throws Exception {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c1 = new Column("c1", Type.DOUBLE, true, null, false, null, "cc1", 1);
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, true,
+        Column c1 = new Column("c1", Type.DOUBLE, true, null, null, false, null, "cc1", 1);
+        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc2", 2);
         List<Column> columns = Lists.newArrayList(c1, c2);
 
@@ -388,8 +388,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static LakeTable newLakeTable(Long tableId, String tableName, int partitionSize) throws Exception {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c1 = new Column("c1", Type.DOUBLE, true, null, false, null, "cc1", 1);
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, true,
+        Column c1 = new Column("c1", Type.DOUBLE, true, null, null, false, null, "cc1", 1);
+        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc2", 2);
         List<Column> columns = Lists.newArrayList(c1, c2);
 

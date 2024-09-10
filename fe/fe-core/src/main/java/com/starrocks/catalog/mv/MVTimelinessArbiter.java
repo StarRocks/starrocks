@@ -21,15 +21,19 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
@@ -135,15 +139,16 @@ public abstract class MVTimelinessArbiter {
             return needRefreshMvPartitionNames;
         }
         for (Map.Entry<Table, Set<String>> entry : baseChangedPartitionNames.entrySet()) {
-            if (!baseToMvNameRef.containsKey(entry.getKey())) {
+            Table baseTable = entry.getKey();
+            if (!baseToMvNameRef.containsKey(baseTable)) {
                 throw new AnalysisException(String.format("Can't find base table %s from baseToMvNameRef",
-                        entry.getKey().getName()));
+                        baseTable.getName()));
             }
-            Map<String, Set<String>> baseTableRefMvPartNames = baseToMvNameRef.get(entry.getKey());
+            Map<String, Set<String>> baseTableRefMvPartNames = baseToMvNameRef.get(baseTable);
             for (String partitionName : entry.getValue()) {
                 if (!baseTableRefMvPartNames.containsKey(partitionName)) {
                     throw new AnalysisException(String.format("Can't find base table %s from baseToMvNameRef",
-                            entry.getKey().getName()));
+                            baseTable.getName()));
                 }
                 needRefreshMvPartitionNames.addAll(baseTableRefMvPartNames.get(partitionName));
             }
@@ -162,10 +167,42 @@ public abstract class MVTimelinessArbiter {
         for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
             Table baseTable = e.getKey();
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    true, true);
+                    true, isQueryRewrite);
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
+            // If base table is a mv, its to-update partitions may not be created yet, skip it
             baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPartitionNames());
         }
         return baseChangedPartitionNames;
+    }
+
+    /**
+     * If base table is materialized view, add partition name to cell mapping into base table partition mapping;
+     * otherwise base table(mv) may lose partition names of the real base table changed partitions.
+     * @param baseTableUpdateInfoMap base table update info from MvTimelinessInfo
+     * @return the base table to its changed partition and cell map if it's mv, empty else
+     */
+    protected void collectExtraBaseTableChangedPartitions(
+            Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfoMap,
+            Consumer<Map.Entry<Table, Map<String, PCell>>> consumer) {
+        Map<Table, Map<String, PCell>> extraChangedPartitions = baseTableUpdateInfoMap.entrySet().stream()
+                .filter(e -> !e.getValue().getMvPartitionNameToCellMap().isEmpty())
+                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().getMvPartitionNameToCellMap()));
+        for (Map.Entry<Table, Map<String, PCell>> entry : extraChangedPartitions.entrySet()) {
+            consumer.accept(entry);
+        }
+    }
+
+    protected void addEmptyPartitionsToRefresh(MvUpdateInfo mvUpdateInfo) {
+        Set<Table> refBaseTables = mv.getRefBaseTablePartitionColumns().keySet();
+        boolean allOlapTables = refBaseTables.stream().allMatch(t -> t instanceof OlapTable);
+        if (!allOlapTables) {
+            return;
+        }
+        mv.getRangePartitionMap().keySet().forEach(mvPartitionName -> {
+            if (!mv.getPartition(mvPartitionName).hasStorageData()) {
+                // add empty partitions
+                mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
+            }
+        });
     }
 }

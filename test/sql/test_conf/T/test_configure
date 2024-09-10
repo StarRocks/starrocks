@@ -1,0 +1,32 @@
+-- name: test_configure @sequential
+admin set frontend config ("thrift_max_message_size"="10485760");
+set group_concat_max_len = 1073741824;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(65535)
+)
+ENGINE=OLAP
+DUPLICATE KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into tab1 values (1, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+(2, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+(3, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+(4, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+(5, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+
+select group_concat(k2) from (select t1.k2 from tab1 t1 join tab1 t2 join tab1 t3 join tab1 t4 join tab1 t5 join tab1 t6 join tab1 t7) t;
+admin set frontend config ("thrift_max_message_size"="1073741824");
+select length(group_concat(k2)) from (select t1.k2 from tab1 t1 join tab1 t2 join tab1 t3 join tab1 t4 join tab1 t5 join tab1 t6 join tab1 t7) t;
+
+set @str = (select /*+ set_var(group_concat_max_len = 1073741824)*/ group_concat(k2) from (select t1.k2 from tab1 t1 join tab1 t2 join tab1 t3 join tab1 t4 join tab1 t5 join tab1 t6 join tab1 t7) t);
+
+update information_schema.be_configs set value = '10485760' where name ='thrift_max_message_size';
+select length(@str);
+update information_schema.be_configs set value = '1073741824' where name ='thrift_max_message_size';
+select length(@str);
+
+

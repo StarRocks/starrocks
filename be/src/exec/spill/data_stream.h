@@ -28,6 +28,11 @@ public:
                           size_t write_num_rows) = 0;
     virtual Status flush() = 0;
     virtual bool is_remote() const = 0;
+    // only used for DCHECK
+    size_t append_rows() const { return _append_rows; }
+
+protected:
+    size_t _append_rows{};
 };
 using SpillOutputDataStreamPtr = std::shared_ptr<SpillOutputDataStream>;
 SpillOutputDataStreamPtr create_spill_output_stream(Spiller* spiller, BlockGroup* block_group,

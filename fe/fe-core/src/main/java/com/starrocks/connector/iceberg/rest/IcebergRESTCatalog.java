@@ -15,7 +15,6 @@
 
 package com.starrocks.connector.iceberg.rest;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -28,6 +27,7 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
@@ -38,6 +38,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.rest.RESTCatalog;
@@ -70,6 +71,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     // not the "https://api.tabular.io/ws"
     public static final String KEY_DISABLE_TABULAR_SUPPORT = "disable_tabular_support";
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
+    public static final String KEY_DISABLE_VENDED_CREDENTIAL = "disable_vended_credential";
 
     private final Configuration conf;
     private final RESTCatalog delegate;
@@ -91,6 +93,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         if (!copiedProperties.containsKey(KEY_DISABLE_TABULAR_SUPPORT)) {
             copiedProperties.put("header.x-tabular-s3-access", "vended_credentials");
+        }
+
+        boolean disableVendedCredential = copiedProperties
+                .getOrDefault(KEY_DISABLE_VENDED_CREDENTIAL, "false")
+                .equalsIgnoreCase("true");
+        if (disableVendedCredential) {
+            copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         }
 
         delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
@@ -172,7 +181,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public Database getDB(String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
-        Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 

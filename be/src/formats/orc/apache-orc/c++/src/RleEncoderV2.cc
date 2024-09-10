@@ -1,19 +1,20 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
- * distributed with option work for additional information
- * regarding copyright ownership.  The ASF licenses option file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use option file except in compliance
+ * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
 #include "Adaptor.hh"
@@ -26,11 +27,11 @@
 namespace orc {
 
 /**
- * Compute the bits required to represent pth percentile value
- * @param data - array
- * @param p - percentile value (>=0.0 to <=1.0)
- * @return pth percentile bits
- */
+   * Compute the bits required to represent pth percentile value
+   * @param data - array
+   * @param p - percentile value (>=0.0 to <=1.0)
+   * @return pth percentile bits
+   */
 uint32_t RleEncoderV2::percentileBits(int64_t* data, size_t offset, size_t length, double p, bool reuseHist) {
     if ((p > 1.0) || (p <= 0.0)) {
         throw InvalidArgument("Invalid p value: " + to_string(p));
@@ -165,14 +166,9 @@ void RleEncoderV2::write(int64_t val) {
 }
 
 void RleEncoderV2::computeZigZagLiterals(EncodingOption& option) {
-    int64_t zzEncVal = 0;
+    assert(isSigned);
     for (size_t i = 0; i < numLiterals; i++) {
-        if (isSigned) {
-            zzEncVal = zigZag(literals[i]);
-        } else {
-            zzEncVal = literals[i];
-        }
-        zigzagLiterals[option.zigzagLiteralsCount++] = zzEncVal;
+        zigzagLiterals[option.zigzagLiteralsCount++] = zigZag(literals[i]);
     }
 }
 
@@ -279,10 +275,10 @@ void RleEncoderV2::preparePatchedBlob(EncodingOption& option) {
 }
 
 /**
- * Prepare for Direct or PatchedBase encoding
- * compute zigZagLiterals and zzBits100p (Max number of encoding bits required)
- * @return zigzagLiterals
- */
+   * Prepare for Direct or PatchedBase encoding
+   * compute zigZagLiterals and zzBits100p (Max number of encoding bits required)
+   * @return zigzagLiterals
+   */
 int64_t* RleEncoderV2::prepareForDirectOrPatchedBase(EncodingOption& option) {
     if (isSigned) {
         computeZigZagLiterals(option);
@@ -438,31 +434,8 @@ void RleEncoderV2::determineEncoding(EncodingOption& option) {
 }
 
 uint64_t RleEncoderV2::flush() {
-    if (numLiterals != 0) {
-        EncodingOption option = {};
-        if (variableRunLength != 0) {
-            determineEncoding(option);
-            writeValues(option);
-        } else if (fixedRunLength != 0) {
-            if (fixedRunLength < MIN_REPEAT) {
-                variableRunLength = fixedRunLength;
-                fixedRunLength = 0;
-                determineEncoding(option);
-                writeValues(option);
-            } else if (fixedRunLength >= MIN_REPEAT && fixedRunLength <= MAX_SHORT_REPEAT_LENGTH) {
-                option.encoding = SHORT_REPEAT;
-                writeValues(option);
-            } else {
-                option.encoding = DELTA;
-                option.isFixedDelta = true;
-                writeValues(option);
-            }
-        }
-    }
-
-    outputStream->BackUp(static_cast<int>(bufferLength - bufferPosition));
+    finishEncode();
     uint64_t dataSize = outputStream->flush();
-    bufferLength = bufferPosition = 0;
     return dataSize;
 }
 
@@ -583,9 +556,7 @@ void RleEncoderV2::writePatchedBasedValues(EncodingOption& option) {
     // find the number of bytes required for base and shift it by 5 bits
     // to accommodate patch width. The additional bit is used to store the sign
     // of the base value.
-    uint32_t baseBitsNum = findClosestNumBits(option.min);
-    // if Negative, sign bit is already accounted for
-    uint32_t baseWidth = isNegative ? baseBitsNum : baseBitsNum + 1;
+    const uint32_t baseWidth = findClosestNumBits(option.min) + 1;
     const uint32_t baseBytes = baseWidth % 8 == 0 ? baseWidth / 8 : (baseWidth / 8) + 1;
     const uint32_t bb = (baseBytes - 1) << 5;
 
@@ -777,5 +748,31 @@ void RleEncoderV2::initializeLiterals(int64_t val) {
     literals[numLiterals++] = val;
     fixedRunLength = 1;
     variableRunLength = 1;
+}
+
+void RleEncoderV2::finishEncode() {
+    if (numLiterals != 0) {
+        EncodingOption option = {};
+        if (variableRunLength != 0) {
+            determineEncoding(option);
+            writeValues(option);
+        } else if (fixedRunLength != 0) {
+            if (fixedRunLength < MIN_REPEAT) {
+                variableRunLength = fixedRunLength;
+                fixedRunLength = 0;
+                determineEncoding(option);
+                writeValues(option);
+            } else if (fixedRunLength >= MIN_REPEAT && fixedRunLength <= MAX_SHORT_REPEAT_LENGTH) {
+                option.encoding = SHORT_REPEAT;
+                writeValues(option);
+            } else {
+                option.encoding = DELTA;
+                option.isFixedDelta = true;
+                writeValues(option);
+            }
+        }
+    }
+
+    RleEncoder::finishEncode();
 }
 } // namespace orc

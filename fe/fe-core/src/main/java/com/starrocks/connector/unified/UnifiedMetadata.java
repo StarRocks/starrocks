@@ -24,12 +24,15 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -113,6 +116,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     private ConnectorMetadata metadataOfTable(Table table) {
         Table.TableType type = getTableType(table);
+        if (table.isHiveView()) {
+            type = HIVE;
+        }
         return metadataMap.get(type);
     }
 
@@ -122,11 +128,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(Table table,
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableVersionRange(table, startVersion, endVersion);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override
@@ -160,22 +166,26 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.tableExists(dbName, tblName);
+        return hiveMetadata.tableExists(dbName, tblName);
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TableVersionRange version,
-                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getRemoteFileInfos(table, partitionKeys, version, predicate, fieldNames, limit);
+        return metadata.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFilesAsync(table, params);
     }
 
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                             long snapshotId, String serializedPredicate) {
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
-        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
     }
 
     @Override

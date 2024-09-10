@@ -27,6 +27,7 @@ import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -129,7 +130,9 @@ public class PaimonConnector implements Connector {
 
     public Catalog getPaimonNativeCatalog() {
         if (paimonNativeCatalog == null) {
-            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions()));
+            Configuration configuration = new Configuration();
+            hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
+            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(), configuration));
         }
         return paimonNativeCatalog;
     }

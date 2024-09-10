@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
@@ -240,13 +241,13 @@ public class DDLStmtExecutor {
                 if (name.isGlobalFunction()) {
                     context.getGlobalStateMgr()
                             .getGlobalFunctionMgr()
-                            .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
+                            .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists(), stmt.createIfNotExists());
                 } else {
-                    Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                    Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.addFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
+                    db.addFunction(stmt.getFunction(), stmt.shouldReplaceIfExists(), stmt.createIfNotExists());
                 }
             });
             return null;
@@ -257,13 +258,14 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 if (name.isGlobalFunction()) {
-                    context.getGlobalStateMgr().getGlobalFunctionMgr().userDropFunction(stmt.getFunctionSearchDesc());
+                    context.getGlobalStateMgr().getGlobalFunctionMgr()
+                            .userDropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
                 } else {
-                    Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                    Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.dropFunction(stmt.getFunctionSearchDesc());
+                    db.dropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
                 }
             });
             return null;
@@ -393,7 +395,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
             });
             return null;
         }
@@ -507,7 +509,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getAuthenticationMgr()
-                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
+                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo(), stmt.getProperties());
             });
             return null;
         }
@@ -585,7 +587,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterSystemStatement(AlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAlterJobMgr().processAlterCluster(stmt);
+                SystemHandler systemHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler();
+                systemHandler.process(Collections.singletonList(stmt.getAlterClause()), null, null);
             });
             return null;
         }
@@ -1097,7 +1100,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateDictionaryStatement(CreateDictionaryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getDictionaryMgr().createDictionary(stmt,
-                                                context.getCurrentCatalog(), context.getDatabase());
+                        context.getCurrentCatalog(), context.getDatabase());
             });
             return null;
         }

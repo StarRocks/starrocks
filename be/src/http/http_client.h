@@ -92,8 +92,10 @@ public:
     }
     // used to get content length
     int64_t get_content_length() const {
-        double cl = 0.0f;
-        curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+        // CURLINFO_CONTENT_LENGTH_DOWNLOAD is deprecated since v7.55.0
+        // https://curl.se/libcurl/c/CURLINFO_CONTENT_LENGTH_DOWNLOAD.html
+        curl_off_t cl = 0;
+        curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
         return cl;
     }
 

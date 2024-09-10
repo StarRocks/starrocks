@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Deploy StarRocks with Operator
@@ -12,7 +12,7 @@ The StarRocks k8s operator was designed to be a level 2 operator.   See https://
 
 ## How it works
 
-![img](../assets/starrocks_operator.png)
+![img](../_assets/starrocks_operator.png)
 
 ## Before you begin
 

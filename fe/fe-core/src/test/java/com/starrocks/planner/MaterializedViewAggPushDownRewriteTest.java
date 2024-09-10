@@ -46,7 +46,8 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
-        createTables("sql/ssb/", Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder"));
+        createTables("sql/ssb/",
+                Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder", "lineorder0"));
     }
 
     @Test
@@ -624,6 +625,62 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 // TODO: It's safe to push down count(distinct) to mv only when join keys are uniqe constraint in this case.
                 // TODO: support this if group by keys are equals to join keys
                 sql(query).nonMatch("mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testJoinWithAggPushDown_RollupFunctions_CountDistinct() {
+        // one query contains count(distinct) agg function, it can be rewritten.
+        List<String> mvs = ImmutableList.of(
+                "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS " +
+                        "select LO_ORDERDATE, array_agg_distinct(LO_REVENUE) \n" +
+                        "from lineorder l group by LO_ORDERDATE;",
+                "CREATE MATERIALIZED VIEW mv2 REFRESH MANUAL as " +
+                        "select LO_ORDERDATE, LO_REVENUE, sum(LO_QUANTITY) as quantity_sum\n" +
+                        "from lineorder l group by LO_ORDERDATE,LO_REVENUE"
+        );
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            {
+                String query = "select LO_ORDERDATE, count(distinct LO_REVENUE) " +
+                        "from lineorder l join dates d " +
+                        "on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;";
+                sql(query).match("mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testJoinWithAggPushDown_NotSPJG() {
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE,lo_orderkey, sum(LO_REVENUE) as c\n" +
+                "from lineorder l group by LO_ORDERDATE,lo_orderkey";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            {
+                String query = "select LO_ORDERDATE,lo_orderkey,sum(LO_REVENUE)\n" +
+                        "from lineorder l " +
+                        "where LO_ORDERDATE='2020-05-01' " +
+                        "and lo_orderkey in (" +
+                        "  select lo_orderkey from lineorder0 group by lo_orderkey" +
+                        ") " +
+                        "group by LO_ORDERDATE,lo_orderkey";
+                sql(query).match("mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testJoinWithAggPushDown_NoGroupBy() {
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, LO_SUPPKEY, sum(LO_REVENUE) as revenue_sum\n" +
+                "from lineorder l group by LO_ORDERDATE,LO_SUPPKEY";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            {
+                String query = "select sum(LO_REVENUE) as revenue_sum\n" +
+                        "   from lineorder l join supplier s on l.lo_suppkey = s.s_suppkey";
+                // TODO: It's safe to push down count(distinct) to mv only when join keys are uniqe constraint in this case.
+                // TODO: support this if group by keys are equals to join keys
+                sql(query).match("mv0");
             }
         });
     }

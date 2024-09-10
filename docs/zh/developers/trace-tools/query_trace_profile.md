@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Query Trace Profile
@@ -154,5 +154,5 @@ MySQL > TRACE LOGS OPTIMIZER SELECT v1 FROM t1 ;
 
 日志将打印在 **fe.log** 中。
 
-![img](../../assets/query_trace_profile.png)
+![img](../../_assets/query_trace_profile.png)
 

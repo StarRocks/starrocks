@@ -126,7 +126,7 @@ public class MVMaintenanceJobTest extends PlanTestBase {
                 pair.first);
 
         String currentDb = connectContext.getDatabase();
-        long dbId = GlobalStateMgr.getCurrentState().getDb(currentDb).getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb).getId();
         MaterializedView view = new MaterializedView();
         view.setDbId(dbId);
         view.setId(1024);

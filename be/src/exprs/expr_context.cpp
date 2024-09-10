@@ -35,6 +35,7 @@
 #include "exprs/expr_context.h"
 
 #include <fmt/format.h>
+#include <storage/chunk_helper.h>
 
 #include <memory>
 #include <sstream>
@@ -163,6 +164,14 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(!_closed);
+    ChunkPtr dummy_chunk;
+    // this may happen if expr is constant, which means it doesn't need any input chunk
+    // but some expr can not handle situation that input chunk is nullptr or empty correctly
+    // so we create chunk with one column and one raw
+    if (chunk == nullptr) {
+        dummy_chunk = ChunkHelper::createDummyChunk();
+        chunk = dummy_chunk.get();
+    }
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();
@@ -177,7 +186,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
             ASSIGN_OR_RETURN(ptr, e->evaluate_with_filter(this, chunk, filter));
         }
         DCHECK(ptr != nullptr);
-        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
+        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant() && (dummy_chunk.get() == nullptr)) {
             ptr->resize(chunk->num_rows());
         }
         return ptr;

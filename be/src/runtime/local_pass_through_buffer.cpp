@@ -73,7 +73,7 @@ public:
         auto it = _sender_id_to_channel.find(sender_id);
         if (it == _sender_id_to_channel.end()) {
             auto* channel = new PassThroughSenderChannel(_total_bytes);
-            _sender_id_to_channel.emplace(std::make_pair(sender_id, channel));
+            _sender_id_to_channel.emplace(sender_id, channel);
             return channel;
         } else {
             return it->second;
@@ -113,7 +113,7 @@ PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
         auto* channel = new PassThroughChannel();
-        _key_to_channel.emplace(std::make_pair(key, channel));
+        _key_to_channel.emplace(key, channel);
         return channel;
     } else {
         return it->second;
@@ -144,7 +144,7 @@ void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& quer
         auto it = _query_id_to_buffer.find(query_id);
         if (it == _query_id_to_buffer.end()) {
             auto* buffer = new PassThroughChunkBuffer(query_id);
-            _query_id_to_buffer.emplace(std::make_pair(query_id, buffer));
+            _query_id_to_buffer.emplace(query_id, buffer);
         } else {
             it->second->ref();
         }

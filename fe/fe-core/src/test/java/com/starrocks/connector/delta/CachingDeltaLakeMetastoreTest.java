@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
@@ -24,6 +25,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
+import io.delta.kernel.engine.Engine;
 import mockit.Expectations;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -48,7 +50,8 @@ public class CachingDeltaLakeMetastoreTest {
     public void setUp() throws Exception {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
-        metastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore, new Configuration());
+        metastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore, new Configuration(),
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
         executor = Executors.newFixedThreadPool(5);
     }
 
@@ -93,8 +96,7 @@ public class CachingDeltaLakeMetastoreTest {
         new MockUp<DeltaUtils>() {
             @mockit.Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                         org.apache.hadoop.conf.Configuration configuration,
-                                                         long createTime) {
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
@@ -146,8 +148,7 @@ public class CachingDeltaLakeMetastoreTest {
         new MockUp<DeltaUtils>() {
             @mockit.Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        org.apache.hadoop.conf.Configuration configuration,
-                                                        long createTime) {
+                                                        Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "tbl1",
                         Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
@@ -159,5 +160,30 @@ public class CachingDeltaLakeMetastoreTest {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testCacheMemoryUsage() {
+        new MockUp<DeltaUtils>() {
+            @mockit.Mock
+            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
+                                                        Engine deltaEngine, long createTime) {
+                return new DeltaLakeTable(1, "delta0", "db1", "table1",
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        "s3://bucket/path/to/table", null, 0);
+            }
+        };
+
+        CachingDeltaLakeMetastore cachingDeltaLakeMetastore =
+                CachingDeltaLakeMetastore.createCatalogLevelInstance(metastore, executor, expireAfterWriteSec,
+                        refreshAfterWriteSec, 100);
+
+        cachingDeltaLakeMetastore.getDb("db1");
+        cachingDeltaLakeMetastore.getTable("db1", "table1");
+
+        Assert.assertTrue(cachingDeltaLakeMetastore.estimateSize() > 0);
+        Assert.assertFalse(cachingDeltaLakeMetastore.estimateCount().isEmpty());
+        Assert.assertTrue(cachingDeltaLakeMetastore.estimateCount().containsKey("databaseCache"));
+        Assert.assertTrue(cachingDeltaLakeMetastore.estimateCount().containsKey("tableCache"));
     }
 }

@@ -18,9 +18,11 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -47,6 +49,17 @@ public class OptExprBuilder {
 
     public ExpressionMapping getExpressionMapping() {
         return expressionMapping;
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getColumnRefToConstOperators() {
+        if (expressionMapping == null) {
+            return null;
+        }
+        return expressionMapping.getColumnRefToConstOperators();
+    }
+
+    public Map<ScalarOperator, ColumnRefOperator> getGeneratedColumnExprOpToColumnRef() {
+        return expressionMapping.getGeneratedColumnExprOpToColumnRef();
     }
 
     public void setExpressionMapping(ExpressionMapping expressionMapping) {

@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
-import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -51,10 +51,10 @@ public class LockThread extends Thread {
                     try {
                         locker.lock(rid, lockType, timeout);
                         lockResult = makeSuccessLockResult();
-                    } catch (IllegalLockStateException deadlockException) {
-                        lockResult = makeIllegalLockStateException(deadlockException);
                     } catch (LockTimeoutException e) {
                         lockResult = makeIllegalLockStateException(e);
+                    } catch (LockException deadlockException) {
+                        lockResult = makeIllegalLockStateException(deadlockException);
                     }
                     break;
                 }

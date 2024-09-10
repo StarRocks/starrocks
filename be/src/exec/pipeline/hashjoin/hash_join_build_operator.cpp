@@ -17,11 +17,14 @@
 #include <numeric>
 #include <utility>
 
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/race_detect.h"
+
 namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
@@ -55,7 +58,7 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
     COUNTER_SET(_join_builder->build_metrics().hash_table_memory_usage,
-                _join_builder->hash_join_builder()->hash_table_mem_usage());
+                _join_builder->hash_join_builder()->ht_mem_usage());
     _join_builder->unref(state);
 
     Operator::close(state);
@@ -107,15 +110,17 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ((HashJoinBuildOperatorFactory*)_factory)
             ->retain_string_key_columns(_driver_sequence, _join_builder->string_key_columns());
 
+    if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
+        // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
+        DCHECK(_join_builder->is_done());
+    }
+
     // push colocate partial runtime filter
     bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists(partial_in_filters.begin(), partial_in_filters.end());
-        if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
-            // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
-            DCHECK(_join_builder->is_done());
-        } else {
+        if (partial_bloom_filters.size() == partial_bloom_filter_build_params.size()) {
             for (size_t i = 0; i < partial_bloom_filters.size(); ++i) {
                 if (partial_bloom_filter_build_params[i].has_value()) {
                     partial_bloom_filters[i]->set_or_concat(partial_bloom_filter_build_params[i]->runtime_filter.get(),
@@ -165,6 +170,10 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     _join_builder->enter_probe_phase();
 
     return Status::OK();
+}
+
+bool HashJoinBuildOperator::is_finished() const {
+    return _is_finished || _join_builder->is_finished();
 }
 
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(

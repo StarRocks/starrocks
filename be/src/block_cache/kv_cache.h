@@ -39,9 +39,7 @@ using DataCacheMetrics = DummyCacheMetrics;
 using DataCacheStatus = DummyCacheStatus;
 #endif
 
-enum class DataCacheEngine { STARCACHE, CACHELIB };
-
-enum class DataCacheEngineType { STARCACHE, CACHELIB };
+enum class DataCacheEngineType { STARCACHE };
 
 class KvCache {
 public:
@@ -62,6 +60,8 @@ public:
                                ReadCacheOptions* options) = 0;
 
     virtual Status read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) = 0;
+
+    virtual bool exist(const std::string& key) const = 0;
 
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove(const std::string& key) = 0;

@@ -123,6 +123,8 @@ private:
 // TODO: support config PYTHONPATH
 class PythonEnvManager {
 public:
+    ~PythonEnvManager() { close(); }
+
     Status init(const std::vector<std::string>& envs) {
         for (const auto& env : envs) {
             std::filesystem::path path = env;

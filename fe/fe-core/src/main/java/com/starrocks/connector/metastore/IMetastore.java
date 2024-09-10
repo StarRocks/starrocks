@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.metastore;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
 
 import java.util.List;
 
@@ -28,10 +26,6 @@ public interface IMetastore {
     Database getDb(String dbName);
 
     MetastoreTable getMetastoreTable(String dbName, String tableName);
-
-    Table getTable(String dbName, String tableName);
-
-    List<String> getPartitionKeys(String dbName, String tableName);
 
     boolean tableExists(String dbName, String tableName);
 }

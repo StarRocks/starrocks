@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.transaction.TransactionType;
 
 import java.util.List;
 
@@ -31,6 +32,8 @@ public interface PhysicalPartition {
 
     // physical partition id
     public long getId();
+    public String getName();
+    public void setName(String name);
     public void setIdForRestore(long id);
     public long getBeforeRestoreId();
 
@@ -53,6 +56,16 @@ public interface PhysicalPartition {
     public long getNextVersion();
     public void setNextVersion(long nextVersion);
     public long getCommittedVersion();
+    public long getDataVersion();
+    public void setDataVersion(long dataVersion);
+    public long getNextDataVersion();
+    public void setNextDataVersion(long nextDataVersion);
+    public long getCommittedDataVersion();
+    public long getVersionEpoch();
+    public void setVersionEpoch(long versionEpoch);
+    public long nextVersionEpoch();
+    public TransactionType getVersionTxnType();
+    public void setVersionTxnType(TransactionType versionTxnType);
     public long getVisibleTxnId();
 
     // materialized index interface

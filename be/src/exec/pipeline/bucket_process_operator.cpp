@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/bucket_process_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.h"
 #include "exec/pipeline/operator.h"
@@ -160,12 +162,12 @@ SpillProcessChannelPtr get_spill_channel(const OperatorPtr& op) {
     return nullptr;
 }
 
-BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(
-        int32_t id, int32_t plan_node_id, const BucketProcessContextFactoryPtr& context_factory,
-        const OperatorFactoryPtr& factory)
+BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                                   BucketProcessContextFactoryPtr context_factory,
+                                                                   OperatorFactoryPtr factory)
         : OperatorFactory(id, "bucket_process_sink_factory", plan_node_id),
-          _factory(factory),
-          _ctx_factory(context_factory) {}
+          _factory(std::move(factory)),
+          _ctx_factory(std::move(context_factory)) {}
 
 OperatorPtr BucketProcessSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);
@@ -188,12 +190,12 @@ void BucketProcessSinkOperatorFactory::close(RuntimeState* state) {
     _factory->close(state);
 }
 
-BucketProcessSourceOperatorFactory::BucketProcessSourceOperatorFactory(
-        int32_t id, int32_t plan_node_id, const BucketProcessContextFactoryPtr& context_factory,
-        const OperatorFactoryPtr& factory)
+BucketProcessSourceOperatorFactory::BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                                       BucketProcessContextFactoryPtr context_factory,
+                                                                       OperatorFactoryPtr factory)
         : SourceOperatorFactory(id, "bucket_process_factory", plan_node_id),
-          _factory(factory),
-          _ctx_factory(context_factory) {}
+          _factory(std::move(factory)),
+          _ctx_factory(std::move(context_factory)) {}
 
 OperatorPtr BucketProcessSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);

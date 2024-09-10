@@ -29,15 +29,22 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.load.DeleteJob.DeleteState;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -130,13 +137,25 @@ public class DeleteHandlerTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyString);
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable("test_db", "test_tbl");
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+
+                globalStateMgr.getLocalMetastore().getTable(CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -182,6 +201,13 @@ public class DeleteHandlerTest {
                 globalStateMgr.getAnalyzer();
                 result = analyzer;
                 minTimes = 0;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
             }
         };
     }
@@ -480,7 +506,67 @@ public class DeleteHandlerTest {
     }
 
     @Test
+    public void testLockTimeout(@Mocked MarkedCountDownLatch countDownLatch) throws DdlException, QueryStateException {
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
+                new IntLiteral(3));
+
+        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
+                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+
+        Set<Replica> finishedReplica = Sets.newHashSet();
+        finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
+        finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
+        finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
+
+        new MockUp<OlapDeleteJob>() {
+            @Mock
+            public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
+                return Lists.newArrayList(tabletDeleteInfo);
+            }
+        };
+
+        new MockUp<Locker>() {
+            @Mock
+            public void lock(long rid, LockType lockType, long timeout) throws LockException {
+                throw new NotSupportLockException("");
+            }
+        };
+
+        new Expectations() {
+            {
+                AgentTaskExecutor.submit((AgentBatchTask) any);
+                minTimes = 0;
+            }
+        };
+
+        try {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        try {
+            deleteHandler.process(deleteStmt);
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_LOCK_ERROR);
+        }
+    }
+
+    @Test
     public void testRemoveOldOnReplay() throws Exception {
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(1L);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+            }
+        };
+
         Config.label_keep_max_second = 1;
         Config.label_keep_max_num = 10;
 

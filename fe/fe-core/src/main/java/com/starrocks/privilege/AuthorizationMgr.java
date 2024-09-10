@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -50,7 +51,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1696,7 +1696,7 @@ public class AuthorizationMgr {
             ret.initBuiltinRolesAndUsers();
 
             // 1 json for num user
-            int numUser = reader.readJson(int.class);
+            int numUser = reader.readInt();
             LOG.info("loading {} users", numUser);
             for (int i = 0; i != numUser; ++i) {
                 // 2 json for each user(kv)
@@ -1714,11 +1714,11 @@ public class AuthorizationMgr {
                 ret.userToPrivilegeCollection.put(userIdentity, collection);
             }
             // 1 json for num roles
-            int numRole = reader.readJson(int.class);
+            int numRole = reader.readInt();
             LOG.info("loading {} roles", numRole);
             for (int i = 0; i != numRole; ++i) {
                 // 2 json for each role(kv)
-                Long roleId = reader.readJson(Long.class);
+                Long roleId = reader.readLong();
                 RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
 
                 // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
@@ -1751,23 +1751,23 @@ public class AuthorizationMgr {
         }
     }
 
-    public void saveV2(DataOutputStream dos) throws IOException {
+    public void saveV2(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
             // 1 json for number of roles, 2 json for each role(kv)
             final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
                     + 1 + roleIdToPrivilegeCollection.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHORIZATION_MGR, cnt);
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.AUTHORIZATION_MGR, cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
-            writer.writeJson(userToPrivilegeCollection.size());
+            writer.writeInt(userToPrivilegeCollection.size());
             for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry : userToPrivilegeCollection.entrySet()) {
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }
             // 1 json for num roles
-            writer.writeJson(roleIdToPrivilegeCollection.size());
+            writer.writeInt(roleIdToPrivilegeCollection.size());
             for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : roleIdToPrivilegeCollection.entrySet()) {
                 RolePrivilegeCollectionV2 value = entry.getValue();
                 // Avoid newly added PEntryObject type corrupt forward compatibility,
@@ -1780,12 +1780,17 @@ public class AuthorizationMgr {
                     clone.typeToPrivilegeEntryList = new HashMap<>();
                     value = clone;
                 }
-                writer.writeJson(entry.getKey());
+                writer.writeLong(entry.getKey());
                 writer.writeJson(value);
             }
             writer.close();
         } catch (SRMetaBlockException e) {
             throw new IOException("failed to save AuthenticationManager!", e);
         }
+    }
+
+    // get all role ids of the user, including the default roles and the inactivated roles
+    public Set<Long> getAllRoleIds(UserIdentity user) throws PrivilegeException {
+        return getRoleIdsByUser(user);
     }
 }

@@ -77,9 +77,12 @@ if [[ -z ${JAVA_HOME} ]]; then
     if command -v javac &> /dev/null; then
         export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which javac))))"
         echo "Infered JAVA_HOME=$JAVA_HOME"
+    elif command -v java &> /dev/null; then
+        export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which java))))"
     else
       cat << EOF
-Error: The environment variable JAVA_HOME is not set. The FE program requires JDK version $MIN_JDK_VERSION or higher in order to run.
+Error: The environment variable JAVA_HOME is not set, and neither JDK or JRE is found.
+The FE program requires JDK/JRE version $MIN_JDK_VERSION  or higher in order to run.
 Please take the following steps to resolve this issue:
 1. Install OpenJDK $MIN_JDK_VERSION or higher using your Linux distribution's package manager,
    or following the openjdk installation instructions at https://openjdk.org/install/
@@ -87,19 +90,11 @@ Please take the following steps to resolve this issue:
    For example:
    export JAVA_HOME=/usr/lib/jvm/java-$MIN_JDK_VERSION
 3. Try running this script again.
+Note: If you are using a JRE environment, you should set your JAVA_HOME to your JRE directory.
+For full development tools, JDK is recommended.
 EOF
       exit 1
     fi
-fi
-
-# cannot be jre
-if [ ! -f "$JAVA_HOME/bin/javac" ]; then
-  cat << EOF
-Error: It appears that your JAVA_HOME environment variable is pointing to a non-JDK path: $JAVA_HOME
-The FE program requires the full JDK to be installed and configured properly. Please check that JAVA_HOME
-is set to the installation directory of JDK $MIN_JDK_VERSION or higher, rather than the JRE installation directory.
-EOF
-  exit 1
 fi
 
 JAVA=$JAVA_HOME/bin/java
@@ -176,6 +171,9 @@ if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
 
+read_var_from_conf meta_dir $STARROCKS_HOME/conf/fe.conf
+mkdir -p ${meta_dir:-"$STARROCKS_HOME/meta"}
+
 # add libs to CLASSPATH
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
@@ -185,8 +183,11 @@ export CLASSPATH=${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${S
 pidfile=$PID_DIR/fe.pid
 
 if [ -f $pidfile ]; then
-  if kill -0 `cat $pidfile` > /dev/null 2>&1; then
-    echo Frontend running as process `cat $pidfile`.  Stop it first.
+  oldpid=$(cat $pidfile)
+  # get the full command
+  pscmd=$(ps -q $oldpid -o cmd=)
+  if echo "$pscmd" | grep -q -w StarRocksFE &>/dev/null ; then
+    echo Frontend running as process $oldpid. Stop it first.
     exit 1
   fi
 fi
@@ -219,7 +220,7 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     echo -e "\nsys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
 else
     # redirect all subsequent commands' stdout/stderr into $LOG_FILE
-    exec &>> $LOG_FILE
+    exec >> $LOG_FILE 2>&1
 fi
 
 echo "using java version $JAVA_VERSION"

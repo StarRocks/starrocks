@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['爆裂函数','一行转多行','炸开','explode']
 ---
 
@@ -41,7 +41,7 @@ FROM tests, UNNEST(scores) AS t;
 
 StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系如下。
 
-![Lateral Join 中数据类型间的转化](../assets/lateral_join_type_conversion.png)
+![Lateral Join 中数据类型间的转化](../_assets/lateral_join_type_conversion.png)
 
 ### 展开 STRING 类型数据
 

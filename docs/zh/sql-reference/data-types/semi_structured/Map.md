@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # MAP
@@ -105,7 +105,7 @@ select map() as empty_map; -- 返回 {}。
 
 ## 导入 MAP 类型数据
 
-可以使用两种方式导入 MAP 数据到 StarRocks：[INSERT INTO](../../sql-statements/data-manipulation/INSERT.md) 和 [ORC/Parquet 文件导入](../../sql-statements/data-manipulation/BROKER_LOAD.md)。
+可以使用两种方式导入 MAP 数据到 StarRocks：[INSERT INTO](../../sql-statements/loading_unloading/INSERT.md) 和 [ORC/Parquet 文件导入](../../sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 导入过程中 StarRocks 会对重复的 Key 值进行删除。
 
@@ -123,7 +123,7 @@ select map() as empty_map; -- 返回 {}。
 
 ### 从 ORC 和 Parquet 文件导入
 
-StarRocks 的 MAP 类型对应 ORC 和 Parquet 格式中的 MAP，无需您做额外的转换或定义。具体导入操作，参考 [Broker Load 文档](../../sql-statements/data-manipulation/BROKER_LOAD.md)。
+StarRocks 的 MAP 类型对应 ORC 和 Parquet 格式中的 MAP，无需您做额外的转换或定义。具体导入操作，参考 [Broker Load 文档](../../sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 ## 查询 MAP 数据
 
