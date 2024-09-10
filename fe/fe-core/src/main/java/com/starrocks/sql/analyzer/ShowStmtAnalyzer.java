@@ -34,10 +34,13 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -308,6 +311,11 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitDescTableStmt(DescribeStmt node, ConnectContext context) {
+            if (node.isTableFunctionTable()) {
+                descTableFunctionTable(node, context);
+                return null;
+            }
+
             node.getDbTableName().normalization(context);
             TableName tableName = node.getDbTableName();
             String catalogName = tableName.getCatalog();
@@ -329,6 +337,24 @@ public class ShowStmtAnalyzer {
                 descExternalCatalogTable(node, catalogName, dbName, tbl);
             }
             return null;
+        }
+
+        private void descTableFunctionTable(DescribeStmt node, ConnectContext context) {
+            Table table = null;
+            try {
+                table = new TableFunctionTable(node.getTableFunctionProperties());
+            } catch (DdlException e) {
+                throw new StorageAccessException(e);
+            }
+
+            List<Column> columns = table.getFullSchema();
+            for (Column column : columns) {
+                List<String> row = Arrays.asList(
+                        column.getName(),
+                        column.getType().canonicalName().toLowerCase(),
+                        column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO);
+                node.getTotalRows().add(row);
+            }
         }
 
         private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
@@ -369,7 +395,7 @@ public class ShowStmtAnalyzer {
                                                 // If you do not follow this specification, it may cause the BI system,
                                                 // such as superset, to fail to recognize the column type.
                                                 column.getType().canonicalName().toLowerCase(),
-                                                column.isAllowNull() ? "YES" : "NO",
+                                                column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
                                                 ((Boolean) column.isKey()).toString(),
                                                 defaultStr,
                                                 extraStr);
@@ -448,7 +474,7 @@ public class ShowStmtAnalyzer {
                                         // If you do not follow this specification, it may cause the BI system,
                                         // such as superset, to fail to recognize the column type.
                                         column.getType().canonicalName().toLowerCase(),
-                                        column.isAllowNull() ? "YES" : "NO",
+                                        column.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO,
                                         ((Boolean) column.isKey()).toString(),
                                         defaultStr,
                                         extraStr);

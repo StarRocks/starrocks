@@ -524,7 +524,7 @@ showAlterStatement
     ;
 
 descTableStatement
-    : (DESC | DESCRIBE) table=qualifiedName ALL?
+    : (DESC | DESCRIBE) ((table=qualifiedName ALL?) | (FILES propertyList))
     ;
 
 createTableLikeStatement
