@@ -14,6 +14,8 @@
 
 #include "exec/mor_processor.h"
 
+#include "exec/hash_joiner.h"
+
 namespace starrocks {
 
 Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& params) {
@@ -46,7 +48,7 @@ Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& p
             std::vector<ExprContext*>(), std::vector<ExprContext*>(), *_build_row_desc, *_probe_row_desc,
             TPlanNodeType::HDFS_SCAN_NODE, TPlanNodeType::HDFS_SCAN_NODE, true,
             std::list<RuntimeFilterBuildDescriptor*>(), std::set<SlotId>(), probe_output_slot_ids,
-            TJoinDistributionMode::PARTITIONED, true, false));
+            TJoinDistributionMode::PARTITIONED, true, false, false));
 
     _hash_joiner = _pool.add(new HashJoiner(*param));
     RETURN_IF_ERROR(_hash_joiner->prepare_builder(runtime_state, _runtime_profile));
@@ -70,6 +72,7 @@ Status IcebergMORProcessor::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
     if (!_prepared_probe.load()) {
         RETURN_IF_ERROR(_hash_joiner->prepare_prober(state, _runtime_profile));
+        _hash_joiner->reference_hash_table(_hash_joiner);
         _prepared_probe.store(true);
     }
 

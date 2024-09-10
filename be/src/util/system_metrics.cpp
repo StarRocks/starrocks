@@ -35,6 +35,7 @@
 #include "util/system_metrics.h"
 
 #include <runtime/exec_env.h>
+#include <tenann/index/index_cache.h>
 
 #include <cstdio>
 #include <memory>
@@ -120,6 +121,25 @@ public:
     METRIC_DEFINE_DOUBLE_GAUGE(query_cache_hit_ratio, MetricUnit::PERCENT);
 };
 
+class VectorIndexCacheMetrics {
+    friend class SystemMetrics;
+
+public:
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_capacity, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_usage, MetricUnit::BYTES);
+    METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_usage_ratio, MetricUnit::PERCENT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_lookup_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_hit_ratio, MetricUnit::PERCENT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_dynamic_lookup_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_dynamic_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_dynamic_hit_ratio, MetricUnit::PERCENT);
+
+private:
+    int _previous_lookup_count;
+    int _previous_hit_count;
+};
+
 class RuntimeFilterMetrics {
 public:
     METRIC_DEFINE_INT_GAUGE(runtime_filter_events_in_queue, MetricUnit::NOUNIT);
@@ -162,6 +182,7 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
     _install_snmp_metrics(registry);
     _install_query_cache_metrics(registry);
     _install_runtime_filter_metrics(registry);
+    _install_vector_index_cache_metrics(registry);
     _registry = registry;
 }
 
@@ -174,6 +195,7 @@ void SystemMetrics::update() {
     _update_snmp_metrics();
     _update_query_cache_metrics();
     _update_runtime_filter_metrics();
+    _update_vector_index_cache_metrics();
 }
 
 void SystemMetrics::_install_cpu_metrics(MetricRegistry* registry) {
@@ -645,6 +667,61 @@ void SystemMetrics::_update_query_cache_metrics() {
     _query_cache_metrics->query_cache_lookup_count.set_value(lookup_count);
     _query_cache_metrics->query_cache_hit_count.set_value(hit_count);
     _query_cache_metrics->query_cache_hit_ratio.set_value(hit_ratio);
+}
+
+void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry) {
+    _vector_index_cache_metrics = std::make_unique<VectorIndexCacheMetrics>();
+    registry->register_metric("vector_index_cache_capacity", &_vector_index_cache_metrics->vector_index_cache_capacity);
+    registry->register_metric("vector_index_cache_usage", &_vector_index_cache_metrics->vector_index_cache_usage);
+    registry->register_metric("vector_index_cache_usage_ratio",
+                              &_vector_index_cache_metrics->vector_index_cache_usage_ratio);
+    registry->register_metric("vector_index_cache_lookup_count",
+                              &_vector_index_cache_metrics->vector_index_cache_lookup_count);
+    registry->register_metric("vector_index_cache_hit_count",
+                              &_vector_index_cache_metrics->vector_index_cache_hit_count);
+    registry->register_metric("vector_index_cache_hit_ratio",
+                              &_vector_index_cache_metrics->vector_index_cache_hit_ratio);
+    registry->register_metric("vector_index_cache_dynamic_lookup_count",
+                              &_vector_index_cache_metrics->vector_index_cache_dynamic_lookup_count);
+    registry->register_metric("vector_index_cache_dynamic_hit_count",
+                              &_vector_index_cache_metrics->vector_index_cache_dynamic_hit_count);
+    registry->register_metric("vector_index_cache_dynamic_hit_ratio",
+                              &_vector_index_cache_metrics->vector_index_cache_dynamic_hit_ratio);
+}
+
+void SystemMetrics::_update_vector_index_cache_metrics() {
+    auto hit_count = 0;
+#ifdef WITH_TENANN
+    auto* index_cache = tenann::IndexCache::GetGlobalInstance();
+    if (UNLIKELY(index_cache == nullptr)) {
+        return;
+    }
+    auto capacity = index_cache->capacity();
+    auto usage = index_cache->memory_usage();
+    auto lookup_count = index_cache->lookup_count();
+#else
+    auto capacity = 0;
+    auto usage = 0;
+    auto lookup_count = 0;
+#endif
+    auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
+    auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
+    auto dynamic_lookup_count = lookup_count - _vector_index_cache_metrics->_previous_lookup_count;
+    auto dynamic_hit_count = hit_count - _vector_index_cache_metrics->_previous_hit_count;
+    auto dynamic_hit_ratio =
+            (dynamic_lookup_count == 0) ? 0.0 : double(dynamic_lookup_count) / double(dynamic_hit_count);
+    _vector_index_cache_metrics->vector_index_cache_capacity.set_value(capacity);
+    _vector_index_cache_metrics->vector_index_cache_usage.set_value(usage);
+    _vector_index_cache_metrics->vector_index_cache_usage_ratio.set_value(usage_ratio);
+    _vector_index_cache_metrics->vector_index_cache_lookup_count.set_value(lookup_count);
+    _vector_index_cache_metrics->vector_index_cache_hit_count.set_value(hit_count);
+    _vector_index_cache_metrics->vector_index_cache_hit_ratio.set_value(hit_ratio);
+    _vector_index_cache_metrics->vector_index_cache_dynamic_lookup_count.set_value(dynamic_lookup_count);
+    _vector_index_cache_metrics->vector_index_cache_dynamic_hit_count.set_value(dynamic_hit_count);
+    _vector_index_cache_metrics->vector_index_cache_dynamic_hit_ratio.set_value(dynamic_hit_ratio);
+
+    _vector_index_cache_metrics->_previous_lookup_count = lookup_count;
+    _vector_index_cache_metrics->_previous_hit_count = hit_count;
 }
 
 void SystemMetrics::_install_fd_metrics(MetricRegistry* registry) {

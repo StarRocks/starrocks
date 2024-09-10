@@ -21,11 +21,14 @@ import com.google.common.collect.Maps;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 // saves all TxnStateChangeListeners
 public class TxnStateCallbackFactory {
     private static final Logger LOG = LogManager.getLogger(TxnStateCallbackFactory.class);
+    private static final int MEMORY_CALLBACK_SAMPLES = 30;
 
     private Map<Long, TxnStateChangeCallback> callbacks = Maps.newHashMap();
 
@@ -52,5 +55,12 @@ public class TxnStateCallbackFactory {
 
     public synchronized long getCallBackCnt() {
         return callbacks.size();
+    }
+
+    public synchronized List<Object> getSamplesForMemoryTracker() {
+        return callbacks.values()
+                .stream()
+                .limit(MEMORY_CALLBACK_SAMPLES)
+                .collect(Collectors.toList());
     }
 }

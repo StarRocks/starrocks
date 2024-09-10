@@ -39,10 +39,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
+import java.util.stream.Collectors;
 
 /*
  * if you want to visit the atrribute(such as queryID,defaultDb)
@@ -78,21 +79,17 @@ public class ProfileManager implements MemoryTrackable {
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
+    public static final String LOAD_TYPE = "Load Type";
+
+    public static final String LOAD_TYPE_STREAM_LOAD = "STREAM_LOAD";
+    public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
+
+    private static final int MEMORY_PROFILE_SAMPLES = 10;
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
-    @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(profileMap) + SizeEstimator.estimate(loadProfileMap);
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
-                               "LoadProfile", (long) loadProfileMap.size());
-    }
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
@@ -298,19 +295,27 @@ public class ProfileManager implements MemoryTrackable {
         return result;
     }
 
-    public long getQueryProfileCount() {
-        readLock.lock();
-        try {
-            return profileMap.size();
-        } finally {
-            readLock.unlock();
-        }
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
+                "LoadProfile", (long) loadProfileMap.size());
     }
 
-    public long getLoadProfileCount() {
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
         readLock.lock();
         try {
-            return loadProfileMap.size();
+            List<Object> profileSamples = profileMap.values()
+                    .stream()
+                    .limit(MEMORY_PROFILE_SAMPLES)
+                    .collect(Collectors.toList());
+            List<Object> loadProfileSamples = loadProfileMap.values()
+                    .stream()
+                    .limit(MEMORY_PROFILE_SAMPLES)
+                    .collect(Collectors.toList());
+
+            return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()),
+                    Pair.create(loadProfileSamples, (long) loadProfileMap.size()));
         } finally {
             readLock.unlock();
         }

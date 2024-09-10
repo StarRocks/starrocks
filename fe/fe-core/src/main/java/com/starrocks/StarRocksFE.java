@@ -320,6 +320,7 @@ public class StarRocksFE {
             System.out.println("Build type: " + Version.STARROCKS_BUILD_TYPE);
             System.out.println("Build time: " + Version.STARROCKS_BUILD_TIME);
             System.out.println("Build distributor id: " + Version.STARROCKS_BUILD_DISTRO_ID);
+            System.out.println("Build arch: " + Version.STARROCKS_BUILD_ARCH);
             System.out.println("Build user: " + Version.STARROCKS_BUILD_USER + "@" + Version.STARROCKS_BUILD_HOST);
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);

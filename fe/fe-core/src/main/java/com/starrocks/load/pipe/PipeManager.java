@@ -14,14 +14,17 @@
 
 package com.starrocks.load.pipe;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -34,6 +37,7 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -48,9 +52,7 @@ public class PipeManager {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    @SerializedName(value = "pipes")
     private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
-    @SerializedName(value = "nameToId")
     private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
     private final PipeRepo repo;
@@ -182,7 +184,7 @@ public class PipeManager {
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
-        long dbId = GlobalStateMgr.getCurrentState().mayGetDb(name.getDbName())
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(name.getDbName())
                 .map(Database::getId)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_NO_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());
@@ -228,14 +230,6 @@ public class PipeManager {
     }
 
     //============================== RAW CRUD ===========================================
-    public Pair<String, Integer> toJson() {
-        try {
-            lock.readLock().lock();
-            return Pair.create(GsonUtils.GSON.toJson(this), pipeMap.size());
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
 
     public List<Pipe> getAllPipesOfDb(long dbId) {
         try {
@@ -310,6 +304,21 @@ public class PipeManager {
         try {
             lock.readLock().lock();
             return Optional.ofNullable(getPipeByNameUnlock(name));
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        try {
+            lock.readLock().lock();
+            final int cnt = 1 + pipeMap.size();
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.PIPE_MGR, cnt);
+            writer.writeInt(pipeMap.size());
+            for (Pipe pipe : pipeMap.values()) {
+                writer.writeJson(pipe);
+            }
+            writer.close();
         } finally {
             lock.readLock().unlock();
         }

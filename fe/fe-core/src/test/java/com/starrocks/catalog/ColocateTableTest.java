@@ -88,7 +88,7 @@ public class ColocateTableTest {
     public void dropDb() throws Exception {
         String dropDbStmtStr = "drop database " + dbName;
         DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(dropDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
     }
 
     private static void createTable(String sql) throws Exception {
@@ -110,8 +110,8 @@ public class ColocateTableTest {
                 ");");
 
         ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        long tableId = db.getTable(tableName1).getId();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullDbName);
+        long tableId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName1).getId();
 
         Assert.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(1, index.getAllGroupIds().size());
@@ -168,9 +168,9 @@ public class ColocateTableTest {
                 ");");
 
         ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        long firstTblId = db.getTable(tableName1).getId();
-        long secondTblId = db.getTable(tableName2).getId();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullDbName);
+        long firstTblId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName1).getId();
+        long secondTblId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName2).getId();
 
         Assert.assertEquals(2, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(1, index.getAllGroupIds().size());

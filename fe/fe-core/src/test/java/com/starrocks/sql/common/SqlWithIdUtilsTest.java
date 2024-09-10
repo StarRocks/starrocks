@@ -75,7 +75,7 @@ public class SqlWithIdUtilsTest {
 
     @Test
     public void testDecodeAndEncode() {
-        Database test = GlobalStateMgr.getCurrentState().getDb("test");
+        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table tbl1 = test.getTable("tbl1");
         Table tbl2 = test.getTable("tbl2");
         System.out.println(test.getId() + " " + tbl1.getId() + " " + tbl2.getId());
@@ -128,7 +128,7 @@ public class SqlWithIdUtilsTest {
     @Test
     public void testDecodeAndEncodeNoDataBase() throws Exception {
         String sql = "select tbl1.k1, tbl2.k2 from test.tbl1 join test.tbl2 on tbl1.k1 = tbl2.k1";
-        Database test = GlobalStateMgr.getCurrentState().getDb("test");
+        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             String encode = SqlWithIdUtils.encode(statementBase, connectContext);
@@ -171,7 +171,7 @@ public class SqlWithIdUtilsTest {
     @Test
     public void testDecodeAndEncodeNoTable() throws Exception {
         String sql = "select tbl1.k1, tbl2.k2 from test.tbl1 join test.tbl2 on tbl1.k1 = tbl2.k1";
-        Database test = GlobalStateMgr.getCurrentState().getDb("test");
+        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table tbl1 = test.getTable("tbl1");
         Table tbl2 = test.getTable("tbl2");
         try {

@@ -70,16 +70,10 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
     }
 
     public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        if (isAnalyzed) {
-            return;
-        }
-
         FeNameFormat.checkPartitionName(getPartitionName());
         analyzeValues(columnDefList.size());
         analyzeProperties(tableProperties, null);
         this.columnDefList = columnDefList;
-
-        isAnalyzed = true;
     }
 
     private void analyzeValues(int partitionColSize) throws AnalysisException {

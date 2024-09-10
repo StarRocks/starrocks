@@ -16,11 +16,8 @@ package com.starrocks.encryption;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
-import org.apache.parquet.crypto.AesGcmDecryptor;
-import org.apache.parquet.crypto.AesGcmEncryptor;
-import org.apache.parquet.crypto.AesMode;
-import org.apache.parquet.crypto.ModuleCipherFactory;
 
+import java.util.Arrays;
 import java.util.Base64;
 
 public class NormalKey extends EncryptionKey {
@@ -83,8 +80,33 @@ public class NormalKey extends EncryptionKey {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof NormalKey)) {
+            return false;
+        }
+        NormalKey rhs = (NormalKey) obj;
+        if (algorithm != rhs.algorithm) {
+            return false;
+        }
+        if (plainKey != null) {
+            return Arrays.equals(plainKey, rhs.plainKey);
+        } else {
+            return Arrays.equals(encryptedKey, rhs.encryptedKey);
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        if (plainKey != null) {
+            return Arrays.hashCode(plainKey) ^ algorithm.value();
+        } else {
+            return Arrays.hashCode(encryptedKey) ^ algorithm.value();
+        }
+    }
+
+    @Override
     public String toSpec() {
-        return String.format("plain:aes_128:%s", Base64.getEncoder().encodeToString(plainKey));
+        return String.format("plain:%s:%s", algorithm.toString().toLowerCase(), Base64.getEncoder().encodeToString(plainKey));
     }
 
     public NormalKey() {
@@ -117,25 +139,11 @@ public class NormalKey extends EncryptionKey {
     }
 
     public byte[] wrapKey(EncryptionAlgorithmPB algorithm, byte[] plainKey) {
-        switch (algorithm) {
-            case AES_128:
-                AesGcmEncryptor keyEncryptor =
-                        (AesGcmEncryptor) ModuleCipherFactory.getEncryptor(AesMode.GCM, this.plainKey);
-                return keyEncryptor.encrypt(false, plainKey, null);
-            default:
-                throw new IllegalArgumentException("Unsupported encryption algorithm:" + algorithm);
-        }
+        return EncryptionUtil.wrapKey(this.plainKey, algorithm, plainKey);
     }
 
     public byte[] unwrapKey(EncryptionAlgorithmPB algorithm, byte[] encryptedKey) {
-        switch (algorithm) {
-            case AES_128:
-                AesGcmDecryptor keyDecryptor =
-                        (AesGcmDecryptor) ModuleCipherFactory.getDecryptor(AesMode.GCM, this.plainKey);
-                return keyDecryptor.decrypt(encryptedKey, 0, encryptedKey.length, null);
-            default:
-                throw new IllegalArgumentException("Unsupported encryption algorithm:" + algorithm);
-        }
+        return EncryptionUtil.unwrapKey(this.plainKey, algorithm, encryptedKey);
     }
 
     @Override

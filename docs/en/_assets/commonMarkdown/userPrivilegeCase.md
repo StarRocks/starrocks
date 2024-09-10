@@ -86,8 +86,6 @@ You can only write data into Iceberg tables (since v3.1) and Hive tables (since 
    GRANT ALL ON ALL FUNCTIONS IN DATABASE db1 TO ROLE db1_admin;
    ```
 
-
-
 #### Grant privileges to perform backup and restore operations on global, database, table, and partition levels
 
 - Grant privileges to perform global backup and restore operations:

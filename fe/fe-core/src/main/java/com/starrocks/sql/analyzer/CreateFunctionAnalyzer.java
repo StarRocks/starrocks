@@ -26,7 +26,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -37,6 +36,7 @@ import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang.StringUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -80,13 +80,9 @@ public class CreateFunctionAnalyzer {
         functionName.analyze(context.getDatabase());
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        try {
-            // check argument
-            argsDef.analyze();
-            returnType.analyze();
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e);
-        }
+        // check argument
+        argsDef.analyze();
+        returnType.analyze();
     }
 
     public String computeMd5(CreateFunctionStmt stmt) {
@@ -525,6 +521,11 @@ public class CreateFunctionAnalyzer {
         }
         String symbol = properties.get(CreateFunctionStmt.SYMBOL_KEY);
         String inputType = properties.getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
+        String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+
+        if (isInline && !StringUtils.equals(objectFile, "inline")) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, "inline function file should be 'inline'");
+        }
 
         if (!inputType.equalsIgnoreCase("arrow") && !inputType.equalsIgnoreCase("scalar")) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, "unknown input type:", inputType);
@@ -533,7 +534,6 @@ public class CreateFunctionAnalyzer {
         FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
         String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
 
         ScalarFunction.ScalarFunctionBuilder scalarFunctionBuilder =

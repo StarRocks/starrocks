@@ -78,7 +78,7 @@ public class PlannerMetaLocker {
         try {
             for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
                 Database database = dbs.get(entry.getKey());
-                if (!locker.tryLockTablesWithIntensiveDbLock(database, new ArrayList<>(entry.getValue()),
+                if (!locker.tryLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(entry.getValue()),
                         LockType.READ, timeout, unit)) {
                     return false;
                 }
@@ -88,7 +88,7 @@ public class PlannerMetaLocker {
         } finally {
             if (!isLockSuccess) {
                 for (Database database : lockedDbs) {
-                    locker.unLockTablesWithIntensiveDbLock(database, new ArrayList<>(tables.get(database.getId())),
+                    locker.unLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(tables.get(database.getId())),
                             LockType.READ);
                 }
             }
@@ -101,7 +101,7 @@ public class PlannerMetaLocker {
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
-            locker.lockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
         }
     }
 
@@ -110,11 +110,21 @@ public class PlannerMetaLocker {
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
-            locker.unLockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
         }
     }
 
-    private Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
+    /**
+     * Collect tables that need to be protected by the PlannerMetaLock
+     */
+    public static void collectTablesNeedLock(StatementBase statement,
+                                             ConnectContext session,
+                                             Map<Long, Database> dbs,
+                                             Map<Long, Set<Long>> tables) {
+        new TableCollector(session, dbs, tables).visit(statement);
+    }
+
+    private static Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         String catalogName = tableName.getCatalog();
@@ -158,7 +168,7 @@ public class PlannerMetaLocker {
         return new Pair<>(db, table);
     }
 
-    private class TableCollector extends AstTraverser<Void, Void> {
+    private static class TableCollector extends AstTraverser<Void, Void> {
         private final ConnectContext session;
 
         private final Map<Long, Database> dbs;

@@ -76,9 +76,6 @@ CREATE DATABASE test_table_with_null;
 USE test_table_with_null;
 -- result:
 -- !result
-SET enable_insert_strict = false;
--- result:
--- !result
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
 -- result:
 -- !result
@@ -122,16 +119,16 @@ Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" 
 INSERT INTO t2 VALUES (1, NULL), (2, NULL);
 -- result:
 -- !result
-INSERT INTO t1 SELECT * FROM t2;
+INSERT INTO t1 properties ("max_filter_ratio" = "1") SELECT * FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT * FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 SELECT 1, NULL;
+INSERT INTO t1 properties ("max_filter_ratio" = "1") SELECT 1, NULL;
 -- result:
 -- !result
 SELECT * FROM t1;
@@ -147,10 +144,10 @@ CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
 Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT * FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
 -- result:
 -- !result
-INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
 -- result:
 -- !result
 INSERT INTO t1 (id) SELECT id FROM t2;
@@ -167,9 +164,6 @@ DROP TABLE t1;
 -- result:
 -- !result
 DROP TABLE t2;
--- result:
--- !result
-SET enable_insert_strict = true;
 -- result:
 -- !result
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
@@ -529,7 +523,7 @@ CREATE TABLE `t_auto_increment_incorrect_col_id` (
   `k2` string default "abc" COMMENT "",
   `k3` BIGINT AUTO_INCREMENT COMMENT "",
   `k4` string default "bcd"COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
@@ -582,7 +576,7 @@ CREATE TABLE `t_auto_increment_partial_update_only` (
   `k2` BIGINT NOT NULL COMMENT "",
   `k3` BIGINT NOT NULL COMMENT "",
   `k4` BIGINT AUTO_INCREMENT COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (

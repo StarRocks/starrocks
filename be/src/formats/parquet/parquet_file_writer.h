@@ -102,11 +102,10 @@ struct ParquetWriterOptions : FileWriterOptions {
 
 class ParquetFileWriter final : public FileWriter {
 public:
-    ParquetFileWriter(const std::string& location, std::shared_ptr<arrow::io::OutputStream> output_stream,
-                      const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
+    ParquetFileWriter(std::string location, std::shared_ptr<arrow::io::OutputStream> output_stream,
+                      std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                      TCompressionType::type compression_type,
-                      const std::shared_ptr<ParquetWriterOptions>& writer_options,
+                      TCompressionType::type compression_type, std::shared_ptr<ParquetWriterOptions> writer_options,
                       const std::function<void()>& rollback_action);
 
     ~ParquetFileWriter() override;
@@ -158,8 +157,7 @@ private:
 class ParquetFileWriterFactory : public FileWriterFactory {
 public:
     ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
-                             const std::map<std::string, std::string>& options,
-                             const std::vector<std::string>& column_names,
+                             std::map<std::string, std::string> options, std::vector<std::string> column_names,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                              std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
                              RuntimeState* runtime_state);

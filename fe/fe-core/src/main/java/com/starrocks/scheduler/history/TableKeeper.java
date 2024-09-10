@@ -16,11 +16,13 @@ package com.starrocks.scheduler.history;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -73,10 +75,7 @@ public class TableKeeper {
                 LOG.info("table created: {}", tableName);
                 tableExisted = true;
             }
-            if (!tableCorrected && correctTable()) {
-                LOG.info("table corrected: {}", tableName);
-                tableCorrected = true;
-            }
+            correctTable();
             if (tableExisted) {
                 changeTTL();
             }
@@ -93,33 +92,31 @@ public class TableKeeper {
     }
 
     public boolean checkDatabaseExists() {
-        return GlobalStateMgr.getCurrentState().getDb(databaseName) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
     }
 
     public void createTable() throws UserException {
         RepoExecutor.getInstance().executeDDL(createTableSql);
     }
 
-    public boolean correctTable() {
+    public void correctTable() {
         int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
-                .mayGetDb(databaseName)
-                .flatMap(db -> db.mayGetTable(tableName))
+                .getLocalMetastore().mayGetTable(databaseName, tableName)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
         if (numBackends < tableReplicas) {
             LOG.info("not enough backends in the cluster, expected {} but got {}",
                     tableReplicas, numBackends);
-            return false;
+            return;
         }
         if (replica < tableReplicas) {
             String sql = alterTableReplicas();
-            RepoExecutor.getInstance().executeDDL(sql);
-        } else {
-            LOG.info("table {} already has {} replicas, no need to alter replication_num",
-                    tableName, replica);
+            if (StringUtils.isNotEmpty(sql)) {
+                RepoExecutor.getInstance().executeDDL(sql);
+            }
+            LOG.info("changed replication_number of table {} to {}", tableName, replica);
         }
-        return true;
     }
 
     public void changeTTL() {
@@ -145,14 +142,26 @@ public class TableKeeper {
 
     private Optional<OlapTable> mayGetTable() {
         return GlobalStateMgr.getCurrentState()
-                .mayGetDb(databaseName)
-                .flatMap(db -> db.mayGetTable(tableName))
+                .getLocalMetastore().mayGetTable(databaseName, tableName)
                 .flatMap(x -> Optional.of((OlapTable) x));
     }
 
     private String alterTableReplicas() {
-        return String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
-                databaseName, tableName, tableReplicas);
+        Optional<OlapTable> table = mayGetTable();
+        if (table.isEmpty()) {
+            return "";
+        }
+        PartitionInfo partitionInfo = table.get().getPartitionInfo();
+        if (partitionInfo.isRangePartition()) {
+            String sql1 = String.format("ALTER TABLE %s.%s MODIFY PARTITION(*) SET ('replication_num'='%d');",
+                    databaseName, tableName, tableReplicas);
+            String sql2 = String.format("ALTER TABLE %s.%s SET ('default.replication_num'='%d');",
+                    databaseName, tableName, tableReplicas);
+            return sql1 + sql2;
+        } else {
+            return String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
+                    databaseName, tableName, tableReplicas);
+        }
     }
 
     private String alterTableTTL(int days) {

@@ -64,16 +64,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Config.alter_scheduler_interval_millisecond = 1;
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
         setTableStatistics(table2, NUM_TABLE2_ROWS);
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, NUM_TABLE0_ROWS);
 
-        OlapTable colocateT0 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate_t0");
+        OlapTable colocateT0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("colocate_t0");
         setTableStatistics(colocateT0, NUM_TABLE0_ROWS);
 
-        OlapTable lineitem = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        OlapTable lineitem = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem");
         setTableStatistics(lineitem, NUM_TABLE0_ROWS * NUM_TABLE0_ROWS);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -181,9 +181,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testCrossJoinBroadCast() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 20000000);
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
         String sql = "select t1a,v1 from test_all_type, t0";
@@ -424,9 +424,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable table1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 5000);
         String sql = "SELECT v2,t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
         String plan = getFragmentPlan(sql);
@@ -469,7 +469,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testBroadcastInnerJoinWithCommutativity() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(table, 1000);
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d ;";
         String plan = getFragmentPlan(sql);
@@ -729,11 +729,39 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+    public void testPushDownIsoZonedDateTimePredicate() throws Exception {
+        String sql = "SELECT COUNT(1)\n" +
+                "  FROM test_dict\n" +
+                "  WHERE dt >= '2022-12-06T00:00:00Z'\n" +
+                "  AND dt < '2022-12-08T00:00:00Z'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: test_dict\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=2/12\n" +
+                "     rollup: test_dict");
+    }
+
+    @Test
+    public void testPushDownIsoOffsetDateTimePredicate() throws Exception {
+        String sql = "SELECT COUNT(1)\n" +
+                "  FROM test_dict\n" +
+                "  WHERE dt >= '2022-12-06T00:00:00+01:00'\n" +
+                "  AND dt < '2022-12-08T00:00:00+01:00'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: test_dict\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=2/12\n" +
+                "     rollup: test_dict");
+    }
+
+    @Test
     public void testThriftWaitingNodeIds() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000);
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 10000);
 
         String sql = "select * from t0 inner join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
@@ -746,11 +774,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testIntersectReorder() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 100);
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
         setTableStatistics(t2, 1);
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
@@ -774,10 +802,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testNotPushDownRuntimeFilterToSortNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 1000000000L);
 
         String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x " +
@@ -809,10 +837,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
         connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000L);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 1000000000L);
 
         String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
@@ -835,13 +863,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
         connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000L);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 10000000L);
 
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
         setTableStatistics(t2, 10000000L);
 
         String sql = "select * from (select t1.v5 as v5, t0.v3 as v3 from t0 join[shuffle] t1 on t0.v2 = " +
@@ -878,11 +906,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testPushDownRuntimeFilterAcrossSetOperationNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 100);
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
         List<OlapTable> tables = new ArrayList<>(Arrays.asList(t0, t1, t2));
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
@@ -1051,8 +1079,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
         List<OlapTable> tables = new ArrayList<>(Arrays.asList(t1, t2));
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
@@ -1119,8 +1147,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testOverflowFilterOnColocateJoin() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate1");
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate2");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("colocate1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("colocate2");
 
         StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
@@ -1150,8 +1178,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneShuffleColumns() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
 
         StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
@@ -1227,7 +1255,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testToDateToDays() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
         StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
             {
@@ -1249,8 +1277,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testMultiJoinColumnPruneShuffleColumnsAndGRF() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
 
         StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
@@ -1973,7 +2001,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Ignore
     public void testDeepTreePredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_dict");
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_dict");
         setTableStatistics(table2, 20000000);
 
         String sql = getSQLFile("optimized-plan/large_predicate");
@@ -1987,12 +2015,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testJoinUnreorder() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000);
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 10000);
 
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
         setTableStatistics(t1, 10);
 
         String sql = "Select * " +
@@ -2034,7 +2062,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneLimit() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem_partition");
         setTableStatistics(table2, 10);
 
         new MockUp<LocalTablet>() {
@@ -2054,7 +2082,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneInvalidPredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem_partition");
         setTableStatistics(table2, 10);
 
         new MockUp<LocalTablet>() {
@@ -2296,31 +2324,42 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testPlanCost() throws Exception {
-        String plan = getVerboseExplain("select t1a, v1 " +
-                "from t0 join [broadcast] test_all_type " +
-                "join [shuffle] (select 1 as v1_c1 where abs(1) = 2) v1 on t1a=v1 and t1a=v1_c1");
-        assertContains(plan, "  11:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 1, build_expr = (16: cast), remote = true\n" +
-                "  |  output columns: 1, 4\n" +
-                "  |  cardinality: 9000\n" +
-                "  |  \n" +
-                "  |----10:EXCHANGE\n" +
-                "  |       distribution type: SHUFFLE\n" +
-                "  |       partition exprs: [16: cast, VARCHAR, false]\n" +
-                "  |       cardinality: 1\n" +
-                "  |    \n" +
-                "  6:EXCHANGE\n" +
-                "     distribution type: SHUFFLE\n" +
-                "     partition exprs: [4: t1a, VARCHAR, true]\n" +
-                "     cardinality: 9000");
+        final boolean prevShowFragmentCost = FeConstants.showFragmentCost;
+        try {
+            FeConstants.showFragmentCost = true;
 
-        AuditEvent event = connectContext.getAuditEventBuilder().build();
-        Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
-        Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+            String sql = "select t1a, v1 " +
+                    "from t0 join [broadcast] test_all_type " +
+                    "join [shuffle] (select 1 as v1_c1 where abs(1) = 2) v1 on t1a=v1 and t1a=v1_c1";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "10:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN\n" +
+                    "  |  cardinality: 10000\n" +
+                    "  |  \n" +
+                    "  |----9:EXCHANGE\n" +
+                    "  |       distribution type: BROADCAST\n" +
+                    "  |       cardinality: 1\n" +
+                    "  |    \n" +
+                    "  5:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                    "  |  4 <-> [4: t1a, VARCHAR, true]\n" +
+                    "  |  cardinality: 10000");
+            System.out.println(plan);
+            assertContains(plan, "PLAN COST\n" +
+                    "  CPU: 4.80001312001E11\n" +
+                    "  Memory: 320201.0");
 
+            assertContains(getCostExplain(sql), "PLAN COST\n" +
+                    "  CPU: 4.80001312001E11\n" +
+                    "  Memory: 320201.0");
+
+            AuditEvent event = connectContext.getAuditEventBuilder().build();
+            Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
+            Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+        } finally {
+            FeConstants.showFragmentCost = prevShowFragmentCost;
+        }
     }
 
     @Test

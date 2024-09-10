@@ -14,12 +14,15 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -30,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -38,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
@@ -181,11 +186,6 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 .setAggregations(aggregate.getAggregations())
                 .setPredicate(aggregate.getPredicate())
                 .setPartitionByColumns(partitionRefs);
-
-        if ("local".equals(context.getSessionVariable().getCboPushDownAggregate())) {
-            builder.setType(AggType.LOCAL);
-            builder.setSplit(false);
-        }
         LogicalAggregationOperator allColumnRefsAggregate = builder.build();
         // cte produce
         LogicalCTEProduceOperator produce = new LogicalCTEProduceOperator(cteId);
@@ -232,7 +232,14 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
-        return OptExpression.create(projectOperator, OptExpression.create(consume));
+        OptExpression result = OptExpression.create(projectOperator, OptExpression.create(consume));
+
+        if (null != repeat.getPredicate()) {
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(outputs);
+            ScalarOperator predicate = rewriter.rewrite(repeat.getPredicate());
+            return OptExpression.create(new LogicalFilterOperator(predicate), result);
+        }
+        return result;
     }
 
     /*
@@ -278,11 +285,18 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         List<List<Long>> groupingIds = repeat.getGroupingIds().stream()
                 .map(s -> s.subList(0, subGroups)).collect(Collectors.toList());
 
+        ScalarOperator predicate = null;
+        if (null != repeat.getPredicate()) {
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(outputs);
+            predicate = rewriter.rewrite(repeat.getPredicate());
+        }
+
         LogicalRepeatOperator newRepeat = LogicalRepeatOperator.builder()
                 .setOutputGrouping(outputGrouping)
                 .setRepeatColumnRefList(repeatRefs)
                 .setGroupingIds(groupingIds)
                 .setHasPushDown(true)
+                .setPredicate(predicate)
                 .build();
 
         // aggregate
@@ -291,7 +305,15 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
             Function aggFunc = Expr.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            aggregations.put(x, new CallOperator(v.getFnName(), k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
+
+            Preconditions.checkState(aggFunc instanceof AggregateFunction);
+            if (k.getType().isDecimalOfAnyVersion()) {
+                aggFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) aggFunc, k.getType(),
+                        v.getType());
+            }
+
+            aggregations.put(x,
+                    new CallOperator(v.getFnName(), k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
             outputs.put(k, x);
         });
 

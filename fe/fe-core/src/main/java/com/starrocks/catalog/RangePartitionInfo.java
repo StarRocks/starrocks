@@ -231,7 +231,6 @@ public class RangePartitionInfo extends PartitionInfo {
 
     public Range<PartitionKey> handleNewSinglePartitionDesc(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc,
                                                             long partitionId, boolean isTemp) throws DdlException {
-        Preconditions.checkArgument(desc.isAnalyzed());
         Range<PartitionKey> range;
         try {
             range = checkAndCreateRange(schema, desc, isTemp);
@@ -277,7 +276,6 @@ public class RangePartitionInfo extends PartitionInfo {
                 if (!existPartitionNameSet.contains(partition.getName())) {
                     long partitionId = partition.getId();
                     SingleRangePartitionDesc desc = (SingleRangePartitionDesc) entry.second;
-                    Preconditions.checkArgument(desc.isAnalyzed());
                     Range<PartitionKey> range;
                     try {
                         range = checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, isTemp);
@@ -388,6 +386,17 @@ public class RangePartitionInfo extends PartitionInfo {
         List<Map.Entry<Long, Range<PartitionKey>>> sortedList = Lists.newArrayList(tmpMap.entrySet());
         Collections.sort(sortedList, RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
         return sortedList;
+    }
+
+    @Override
+    public List<Long> getSortedPartitions(boolean asc) {
+        Map<Long, Range<PartitionKey>> tmpMap = idToRange;
+        List<Map.Entry<Long, Range<PartitionKey>>> sortedList = Lists.newArrayList(tmpMap.entrySet());
+        sortedList.sort(asc ? RangeUtils.RANGE_MAP_ENTRY_COMPARATOR : RangeUtils.RANGE_MAP_ENTRY_COMPARATOR.reversed());
+        if (sortedList.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        return sortedList.stream().map(Map.Entry::getKey).collect(Collectors.toList());
     }
 
     // get a sorted range list, exclude partitions which ids are in 'excludePartitionIds'

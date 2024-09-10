@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Apache Ranger 管理权限
@@ -109,13 +109,13 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 3. 登录 Ranger 界面 `http://<ranger-ip>:<ranger-host>/login.jsp`。可以看到界面上出现了 STARROCKS 服务。
 
-   ![home](../../assets/ranger_home.png)
+   ![home](../../_assets/ranger_home.png)
 
 4. 点击 **STARROCKS** 后的加号 (`+`) 配置 StarRocks Service 信息。
 
-   ![service config](../../assets/ranger_service_details.png)
+   ![service config](../../_assets/ranger_service_details.png)
 
-   ![property](../../assets/ranger_properties.png)
+   ![property](../../_assets/ranger_properties.png)
 
    - `Service Name`: 服务名称，必填。
    - `Display Name`: 要显示在 STARROCKS 下的服务名称。如果不指定，则显示 `Service Name`。
@@ -124,11 +124,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    下图展示了一个填写示例。
 
-   ![example](../../assets/ranger_show_config.png)
+   ![example](../../_assets/ranger_show_config.png)
 
    下图展示了页面上配置好的 service。
 
-   ![service](../../assets/ranger_added_service.png)
+   ![service](../../_assets/ranger_added_service.png)
 
 5. 点击 **Test connection** 测试连通性，连通成功后保存。需要注意，如果您没有安装 ranger-starrocks-plugin，则可以跳过测试直接保存。
 6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：

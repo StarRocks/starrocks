@@ -1,0 +1,28 @@
+-- name: test_hll_function
+CREATE TABLE t1 (
+    c1 int,
+    c2 int
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t1 select generate_series, generate_series from table(generate_series(1, 1000));
+set pipeline_dop=1;
+
+select ndv(c1) from t1;
+select c2, ndv(c1) from t1 group by c2 order by c2 limit 10;
+
+select approx_count_distinct(c1) from t1;
+select c2,approx_count_distinct(c1) from t1 group by c2 order by c2 limit 10;
+
+select approx_count_distinct_hll_sketch(c1) from t1;
+select c2,approx_count_distinct_hll_sketch(c1) from t1 group by c2 order by c2 limit 10;
+
+select hll_union(hll_hash(c1)) from t1;
+select c2, hll_union(hll_hash(c1)) from t1 group by c2 order by c2 limit 10;
+select hll_raw_agg(hll_hash(c1)) from t1;
+select c2, hll_raw_agg(hll_hash(c1)) from t1 group by c2 order by c2 limit 10;
+
+select hll_union_agg(hll_hash(c1)) from t1;
+select c2, hll_union_agg(hll_hash(c1)) from t1 group by c2 order by c2 limit 10;

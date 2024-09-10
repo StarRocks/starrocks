@@ -35,8 +35,7 @@ struct ConnectorScanOperatorMemShareArbitrator {
     int64_t scan_mem_limit = 0;
     std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
 
-    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit)
-            : query_mem_limit(query_mem_limit), scan_mem_limit(query_mem_limit) {}
+    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit, int scan_node_number);
 
     int64_t set_scan_mem_ratio(double mem_ratio) {
         scan_mem_limit = std::max<int64_t>(1, query_mem_limit * mem_ratio);
@@ -117,6 +116,10 @@ public:
     ConnectorScanOperatorAdaptiveProcessor* adaptive_processor() const { return _adaptive_processor; }
     bool enable_adaptive_io_tasks() const { return _enable_adaptive_io_tasks; }
 
+    workgroup::ScanSchedEntityType sched_entity_type() const override {
+        return workgroup::ScanSchedEntityType::CONNECTOR;
+    }
+
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
@@ -148,8 +151,6 @@ protected:
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
-
-    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 

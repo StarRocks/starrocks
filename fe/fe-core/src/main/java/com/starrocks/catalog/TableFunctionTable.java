@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.Delimiter;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
@@ -38,6 +39,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -98,6 +100,7 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PARTITION_BY = "partition_by";
 
     public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
+    private static final String PROPERTY_STRICT_MODE = LoadStmt.STRICT_MODE;
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
@@ -118,6 +121,7 @@ public class TableFunctionTable extends Table {
     private int autoDetectSampleRows;
 
     private List<String> columnsFromPath = new ArrayList<>();
+    private boolean strictMode = false;
     private final Map<String, String> properties;
 
     private Optional<List<Integer>> partitionColumnIDs = Optional.empty();
@@ -249,6 +253,10 @@ public class TableFunctionTable extends Table {
             }
         }
 
+        if (properties.containsKey(PROPERTY_STRICT_MODE)) {
+            strictMode = Boolean.parseBoolean(properties.get(PROPERTY_STRICT_MODE));
+        }
+
         if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
             autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
         } else {
@@ -270,7 +278,7 @@ public class TableFunctionTable extends Table {
         }
 
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
-            csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            csvColumnSeparator = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_COLUMN_SEPARATOR));
             int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
             if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
@@ -279,7 +287,7 @@ public class TableFunctionTable extends Table {
         }
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
-            csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            csvRowDelimiter = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_ROW_DELIMITER));
             int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
             if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
@@ -484,6 +492,10 @@ public class TableFunctionTable extends Table {
 
     public List<String> getColumnsFromPath() {
         return columnsFromPath;
+    }
+
+    public boolean isStrictMode() {
+        return strictMode;
     }
 
     @Override

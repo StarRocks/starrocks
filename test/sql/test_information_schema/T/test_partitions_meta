@@ -12,4 +12,4 @@ DISTRIBUTED BY HASH(`k`) BUCKETS 2
 PROPERTIES (
 "replication_num" = "1"
 );
-select TABLE_NAME, PARTITION_NAME from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by partition_name;
+select TABLE_NAME, PARTITION_NAME, DATA_VERSION, VERSION_TXN_TYPE from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by partition_name;

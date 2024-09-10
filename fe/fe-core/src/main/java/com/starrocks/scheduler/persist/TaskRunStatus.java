@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -32,6 +33,8 @@ import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -44,6 +47,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class TaskRunStatus implements Writable {
+    private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
     // A refresh may contain a batch of task runs, startTaskRunId is to mark the unique id of the batch task run status.
     // You can use the startTaskRunId to find the batch of task runs.
@@ -377,15 +381,14 @@ public class TaskRunStatus implements Writable {
 
     public long calculateRefreshProcessDuration() {
         if (finishTime > processStartTime) {
-            return finishTime - processStartTime;
-        } else {
-            return 0L;
-        }
-    }
-
-    public long calculateRefreshDuration() {
-        if (finishTime > createTime) {
-            return finishTime - createTime;
+            // NOTE:
+            // It's mostly because of tech debt, before this pr, the processStartTime can be persisted as 0 .
+            // In this case to avoid return a weird duration we choose the createTime as startTime
+            if (processStartTime > 0) {
+                return finishTime - processStartTime;
+            } else {
+                return finishTime - createTime;
+            }
         } else {
             return 0L;
         }
@@ -471,7 +474,7 @@ public class TaskRunStatus implements Writable {
     /**
      * Only used for deserialization of ResultBatch
      */
-    static class TaskRunStatusJSONRecord {
+    public static class TaskRunStatusJSONRecord {
         /**
          * Only one item in the array, like:
          * { data: [ {TaskRunStatus} ] }
@@ -488,9 +491,21 @@ public class TaskRunStatus implements Writable {
         List<TaskRunStatus> res = new ArrayList<>();
         for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
             for (ByteBuffer buffer : batch.getRows()) {
-                ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                String jsonString = copied.toString(Charset.defaultCharset());
-                res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+                String jsonString = "";
+                try {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    jsonString = copied.toString(Charset.defaultCharset());
+                    res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+                } catch (Exception e) {
+                    // If the task run history is corrupted, we can use `ignore_task_run_history_replay_error` config to ignore
+                    // it and continue to process the next one.
+                    if (!Config.ignore_task_run_history_replay_error) {
+                        LOG.warn("Failed to deserialize TaskRunStatus from json， please delete it from " +
+                                "_statistics_.task_run_history table: {}", jsonString, e);
+                        throw new RuntimeException("Failed to deserialize TaskRunStatus from json， please delete it from " +
+                                "_statistics_.task_run_history table: " + jsonString, e);
+                    }
+                }
             }
         }
         return res;

@@ -191,7 +191,8 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
 
     std::unique_ptr<parquet::FileReader> reader;
     try {
-        reader = std::make_unique<parquet::FileReader>(state->chunk_size(), file.get(), file->get_size().value(), 0);
+        reader = std::make_unique<parquet::FileReader>(state->chunk_size(), file.get(), file->get_size().value(),
+                                                       _datacache_options);
     } catch (std::exception& e) {
         const auto s = strings::Substitute(
                 "ParquetEqualityDeleteBuilder::build create parquet::FileReader failed. reason = $0", e.what());

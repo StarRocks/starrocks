@@ -128,8 +128,10 @@ public class Status {
     }
 
     public void setInternalErrorStatus(String msg) {
-        this.errorCode = TStatusCode.INTERNAL_ERROR;
-        this.errorMsg = msg;
+        if (this.errorCode != TStatusCode.GLOBAL_DICT_ERROR) {
+            this.errorCode = TStatusCode.INTERNAL_ERROR;
+            this.errorMsg = msg;
+        }
     }
 
     public void setPstatus(StatusPB status) {

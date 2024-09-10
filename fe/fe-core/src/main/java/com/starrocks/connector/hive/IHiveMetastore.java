@@ -34,6 +34,8 @@ public interface IHiveMetastore extends IMetastore {
 
     void dropTable(String dbName, String tableName);
 
+    Table getTable(String dbName, String tableName);
+
     default List<String> getPartitionKeys(String dbName, String tableName) {
         return getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
     }

@@ -40,6 +40,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TNetworkAddress;
@@ -85,7 +86,6 @@ public class ResultReceiver {
             while (!isDone && !isCancel) {
                 PFetchDataRequest request = new PFetchDataRequest(finstId);
 
-                currentThread = Thread.currentThread();
                 Future<PFetchDataResult> future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
                 PFetchDataResult pResult = null;
                 while (pResult == null) {
@@ -124,7 +124,7 @@ public class ResultReceiver {
                 byte[] serialResult = request.getSerializedResult();
                 if (serialResult != null && serialResult.length > 0) {
                     TResultBatch resultBatch = new TResultBatch();
-                    TDeserializer deserializer = new TDeserializer();
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
                     deserializer.deserialize(resultBatch, serialResult);
                     rowBatch.setBatch(resultBatch);
                     rowBatch.setEos(pResult.eos);
@@ -153,10 +153,6 @@ public class ResultReceiver {
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
             }
-        } finally {
-            synchronized (this) {
-                currentThread = null;
-            }
         }
 
         if (isCancel) {
@@ -167,14 +163,5 @@ public class ResultReceiver {
 
     public void cancel() {
         isCancel = true;
-        synchronized (this) {
-            if (currentThread != null) {
-                // TODO(cmy): we cannot interrupt this thread, or we may throw
-                // java.nio.channels.ClosedByInterruptException when we call
-                // MysqlChannel.realNetSend -> SocketChannelImpl.write
-                // And user will lost connection to starrocks
-                // currentThread.interrupt();
-            }
-        }
     }
 }

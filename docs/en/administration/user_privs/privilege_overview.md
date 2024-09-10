@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Overview of privileges
@@ -26,13 +26,13 @@ The following figure shows an example of privilege management under the RBAC and
 
 In the models, access to objects is allowed through privileges assigned to roles and users. Roles are in turn assigned to other roles or users.
 
-![privilege management](../../assets/privilege-manage.png)
+![privilege management](../../_assets/privilege-manage.png)
 
 ## Objects and privileges
 
 Objects have a logical hierarchy, which is related to the concept they represent. For example, Database is contained in Catalog, and Table, View, Materialized View, and Function are contained in Database. The following figure shows the object hierarchy in the StarRocks system.
 
-![privilege objects](../../assets/privilege-object.png)
+![privilege objects](../../_assets/privilege-object.png)
 
 Each object has a set of privilege items that can be granted. These privileges define which operations can be performed on these objects. You can grant and revoke privileges from roles or users through the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) commands.
 
@@ -62,7 +62,7 @@ After a role is activated, users can perform operations that are authorized by t
 
 StarRocks provides several types of system-defined roles.
 
-![roles](../../assets/privilege-role.png)
+![roles](../../_assets/privilege-role.png)
 
 - `root`: has global privileges. By default, the `root` user has the `root` role.
    After a StarRocks cluster is created, the system automatically generates a root user with root privileges. Because the root user and role have all privileges of the system, we recommend that you create new users and roles for subsequent operations to prevent any risky operations. Keep the password of the root user properly.
@@ -87,7 +87,7 @@ The following figure shows an example of privilege inheritance.
 
 > Note: The maximum number of inheritance levels for a role is 16 by default. The inheritance relationship cannot be bidirectional.
 
-![role inheritance](../../assets/privilege-role_inheri.png)
+![role inheritance](../../_assets/privilege-role_inheri.png)
 
 As shown in the figure:
 

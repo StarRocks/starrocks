@@ -14,15 +14,20 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include <memory>
+
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "util/threadpool.h"
+#include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 
 namespace starrocks::pipeline {
@@ -83,7 +88,38 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+
+    if (_report_when_finish) {
+        /// TODO: report fragment finish to BE coordinator
+        TReportFragmentFinishResponse res;
+        TReportFragmentFinishParams params;
+        params.__set_query_id(query_id());
+        params.__set_fragment_instance_id(fragment_instance_id());
+        // params.query_id = query_id();
+        // params.fragment_instance_id = fragment_instance_id();
+        const auto& fe_addr = state->fragment_ctx()->fe_addr();
+
+        class RpcRunnable : public Runnable {
+        public:
+            RpcRunnable(const TNetworkAddress& fe_addr, const TReportFragmentFinishResponse& res,
+                        const TReportFragmentFinishParams& params)
+                    : fe_addr(fe_addr), res(res), params(params) {}
+            const TNetworkAddress fe_addr;
+            TReportFragmentFinishResponse res;
+            const TReportFragmentFinishParams params;
+
+            void run() override {
+                (void)ThriftRpcHelper::rpc<FrontendServiceClient>(
+                        fe_addr.hostname, fe_addr.port,
+                        [&](FrontendServiceConnection& client) { client->reportFragmentFinish(res, params); });
+            }
+        };
+        //
+        std::shared_ptr<Runnable> runnable;
+        runnable = std::make_shared<RpcRunnable>(fe_addr, res, params);
+        (void)state->exec_env()->streaming_load_thread_pool()->submit(runnable);
+    }
 
     destroy_pass_through_chunk_buffer();
 
@@ -129,7 +165,7 @@ void FragmentContext::report_exec_state_if_necessary() {
                 driver->runtime_report_action();
             }
         });
-        state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
     }
 }
 
@@ -145,15 +181,20 @@ void FragmentContext::set_final_status(const Status& status) {
 
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
-            std::stringstream ss;
-            ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
-               << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
-            if (detailed_message == "LimitReach" || detailed_message == "UserCancel" || detailed_message == "TimeOut") {
-                LOG(INFO) << ss.str();
+            std::string cancel_msg =
+                    fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
+                                print_id(_fragment_instance_id), detailed_message);
+            if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
+                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << cancel_msg;
             } else {
-                LOG(WARNING) << ss.str();
+                LOG(WARNING) << cancel_msg;
             }
-            DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
+
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
     }
@@ -218,7 +259,7 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
-        raw_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
+        raw_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
         return raw_ctx;
     }
 }

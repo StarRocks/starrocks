@@ -50,18 +50,18 @@ public class CreateFunctionStmtAnalyzerTest {
                 createFunctionSql, 32).get(0);
     }
 
-    private CreateFunctionStmt createPyStmt(String symbol, String type) {
+    private CreateFunctionStmt createPyStmt(String symbol, String type, String target) {
         Config.enable_udf = true;
-        String createFunctionSql = String.format("CREATE %s FUNCTION ABC.MY_UDF_JSON_GET(string, string) \n"
+        String createFunctionSql = String.format("CREATE FUNCTION ABC.MY_UDF_JSON_GET(string, string) \n"
                 + "RETURNS string \n"
                 + "properties (\n"
                 + "    \"symbol\" = \"%s\",\n"
                 + "    \"type\" = \"Python\",\n"
-                + "    \"file\" = \"http://localhost:8080/\"\n"
+                + "    \"file\" = \"%s\"\n"
                 + ") AS $$\n"
                 + "def a(b):"
                 + "   return b "
-                + "$$;", type, symbol);
+                + "$$;", symbol, target);
         return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
     }
@@ -200,10 +200,16 @@ public class CreateFunctionStmtAnalyzerTest {
 
     @Test
     public void testPyUDF() {
-        CreateFunctionStmt stmt = createPyStmt("a", "");
+        CreateFunctionStmt stmt = createPyStmt("a", "Python", "inline");
         Assert.assertNotNull(stmt.getContent());
         new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+    }
 
+    @Test(expected = SemanticException.class)
+    public void testPyUDFSymbolEmpty() {
+        CreateFunctionStmt stmt = createPyStmt("a", "Python", "http://a/a.py.gz");
+        Assert.assertNotNull(stmt.getContent());
+        new CreateFunctionAnalyzer().analyze(stmt, connectContext);
     }
 
 }

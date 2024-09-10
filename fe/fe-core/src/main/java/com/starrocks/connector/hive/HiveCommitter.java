@@ -24,6 +24,8 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
@@ -49,6 +51,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Verify.verify;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.HivePartitionStats.ReduceOperator.SUBTRACT;
@@ -146,9 +149,11 @@ public class HiveCommitter {
     }
 
     public void doCommit() {
-        waitAsyncFsTasks();
-        runAddPartitionsTask();
-        runUpdateStatsTasks();
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.do_commit")) {
+            waitAsyncFsTasks();
+            runAddPartitionsTask();
+            runUpdateStatsTasks();
+        }
     }
 
     public void asyncRefreshOthersFeMetadataCache(List<PartitionUpdate> partitionUpdates) {
@@ -306,40 +311,44 @@ public class HiveCommitter {
 
     private void runAddPartitionsTask() {
         if (!addPartitionsTask.isEmpty()) {
-            addPartitionsTask.run(hmsOps);
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.add_partition_tasks")) {
+                addPartitionsTask.run(hmsOps);
+            }
         }
     }
 
     private void runUpdateStatsTasks() {
-        ImmutableList.Builder<CompletableFuture<?>> updateStatsFutures = ImmutableList.builder();
-        List<String> failedUpdateStatsTaskDescs = new ArrayList<>();
-        List<Throwable> suppressedExceptions = new ArrayList<>();
-        for (UpdateStatisticsTask task : updateStatisticsTasks) {
-            updateStatsFutures.add(CompletableFuture.runAsync(() -> {
-                try {
-                    task.run(hmsOps);
-                } catch (Throwable t) {
-                    addSuppressedExceptions(suppressedExceptions, t, failedUpdateStatsTaskDescs, task.getDescription());
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.update_statistics_tasks")) {
+            ImmutableList.Builder<CompletableFuture<?>> updateStatsFutures = ImmutableList.builder();
+            List<String> failedUpdateStatsTaskDescs = new ArrayList<>();
+            List<Throwable> suppressedExceptions = new ArrayList<>();
+            for (UpdateStatisticsTask task : updateStatisticsTasks) {
+                updateStatsFutures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        task.run(hmsOps);
+                    } catch (Throwable t) {
+                        addSuppressedExceptions(suppressedExceptions, t, failedUpdateStatsTaskDescs, task.getDescription());
+                    }
+                }, updateStatsExecutor));
+            }
+
+            for (CompletableFuture<?> executeUpdateFuture : updateStatsFutures.build()) {
+                getFutureValue(executeUpdateFuture);
+            }
+
+            if (!suppressedExceptions.isEmpty()) {
+                StringBuilder message = new StringBuilder();
+                message.append("Failed to update following tasks: ");
+                Joiner.on("; ").appendTo(message, failedUpdateStatsTaskDescs);
+                StarRocksConnectorException exception = new StarRocksConnectorException(message.toString());
+                suppressedExceptions.forEach(exception::addSuppressed);
+                // Insert into Hive4 table occur failure caused by compatibility issue between Hive3 and Hive4 thrift HMS client.
+                // Check https://github.com/StarRocks/starrocks/issues/38620 and HIVE-27984 for more details.
+                if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
+                    throw exception;
+                } else {
+                    LOG.error(exception);
                 }
-            }, updateStatsExecutor));
-        }
-
-        for (CompletableFuture<?> executeUpdateFuture : updateStatsFutures.build()) {
-            getFutureValue(executeUpdateFuture);
-        }
-
-        if (!suppressedExceptions.isEmpty()) {
-            StringBuilder message = new StringBuilder();
-            message.append("Failed to update following tasks: ");
-            Joiner.on("; ").appendTo(message, failedUpdateStatsTaskDescs);
-            StarRocksConnectorException exception = new StarRocksConnectorException(message.toString());
-            suppressedExceptions.forEach(exception::addSuppressed);
-            // Insert into Hive4 table occur failure caused by compatibility issue between Hive3 and Hive4 thrift HMS client.
-            // Check https://github.com/StarRocks/starrocks/issues/38620 and HIVE-27984 for more details.
-            if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
-                throw exception;
-            } else {
-                LOG.error(exception);
             }
         }
     }

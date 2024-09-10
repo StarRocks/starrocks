@@ -74,7 +74,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (Tablet tablet : index.getTablets()) {
                 List<Comparable> tabletInfo = Lists.newArrayList();
@@ -86,7 +86,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfos.add(tabletInfo);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return tabletInfos;
     }
@@ -133,7 +133,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Tablet tablet = index.getTablet(tabletId);
             if (tablet == null) {
@@ -142,7 +142,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             Preconditions.checkState(tablet instanceof LakeTablet);
             return new LakeTabletProcNode((LakeTablet) tablet);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

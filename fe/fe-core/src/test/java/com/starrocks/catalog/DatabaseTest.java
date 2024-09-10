@@ -42,6 +42,7 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -95,6 +96,10 @@ public class DatabaseTest {
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = 1L;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
             }
         };
     }
@@ -191,9 +196,9 @@ public class DatabaseTest {
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
         // Attempt to add the same UDF again
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
 
         List<Function> functions = db.getFunctions();
         Assert.assertEquals(functions.size(), 1);

@@ -531,8 +531,14 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     std::unique_ptr<Column> pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
-    for (const auto& del : rowset->metadata().del_files()) {
-        ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del.name())));
+    for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
+        const auto& del = rowset->metadata().del_files(del_idx);
+        RandomAccessFileOptions ropts;
+        if (!del.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
+        }
+        ASSIGN_OR_RETURN(auto read_file,
+                         fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
         ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
         // serialize to column
         auto pkc = pk_column->clone();
@@ -732,6 +738,11 @@ size_t LakePersistentIndex::memory_usage() const {
     }
     if (_immutable_memtable != nullptr) {
         mem_usage += _immutable_memtable->memory_usage();
+    }
+    for (const auto& sst_ptr : _sstables) {
+        if (sst_ptr != nullptr) {
+            mem_usage += sst_ptr->memory_usage();
+        }
     }
     return mem_usage;
 }

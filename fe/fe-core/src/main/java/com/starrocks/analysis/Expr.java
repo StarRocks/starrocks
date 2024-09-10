@@ -781,7 +781,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
      */
     public String toSqlWithoutTbl() {
-        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true).visit(this);
+        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true, true).visit(this);
     }
 
     public String explain() {
@@ -1522,6 +1522,17 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public List<String> getHints() {
         return hints;
+    }
+
+    public boolean containsDictMappingExpr() {
+        return containsDictMappingExpr(this);
+    }
+
+    private static boolean containsDictMappingExpr(Expr expr) {
+        if (expr instanceof DictMappingExpr) {
+            return true;
+        }
+        return expr.getChildren().stream().anyMatch(child -> containsDictMappingExpr(child));
     }
 
 }

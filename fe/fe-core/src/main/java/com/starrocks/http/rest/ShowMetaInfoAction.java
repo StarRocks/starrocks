@@ -173,10 +173,10 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
         for (int i = 0; i < dbNames.size(); i++) {
             String dbName = dbNames.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
             long totalSize = 0;
-            List<Table> tables = db.getTables();
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (int j = 0; j < tables.size(); j++) {
                 Table table = tables.get(j);
                 if (table.getType() != TableType.OLAP) {

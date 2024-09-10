@@ -1,8 +1,67 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 3.2
+
+## 3.2.11
+
+发布日期：2024 年 9 月 9 日
+
+### 功能优化
+
+- 对 Files()、PIPE 相关操作中的敏感信息进行脱敏。[#47629](https://github.com/StarRocks/starrocks/pull/47629)
+- 通过 Files() 读取 Parquet 文件支持自动推导 STRUCT 类型。[#50481](https://github.com/StarRocks/starrocks/pull/50481)
+
+### 问题修复
+
+修复了如下问题：
+
+- Equi-join 查询由于全局字典未改写导致报错。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+- Tablet Clone 时 FE 侧死循环导致报错 "version has been compacted"。[#50561](https://github.com/StarRocks/starrocks/pull/50561)
+- 数据副本基于 Label 分布后，不健康副本修复调度错误。[#50331](https://github.com/StarRocks/starrocks/pull/50331)
+- 统计信息收集日志中报错 "Unknown column '%s' in '%s"。[#50785](https://github.com/StarRocks/starrocks/pull/50785)
+- Files() 读取 Parquet 格式文件中复杂类型 TIMESTAMP 时使用的 Timezone 不正确。[#50448](https://github.com/StarRocks/starrocks/pull/50448)
+
+### 行为变更
+
+- 从 v3.3.x 版本降级至 v3.2.11 版本，如果存在不兼容的元数据信息，系统将直接忽略。[#49636](https://github.com/StarRocks/starrocks/pull/49636)
+
+## 3.2.10
+
+发布日期：2024 年 8 月 23 日
+
+### 功能优化
+
+- Files() 读取 Parquet 文件中的 `logical_type` 为 JSON 的 BYTE_ARRAY 数据自动转换为 StarRocks 中的 JSON 类型。[#49385](https://github.com/StarRocks/starrocks/pull/49385)
+- 优化 Files() 在缺失 Access Key ID 和 Secret Access Key 时的报错信息。[#49090](https://github.com/StarRocks/starrocks/pull/49090)
+- `information_schema.columns` 支持 `GENERATION_EXPRESSION` 字段。[#49734](https://github.com/StarRocks/starrocks/pull/49734)
+
+### 问题修复
+
+修复了如下问题：
+
+- 在 v3.3 存算分离集群中为主键表设置 Property `"persistent_index_type" = "CLOUD_NATIVE"` 后，将集群降级到 v3.2 导致 Crash。[#48149](https://github.com/StarRocks/starrocks/pull/48149)
+- SELECT INTO OUTFILE 导出数据至 CSV 文件可能导致数据不一致。[#48052](https://github.com/StarRocks/starrocks/pull/48052)
+- 并发执行查询时查询失败。[#48180](https://github.com/StarRocks/starrocks/pull/48180)
+- Plan 阶段超时但不退出，导致的查询卡住。[#48405](https://github.com/StarRocks/starrocks/pull/48405)
+- 在旧版本中为主键表关闭索引压缩功能后，升级至 v3.1.13 或 v3.2.9，访问索引的 `page_off` 信息时数组越界导致 Crash。[#48230](https://github.com/StarRocks/starrocks/pull/48230)
+- 并发执行 ADD/DROP COLUMN 操作导致 BE Crash。[#49355](https://github.com/StarRocks/starrocks/pull/49355)
+- 在 aarch64 架构下查询 ORC 格式文件中的 TINYINT 类型负数显示为 None。[#49517](https://github.com/StarRocks/starrocks/pull/49517)
+- 当写盘失败时，主键表持久化主键索引的 `l``0` 可能会因为无法捕捉错误导致数据丢失。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- 主键表部分列更新在大量数据更新的场景下写入失败。[#49054](https://github.com/StarRocks/starrocks/pull/49054)
+-  v3.3.0 存算分离集群降级到 v3.2.9 后，Fast Schema Evolution 导致 BE Crash。[#42737](https://github.com/StarRocks/starrocks/pull/42737)
+- `partition_linve_nubmer` 不生效。[#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- 主键表索引落盘和 Compaction 并发的冲突可能导致 Clone 失败。[#49341](https://github.com/StarRocks/starrocks/pull/49341)
+- 通过 ALTER TABLE 修改 `partition_linve_nubmer` 不生效。[#49437](https://github.com/StarRocks/starrocks/pull/49437)
+- CTE distinct grouping sets 查询改写生成错误计划。[#48765](https://github.com/StarRocks/starrocks/pull/48765)
+- RPC 失败导致线程池污染。[#49619](https://github.com/StarRocks/starrocks/pull/49619)
+- 通过 PIPE 导入 AWS S3 中的文件时访问鉴权失败。[#49837](https://github.com/StarRocks/starrocks/pull/49837)
+
+### 行为变更
+
+- FE 启动脚本中增加 `meta` 目录检查，如果不存在则自动创建 `meta` 目录。[#48940](https://github.com/StarRocks/starrocks/pull/48940)
+- 增加导入内存限制参数 `load_process_max_memory_hard_limit_ratio`，当导入内存超过使用限制后，后续导入任务将失败。[#48495](https://github.com/StarRocks/starrocks/pull/48495)
 
 ## 3.2.9
 
@@ -36,6 +95,12 @@ displayed_sidebar: "Chinese"
 - 写入 Hive 或 Iceberg 表时没有正确处理 I/O Error。[#46979](https://github.com/StarRocks/starrocks/pull/46979)
 - 给表属性赋值时添加空格不生效。[#47119](https://github.com/StarRocks/starrocks/pull/47119)
 - 对主键表并发执行迁移操作和 Index Compaction 时导致 BE Crash。[#46675](https://github.com/StarRocks/starrocks/pull/46675)
+
+### 行为变更
+
+- 修改 `JAVA_OPTS` 参数继承顺序，如果使用 JDK_9 或 JDK_11 以外的版本，用户需直接在 `JAVA_OPTS` 中配置。[#47495](https://github.com/StarRocks/starrocks/pull/47495)
+- 用户创建非分区表但未设置分桶数时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 或 CN 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+- 用户创建分区表但未设置分桶数时，当分区数量超过 5 个后，系统自动设置分桶数的规则更改为 `max(2 * BE 或 CN 数量, 根据最大历史分区数据量计算得出的分桶数)`。原来的规则是根据最大历史分区数据量计算分桶数。[#47949](https://github.com/StarRocks/starrocks/pull/47949)
 
 ## 3.2.8
 

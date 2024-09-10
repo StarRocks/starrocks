@@ -86,6 +86,7 @@ import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
@@ -230,6 +231,12 @@ public class Analyzer {
 
         @Override
         public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
+            statement.analyze();
+            return null;
+        }
+
+        @Override
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
             statement.analyze();
             return null;
         }
@@ -696,71 +703,72 @@ public class Analyzer {
             return null;
         }
 
-        // ---------------------------------------- Privilege Statement ------------------------------------------------
+        // ---------------------------------------- Authentication Statement ------------------------------------------------
 
         @Override
         public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthenticationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthenticationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            PrivilegeStmtAnalyzer.analyze(statement, context);
+            AuthenticationAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthenticationAnalyzer.analyze(stmt, session);
             return null;
         }
 
+        // ---------------------------------------- Authorization Statement ------------------------------------------------
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 

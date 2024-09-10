@@ -20,11 +20,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -98,9 +101,9 @@ public class MetaFunctions {
     }
 
     public static Pair<Database, Table> inspectTable(TableName tableName) {
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
-        Table table = db.tryGetTable(tableName.getTbl())
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(tableName.getDb(), tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
@@ -146,12 +149,12 @@ public class MetaFunctions {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
         }
     }
 
@@ -164,19 +167,19 @@ public class MetaFunctions {
         Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
         if (table.isNativeTableOrMaterializedView()) {
-            mayDb = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb());
+            mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
         } else {
             mayDb = Optional.empty();
         }
 
         Locker locker = new Locker();
         try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
 
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
             for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
+                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
                         .map(Table::getName)
                         .orElse(null);
                 JsonObject obj = new JsonObject();
@@ -189,7 +192,7 @@ public class MetaFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
         }
     }
 
@@ -243,7 +246,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         authOperatorPrivilege();
         String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(connectContext.getDatabase())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
         String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
         return ConstantOperator.createVarchar(json);
@@ -419,8 +422,22 @@ public class MetaFunctions {
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
-        String sql = String.format("select cast(dict_mapping('%s', '%s', '%s') as string)",
-                tableNameValue.toString(), lookupKey.getVarchar(), returnColumn.getVarchar());
+        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableNameValue);
+        maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
+        if (!(maybeTable.get() instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
+        }
+        OlapTable table = (OlapTable) maybeTable.get();
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be PRIMARY_KEY");
+        }
+        if (table.getKeysNum() > 1) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "too many key columns");
+        }
+        Column keyColumn = table.getKeyColumns().get(0);
+
+        String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
+                returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
         try {
             List<TResultBatch> result = RepoExecutor.getInstance().executeDQL(sql);
             return deserializeLookupResult(result);

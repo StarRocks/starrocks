@@ -530,6 +530,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
+        if (table.inputHasTempPartition(scan.getSelectedPartitionId())) {
+            return DecodeInfo.EMPTY;
+        }
 
         // check dict column
         DecodeInfo info = new DecodeInfo();
@@ -550,8 +553,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                     .getColumnStatistic(table, column.getName());
             // Condition 2: the varchar column is low cardinality string column
-            if (!column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
-                    columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
+
+            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDict();
+            if (!alwaysCollectDict && !column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER &&
+                    (columnStatistic.isUnknown() ||
+                            columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
                 LOG.debug("{} isn't low cardinality string column", column.getName());
                 continue;
             }

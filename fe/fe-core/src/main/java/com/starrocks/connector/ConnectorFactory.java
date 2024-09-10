@@ -48,7 +48,7 @@ public class ConnectorFactory {
 
             InformationSchemaConnector informationSchemaConnector =
                     new InformationSchemaConnector(context.getCatalogName());
-            TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName());
+            TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName(), context.getType());
             return new CatalogConnector(lazyConnector, informationSchemaConnector, tableMetaConnector);
         } catch (Exception e) {
             LOG.error(String.format("create [%s] connector failed", context.getType()), e);

@@ -88,7 +88,6 @@ import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
-import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
@@ -176,13 +175,13 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_DB_V2: {
                     CreateDbInfo db = (CreateDbInfo) journal.getData();
-                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+                    LocalMetastore metastore = globalStateMgr.getLocalMetastore();
                     metastore.replayCreateDb(db);
                     break;
                 }
                 case OperationType.OP_DROP_DB: {
                     DropDbInfo dropDbInfo = (DropDbInfo) journal.getData();
-                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+                    LocalMetastore metastore = globalStateMgr.getLocalMetastore();
                     metastore.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
                     break;
                 }
@@ -229,7 +228,7 @@ public class EditLog {
                 case OperationType.OP_DROP_TABLE:
                 case OperationType.OP_DROP_TABLE_V2: {
                     DropInfo info = (DropInfo) journal.getData();
-                    Database db = globalStateMgr.getDb(info.getDbId());
+                    Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
                     if (db == null) {
                         LOG.warn("failed to get db[{}]", info.getDbId());
                         break;
@@ -823,6 +822,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BUCKET_SIZE:
+                case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+                case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -1076,7 +1077,7 @@ public class EditLog {
                 case OperationType.OP_ALTER_USER_V2: {
                     AlterUserInfo info = (AlterUserInfo) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayAlterUser(
-                            info.getUserIdentity(), info.getAuthenticationInfo());
+                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getProperties());
                     break;
                 }
                 case OperationType.OP_UPDATE_USER_PROP_V2:
@@ -1107,12 +1108,12 @@ public class EditLog {
                 }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
-                    MaterializedViewMgr.getInstance().replay(job);
+                    GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replay(job);
                     break;
                 }
                 case OperationType.OP_MV_EPOCH_UPDATE: {
                     MVEpoch epoch = (MVEpoch) journal.getData();
-                    MaterializedViewMgr.getInstance().replayEpoch(epoch);
+                    GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replayEpoch(epoch);
                     break;
                 }
                 case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
@@ -1185,9 +1186,20 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
+                case OperationType.OP_DELETE_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayDeleteReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
                 case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
+                    break;
+                }
+                case OperationType.OP_ADD_KEY: {
+                    Text keyJson = (Text) journal.getData();
+                    EncryptionKeyPB keyPB = GsonUtils.GSON.fromJson(keyJson.toString(), EncryptionKeyPB.class);
+                    GlobalStateMgr.getCurrentState().getKeyMgr().replayAddKey(keyPB);
                     break;
                 }
                 default: {
@@ -1719,6 +1731,14 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
     }
 
+    public void logModifyMutableBucketNum(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
+    }
+
+    public void logModifyEnableLoadProfile(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info);
+    }
+
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
         logEdit(OperationType.OP_REPLACE_TEMP_PARTITION, info);
     }
@@ -1883,8 +1903,9 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_USER_V2, info);
     }
 
-    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
-        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo);
+    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo,
+                             Map<String, String> properties) {
+        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo, properties);
         logEdit(OperationType.OP_ALTER_USER_V2, info);
     }
 
@@ -1981,6 +2002,11 @@ public class EditLog {
     public void logReplicationJob(ReplicationJob replicationJob) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
         logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+    }
+
+    public void logDeleteReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
     }
 
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {

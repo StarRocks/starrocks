@@ -151,6 +151,15 @@ public:
 
     static Status CapacityLimitExceed(std::string_view msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
 
+    static Status Shutdown(std::string_view msg) { return Status(TStatusCode::SHUTDOWN, msg); }
+
+    static Status BigQueryCpuSecondLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
+    }
+    static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
+    }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
@@ -202,6 +211,8 @@ public:
     bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 
     bool is_yield() const { return code() == TStatusCode::YIELD; }
+
+    bool is_shutdown() const { return code() == TStatusCode::SHUTDOWN; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
@@ -405,6 +416,17 @@ struct StatusInstance {
 #else
 #define RETURN_IF_ERROR(stmt) RETURN_IF_ERROR_INTERNAL(stmt)
 #endif
+
+#define SET_STATUE_AND_RETURN_IF_ERROR_INTERNAL(err_status, stmt)                                           \
+    do {                                                                                                    \
+        auto&& status__ = (stmt);                                                                           \
+        if (UNLIKELY(!status__.ok())) {                                                                     \
+            err_status = to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+            return;                                                                                         \
+        }                                                                                                   \
+    } while (false)
+
+#define SET_STATUE_AND_RETURN_IF_ERROR(err_status, stmt) SET_STATUE_AND_RETURN_IF_ERROR_INTERNAL(err_status, stmt)
 
 #define EXIT_IF_ERROR(stmt)                   \
     do {                                      \

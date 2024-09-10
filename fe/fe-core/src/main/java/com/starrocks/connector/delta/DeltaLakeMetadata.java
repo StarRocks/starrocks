@@ -26,6 +26,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
@@ -114,21 +115,20 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange versionRange, ScalarOperator operator,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         String dbName = deltaLakeTable.getDbName();
         String tableName = deltaLakeTable.getTableName();
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, versionRange.end().get(), operator);
+        PredicateSearchKey key =
+                PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().end().get(), params.getPredicate());
 
-        triggerDeltaLakePlanFilesIfNeeded(key, table, operator, fieldNames);
+        triggerDeltaLakePlanFilesIfNeeded(key, table, params.getPredicate(), params.getFieldNames());
 
         List<FileScanTask> scanTasks = splitTasks.get(key);
         if (scanTasks == null) {
             throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
-                    dbName, tableName, operator);
+                    dbName, tableName, params.getPredicate());
         }
 
         List<RemoteFileDesc> remoteFileDescs = Lists.newArrayList(
@@ -213,11 +213,11 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         if (fieldNames != null) {
             nonPartitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
-                    && !partitionColumns.contains(column))
+                            && !partitionColumns.contains(column))
                     .collect(Collectors.toSet());
             partitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
-                    && partitionColumns.contains(column))
+                            && partitionColumns.contains(column))
                     .collect(Collectors.toSet());
         } else {
             nonPartitionPrimitiveColumns = schema.fieldNames().stream()

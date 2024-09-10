@@ -210,6 +210,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 (typeVariable.isNumericType() && typeConstant.isBoolean()) ||
                 (typeVariable.isDateType() && typeConstant.isNumericType()) ||
                 (typeVariable.isDateType() && typeConstant.isStringType()) ||
+                (typeVariable.isFixedPointType() && typeConstant.isStringType() &&
+                        predicate.getBinaryType() == BinaryType.EQ) ||
                 (typeVariable.isBoolean() && typeConstant.isStringType()) ||
                 checkStringCastToNumber) {
 

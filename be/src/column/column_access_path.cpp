@@ -15,6 +15,7 @@
 #include "column/column_access_path.h"
 
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 #include "column/column.h"
@@ -23,8 +24,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
@@ -66,19 +69,10 @@ Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAcces
 
     for (const auto& child : column_path.children) {
         ColumnAccessPathPtr child_path = std::make_unique<ColumnAccessPath>();
-        RETURN_IF_ERROR(child_path->init(_absolute_path + "/", child, state, pool));
+        RETURN_IF_ERROR(child_path->init(_absolute_path + ".", child, state, pool));
         _children.emplace_back(std::move(child_path));
     }
 
-    return Status::OK();
-}
-
-Status ColumnAccessPath::init(TAccessPathType::type type, const std::string& path, uint32_t index) {
-    _type = type;
-    _path = path;
-    _column_index = index;
-    _absolute_path = path;
-    _value_type = TypeDescriptor(LogicalType::TYPE_JSON);
     return Status::OK();
 }
 
@@ -175,6 +169,16 @@ size_t ColumnAccessPath::leaf_size() const {
     return size;
 }
 
+void ColumnAccessPath::get_all_leafs(std::vector<ColumnAccessPath*>* result) {
+    if (_children.empty()) {
+        result->emplace_back(this);
+        return;
+    }
+    for (const auto& child : _children) {
+        child->get_all_leafs(result);
+    }
+}
+
 const std::string ColumnAccessPath::to_string() const {
     std::stringstream ss;
     ss << _path << "(" << _type << ")";
@@ -184,15 +188,68 @@ const std::string ColumnAccessPath::to_string() const {
 StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TColumnAccessPath& column_path,
                                                                      RuntimeState* state, ObjectPool* pool) {
     auto path = std::make_unique<ColumnAccessPath>();
-    RETURN_IF_ERROR(path->init("/", column_path, state, pool));
+    RETURN_IF_ERROR(path->init("", column_path, state, pool));
     return path;
 }
 
 StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TAccessPathType::type& type,
-                                                                     const std::string& path, uint32_t index) {
+                                                                     const std::string& path, uint32_t index,
+                                                                     const std::string& prefix) {
     auto p = std::make_unique<ColumnAccessPath>();
-    RETURN_IF_ERROR(p->init(type, path, index));
-    return p;
+    p->_type = type;
+    p->_path = path;
+    p->_column_index = index;
+    if (prefix != "") {
+        p->_absolute_path = prefix + "." + path;
+    } else {
+        p->_absolute_path = path;
+    }
+    p->_value_type = TypeDescriptor(LogicalType::TYPE_JSON);
+    p->_children.clear();
+    return std::move(p);
+}
+
+std::pair<std::string, std::string> _split_path(const std::string& path) {
+    size_t pos = 0;
+    if (path.starts_with("\"")) {
+        pos = path.find('\"', 1);
+        DCHECK(pos != std::string::npos);
+    }
+    pos = path.find('.', pos);
+    std::string key;
+    std::string next;
+    if (pos == std::string::npos) {
+        key = path;
+    } else {
+        key = path.substr(0, pos);
+        next = path.substr(pos + 1);
+    }
+
+    return {key, next};
+}
+
+ColumnAccessPath* insert_json_path_impl(const std::string& path, ColumnAccessPath* root) {
+    if (path.empty()) {
+        return root;
+    }
+
+    auto [key, next] = _split_path(path);
+    auto child = root->get_child(key);
+    if (child == nullptr) {
+        auto n = ColumnAccessPath::create(TAccessPathType::FIELD, key, 0, root->absolute_path());
+        DCHECK(n.ok());
+        root->children().emplace_back(std::move(n.value()));
+        child = root->children().back().get();
+    }
+    return insert_json_path_impl(next, child);
+}
+
+void ColumnAccessPath::insert_json_path(ColumnAccessPath* root, LogicalType type, const std::string& path) {
+    auto leaf = insert_json_path_impl(path, root);
+    leaf->_type = TAccessPathType::type::FIELD;
+    leaf->_column_index = 0;
+    leaf->_absolute_path = root->absolute_path() + "." + path;
+    leaf->_value_type = TypeDescriptor(type);
 }
 
 } // namespace starrocks

@@ -84,6 +84,7 @@ enum TPlanNodeType {
   STREAM_JOIN_NODE,
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
+  CAPTURE_VERSION_NODE,
 }
 
 // phases of an execution node
@@ -388,6 +389,7 @@ struct THdfsScanRange {
 
     // Paimon Deletion Vector File
     27: optional TPaimonDeletionFile paimon_deletion_file
+
 }
 
 struct TBinlogScanRange {
@@ -523,6 +525,19 @@ struct TColumnAccessPath {
     5: optional Types.TTypeDesc type_desc
 }
 
+struct TVectorSearchOptions {
+  1: optional bool enable_use_ann;
+  2: optional i64 vector_limit_k;
+  3: optional string vector_distance_column_name;
+  4: optional list<string> query_vector;
+  5: optional map<string, string> query_params;
+  6: optional double vector_range;
+  7: optional i32 result_order;
+  8: optional bool use_ivfpq;
+  9: optional double pq_refine_factor;
+  10: optional double k_factor;
+}
+
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -552,6 +567,9 @@ struct TOlapScanNode {
   34: optional bool partition_order_hint
   35: optional bool enable_prune_column_after_index_filter
   36: optional bool enable_gin_filter
+  37: optional i64 schema_id
+
+  40: optional TVectorSearchOptions vector_search_options
 }
 
 struct TJDBCScanNode {
@@ -667,6 +685,7 @@ struct THashJoinNode {
   // used in pipeline engine
   55: optional bool interpolate_passthrough = false
   56: optional bool late_materialization = false
+  57: optional bool enable_partition_hash_join = false
 }
 
 struct TMergeJoinNode {
@@ -1103,6 +1122,11 @@ struct THdfsScanNode {
 
     // if load column statistics for metadata table scan
     20: optional bool load_column_stats;
+
+    // for jni scan factory selection scanner
+    21: optional string metadata_table_type
+
+    22: optional DataCache.TDataCacheOptions datacache_options;
 }
 
 struct TProjectNode {

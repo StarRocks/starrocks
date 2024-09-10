@@ -22,7 +22,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.RemoteScanRangeLocations;
+import com.starrocks.connector.hudi.HudiConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -35,7 +35,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import java.util.List;
 
 public class HudiScanNode extends ScanNode {
-    private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+    private HudiConnectorScanRangeSource scanRangeSource = null;
 
     private final HudiTable hudiTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
@@ -67,7 +67,8 @@ public class HudiScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
         this.descTbl = descTbl;
-        scanRangeLocations.setup(descTbl, hudiTable, scanNodePredicates);
+        this.scanRangeSource = new HudiConnectorScanRangeSource(descTbl, hudiTable, scanNodePredicates);
+        this.scanRangeSource.setup();
     }
 
     private void setupCloudCredential() {
@@ -85,7 +86,7 @@ public class HudiScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+        return scanRangeSource.getAllOutputs();
     }
 
     @Override
@@ -122,6 +123,8 @@ public class HudiScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -132,11 +135,6 @@ public class HudiScanNode extends ScanNode {
         }
 
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocations.getScanRangeLocationsSize();
     }
 
     @Override
@@ -156,6 +154,7 @@ public class HudiScanNode extends ScanNode {
         HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
     }
 
     @Override

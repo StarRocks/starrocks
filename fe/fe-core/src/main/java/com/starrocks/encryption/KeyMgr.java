@@ -18,6 +18,8 @@ import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -31,7 +33,6 @@ import com.starrocks.thrift.TGetKeysResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -92,7 +93,10 @@ public class KeyMgr {
         EncryptionKey kek = masterKey.generateKey();
         kek.id = idToKey.lastKey() + 1;
         addKey(kek);
-        LOG.info("generate new KEK " + kek);
+        if (MetricRepo.hasInit) {
+            MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
+        }
+        LOG.info(String.format("generate new KEK %s, total: %d", kek.toString(), idToKey.size()));
         return kek;
     }
 
@@ -115,19 +119,18 @@ public class KeyMgr {
                 } else {
                     // check masterkey not changed
                     EncryptionKey masterKey = idToKey.get(DEFAULT_MASTER_KYE_ID);
-                    if (!masterKey.toSpec().equals(masterKeyFromConfig.toSpec())) {
-                        // masterKey changed
-                        String msg = String.format("default_master_key changed meta:%s config:%s", masterKey.toSpec(),
-                                masterKeyFromConfig.toSpec());
-                        LOG.error(msg);
-                        System.exit(1);
-                    }
+                    Preconditions.checkState(masterKey.equals(masterKeyFromConfig),
+                            "default_master_key changed meta:%s config:%s", masterKey.toSpec(),
+                            masterKeyFromConfig.toSpec());
                 }
                 if (idToKey.size() == 1) {
                     // setup first KEK
                     generateNewKEK();
                 }
             }
+        } catch (Exception e) {
+            LOG.fatal("init default master key failed, will exit.", e);
+            System.exit(-1);
         } finally {
             keysLock.writeLock().unlock();
         }
@@ -149,6 +152,9 @@ public class KeyMgr {
             if (lastKEK.createTime + keyValidSec <= now) {
                 generateNewKEK();
             }
+            if (MetricRepo.hasInit) {
+                MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
+            }
         } finally {
             keysLock.writeLock().unlock();
         }
@@ -168,41 +174,52 @@ public class KeyMgr {
     }
 
     public EncryptionKey create(EncryptionKeyPB pb) {
+        EncryptionKey key;
         switch (pb.type) {
             case NORMAL_KEY:
-                NormalKey key = new NormalKey();
-                key.fromPB(pb, this);
-                return key;
+                key = new NormalKey();
+                break;
             default:
                 throw new IllegalStateException("Unexpected EncryptionKeyTypePB value: " + pb.type);
         }
+        key.fromPB(pb, this);
+        return key;
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int cnt = reader.readInt();
-        LOG.info("loading {} keys", cnt);
-        for (int i = 0; i < cnt; i++) {
-            EncryptionKeyPB pb = reader.readJson(EncryptionKeyPB.class);
-            switch (pb.type) {
-                case NORMAL_KEY:
-                    NormalKey key = new NormalKey();
-                    key.fromPB(pb, this);
-                    idToKey.put(key.id, key);
+        keysLock.writeLock().lock();
+        try {
+            int cnt = reader.readInt();
+            LOG.info("loading {} keys", cnt);
+            for (int i = 0; i < cnt; i++) {
+                EncryptionKeyPB pb = reader.readJson(EncryptionKeyPB.class);
+                EncryptionKey key = create(pb);
+                idToKey.put(key.id, key);
             }
+            if (MetricRepo.hasInit) {
+                MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
+            }
+        } finally {
+            keysLock.writeLock().unlock();
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        final int cnt = 1 + idToKey.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.KEY_MGR, cnt);
-        // write keys
-        writer.writeJson(idToKey.size());
-        for (EncryptionKey key : idToKey.values()) {
-            EncryptionKeyPB pb = new EncryptionKeyPB();
-            key.toPB(pb, this);
-            writer.writeJson(pb);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        keysLock.readLock().lock();
+        try {
+            final int cnt = 1 + idToKey.size();
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.KEY_MGR, cnt);
+            // write keys
+            writer.writeInt(idToKey.size());
+            for (EncryptionKey key : idToKey.values()) {
+                EncryptionKeyPB pb = new EncryptionKeyPB();
+                key.toPB(pb, this);
+                writer.writeJson(pb);
+            }
+            writer.close();
+        } finally {
+            keysLock.readLock().unlock();
         }
-        writer.close();
     }
 
     public TGetKeysResponse getKeys(TGetKeysRequest req) throws IOException {

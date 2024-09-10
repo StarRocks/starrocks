@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 聚合表
@@ -87,7 +87,7 @@ DISTRIBUTED BY HASH(site_id);
 
 - **value 列**：通过在列名后指定聚合函数，定义该列为 value 列。一般为需要汇总统计的数据。
 
-- **聚合函数**：value 列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+- **聚合函数**：value 列使用的聚合函数。聚合表支持的聚合函数，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 - **排序键**：
   - 自 v3.3.0 起，聚合表解耦了排序键和聚合键。聚合表支持使用 `ORDER BY` 指定排序键和使用 `AGGREGATE KEY` 指定聚合键。排序键和聚合键中的列需要保持一致，但是列的顺序不需要保持一致。

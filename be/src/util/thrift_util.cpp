@@ -58,7 +58,10 @@
 namespace starrocks {
 
 ThriftSerializer::ThriftSerializer(bool compact, int initial_buffer_size)
-        : _mem_buffer(new apache::thrift::transport::TMemoryBuffer(initial_buffer_size)) {
+        : _mem_buffer(new apache::thrift::transport::TMemoryBuffer(
+                  initial_buffer_size, std::make_shared<apache::thrift::TConfiguration>(
+                                               config::thrift_max_message_size, config::thrift_max_frame_size,
+                                               config::thrift_max_recursion_depth))) {
     if (compact) {
         apache::thrift::protocol::TCompactProtocolFactoryT<apache::thrift::transport::TMemoryBuffer> factory;
         _protocol = factory.getProtocol(_mem_buffer);

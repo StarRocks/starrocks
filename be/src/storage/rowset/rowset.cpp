@@ -48,9 +48,10 @@
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
@@ -76,6 +77,13 @@ Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetM
 }
 
 Rowset::~Rowset() {
+#ifndef BE_TEST
+    if (_keys_type != PRIMARY_KEYS) {
+        // ONLY support non-pk table now.
+        // evict rowset before destroy, in case this rowset no close yet.
+        MetadataCache::instance()->evict_rowset(this);
+    }
+#endif
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
@@ -176,6 +184,13 @@ Status Rowset::do_load() {
         }
         _segments.push_back(std::move(res).value());
     }
+#ifndef BE_TEST
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+        // Add rowset to lru metadata cache for memory control.
+        // ONLY support non-pk table now.
+        MetadataCache::instance()->cache_rowset(this);
+    }
+#endif
     return Status::OK();
 }
 
@@ -310,6 +325,12 @@ Status Rowset::remove() {
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
                 LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
+            } else if (index.index_type() == IndexType::VECTOR) {
+                std::string vector_index_path = IndexDescriptor::vector_index_file_path(
+                        _rowset_path, rowset_id().to_string(), i, index.index_id());
+                auto vst = fs->delete_file(vector_index_path);
+                LOG_IF(WARNING, !vst.ok()) << "Fail to delete vector_index_path " << vector_index_path << ": " << vst;
+                merge_status(vst);
             }
         }
     }
@@ -416,6 +437,15 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
                             return Status::RuntimeError(strings::Substitute("Fail to link index gin file from $0 to $1",
                                                                             src_absolute_path, dst_absolute_path));
                         }
+                    }
+                } else if (index.index_type() == VECTOR) {
+                    std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                    std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
+                    if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
+                        PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
+                        return Status::RuntimeError("Fail to link index data file");
                     }
                 }
             }
@@ -609,6 +639,14 @@ void Rowset::do_close() {
     _segments.clear();
 }
 
+size_t Rowset::segment_memory_usage() {
+    size_t total = 0;
+    for (const auto& segment : _segments) {
+        total += segment->mem_usage();
+    }
+    return total;
+}
+
 class SegmentIteratorWrapper : public ChunkIterator {
 public:
     SegmentIteratorWrapper(std::shared_ptr<Rowset> rowset, ChunkIteratorPtr iter)
@@ -619,12 +657,12 @@ public:
         _iter.reset();
     }
 
-    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         return _iter->init_encoded_schema(dict_maps);
     }
 
-    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         return _iter->init_output_schema(unused_output_column_ids);
     }
@@ -670,6 +708,9 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.tablet_schema = options.tablet_schema;
+    seg_options.use_vector_index = options.use_vector_index;
+    seg_options.vector_search_option = options.vector_search_option;
+
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
@@ -692,6 +733,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     }
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.has_preaggregation = options.has_preaggregation;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
@@ -843,6 +885,7 @@ StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.rowset_path = _rowset_path;
 
     // open update file
     DCHECK(update_file_id < num_update_files());

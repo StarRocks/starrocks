@@ -78,11 +78,6 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
-    }
-
-    @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
@@ -182,8 +177,11 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
         return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
-                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+                optProbeExprCandidates,
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 

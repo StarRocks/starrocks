@@ -51,13 +51,12 @@ public class LockManager {
      * @param locker   The Locker to lock this on behalf of.
      * @param lockType Then lock type requested
      * @param timeout  milliseconds to time out after if lock couldn't be obtained. 0 means block indefinitely.
-     * @throws LockTimeoutException when the transaction time limit was exceeded.
-     * @throws DeadlockException    when deadlock was detected
+     * @throws LockTimeoutException    when the transaction time limit was exceeded.
+     * @throws DeadlockException       when deadlock was detected
+     * @throws LockInterruptException  when catch InterruptedException
+     * @throws NotSupportLockException when lock request not support, such as request (S or X) lock in (IS or IX) scope
      */
-
-    public void lock(long rid, Locker locker, LockType lockType, long timeout)
-            throws LockInterruptException, LockTimeoutException, DeadlockException {
-
+    public void lock(long rid, Locker locker, LockType lockType, long timeout) throws LockException {
         final long startTime = System.currentTimeMillis();
         locker.setLockRequestTimeMs(startTime);
 
@@ -262,7 +261,7 @@ public class LockManager {
         }
     }
 
-    public void release(long rid, Locker locker, LockType lockType) {
+    public void release(long rid, Locker locker, LockType lockType) throws LockException {
         Set<Locker> newOwners;
 
         int lockTableIdx = getLockTableIndex(rid);
@@ -374,6 +373,7 @@ public class LockManager {
             readerInfo.addProperty("name", owner.getLocker().getThreadName());
             readerInfo.addProperty("heldFor", nowMs - owner.getLockAcquireTimeMs());
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
+            readerInfo.addProperty("locker", locker.getLockerStackTrace());
             readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                     locker.getLockerThread(), 0, DEFAULT_STACK_RESERVE_LEVELS));
             ownerArray.add(readerInfo);

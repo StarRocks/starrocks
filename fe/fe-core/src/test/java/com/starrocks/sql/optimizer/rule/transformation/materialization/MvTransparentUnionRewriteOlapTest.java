@@ -513,4 +513,164 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
             }
         });
     }
+
+    @Test
+    public void testTransparentRewriteWithNestedMVs() {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
+            cluster.runSql("test", "insert into m2 values (1,1,1,1), (4,2,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    " AS SELECT k1, k2, v1, v2 from m1;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    " AS SELECT k1, k2, v1, v2 from m2;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    " AS SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1;");
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv2 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            String[] mvs = {"mv0", "mv1", "mv2"};
+            for (String mv : mvs) {
+                MaterializedView mv1 = getMv("test", mv);
+                Set<String> mvNames = mv1.getPartitionNames();
+                Assert.assertEquals("[p1]", mvNames.toString());
+            }
+
+            // compensate rewrite: no compensation
+            {
+                String[] sqls = {
+                        "SELECT * from mv2 as a where a.k1=1",
+                        "SELECT * from mv2 as a where a.k1<3",
+                        "SELECT * from mv2 as a where a.k1 >=1 and a.k1 < 3",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    System.out.println("start to check:" + query);
+                    String plan = getFragmentPlan(query);
+                    // TODO(fixme): prune empty nodes
+                    PlanTestBase.assertContains(plan, "UNION", "mv0", "mv1", "mv2");
+                }
+            }
+
+            {
+                String[] sqls = {
+                        "SELECT * from mv2",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv0", "mv1", "mv2");
+                }
+            }
+
+            {
+                // TODO: For now we cannot detect the timeliness of nested mv directly
+                String[] sqls = {
+                        "SELECT * from mv2",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "UNION", "mv0", "mv1", "mv2");
+                }
+            }
+            starRocksAssert.dropMaterializedView("mv0");
+            starRocksAssert.dropMaterializedView("mv1");
+            starRocksAssert.dropMaterializedView("mv2");
+        });
+    }
+
+    @Test
+    public void testRewriteWithNestedMVs() {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
+            cluster.runSql("test", "insert into m2 values (1,1,1,1), (4,2,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " AS SELECT k1, k2, v1, v2 from m1;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " AS SELECT k1, k2, v1, v2 from m2;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " AS SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1;");
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv2 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            String[] mvs = {"mv0", "mv1", "mv2"};
+            for (String mv : mvs) {
+                MaterializedView mv1 = getMv("test", mv);
+                Set<String> mvNames = mv1.getPartitionNames();
+                Assert.assertEquals("[p1]", mvNames.toString());
+            }
+
+            // compensate rewrite: no compensation
+            {
+                String[] sqls = {
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 where a.k1=1",
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 where a.k1<3",
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 where a.k1 >=1 and a.k1 < 3",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, "mv2");
+                }
+            }
+
+            {
+                String[] sqls = {
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from m1 a join m2 b on a.k1 = b.k1 ",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, "mv0");
+                    PlanTestBase.assertContains(plan, "mv1");
+                }
+            }
+
+            {
+                // TODO: For now we cannot detect the timeliness of nested mv directly
+                String[] sqls = {
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 ",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, "mv2");
+                }
+            }
+
+            starRocksAssert.dropMaterializedView("mv0");
+            starRocksAssert.dropMaterializedView("mv1");
+            starRocksAssert.dropMaterializedView("mv2");
+        });
+    }
 }

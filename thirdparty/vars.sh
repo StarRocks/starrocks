@@ -115,10 +115,10 @@ GFLAGS_SOURCE=gflags-2.2.2
 GFLAGS_MD5SUM="1a865b93bacfa963201af3f75b7bd64c"
 
 # glog
-GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.4.0.tar.gz"
-GLOG_NAME=glog-0.4.0.tar.gz
-GLOG_SOURCE=glog-0.4.0
-GLOG_MD5SUM="0daea8785e6df922d7887755c3d100d0"
+GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.7.1.tar.gz"
+GLOG_NAME=glog-0.7.1.tar.gz
+GLOG_SOURCE=glog-0.7.1
+GLOG_MD5SUM="128e2995cc33d794ff24f785a3060346"
 
 # gtest
 GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.10.0.tar.gz"
@@ -193,10 +193,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.3.0.tar.gz"
-BRPC_NAME=brpc-1.3.0.tar.gz
-BRPC_SOURCE=brpc-1.3.0
-BRPC_MD5SUM="9470f1a77ec153e82cd8a25dc2148e47"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz"
+BRPC_NAME=brpc-1.9.0.tar.gz
+BRPC_SOURCE=brpc-1.9.0
+BRPC_MD5SUM="a2b626d96a5b017f2a6701ffa594530c"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -325,6 +325,12 @@ AWS_SDK_CPP_NAME="aws-sdk-cpp-1.11.267.tar.gz"
 AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.11.267"
 AWS_SDK_CPP_MD5SUM="fdf43e7262f9d08968eb34f9ad18b8e7"
 
+# poco
+POCO_DOWNLOAD="https://github.com/pocoproject/poco/archive/refs/tags/poco-1.12.5-release.tar.gz"
+POCO_NAME="poco-1.12.5-release.tar.gz"
+POCO_SOURCE="poco-1.12.5-release"
+POCO_MD5SUM="282e54a68911f516b15d07136c78592b"
+
 # velocypack: A fast and compact format for serialization and storage
 VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"
 VPACK_NAME="velocypack-XYZ1.0.tar.gz"
@@ -434,9 +440,15 @@ SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
 SIMDUTF_SOURCE="simdutf-5.2.8"
 SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
 
+# tenann
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.4.2-RELEASE/tenann-v0.4.2-RELEASE.tar.gz"
+TENANN_NAME="tenann-v0.4.2-RELEASE.tar.gz"
+TENANN_SOURCE="tenann-v0.4.2-RELEASE"
+TENANN_MD5SUM="40a00643d953982845901ae60766aad4"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO"

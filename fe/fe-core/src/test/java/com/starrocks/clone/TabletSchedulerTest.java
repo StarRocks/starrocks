@@ -52,6 +52,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
@@ -125,6 +126,10 @@ public class TabletSchedulerTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
             }
         };
 
@@ -218,10 +223,10 @@ public class TabletSchedulerTest {
                 Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
-                    locker.lockDatabase(goodDB, LockType.READ);
+                    locker.lockDatabase(goodDB.getId(), LockType.READ);
                     tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
                 } finally {
-                    locker.unLockDatabase(goodDB, LockType.READ);
+                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
                 }
             }
         }, "testAddCtx").start();

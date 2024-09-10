@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -69,7 +70,6 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan, "sync_mv1");
     }
 
-
     @Test
     public void testMVCacheInvalidAndReValid() throws Exception {
         starRocksAssert.withTable("\n" +
@@ -120,12 +120,13 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1  varchar(30);";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             // check mv invalid
-            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-            MaterializedView mv1 = ((MaterializedView) testDb.getTable("test_cache_mv1"));
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_cache_mv1"));
             Assert.assertFalse(mv1.isActive());
             try {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
@@ -143,7 +144,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             String alterSql = "alter table test_base_tbl modify column col1 bigint;";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
                     connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
             waitForSchemaChangeAlterJobFinish();
 
             cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
@@ -271,7 +272,6 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             starRocksAssert.dropView("view1");
             dropMv("test", "join_mv_1");
         }
-
 
         {
             starRocksAssert.withMTableNames(cluster, List.of("depts", "emps_par"),

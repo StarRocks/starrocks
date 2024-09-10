@@ -95,6 +95,10 @@ public:
     int64_t gtid = 0;
     // Is pk compaction output writer
     bool is_pk_compaction = false;
+    // is compaction job
+    bool is_compaction = false;
+
+    std::map<string, string>* column_to_expr_value = nullptr;
 };
 
 } // namespace starrocks

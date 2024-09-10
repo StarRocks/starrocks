@@ -44,6 +44,8 @@ import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -259,6 +261,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default automatic bucket size
     private long bucketSize = 0;
 
+    // the default mutable bucket number
+    private long mutableBucketNum = 0;
+
+    private boolean enableLoadProfile = false;
+
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -352,6 +359,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_BUCKET_SIZE:
                 buildBucketSize();
                 break;
+            case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+                buildMutableBucketNum();
+                break;
+            case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
+                buildEnableLoadProfile();
+                break;
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
                 break;
@@ -435,17 +448,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPartitionTTL() {
-        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
-                String.valueOf(INVALID)));
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER));
+        }
         return this;
     }
 
     public TableProperty buildPartitionLiveNumber() {
-        if (partitionTTLNumber != INVALID) {
-            return this;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER));
         }
-        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
-                String.valueOf(INVALID)));
         return this;
     }
 
@@ -634,6 +646,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildBucketSize() {
         if (properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) != null) {
             bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+        }
+        return this;
+    }
+
+    public TableProperty buildMutableBucketNum() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM) != null) {
+            mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
+        }
+        return this;
+    }
+
+    public TableProperty buildEnableLoadProfile() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE) != null) {
+            enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
         }
         return this;
     }
@@ -890,6 +916,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return bucketSize;
     }
 
+    public long getMutableBucketNum() {
+        return mutableBucketNum;
+    }
+
+    public boolean enableLoadProfile() {
+        return enableLoadProfile;
+    }
+
     public String getStorageVolume() {
         return storageVolume;
     }
@@ -1006,6 +1040,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionLiveNumber();
         buildReplicatedStorage();
         buildBucketSize();
+        buildEnableLoadProfile();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();

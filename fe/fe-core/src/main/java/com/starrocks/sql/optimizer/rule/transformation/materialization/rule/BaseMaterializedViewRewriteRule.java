@@ -35,10 +35,10 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSelector;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
@@ -63,7 +63,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (scan.hasTableHints()) {
                 return false;
             }
-            // Avoid rewrite the query repeat, add a shortcut.
+            // Avoid rewriting the query repeat, add a shortcut.
             Table table = scan.getTable();
             if ((table instanceof MaterializedView) && ((MaterializedView) (table)).getRefreshScheme().isSync()) {
                 return false;
@@ -227,6 +227,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             IMaterializedViewMetricsEntity mvEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
             mvEntity.increaseQueryMatchedCount(1L);
+            // mark: query has been rewritten by mv success.
+            context.getQueryMaterializationContext().markRewriteSuccess(true);
 
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();

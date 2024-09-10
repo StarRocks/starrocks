@@ -17,6 +17,10 @@
 ###########################################################################
 
 import trino
+from cup import log
+
+from lib import close_conn
+
 
 class TrinoLib(object):
     """TrinoLib class"""
@@ -34,5 +38,5 @@ class TrinoLib(object):
 
     def close(self):
         if self.connector is not None:
-            self.connector.close()
+            close_conn(self.connector, "trino")
             self.connector = None

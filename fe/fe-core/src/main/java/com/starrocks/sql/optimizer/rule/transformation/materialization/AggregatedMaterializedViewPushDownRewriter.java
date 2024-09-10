@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.api.client.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -244,12 +244,6 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 return visit(optExpression, context);
             }
 
-            // no-group-by don't push down
-            if (aggOp.getGroupingKeys().isEmpty()) {
-                logMVRewrite(mvRewriteContext, "No group by can't push down");
-                return visit(optExpression, context);
-            }
-
             context = new AggregatePushDownContext();
             context.setAggregator(aggOp);
             return context;
@@ -322,7 +316,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
     // 3. return input AggRewriteInfo as return value if you want to rewrite upper nodes.
     private class PostVisitor extends OptExpressionVisitor<AggRewriteInfo, AggRewriteInfo> {
         private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
-            return context.isEmpty() || context.groupBys.isEmpty() || optExpression.getOp().hasLimit();
+            return context.isEmpty() || optExpression.getOp().hasLimit();
         }
 
         // Default visit method do nothing but just pass the AggRewriteInfo to its parent
@@ -361,7 +355,10 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 int foundIndex = 0;
 
                 CallOperator newAggCall = ctx.aggColRefToPushDownAggMap.get(origAggColRef);
-                Preconditions.checkState(newAggCall != null, "newAggCall is null");
+                if (newAggCall == null) {
+                    logMVRewrite(mvRewriteContext, "newAggCall is null");
+                    return AggRewriteInfo.NOT_REWRITE;
+                }
                 if (ctx.isRewrittenByEquivalent(newAggCall)) {
                     newAggregate = ctx.aggToFinalAggMap.get(newAggCall);
                     if (newAggregate == null) {
@@ -383,8 +380,11 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                                 }
                             }
                         }
-                        Preconditions.checkState(foundIndex != -1,
-                                "no aggregate functions found: " + newAggregate.getChildren());
+                        if (foundIndex == -1) {
+                            logMVRewrite(mvRewriteContext,
+                                    "no aggregate functions found: " + newAggregate.getChildren());
+                            return AggRewriteInfo.NOT_REWRITE;
+                        }
                     }
                 } else {
                     ScalarOperator newArg0 = remapping.get(origAggColRef);
@@ -396,17 +396,27 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                     List<ScalarOperator> newArgs = aggCall.getChildren();
                     newArgs.set(0, newArg0);
                     String rollupFuncName = getRollupFunctionName(aggCall, false);
+                    // eg: count(distinct) + rollup
+                    if (rollupFuncName == null) {
+                        logMVRewrite(mvRewriteContext, "Get rollup function name is null, aggCall:{}", aggCall);
+                        return AggRewriteInfo.NOT_REWRITE;
+                    }
                     Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
                     Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                    Preconditions.checkState(newFunc != null,
-                            "Get rollup function is null, rollupFuncName:", rollupFuncName);
+                    if (newFunc == null) {
+                        logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
+                        return AggRewriteInfo.NOT_REWRITE;
+                    }
                     newAggregate = new CallOperator(rollupFuncName, newFunc.getReturnType(), newArgs, newFunc);
                     realAggregate = newAggregate;
                 }
 
                 // rewrite it with remapping and final aggregate should use the new input as its argument.
-                Preconditions.checkState(realAggregate != null, "realAggregate is null");
+                if (realAggregate == null) {
+                    logMVRewrite(mvRewriteContext, "realAggregate is null");
+                    return AggRewriteInfo.NOT_REWRITE;
+                }
                 realAggregate = replaceAggFuncArgument(remapping, origAggColRef, realAggregate, foundIndex);
 
                 ColumnRefOperator newAggColRef = queryColumnRefFactory.create(realAggregate,

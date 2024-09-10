@@ -120,9 +120,8 @@ using BucketProcessContextFactoryPtr = std::shared_ptr<BucketProcessContextFacto
 
 class BucketProcessSinkOperatorFactory final : public OperatorFactory {
 public:
-    BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                     const BucketProcessContextFactoryPtr& context_factory,
-                                     const OperatorFactoryPtr& factory);
+    BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
+                                     OperatorFactoryPtr factory);
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -134,9 +133,8 @@ private:
 
 class BucketProcessSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id,
-                                       const BucketProcessContextFactoryPtr& context_factory,
-                                       const OperatorFactoryPtr& factory);
+    BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
+                                       OperatorFactoryPtr factory);
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

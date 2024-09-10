@@ -1,0 +1,6 @@
+position: 120 # float position is supported
+label: 'CBO statistics'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

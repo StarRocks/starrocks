@@ -36,9 +36,38 @@ public class IcebergMetadataScannerFactory implements ScannerFactory {
     }
 
     @Override
-    public Class getScannerClass() throws ClassNotFoundException {
+    public Class getScannerClass(String scannerType) throws ClassNotFoundException {
         try {
-            return classLoader.loadClass("com.starrocks.connector.iceberg.IcebergMetadataScanner");
+            String loadClass;
+            switch (scannerType.toLowerCase()) {
+                case "logical_iceberg_metadata":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergMetadataScanner";
+                    break;
+                case "refs":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergRefsTableScanner";
+                    break;
+                case "history":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergHistoryTableScanner";
+                    break;
+                case "metadata_log_entries":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergMetadataLogEntriesScanner";
+                    break;
+                case "snapshots":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergSnapshotsTableScanner";
+                    break;
+                case "manifests":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergManifestsTableScanner";
+                    break;
+                case "files":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergFilesTableScanner";
+                    break;
+                case "partitions":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergPartitionsTableScanner";
+                    break;
+                default:
+                    throw new IllegalArgumentException("unknown iceberg scanner type " + scannerType);
+            }
+            return classLoader.loadClass(loadClass);
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
             throw e;

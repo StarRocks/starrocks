@@ -35,6 +35,7 @@
 #include "orc_schema_builder.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
+#include "util/stack_util.cpp"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -94,13 +95,13 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
         // build hive column names index.
         int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
         for (int i = 0; i < size; i++) {
-            std::string col_name = format_column_name(hive_column_names->at(i), case_sensitive);
+            std::string col_name = Utils::format_name(hive_column_names->at(i), case_sensitive);
             name_set->insert(col_name);
         }
     } else {
         // build orc column names index.
         for (int i = 0; i < root_type.getSubtypeCount(); i++) {
-            std::string col_name = format_column_name(root_type.getFieldName(i), case_sensitive);
+            std::string col_name = Utils::format_name(root_type.getFieldName(i), case_sensitive);
             name_set->insert(col_name);
         }
     }
@@ -450,6 +451,7 @@ Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
+        LOG(WARNING) << get_stack_trace();
         auto s = strings::Substitute("ORC reader read file $0 failed. Reason is $1.", _current_file_name, e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);

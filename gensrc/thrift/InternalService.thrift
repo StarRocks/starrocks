@@ -113,6 +113,7 @@ enum TSpillableOperatorType {
   AGG_DISTINCT = 2;
   SORT = 3;
   NL_JOIN = 4;
+  MULTI_CAST_LOCAL_EXCHANGE = 5;
 }
 
 enum TTabletInternalParallelMode {
@@ -174,7 +175,7 @@ struct TSpillOptions {
 struct TQueryOptions {
   2: optional i32 max_errors = 0
   4: optional i32 batch_size = 0
-  
+
   12: optional i64 mem_limit = 2147483648
   13: optional bool abort_on_default_limit_exceeded = 0
   14: optional i32 query_timeout = 3600
@@ -214,7 +215,7 @@ struct TQueryOptions {
   59: optional bool enable_tablet_internal_parallel;
 
   60: optional i32 query_delivery_timeout;
-  
+
   61: optional bool enable_query_debug_trace;
 
   62: optional Types.TCompressionType load_transmission_compression_type;
@@ -228,7 +229,7 @@ struct TQueryOptions {
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
-  
+
   69: optional bool enable_populate_datacache;
 
   70: optional bool allow_throw_exception = 0;
@@ -252,7 +253,7 @@ struct TQueryOptions {
   85: optional TSpillMode spill_mode;
 
   82: optional TSpillOptions spill_options;
-  
+
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
@@ -314,10 +315,15 @@ struct TQueryOptions {
   133: optional bool enable_datacache_io_adaptor;
   134: optional i32 datacache_priority;
   135: optional i64 datacache_ttl_seconds;
+  136: optional bool enable_cache_select;
 
   140: optional string catalog;
 
   141: optional i32 datacache_evict_probability;
+
+  150: optional map<string, string> ann_params;
+  151: optional double pq_refine_factor;
+  152: optional double k_factor;
 }
 
 
@@ -325,6 +331,8 @@ struct TQueryOptions {
 struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
+  3: optional bool placeholder = false
+  4: optional bool has_more = false;
 }
 
 // Parameters for a single execution instance of a particular TPlanFragment
@@ -372,6 +380,8 @@ struct TPlanFragmentExecParams {
   54: optional bool enable_exchange_perf
 
   70: optional i32 pipeline_sink_dop
+
+  73: optional bool report_when_finish;
 }
 
 // Global query parameters assigned by the coordinator.
@@ -393,6 +403,8 @@ struct TQueryGlobals {
   30: optional string last_query_id
 
   31: optional i64 timestamp_us
+
+  32: optional i64 scan_node_number
 }
 
 
@@ -463,7 +475,7 @@ struct TExecPlanFragmentParams {
   53: optional WorkGroup.TWorkGroup workgroup
   54: optional bool enable_resource_group
   55: optional i32 func_version
-  
+
   // Sharing data between drivers of same scan operator
   56: optional bool enable_shared_scan
 

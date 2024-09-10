@@ -23,7 +23,7 @@ public class ShowUserPropertyAnalyzer {
     public static void analyze(ShowUserPropertyStmt statment, ConnectContext context) {
         String user = statment.getUser();
         if (Strings.isNullOrEmpty(user)) {
-            statment.setUser(context.getQualifiedUser());
+            statment.setUser(context.getCurrentUserIdentity().getUser());
         } else {
             statment.setUser(user);
         }

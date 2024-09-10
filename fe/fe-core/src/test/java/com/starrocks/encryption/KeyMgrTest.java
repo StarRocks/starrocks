@@ -14,6 +14,7 @@
 package com.starrocks.encryption;
 
 import com.starrocks.common.Config;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
@@ -21,6 +22,8 @@ import com.starrocks.proto.EncryptionKeyTypePB;
 import com.starrocks.thrift.TGetKeysRequest;
 import com.starrocks.thrift.TGetKeysResponse;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -29,6 +32,7 @@ import org.junit.Test;
 public class KeyMgrTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
+        MetricRepo.init();
         UtFrameUtils.setUpForPersistTest();
     }
 
@@ -97,10 +101,10 @@ public class KeyMgrTest {
         keyMgr.replayAddKey(pb);
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        keyMgr.save(image.getDataOutputStream());
+        keyMgr.save(image.getImageWriter());
 
         KeyMgr keyMgr2 = new KeyMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = image.getMetaBlockReader();
         keyMgr2.load(reader);
         reader.close();
 
@@ -121,14 +125,38 @@ public class KeyMgrTest {
             Assert.assertEquals(1, tGetKeysResponse.getKey_metasSize());
 
             UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-            keyMgr.save(image.getDataOutputStream());
+            keyMgr.save(image.getImageWriter());
 
             KeyMgr keyMgr2 = new KeyMgr();
-            SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+            SRMetaBlockReader reader = image.getMetaBlockReader();
             keyMgr2.load(reader);
             reader.close();
 
             Assert.assertEquals(2, keyMgr2.numKeys());
+        } finally {
+            Config.default_master_key = oldConfig;
+        }
+    }
+
+    @Test
+    public void testInitDefaultMasterKey() {
+        new MockUp<System>() {
+            @Mock
+            public void exit(int value) {
+                throw new RuntimeException(String.valueOf(value));
+            }
+        };
+        String oldConfig = Config.default_master_key;
+        try {
+            Config.default_master_key = "plain:aes_128:enwSdCUAiCLLx2Bs9E/neQ==";
+            KeyMgr keyMgr = new KeyMgr();
+            keyMgr.initDefaultMasterKey();
+            Assert.assertEquals(2, keyMgr.numKeys());
+            Config.default_master_key = "plain:aes_128:eCsM28LaDORFTZDUMz3y4g==";
+            keyMgr.initDefaultMasterKey();
+            Assert.fail("should throw exception");
+        } catch (RuntimeException e) {
+            Assert.assertEquals("-1", e.getMessage());
         } finally {
             Config.default_master_key = oldConfig;
         }

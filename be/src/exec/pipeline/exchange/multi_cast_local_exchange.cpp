@@ -56,6 +56,7 @@ bool InMemoryMultiCastLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
     // if for the fastest consumer, the exchanger still has enough chunk to be consumed.
     // the exchanger does not need any input.
+
     if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
         _runtime_state->chunk_size() * kBufferedRowSizeScaleFactor) {
         return false;

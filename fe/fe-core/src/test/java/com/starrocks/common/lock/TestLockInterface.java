@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
-import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockParams;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -87,18 +87,18 @@ public class TestLockInterface {
         long rid3 = 3L;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.READ);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
-        locker.lockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.WRITE);
     }
 
     @Test
-    public void testTryLockTablesWithIntensiveDbLock1() throws IllegalLockStateException {
+    public void testTryLockTablesWithIntensiveDbLock1() throws LockException {
         long rid = 1L;
         Database database = new Database(rid, "db");
 
@@ -107,7 +107,7 @@ public class TestLockInterface {
         long rid3 = 3L;
 
         Locker locker = new Locker();
-        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database,
+        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
                 Lists.newArrayList(rid2, rid3), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
@@ -115,13 +115,13 @@ public class TestLockInterface {
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
-        locker.unLockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.READ);
+        locker.unLockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.READ);
         Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
-        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database,
+        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
                 Lists.newArrayList(rid2, rid3), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
@@ -143,7 +143,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -152,7 +152,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -161,7 +161,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -170,7 +170,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -184,7 +184,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertTrue(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -198,7 +198,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         Config.lock_manager_enabled = true;
     }
@@ -222,13 +222,19 @@ public class TestLockInterface {
         {
             new MockUp<Locker>() {
                 @Mock
-                public boolean tryLockDatabase(Database database, LockType lockType, long timeout, TimeUnit unit) {
-                    if (database.getFullName().equalsIgnoreCase("db5")) {
+                public boolean tryLockDatabase(Long dbId, LockType lockType, long timeout, TimeUnit unit) {
+                    if (dbId == 5) {
                         return false;
                     }
-                    QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+
+                    QueryableReentrantReadWriteLock rwLock = dbs.get(dbId.intValue()).getRwLock();
                     rwLock.exclusiveLock();
                     return true;
+                }
+
+                @Mock
+                public void unLockDatabase(Long dbId, LockType lockType) {
+
                 }
             };
             Assert.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
@@ -238,29 +244,31 @@ public class TestLockInterface {
     }
 
     @Test
-    public void testTryLockTablesWithIntensiveDbLock2() throws IllegalLockStateException {
+    public void testTryLockTablesWithIntensiveDbLock2() throws LockException {
         long rid = 1L;
         Database database = new Database(rid, "db");
         long rid2 = 2L;
         Locker locker = new Locker();
-        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database, rid2, LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
+                rid2, LockType.READ, 10, TimeUnit.MILLISECONDS));
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
 
-        locker.unLockTablesWithIntensiveDbLock(database, ImmutableList.of(rid2), LockType.READ);
+        locker.unLockTablesWithIntensiveDbLock(database.getId(), ImmutableList.of(rid2), LockType.READ);
         Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
-        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database, rid2, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
+                rid2, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
     }
 
     @Test
-    public void testTryLockTablesWithIntensiveDbLock3() throws IllegalLockStateException {
+    public void testTryLockTablesWithIntensiveDbLock3() throws LockException {
         long rid = 1L;
         long rid2 = 2L;
         long rid3 = 3L;

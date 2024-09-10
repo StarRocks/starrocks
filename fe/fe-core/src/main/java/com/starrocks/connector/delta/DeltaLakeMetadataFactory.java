@@ -17,7 +17,6 @@ package com.starrocks.connector.delta;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
-import com.starrocks.connector.metastore.IMetastore;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
@@ -28,12 +27,12 @@ import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_UR
 
 public class DeltaLakeMetadataFactory {
     private final String catalogName;
-    protected final IMetastore metastore;
+    protected final IDeltaLakeMetastore metastore;
     protected final long perQueryMetastoreMaxNum;
     private final HdfsEnvironment hdfsEnvironment;
     protected final MetastoreType metastoreType;
 
-    public DeltaLakeMetadataFactory(String catalogName, IMetastore metastore, CachingHiveMetastoreConf hmsConf,
+    public DeltaLakeMetadataFactory(String catalogName, IDeltaLakeMetastore metastore, CachingHiveMetastoreConf hmsConf,
                                     Map<String, String> properties, HdfsEnvironment hdfsEnvironment,
                                     MetastoreType metastoreType) {
         this.catalogName = catalogName;
@@ -70,5 +69,13 @@ public class DeltaLakeMetadataFactory {
         }
 
         return cacheUpdateProcessor;
+    }
+
+    public void metastoreCacheInvalidateCache() {
+        if (metastore instanceof CachingDeltaLakeMetastore) {
+            ((CachingDeltaLakeMetastore) metastore).invalidateAll();
+        } else {
+            ((DeltaLakeMetastore) metastore).invalidateAll();
+        }
     }
 }

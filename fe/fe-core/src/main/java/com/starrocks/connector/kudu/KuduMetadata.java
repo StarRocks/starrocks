@@ -26,6 +26,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -256,9 +257,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   TableVersionRange versionRange, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
         String kuduTableName = getKuduFullTableName(kuduTable);
@@ -269,11 +268,11 @@ public class KuduMetadata implements ConnectorMetadata {
             throw new RuntimeException(e);
         }
         KuduScanToken.KuduScanTokenBuilder builder = kuduClient.newScanTokenBuilder(nativeTable);
-        builder.setProjectedColumnNames(fieldNames);
-        if (limit > 0) {
-            builder.limit(limit);
+        builder.setProjectedColumnNames(params.getFieldNames());
+        if (params.getLimit() > 0) {
+            builder.limit(params.getLimit());
         }
-        addConstraintPredicates(nativeTable, builder, predicate);
+        addConstraintPredicates(nativeTable, builder, params.getPredicate());
         List<KuduScanToken> tokens = builder.build();
         List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                 KuduRemoteFileDesc.createKuduRemoteFileDesc(tokens));

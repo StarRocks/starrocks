@@ -62,6 +62,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateJoinWithConstantRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
@@ -150,6 +151,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRu
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
@@ -245,6 +247,7 @@ public class RuleSet {
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
                 MergeLimitDirectRule.JDBC_SCAN,
+                MergeLimitDirectRule.ICEBERG_METADATA_SCAN,
                 MergeLimitDirectRule.WINDOW,
                 MergeLimitDirectRule.INTERSECT,
                 MergeLimitDirectRule.EXCEPT,
@@ -269,6 +272,10 @@ public class RuleSet {
                 new LimitPruneTabletsRule()
         ));
 
+        REWRITE_RULES.put(RuleSetType.VECTOR_REWRITE, ImmutableList.of(
+                new RewriteToVectorPlanRule()
+        ));
+
         REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
                 PruneScanColumnRule.OLAP_SCAN,
                 PruneScanColumnRule.SCHEMA_SCAN,
@@ -280,6 +287,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
                 PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
+                PruneHDFSScanColumnRule.ICEBERG_METADATA_SCAN,
                 PruneHDFSScanColumnRule.PAIMON_SCAN,
                 PruneHDFSScanColumnRule.ODPS_SCAN,
                 PruneScanColumnRule.KUDU_SCAN,
@@ -452,8 +460,10 @@ public class RuleSet {
                 FineGrainedRangePredicateRule.INSTANCE,
                 FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
 
-        REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
-                EliminateGroupByConstantRule.INSTANCE
+        REWRITE_RULES.put(RuleSetType.ELIMINATE_OP_WITH_CONSTANT, ImmutableList.of(
+                EliminateGroupByConstantRule.INSTANCE,
+                EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_LEFT_SINGLE_VALUE_RULE,
+                EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_RIGHT_SINGLE_VALUE_RULE
         ));
 
         REWRITE_RULES.put(RuleSetType.META_SCAN_REWRITE, ImmutableList.of(

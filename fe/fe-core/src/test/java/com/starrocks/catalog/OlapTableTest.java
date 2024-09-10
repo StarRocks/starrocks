@@ -393,4 +393,15 @@ public class OlapTableTest {
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
     }
+
+    @Test
+    public void testGetPhysicalPartitionByName() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        List<Table> tables = db.getTables();
+        for (Table table : tables) {
+            OlapTable olapTable = (OlapTable) table;
+            PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
+            Assert.assertNull(partition);
+        }
+    }
 }

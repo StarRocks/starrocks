@@ -17,7 +17,6 @@ package com.starrocks.connector;
 import com.google.common.collect.Maps;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,24 +32,12 @@ public class DirectoryBasedUpdateArbitrator extends TableUpdateArbitrator {
         if (partitionLimit >= 0 && partitionLimit < partitionNames.size()) {
             partitionNameToFetch = partitionNames.subList(partitionNames.size() - partitionLimit, partitionNames.size());
         }
-        List<RemoteFileInfo> remoteFileInfos =
+        List<PartitionInfo> partitions =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getRemotePartitions(table, partitionNameToFetch);
         for (int i = 0; i < partitionNameToFetch.size(); i++) {
-            RemoteFileInfo remoteFileInfo = remoteFileInfos.get(i);
-            List<RemoteFileDesc> remoteFileDescs = remoteFileInfo.getFiles();
-            if (remoteFileDescs != null) {
-                long lastFileModifiedTime = Long.MIN_VALUE;
-                int fileNumber = remoteFileDescs.size();
-                Optional<RemoteFileDesc> maxLastModifiedTimeFile = remoteFileDescs.stream()
-                        .max(Comparator.comparingLong(RemoteFileDesc::getModificationTime));
-                if (maxLastModifiedTimeFile.isPresent()) {
-                    lastFileModifiedTime = maxLastModifiedTimeFile.get().getModificationTime();
-                }
-                HivePartitionDataInfo hivePartitionDataInfo = new HivePartitionDataInfo(lastFileModifiedTime, fileNumber);
-                partitionDataInfos.put(partitionNameToFetch.get(i), Optional.of(hivePartitionDataInfo));
-            } else {
-                partitionDataInfos.put(partitionNameToFetch.get(i), Optional.empty());
-            }
+            PartitionInfo partitionInfo = partitions.get(i);
+            HivePartitionDataInfo hivePartitionDataInfo = new HivePartitionDataInfo(partitionInfo.getModifiedTime(), 1);
+            partitionDataInfos.put(partitionNameToFetch.get(i), Optional.of(hivePartitionDataInfo));
         }
         return partitionDataInfos;
     }

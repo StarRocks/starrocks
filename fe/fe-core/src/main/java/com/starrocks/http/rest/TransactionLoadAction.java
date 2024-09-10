@@ -263,7 +263,7 @@ public class TransactionLoadAction extends RestBaseAction {
 
         if (null == sourceType) {
             String dbName = params.getDbName();
-            Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(dbName))
+            Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
                     .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
 
             TransactionState txnState = GlobalStateMgr.getCurrentState()
@@ -318,6 +318,7 @@ public class TransactionLoadAction extends RestBaseAction {
         if (StringUtils.isBlank(label)) {
             throw new UserException("Empty label.");
         }
+        String user = request.getRequest().headers().get(USER_KEY);
 
         TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
                 .orElseThrow(() -> new UserException(

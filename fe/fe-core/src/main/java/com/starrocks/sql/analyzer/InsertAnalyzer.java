@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -31,15 +32,20 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.iceberg.SnapshotRef;
@@ -56,14 +62,38 @@ import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
-    public static void analyze(InsertStmt insertStmt, ConnectContext session) {
-        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+    private static final ImmutableSet<String> PUSH_DOWN_PROPERTIES_SET = new ImmutableSet.Builder<String>()
+            .add(LoadStmt.STRICT_MODE)
+            .build();
 
-        List<Table> tables = new ArrayList<>();
-        AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-        tables.stream().map(table -> (HiveTable) table)
-                .forEach(table -> table.useMetadataCache(false));
+    /**
+     * Normal path of analyzer
+     */
+    public static void analyze(InsertStmt insertStmt, ConnectContext session) {
+        analyzeWithDeferredLock(insertStmt, session, () -> {
+        });
+    }
+
+    /**
+     * An optimistic path of analyzer for INSERT-SELECT, whose SELECT doesn't need a lock
+     * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
+     */
+    public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        try {
+            // insert properties
+            analyzeProperties(insertStmt, session);
+
+            new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+
+            List<Table> tables = new ArrayList<>();
+            AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+            tables.stream().map(table -> (HiveTable) table)
+                    .forEach(table -> table.useMetadataCache(false));
+        } finally {
+            // Take the PlannerMetaLock
+            takeLock.run();
+        }
+
 
         /*
          *  Target table
@@ -138,7 +168,8 @@ public class InsertAnalyzer {
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
-                    if (!insertStmt.getTargetColumnNames().contains(partitionColName)) {
+                    // case-insensitive match. refer to AstBuilder#getColumnNames
+                    if (!insertStmt.getTargetColumnNames().contains(partitionColName.toLowerCase())) {
                         throw new SemanticException("Must include partition column %s", partitionColName);
                     }
                 }
@@ -191,7 +222,7 @@ public class InsertAnalyzer {
                 requiredKeyColumns.remove(colName.toLowerCase());
                 targetColumns.add(column);
             }
-            if (table.isOlapTable()) {
+            if (table.isNativeTable()) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)) {
                     if (!requiredKeyColumns.isEmpty()) {
@@ -227,6 +258,7 @@ public class InsertAnalyzer {
             mentionedColumnSize -= table.getPartitionColumnNames().size();
         }
 
+        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         if (query.getRelationFields().size() != mentionedColumnSize) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INSERTED_COLUMN_MISMATCH, mentionedColumnSize,
                     query.getRelationFields().size());
@@ -253,6 +285,40 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
+        }
+    }
+
+    private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
+        Map<String, String> properties = insertStmt.getProperties();
+        // use session variable if not set max_filter_ratio property
+        if (!properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                    String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        }
+        // use session variable if not set strict_mode property
+        if (!properties.containsKey(LoadStmt.STRICT_MODE) &&
+                session.getSessionVariable().getEnableInsertStrict()) {
+            properties.put(LoadStmt.STRICT_MODE, "true");
+        }
+
+        try {
+            LoadStmt.checkProperties(properties);
+        } catch (DdlException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+        }
+
+        // push down some properties to file table function
+        QueryStatement queryStatement = insertStmt.getQueryStatement();
+        if (queryStatement != null) {
+            List<FileTableFunctionRelation> relations = AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
+            for (FileTableFunctionRelation relation : relations) {
+                Map<String, String> tableFunctionProperties = relation.getProperties();
+                for (String property : PUSH_DOWN_PROPERTIES_SET) {
+                    if (properties.containsKey(property)) {
+                        tableFunctionProperties.put(property, properties.get(property));
+                    }
+                }
+            }
         }
     }
 
@@ -313,14 +379,17 @@ public class InsertAnalyzer {
             return insertStmt.makeBlackHoleTable();
         }
 
-        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
+        insertStmt.getTableName().normalization(session);
         String catalogName = insertStmt.getTableName().getCatalog();
         String dbName = insertStmt.getTableName().getDb();
         String tableName = insertStmt.getTableName().getTbl();
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (database == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);

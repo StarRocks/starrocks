@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Python UDF
@@ -36,6 +37,7 @@ CREATE FUNCTION python_echo(INT) RETURNS
 INT
 type = 'Python'
 symbol = 'echo'
+file = 'inline'
 AS
 $$
 def echo(x):

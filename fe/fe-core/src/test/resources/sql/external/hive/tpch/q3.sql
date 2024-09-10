@@ -121,6 +121,7 @@ NON-PARTITION PREDICATES: 13: o_orderdate < '1995-03-11'
 MIN/MAX PREDICATES: 13: o_orderdate < '1995-03-11'
 partitions=1/1
 avgRowSize=24.0
+dataCacheOptions={populate: false}
 cardinality: 72661123
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -149,6 +150,7 @@ NON-PARTITION PREDICATES: 7: c_mktsegment = 'HOUSEHOLD'
 MIN/MAX PREDICATES: 7: c_mktsegment <= 'HOUSEHOLD', 7: c_mktsegment >= 'HOUSEHOLD'
 partitions=1/1
 avgRowSize=18.0
+dataCacheOptions={populate: false}
 cardinality: 3000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
@@ -177,6 +179,7 @@ NON-PARTITION PREDICATES: 28: l_shipdate > '1995-03-11'
 MIN/MAX PREDICATES: 28: l_shipdate > '1995-03-11'
 partitions=1/1
 avgRowSize=28.0
+dataCacheOptions={populate: false}
 cardinality: 323426370
 probe runtime filters:
 - filter_id = 1, probe_expr = (18: l_orderkey)

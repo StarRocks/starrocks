@@ -18,9 +18,11 @@
 #include <unordered_map>
 
 #include "common/config.h"
+#include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
+#include "exec/hash_join_node.h"
 #include "exec/multi_olap_table_sink.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
@@ -103,6 +105,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
+    if (_query_ctx == nullptr) {
+        return Status::Cancelled("Query has been cancelled");
+    }
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -172,12 +177,12 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
     WorkGroupPtr wg;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
-        wg = WorkGroupManager::instance()->get_default_workgroup();
+        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
     } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
-        wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_mv_workgroup();
     } else {
         wg = std::make_shared<WorkGroup>(request.common().workgroup);
-        wg = WorkGroupManager::instance()->add_workgroup(wg);
+        wg = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
 
@@ -227,8 +232,13 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
             spill_mem_limit_ratio = query_options.spill_mem_limit_threshold;
         }
     }
+
+    int scan_node_number = 1;
+    if (query_globals.__isset.scan_node_number) {
+        scan_node_number = query_globals.scan_node_number;
+    }
     _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
-                                 wg.get(), runtime_state);
+                                 wg.get(), runtime_state, scan_node_number);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -254,6 +264,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
+    _fragment_ctx->set_report_when_finish(request.unique().params.__isset.report_when_finish &&
+                                          request.unique().params.report_when_finish);
 
     auto* obj_pool = runtime_state->obj_pool();
     // Set up desc tbl
@@ -318,13 +330,13 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
     return QueryContext::DEFAULT_EXPIRE_SECONDS;
 }
 
-static void collect_shuffle_hash_bucket_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
+static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
     for (const auto* child : node->children()) {
-        collect_shuffle_hash_bucket_rf_ids(child, filter_ids);
+        collect_non_broadcast_rf_ids(child, filter_ids);
     }
     if (node->type() == TPlanNodeType::HASH_JOIN_NODE) {
         const auto* join_node = down_cast<const HashJoinNode*>(node);
-        if (join_node->distribution_mode() == TJoinDistributionMode::SHUFFLE_HASH_BUCKET) {
+        if (join_node->distribution_mode() != TJoinDistributionMode::BROADCAST) {
             for (const auto* rf : join_node->build_runtime_filters()) {
                 filter_ids.insert(rf->filter_id());
             }
@@ -385,8 +397,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             ExecNode::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl, &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
     std::unordered_set<int32_t> filter_ids;
-    collect_shuffle_hash_bucket_rf_ids(plan, filter_ids);
-    runtime_state->set_shuffle_hash_bucket_rf_ids(std::move(filter_ids));
+    collect_non_broadcast_rf_ids(plan, filter_ids);
+    runtime_state->set_non_broadcast_rf_ids(std::move(filter_ids));
     BroadcastJoinRightOffsprings broadcast_join_right_offsprings_map;
     collect_broadcast_join_right_offsprings(plan, broadcast_join_right_offsprings_map);
     runtime_state->set_broadcast_join_right_offsprings(std::move(broadcast_join_right_offsprings_map));
@@ -482,7 +494,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                          scan_node->convert_scan_range_to_morsel_queue_factory(
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
                                  _is_in_colocate_exec_group(scan_node->id()), enable_tablet_internal_parallel,
-                                 tablet_internal_parallel_mode));
+                                 tablet_internal_parallel_mode, enable_shared_scan));
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
@@ -504,6 +516,15 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             logical_scan_limit = -1;
             break;
         }
+    }
+
+    std::vector<ExecNode*> capture_version_nodes;
+    plan->collect_nodes(TPlanNodeType::CAPTURE_VERSION_NODE, &capture_version_nodes);
+    for (auto* node : capture_version_nodes) {
+        const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(node->id());
+        ASSIGN_OR_RETURN(auto morsel_queue_factory,
+                         down_cast<CaptureVersionNode*>(node)->scan_range_to_morsel_queue_factory(scan_ranges));
+        morsel_queue_factories.emplace(node->id(), std::move(morsel_queue_factory));
     }
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
@@ -578,12 +599,13 @@ bool FragmentExecutor::_is_in_colocate_exec_group(PlanNodeId plan_node_id) {
     return false;
 }
 
-void create_adaptive_group_initialize_events(RuntimeState* state, PipelineGroupMap&& unready_pipeline_groups) {
+static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGroup* wg,
+                                                    PipelineGroupMap&& unready_pipeline_groups) {
     if (unready_pipeline_groups.empty()) {
         return;
     }
 
-    auto* driver_executor = state->exec_env()->wg_driver_executor();
+    auto* driver_executor = wg->executors()->driver_executor();
     for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
         EventPtr group_initialize_event =
                 Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
@@ -661,7 +683,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     });
 
     if (!unready_pipeline_groups.empty()) {
-        create_adaptive_group_initialize_events(runtime_state, std::move(unready_pipeline_groups));
+        create_adaptive_group_initialize_events(runtime_state, _wg.get(), std::move(unready_pipeline_groups));
     }
 
     // Acquire driver token to avoid overload
@@ -747,7 +769,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
                          << " fragment_instance_id=" << print_id(request.fragment_instance_id())
                          << " is_stream_pipeline=" << request.is_stream_pipeline()
-                         << " backend_num=" << request.backend_num() << " fragment= " << request.common().fragment;
+                         << " backend_num=" << request.backend_num();
+            VLOG_QUERY << "Prepare fragment failed fragment=" << request.common().fragment;
         }
     });
 
@@ -811,7 +834,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     prepare_success = true;
 
     DCHECK(_fragment_ctx->enable_resource_group());
-    auto* executor = exec_env->wg_driver_executor();
+    auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
 
     return Status::OK();

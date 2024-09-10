@@ -39,9 +39,9 @@ public class MaterializedViewLowCardTPCHTest extends MaterializedViewTestBase {
         int scale = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("customer");
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("customer");
         setTableStatistics(t4, 150000 * scale);
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
 
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);

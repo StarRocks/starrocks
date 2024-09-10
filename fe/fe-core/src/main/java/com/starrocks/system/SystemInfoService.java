@@ -421,11 +421,11 @@ public class SystemInfoService implements GsonPostProcessable {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
         List<Long> dbs = globalStateMgr.getLocalMetastore().getDbIds();
 
-        dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
+        dbs.stream().map(dbId -> globalStateMgr.getLocalMetastore().getDb(dbId)).forEach(db -> {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                db.getTables().stream()
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
                         .filter(Table::isOlapTableOrMaterializedView)
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
@@ -449,7 +449,7 @@ public class SystemInfoService implements GsonPostProcessable {
                                     });
                         }));
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         });
     }
@@ -673,7 +673,7 @@ public class SystemInfoService implements GsonPostProcessable {
             List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages = new ArrayList<>(groupUsages.size());
             for (TResourceGroupUsage usage : groupUsages) {
                 ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                        .getResourceGroupIncludingDefault(usage.getGroup_id());
+                        .getResourceGroup(usage.getGroup_id());
                 if (group == null) {
                     continue;
                 }
@@ -953,7 +953,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (node instanceof Backend) {
             AtomicLong atomicLong;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
@@ -1134,7 +1134,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         if (getClusterAvailableCapacityB() <= 0L) {
-            throw new DdlException("Cluster has no available capacity");
+            throw new SemanticException("Cluster has no available capacity");
         }
     }
 

@@ -108,4 +108,10 @@ void RleEncoder::recordPosition(PositionRecorder* recorder) const {
     recorder->add(static_cast<uint64_t>(numLiterals));
 }
 
+void RleEncoder::finishEncode() {
+    outputStream->BackUp(static_cast<int>(bufferLength - bufferPosition));
+    outputStream->finishStream();
+    bufferLength = bufferPosition = 0;
+}
+
 } // namespace orc

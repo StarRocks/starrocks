@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Stream Load
@@ -15,7 +15,7 @@ In v2.5 and earlier, Stream Load does not support skipping the first few rows of
 - In the load command or statement, use `-H "where: <column_name> != '<column_name>'"` to filter out the first few rows of the CSV file. `<column_name>` is any of the column names held in the first few rows. Note that StarRocks first transforms and then filters the source data. Therefore, if the column names in the first few rows fail to be transformed into their matching destination data types, `NULL` values are returned for them. This means the destination StarRocks table cannot contain columns that are set to `NOT NULL`.
 - In the load command or statement, add `-H "max_filter_ratio:0.01"` to set a maximum error tolerance that is 1% or lower but can tolerate a few error rows, thereby allowing StarRocks to ignore the data transformation failures in the first few rows. In this case, the Stream Load job can still succeed even if `ErrorURL` is returned to indicate error rows. Do not set `max_filter_ratio` to a large value. If you set `max_filter_ratio` to a large value, some important data quality issues may be missed.
 
-From v3.0 onwards, Stream Load supports the `skip_header` parameter, which specifies whether to skip the first few rows of a CSV file. For more information,see [CSV parameters](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters).
+From v3.0 onwards, Stream Load supports the `skip_header` parameter, which specifies whether to skip the first few rows of a CSV file. For more information,see [CSV parameters](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-parameters).
 
 ## 2. The data to be loaded into the partition column is not of standard DATE or INT type. For example, the data is in a format like 202106.00. How do I transform the data if I load it by using Stream Load?
 

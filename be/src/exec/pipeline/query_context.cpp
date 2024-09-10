@@ -100,12 +100,13 @@ FragmentContextManager* QueryContext::fragment_mgr() {
 }
 
 void QueryContext::cancel(const Status& status) {
+    _is_cancelled = true;
     _fragment_mgr->cancel(status);
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
                                     std::optional<double> spill_mem_reserve_ratio, workgroup::WorkGroup* wg,
-                                    RuntimeState* runtime_state) {
+                                    RuntimeState* runtime_state, int scan_node_number) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -136,8 +137,8 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (big_query_mem_limit > 0) {
             _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
         }
-        _connector_scan_operator_mem_share_arbitrator =
-                _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit));
+        _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
+                new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, scan_node_number));
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
@@ -337,6 +338,16 @@ QueryContextManager::~QueryContextManager() {
     }
 }
 
+#define RETURN_NULL_IF_CTX_CANCELLED(query_ctx) \
+    if (query_ctx->is_cancelled()) {            \
+        return nullptr;                         \
+    }                                           \
+    query_ctx->increment_num_fragments();       \
+    if (query_ctx->is_cancelled()) {            \
+        query_ctx->rollback_inc_fragments();    \
+        return nullptr;                         \
+    }
+
 QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
@@ -348,7 +359,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         // lookup query context in context_map
         auto it = context_map.find(query_id);
         if (it != context_map.end()) {
-            it->second->increment_num_fragments();
+            RETURN_NULL_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         }
     }
@@ -358,14 +369,14 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         auto it = context_map.find(query_id);
         auto sc_it = sc_map.find(query_id);
         if (it != context_map.end()) {
-            it->second->increment_num_fragments();
+            RETURN_NULL_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         } else {
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
-                ctx->increment_num_fragments();
                 sc_map.erase(sc_it);
+                RETURN_NULL_IF_CTX_CANCELLED(ctx);
                 auto* raw_ctx_ptr = ctx.get();
                 context_map.emplace(query_id, std::move(ctx));
                 return raw_ctx_ptr;
@@ -649,6 +660,7 @@ void QueryContextManager::report_fragments(
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
 
+            // TODO: refactor me
             try {
                 try {
                     fe_connection->batchReportExecStatus(res, report_batch);
@@ -664,6 +676,7 @@ void QueryContextManager::report_fragments(
                 }
 
             } catch (TException& e) {
+                (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();

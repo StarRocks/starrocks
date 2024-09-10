@@ -1,4 +1,4 @@
--- name: test_mv_partition_union_rewrite_mode_iceberg
+-- name: test_mv_partition_union_rewrite_mode_iceberg @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (

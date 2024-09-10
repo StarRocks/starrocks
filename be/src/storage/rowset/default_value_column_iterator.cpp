@@ -121,6 +121,15 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, Column* dst) {
 
 Status DefaultValueColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     size_t to_read = range.span_size();
+    // if array column is nullable, range maybe empty. Before we support add/drop field for struct,
+    // the element column iterator of array can not be default value column iterator.
+    // However, if the element type of array is struct and we add a new field into the struct element,
+    // we may access `DefaultValueColumnIterator` right now.
+    // And when the range is empty, the `range.end()` will meet nullptr.
+    // So if the range is empty, return ok is enough.
+    if (to_read == 0) {
+        return Status::OK();
+    }
     if (_is_default_value_null) {
         [[maybe_unused]] bool ok = dst->append_nulls(to_read);
         _current_rowid = range.end();

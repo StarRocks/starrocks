@@ -21,6 +21,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
+    capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
     exec_node.cpp
@@ -100,6 +101,7 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
+    cache_select_scanner.cpp
     mor_processor.cpp
     json_scanner.cpp
     json_parser.cpp
@@ -166,6 +168,7 @@ set(EXEC_FILES
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
+    pipeline/capture_version_operator.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
@@ -174,6 +177,8 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
     pipeline/exchange/multi_cast_local_exchange.cpp
+    pipeline/exchange/mem_limited_chunk_queue.cpp
+    pipeline/exchange/spillable_multi_cast_local_exchange.cpp
     pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
     pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
     pipeline/exchange/sink_buffer.cpp
@@ -279,6 +284,8 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp

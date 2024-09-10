@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 创建分区物化视图
@@ -98,7 +98,7 @@ DISTRIBUTED BY HASH(k1);
 
 您可以通过使用相同的分区键创建一个分区与基表分区一一对应的物化视图。
 
-![Partitioned Materialized View-1](../assets/partitioned_mv-1.png)
+![Partitioned Materialized View-1](../_assets/partitioned_mv-1.png)
 
 - 如果基表的分区键是 DATE 或 DATETIME 类型，可以直接为物化视图指定相同的分区键。
 
@@ -146,7 +146,7 @@ DISTRIBUTED BY HASH(k1);
 
 您可以通过在分区键上使用 [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) 函数，创建一个分区时间粒度比基表更粗的物化视图。当检测到基表分区中的数据变更后，StarRocks 将会刷新物化视图中对应的上卷分区。
 
-![Partitioned Materialized View-2](../assets/partitioned_mv-2.png)
+![Partitioned Materialized View-2](../_assets/partitioned_mv-2.png)
 
 - 如果基表的分区键是 DATE 或 DATETIME 类型，可以直接在基表的分区键上使用 date_trunc 函数。
 
@@ -197,17 +197,17 @@ DISTRIBUTED BY HASH(k1);
 
 ### 自定义时间粒度对齐分区
 
-上述的分区上卷方法只允许根据特定的时间粒度对物化视图进行分区，不允许自定义分区时间范围。如果您的业务场景需要使用自定义的时间粒度进行分区，您可以创建一个物化视图，并使用 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 或 [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md) 函数定义其分区的时间粒度。以上两种函数可以根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。
+上述的分区上卷方法只允许根据特定的时间粒度对物化视图进行分区，不允许自定义分区时间范围。如果您的业务场景需要使用自定义的时间粒度进行分区，您可以创建一个物化视图，并使用 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 函数定义其分区的时间粒度。以上两种函数可以根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。
 
-您需要在 SELECT List 中使用 time_slice 或 date_slice 函数在基表的分区键上定义新的时间粒度，为其设置别名，然后结合 date_trunc 函数指定物化视图的分区键，从而创建一个自定义分区时间粒度的物化视图。
+您需要在 SELECT List 中使用 time_slice 函数在基表的分区键上定义新的时间粒度，为其设置别名，然后结合 date_trunc 函数指定物化视图的分区键，从而创建一个自定义分区时间粒度的物化视图。
 
 ```SQL
 PARTITION BY
 date_trunc(<format>, <mv_partitioning_column>)
 AS
 SELECT 
-  -- 您可以使用 time_slice 或 date_slice 函数。
-  date_slice(<base_table_partitioning_column>, <interval>) AS <mv_partitioning_column>
+  -- 您可以使用 time_slice 函数。
+  time_slice(<base_table_partitioning_column>, <interval>) AS <mv_partitioning_column>
 ```
 
 示例：
@@ -220,14 +220,14 @@ AS
 SELECT 
   k1, 
   sum(v1) AS SUM, 
-  date_slice(datekey, INTERVAL 5 HOUR) AS mv_datekey 
+  time_slice(datekey, INTERVAL 5 HOUR) AS mv_datekey 
 FROM par_tbl1 
 GROUP BY datekey, k1;
 ```
 
 ### 多基表对齐分区
 
-![Partitioned Materialized View-3](../assets/partitioned_mv-3.png)
+![Partitioned Materialized View-3](../_assets/partitioned_mv-3.png)
 
 如果多张基表的分区可以互相对齐，即基表使用相同类型的分区键，您就可以基于多张基表创建分区物化视图。您可以使用 JOIN 连接基表，并将分区键设置为公共列。您也可以使用 UNION 连接基表。具有对齐分区的基表称为 Reference Table。任意 Reference Table 中的数据变更都将触发对应物化视图分区的刷新任务。
 
@@ -358,4 +358,4 @@ WHERE datekey='2021-01-01'
 GROUP BY datekey, k1;
 ```
 
-![Partitioned Materialized View-4](../assets/partitioned_mv-4.png)
+![Partitioned Materialized View-4](../_assets/partitioned_mv-4.png)

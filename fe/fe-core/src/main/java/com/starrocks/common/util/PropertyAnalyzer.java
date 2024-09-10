@@ -53,7 +53,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -62,7 +61,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -168,6 +168,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
+    public static final String PROPERTIES_MUTABLE_BUCKET_NUM = "mutable_bucket_num";
+
+    public static final String PROPERTIES_ENABLE_LOAD_PROFILE = "enable_load_profile";
 
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
@@ -391,17 +395,16 @@ public class PropertyAnalyzer {
         return Pair.create(null, PeriodDuration.ZERO);
     }
 
-    public static int analyzePartitionLiveNumber(Map<String, String> properties,
-                                                 boolean removeProperties) throws AnalysisException {
+    public static int analyzePartitionLiveNumber(Map<String, String> properties, boolean removeProperties) {
         int partitionLiveNumber = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
             try {
                 partitionLiveNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_LIVE_NUMBER));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Partition Live Number: " + e.getMessage());
+                throw new SemanticException("Partition Live Number: " + e.getMessage());
             }
             if (partitionLiveNumber <= 0 && partitionLiveNumber != INVALID) {
-                throw new AnalysisException("Illegal Partition Live Number: " + partitionLiveNumber);
+                throw new SemanticException("Illegal Partition Live Number: " + partitionLiveNumber);
             }
             if (removeProperties) {
                 properties.remove(PROPERTIES_PARTITION_LIVE_NUMBER);
@@ -410,21 +413,46 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
-    public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
+    public static long analyzeBucketSize(Map<String, String> properties) {
         long bucketSize = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
             try {
                 bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Bucket size: " + e.getMessage());
+                throw new SemanticException("Bucket size: " + e.getMessage());
             }
             if (bucketSize < 0) {
-                throw new AnalysisException("Illegal bucket size: " + bucketSize);
+                throw new SemanticException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
         } else {
-            throw new AnalysisException("Bucket size is not set");
+            throw new SemanticException("Bucket size is not set");
         }
+    }
+
+    public static long analyzeMutableBucketNum(Map<String, String> properties) {
+        long mutableBucketNum = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_MUTABLE_BUCKET_NUM)) {
+            try {
+                mutableBucketNum = Long.parseLong(properties.get(PROPERTIES_MUTABLE_BUCKET_NUM));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Mutable bucket num: " + e.getMessage());
+            }
+            if (mutableBucketNum < 0) {
+                throw new SemanticException("Illegal mutable bucket num: " + mutableBucketNum);
+            }
+            return mutableBucketNum;
+        } else {
+            throw new SemanticException("Mutable bucket num is not set");
+        }
+    }
+
+    public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {
+        boolean enableLoadProfile = false;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_LOAD_PROFILE)) {
+            enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
+        }
+        return enableLoadProfile;
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
@@ -516,8 +544,7 @@ public class PropertyAnalyzer {
         return replicationNum;
     }
 
-    public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
-            throws AnalysisException {
+    public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault) {
         String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
@@ -538,21 +565,21 @@ public class PropertyAnalyzer {
         return resourceGroup;
     }
 
-    private static void checkReplicationNum(short replicationNum) throws AnalysisException {
+    private static void checkReplicationNum(short replicationNum) {
         if (replicationNum <= 0) {
-            throw new AnalysisException("Replication num should larger than 0");
+            throw new SemanticException("Replication num should larger than 0");
         }
 
         List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
         if (RunMode.isSharedDataMode()) {
             backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
-                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
+                throw new SemanticException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
             if (replicationNum > backendIds.size()) {
-                throw new AnalysisException("Table replication num should be less than " +
+                throw new SemanticException("Table replication num should be less than " +
                         "of equal to the number of available BE nodes. "
                         + "You can change this default by setting the replication_num table properties. "
                         + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");

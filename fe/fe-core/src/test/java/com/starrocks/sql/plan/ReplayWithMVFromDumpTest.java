@@ -127,10 +127,13 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testMVOnMV2() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        // TODO: How to remove the join reorder noise?
+        connectContext.getSessionVariable().disableJoinReorder();
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().enableJoinReorder();
         assertContains(replayPair.second, "test_mv2");
     }
 
@@ -221,5 +224,24 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+    }
+
+    @Test
+    public void testMV_CountStarRewrite() throws Exception {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/count_star_rewrite"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        assertContains(replayPair.second, "tbl_mock_067");
+        // NOTE: OUTPUT EXPRS must refer to coalesce column ref
+        assertContains(replayPair.second, " OUTPUT EXPRS:59: count\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 59> : coalesce(80: count, 0)");
     }
 }

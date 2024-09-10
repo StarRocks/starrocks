@@ -174,6 +174,7 @@ public:
     Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table);
 
     void add_block_group(BlockGroupPtr&& block_group) { _block_group_set.add_block_group(std::move(block_group)); }
+    size_t block_group_num_rows() const { return _block_group_set.num_rows(); }
 
 public:
     struct FlushContext : public SpillIOTaskContext {

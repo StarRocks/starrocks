@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Operator 部署 StarRocks 集群
@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 ## 工作原理
 
-![sr operator and src](../assets/starrocks_operator.png)
+![sr operator and src](../_assets/starrocks_operator.png)
 
 ## **环境准备**
 

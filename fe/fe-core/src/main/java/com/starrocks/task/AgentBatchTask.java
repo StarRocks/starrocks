@@ -35,11 +35,11 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.ClientPool;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TAlterTabletReqV2;
@@ -171,9 +171,6 @@ public class AgentBatchTask implements Runnable {
     @Override
     public void run() {
         for (Long backendId : this.backendIdToTasks.keySet()) {
-            BackendService.Client client = null;
-            TNetworkAddress address = null;
-            boolean ok = false;
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 if (RunMode.isSharedDataMode() && computeNode == null) {
@@ -188,35 +185,29 @@ public class AgentBatchTask implements Runnable {
                 int port = computeNode.getBePort();
 
                 List<AgentTask> tasks = this.backendIdToTasks.get(backendId);
-                // create AgentClient
-                address = new TNetworkAddress(host, port);
-                client = ClientPool.backendPool.borrowObject(address);
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();
                 for (AgentTask task : tasks) {
                     agentTaskRequests.add(toAgentTaskRequest(task));
                 }
-                client.submit_tasks(agentTaskRequests);
+
+                ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.backendPool,
+                        new TNetworkAddress(host, port),
+                        client -> client.submit_tasks(agentTaskRequests));
+
                 if (LOG.isDebugEnabled()) {
                     for (AgentTask task : tasks) {
                         LOG.debug("send task: type[{}], backend[{}], signature[{}]",
                                 task.getTaskType(), backendId, task.getSignature());
                     }
                 }
-                ok = true;
             } catch (Exception e) {
                 LOG.warn("task exec error. backend[{}]", backendId, e);
-            } finally {
-                if (ok) {
-                    ClientPool.backendPool.returnObject(address, client);
-                } else {
-                    // TODO: notify tasks rpc failed in trace
-                    ClientPool.backendPool.invalidateObject(address, client);
-                }
             }
         } // end for compute node
     }
 
-    private TAgentTaskRequest toAgentTaskRequest(AgentTask task) {
+    public static TAgentTaskRequest toAgentTaskRequest(AgentTask task) {
         TAgentTaskRequest tAgentTaskRequest = new TAgentTaskRequest();
         tAgentTaskRequest.setProtocol_version(TAgentServiceVersion.V1);
         tAgentTaskRequest.setSignature(task.getSignature());

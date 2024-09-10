@@ -28,6 +28,7 @@ void PersistentIndexMemtable::update_index_value(std::list<IndexValueWithVer>* i
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                        KeyIndexSet* not_founds, size_t* num_found, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_upsert_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -51,7 +52,7 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
 }
 
 Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtable_insert_us");
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_insert_us");
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
         auto size = keys[i].get_size();
@@ -85,6 +86,7 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
 
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
                                       size_t* num_found, int64_t version, uint32_t rowset_id) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_erase_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -132,6 +134,7 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
 
 Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* values,
                                         const std::vector<size_t>& replace_idxes, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_replace_us");
     for (unsigned long idx : replace_idxes) {
         auto key = keys[idx].to_string();
         const auto value = values[idx];
@@ -149,6 +152,7 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
 
 Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* not_founds,
                                     int64_t version) const {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
     for (size_t i = 0; i < n; ++i) {
         auto key = std::string_view(keys[i]);
         auto it = _map.find(key);
@@ -167,6 +171,7 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
 
 Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
                                     KeyIndexSet* found_key_indexes, int64_t version) const {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
     for (auto& key_index : key_indexes) {
         auto key = std::string_view(keys[key_index]);
         auto it = _map.find(key);

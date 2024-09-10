@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Partition;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
@@ -718,6 +720,36 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "where l_shipdate >= '1998-01-04'";
             PlanTestBase.assertContains(getFragmentPlan(query), mvName);
             dropMv("test", mvName);
+        }
+    }
+
+    @Test
+    public void testPartitionQueryRewriteSkipEmptyPartitions() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        {
+            // Loose, empty mv partitions should be skipped
+            starRocksAssert.withRefreshedMaterializedView("create materialized view test_loose_mv" +
+                    " partition by id_date" +
+                    " distributed by random" +
+                    " REFRESH ASYNC\n" +
+                    " PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"query_rewrite_consistency\" = \"loose\"," +
+                    "\"auto_refresh_partitions_limit\" = \"1\"" +
+                    ")\n" +
+                    " as" +
+                    " select id_date, sum(t1b) from table_with_day_partition group by id_date");
+            MaterializedView mv = starRocksAssert.getMv("test", "test_loose_mv");
+            mv.getPartition("p19910330")
+                    .setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+            String query5 = "select id_date, sum(t1b) from table_with_day_partition" +
+                    " where id_date >= '1991-03-30' and id_date < '1991-04-03' group by id_date";
+            FeConstants.runningUnitTest = false;
+            String plan = getFragmentPlan(query5);
+            FeConstants.runningUnitTest = true;
+            PlanTestBase.assertContains(plan, "test_loose_mv", "partitions=3/4",
+                    "table_with_day_partition", "partitions=1/4", "UNION");
+            dropMv("test", "test_loose_mv");
         }
     }
 

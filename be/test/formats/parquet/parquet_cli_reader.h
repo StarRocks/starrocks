@@ -47,7 +47,7 @@ public:
         // create temporary reader to load schema.
         FileMetaData* file_metadata = nullptr;
         std::shared_ptr<FileReader> reader =
-                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
+                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         {
             HdfsScannerContext ctx;
             HdfsScanStats stats;
@@ -77,7 +77,7 @@ public:
         _make_column_info_vector(_scanner_ctx->tuple_desc, &_scanner_ctx->materialized_columns);
         _scanner_ctx->scan_range = scan_range;
 
-        _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
+        _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
 
         return Status::OK();

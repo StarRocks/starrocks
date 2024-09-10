@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # JSON
@@ -54,7 +54,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
   - If you want to load a root JSON object, set `jsonpaths` to `$`.
   - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
 
-- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
 StarRocks supports the following data type conversions at Parquet file loading.
 

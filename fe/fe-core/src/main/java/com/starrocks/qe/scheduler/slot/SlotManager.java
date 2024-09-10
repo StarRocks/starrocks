@@ -20,7 +20,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -256,9 +257,10 @@ public class SlotManager {
 
             TNetworkAddress feEndpoint = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
             try {
-                TFinishSlotRequirementResponse res =
-                        FrontendServiceProxy.call(feEndpoint, Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times, client -> client.finishSlotRequirement(request));
+                TFinishSlotRequirementResponse res = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        feEndpoint,
+                        client -> client.finishSlotRequirement(request));
                 TStatus resStatus = res.getStatus();
                 if (resStatus.getStatus_code() != TStatusCode.OK) {
                     LOG.warn("[Slot] failed to finish slot requirement [slot={}] [err={}]", slot, resStatus);

@@ -308,6 +308,7 @@ Status DeltaWriter::_init() {
         writer_context.full_tablet_schema = _tablet_schema;
         writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
+        writer_context.column_to_expr_value = _opt.column_to_expr_value;
         _tablet_schema = partial_update_schema;
     } else {
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
@@ -420,6 +421,14 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
+        // When loading memory usage is larger than hard limit, we will reject new loading task.
+        if (!config::enable_new_load_on_memory_limit_exceeded &&
+            is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
+                                      config::load_process_max_memory_hard_limit_ratio)) {
+            return Status::MemoryLimitExceeded(
+                    "memory limit exceeded, please reduce load frequency or increase config "
+                    "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
+        }
         _reset_mem_table();
     }
     auto state = get_state();
@@ -838,7 +847,7 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     // 2. probe index
     RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
 
-    std::vector<uint8_t> filter;
+    Filter filter;
     uint32_t gen_num = 0;
     for (unsigned long v : rss_rowids) {
         uint32_t rssid = v >> 32;

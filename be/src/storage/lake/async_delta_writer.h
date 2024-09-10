@@ -62,7 +62,7 @@ public:
     // same Status as the first call.
     //
     // [thread-safe]
-    [[nodiscard]] Status open();
+    Status open();
 
     // REQUIRE:
     //  - |chunk| and |indexes| must be kept alive until |cb| been invoked
@@ -108,7 +108,7 @@ public:
 
     [[nodiscard]] bool is_immutable() const;
 
-    [[nodiscard]] Status check_immutable();
+    Status check_immutable();
 
     [[nodiscard]] int64_t last_write_ts() const;
 
@@ -186,6 +186,11 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -201,6 +206,7 @@ private:
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 
 } // namespace starrocks::lake

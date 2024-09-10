@@ -59,7 +59,8 @@ static std::string make_value_type_not_matched_error_message(int field_pos, cons
                                                              const SlotDescriptor* slot) {
     std::stringstream error_msg;
     error_msg << "The field (name = " << slot->col_name() << ", pos = " << field_pos << ") is out of range. "
-              << "Type: " << slot->type().debug_string() << ", Value: " << field.to_string();
+              << "Type: " << slot->type().debug_string() << ", Value length: " << field.get_size()
+              << ", Value: " << field.to_string();
     return error_msg.str();
 }
 
@@ -259,7 +260,18 @@ Status CSVScanner::_init_reader() {
         if (_parse_options.skip_header) {
             for (int64_t i = 0; i < _parse_options.skip_header; i++) {
                 CSVReader::Record dummy;
-                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+                auto st = _curr_reader->next_record(&dummy);
+                if (!st.ok()) {
+                    if (st.is_end_of_file()) {
+                        auto err_msg = fmt::format(
+                                "The parameter 'skip_header' is set to {}, but there are only {} rows in the csv file",
+                                _parse_options.skip_header, i);
+
+                        return Status::EndOfFile(err_msg);
+                    } else {
+                        return st;
+                    }
+                }
             }
         }
         return Status::OK();
@@ -619,7 +631,7 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
         _curr_reader->split_record(record, &fields);
         for (size_t i = 0; i < fields.size(); i++) {
             // column name: $1, $2, $3...
-            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(fields[i]));
         }
         schemas.emplace_back(schema);
         i++;
@@ -656,7 +668,7 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
             const Slice field(basePtr + column.start_pos, column.length);
 
             // column name: $1, $2, $3...
-            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
+            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(field));
         }
         schemas.emplace_back(schema);
         i++;
