@@ -21,8 +21,8 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 // We have to implement DefaultCredentialsProvider by ourselves,
 // otherwise we may face "java.lang.IllegalStateException: Connection pool shut down" error.
 //
-// Hadoop S3AFileSystem will call `static AwsCredentialsProvider::create()` to create CredentialsProvider
-// But in DefaultCredentialsProvider::create(), it will only return a global static variable
+// Hadoop S3AFileSystem will call `static AwsCredentialsProvider::create()` to create CredentialsProvider.
+// But in DefaultCredentialsProvider::create(), it will only return a global static variable.
 // If we close S3AFileSystem, it will also close CredentialsProvider.
 // For the next time we create a new S3AFileSystem, it will reuse previous closed CredentialsProvider, then error will be thrown
 // You can check details in link:
