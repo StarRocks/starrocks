@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -56,6 +57,7 @@ import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatisticExecutor {
@@ -87,11 +89,17 @@ public class StatisticExecutor {
             return Collections.emptyList();
         }
 
-        List<ColumnStatsMeta> columnStatsMetaList = meta == null ?
-                columnNames.stream().map(x ->
-                                new ColumnStatsMeta(x, StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.MIN))
-                        .collect(Collectors.toList()) :
-                Lists.newArrayList(meta.getAnalyzedColumns().values());
+        Map<String, ColumnStatsMeta> analyzedColumns = meta != null ? meta.getAnalyzedColumns() : Maps.newHashMap();
+        List<ColumnStatsMeta> columnStatsMetaList = Lists.newArrayList();
+        for (String name : columnNames) {
+            if (meta == null || !analyzedColumns.containsKey(name)) {
+                columnStatsMetaList.add(
+                        new ColumnStatsMeta(name, StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.MIN));
+            } else {
+                columnStatsMetaList.add(analyzedColumns.get(name));
+            }
+        }
+
         return queryColumnStats(context, dbId, tableId, columnStatsMetaList, table);
     }
 

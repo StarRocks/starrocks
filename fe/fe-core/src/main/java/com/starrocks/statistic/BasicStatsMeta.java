@@ -25,6 +25,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
@@ -216,7 +217,7 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
     public Map<String, ColumnStatsMeta> getAnalyzedColumns() {
         Map<String, ColumnStatsMeta> deduplicate = Maps.newHashMap();
         // TODO: just for compatible, we can remove it at next version
-        for (String column : columns) {
+        for (String column : ListUtils.emptyIfNull(columns)) {
             deduplicate.put(column, new ColumnStatsMeta(column, type, updateTime));
         }
         deduplicate.putAll(columnStatsMetaMap);
