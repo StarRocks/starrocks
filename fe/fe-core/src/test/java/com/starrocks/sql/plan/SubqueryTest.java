@@ -1799,10 +1799,10 @@ public class SubqueryTest extends PlanTestBase {
 
         String sql = "select v1 from t0 where v1 = 1 or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "15:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 8: v4\n" +
-                "  |  \n" +
-                "  14:EXCHANGE");
+        assertContains(plan, "  |----15:AGGREGATE (merge finalize)\n" +
+                "  |    |  group by: 8: v4\n" +
+                "  |    |  \n" +
+                "  |    14:EXCHANGE");
         assertContains(plan, "9:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
@@ -1823,20 +1823,37 @@ public class SubqueryTest extends PlanTestBase {
                 "or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "33:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 12: v4\n" +
+        assertContains(plan, "  |----32:AGGREGATE (merge finalize)\n" +
+                "  |    |  group by: 12: v4\n" +
+                "  |    |  \n" +
+                "  |    31:EXCHANGE");
+        assertContains(plan, "  27:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 7> : 7: expr\n" +
+                "  |  <slot 15> : 15: countRows\n" +
+                "  |  <slot 16> : 16: countNotNulls\n" +
                 "  |  \n" +
+<<<<<<< HEAD
                 "  32:EXCHANGE");
         assertContains(plan, "27:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+=======
+                "  26:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+>>>>>>> cffaa196d9 ([BugFix] RangePredicateExtractor discard predicates mistakenly (#50854))
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: v2 = 14: v4\n" +
                 "  |  \n" +
+<<<<<<< HEAD
                 "  |----26:AGGREGATE (merge finalize)\n" +
                 "  |    |  output: count(15: countRows), count(16: countNotNulls)\n" +
                 "  |    |  group by: 14: v4\n" +
                 "  |    |  \n" +
                 "  |    25:EXCHANGE\n" +
+=======
+                "  |----25:EXCHANGE\n" +
+>>>>>>> cffaa196d9 ([BugFix] RangePredicateExtractor discard predicates mistakenly (#50854))
                 "  |    \n" +
                 "  21:EXCHANGE");
     }
