@@ -1184,10 +1184,34 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return true;
         }
         List<TableName> excludedTriggerTables = tableProperty.getExcludedTriggerTables();
-        if (excludedTriggerTables == null) {
+        return matchTable(excludedTriggerTables, dbName, tableName);
+    }
+
+    public boolean shouldRefreshBaseTable(String tableName) {
+        long dbId = this.getDbId();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            LOG.warn("failed to get Database when pending refresh, DBId: {}", dbId);
+            return false;
+        }
+        String dbName = db.getFullName();
+
+        if (!isLoadTriggeredRefresh()) {
+            return false;
+        }
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
             return true;
         }
-        for (TableName tables : excludedTriggerTables) {
+        List<TableName> excludedRefreshBaseTables = tableProperty.getExcludedRefreshBaseTables();
+        return matchTable(excludedRefreshBaseTables, dbName, tableName);
+    }
+
+    private boolean matchTable(List<TableName> excludedRefreshBaseTables, String dbName, String tableName) {
+        if (excludedRefreshBaseTables == null) {
+            return true;
+        }
+        for (TableName tables : excludedRefreshBaseTables) {
             if (tables.getDb() == null) {
                 if (tables.getTbl().equals(tableName)) {
                     return false;
