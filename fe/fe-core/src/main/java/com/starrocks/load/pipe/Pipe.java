@@ -352,6 +352,7 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        Runnable changeStateAction = null;
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
@@ -362,7 +363,7 @@ public class Pipe implements GsonPostProcessable {
                 if (task.isError()) {
                     failedTaskExecutionCount++;
                     if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
-                        changeState(State.ERROR, false);
+                        changeStateAction = () -> changeState(State.ERROR, false);
                     }
                 }
                 if (task.isFinished()) {
@@ -376,6 +377,10 @@ public class Pipe implements GsonPostProcessable {
             for (long taskId : removeTaskId) {
                 runningTasks.remove(taskId);
             }
+        }
+
+        if (changeStateAction != null) {
+            changeStateAction.run();
         }
 
         // Persist LoadStatus
