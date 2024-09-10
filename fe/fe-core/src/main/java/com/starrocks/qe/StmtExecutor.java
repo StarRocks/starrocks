@@ -2255,7 +2255,8 @@ public class StmtExecutor {
             }
 
             // insert will fail if 'filtered rows / total rows' exceeds max_filter_ratio
-            if (loadJob != null && !loadJob.checkDataQuality()) {
+            // for native table and external catalog table(without insert load job)
+            if (filteredRows > (filteredRows + loadedRows) * stmt.getMaxFilterRatio()) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     RemoteTransactionMgr.abortRemoteTransaction(externalTable.getSourceTableDbId(), transactionId,
