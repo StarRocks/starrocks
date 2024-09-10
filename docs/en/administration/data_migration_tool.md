@@ -339,7 +339,7 @@ ORDER BY TABLE_NAME;
 
 ## Q&A
 
-### Q1: Why is that only the table schemas got synchronized?
+### Q1: Why did only the table schemas get synchronized?
 
 If you have enabled the firewall, you must open these ports:
 
