@@ -29,6 +29,9 @@ import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
@@ -165,6 +168,18 @@ public class CachedStatisticStorage implements StatisticStorage {
         try {
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> result =
                     connectorTableCachedStatistics.getAll(cacheKeys);
+
+            SessionVariable sessionVariable = ConnectContext.get() == null ? VariableMgr.newSessionVariable() :
+                    ConnectContext.get().getSessionVariable();
+            result.whenCompleteAsync((res, e) -> {
+                if (e != null) {
+                    LOG.warn("Get connector table column statistics filed, exception: ", e);
+                    return;
+                }
+                if (sessionVariable.isEnableQueryTriggerAnalyze() && GlobalStateMgr.getCurrentState().isLeader()) {
+                    GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
+                }
+            }, statsCacheRefresherExecutor);
             if (result.isDone()) {
                 List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
                 Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;

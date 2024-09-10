@@ -421,6 +421,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
+    public static final String ENABLE_QUERY_TRIGGER_ANALYZE = "enable_query_trigger_analyze";
+
     public static final String PLAN_MODE = "plan_mode";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
@@ -2111,6 +2113,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
 
+    @VarAttr(name = ENABLE_QUERY_TRIGGER_ANALYZE)
+    private boolean enableQueryTriggerAnalyze = true;
+
     @VarAttr(name = PLAN_MODE)
     private String planMode = PlanMode.AUTO.modeName();
 
@@ -2223,6 +2228,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
         this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public boolean isEnableQueryTriggerAnalyze() {
+        return enableQueryTriggerAnalyze;
     }
 
     public String getPlanMode() {
@@ -2437,6 +2446,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCacheSelect(boolean enableCacheSelect) {
         this.enableCacheSelect = enableCacheSelect;
+    }
+
+    public void setConnectorIoTasksPerScanOperator(int connectorIoTasksPerScanOperator) {
+        this.connectorIoTasksPerScanOperator = connectorIoTasksPerScanOperator;
     }
 
     public boolean isCboUseDBLock() {

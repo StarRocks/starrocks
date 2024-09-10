@@ -2091,6 +2091,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_small_table_interval = 6 * 60 * 60; // unit: second, default 6h
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_large_table_interval = 24 * 60 * 60; // unit: second, default 24h
+
+    @ConfField(mutable = true)
+    public static int connector_table_query_trigger_analyze_max_running_task_num = 2;
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_max_pending_task_num = 100;
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_schedule_interval = 30; // unit: second, default 30s
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
