@@ -68,7 +68,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(agg.getAggregations().values());
 
         // all distinct function use the same distinct columns, we use the split rule to rewrite
-        return distinctCols.isEmpty();
+        return !distinctCols.isPresent();
     }
 
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
