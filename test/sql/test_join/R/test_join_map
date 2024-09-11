@@ -36,7 +36,7 @@ select t.map2, s.map2 from map_test t join map_test s on s.map2 = t.map2 order b
 {0:["1","2"]}	{0:["1","2"]}
 {1:[]}	{1:[]}
 {null:null}	{null:null}
-{3:["3",null],null:null}	{3:["3",null],null:null}
+{null:null,3:["3",null]}	{null:null,3:["3",null]}
 -- !result
 select t.map3, s.map3 from map_test t join map_test s on s.map3 = t.map3 order by t.pk;
 -- result:
@@ -366,12 +366,12 @@ select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,a
 {0:["1","2"]}	{0:["1","2"]}
 {1:[]}	{1:[]}
 {null:null}	{null:null}
-{3:["3",null],null:null}	{3:["3",null],null:null}
+{null:null,3:["3",null]}	{null:null,3:["3",null]}
 -- !result
 select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,v),s.map2) = map_apply((k,v)->(k+1,v),t.map2) order by t.pk;
 -- result:
 {0:["1","2"]}	{0:["1","2"]}
 {1:[]}	{1:[]}
 {null:null}	{null:null}
-{3:["3",null],null:null}	{3:["3",null],null:null}
+{null:null,3:["3",null]}	{null:null,3:["3",null]}
 -- !result
