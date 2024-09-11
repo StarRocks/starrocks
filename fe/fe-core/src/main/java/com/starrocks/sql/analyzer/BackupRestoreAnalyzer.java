@@ -80,7 +80,7 @@ public class BackupRestoreAnalyzer {
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
-            Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             List<TableRef> tableRefs = backupStmt.getTableRefs();
             // If TableRefs is empty, it means that we do not specify any table in Backup stmt.
             // We should backup all table in current database.
@@ -253,7 +253,7 @@ public class BackupRestoreAnalyzer {
         public Void visitRestoreStatement(RestoreStmt restoreStmt, ConnectContext context) {
             List<TableRef> tableRefs = restoreStmt.getTableRefs();
             Set<String> aliasSet = Sets.newHashSet();
-            Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             for (TableRef tableRef : tableRefs) {
                 TableName tableName = tableRef.getName();
 
