@@ -326,9 +326,9 @@ PROPERTIES (
 INSERT INTO t_dictmapping_multiple_open_crash VALUES (1, DEFAULT);
 -- result:
 -- !result
-select dict_mapping("t_dictmapping_multiple_open_crash", k) from t where dict_mapping("t_dictmapping_multiple_open_crash", k) != 0;
+select dict_mapping("t_dictmapping_multiple_open_crash", k) from t_dictmapping_multiple_open_crash where dict_mapping("t_dictmapping_multiple_open_crash", k) != 0;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_635994ed9f8b4b06bb4c07ef77387ab8.t'.")
+1
 -- !result
 DROP TABLE t_dictmapping_multiple_open_crash;
 -- result:
