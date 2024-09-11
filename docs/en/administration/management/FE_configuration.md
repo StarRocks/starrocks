@@ -1345,7 +1345,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: false
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Whether to enable UDF.
 - Introduced in: -
 
