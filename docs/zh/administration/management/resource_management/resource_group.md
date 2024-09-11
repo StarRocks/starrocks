@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 本文介绍如何使用资源隔离功能。
 
-自 2.2 版本起，StarRocks 支持资源组管理，集群可以通过设置资源组（Resource Group）的方式限制查询对资源的消耗，实现多租户之间的资源隔离与合理利用。在 2.3 版本中，StarRocks 支持限制大查询，集群可以进一步控制大查询对资源的消耗，避免少数的大查询耗尽系统资源，进而影响系统稳定性。StarRocks 2.5 版本支持通过资源组对导入计算进行资源隔离，从而间接控制导入任务对集群资源的消耗。StarRocks 3.3.5 版本支持对 CPU 资源进行硬隔离。
+自 2.2 版本起，StarRocks 支持资源组管理，集群可以通过设置资源组（Resource Group）的方式限制查询对资源的消耗，实现多租户之间的资源隔离与合理利用。在 2.3 版本中，StarRocks 支持限制大查询，集群可以进一步控制大查询对资源的消耗，避免少数的大查询耗尽系统资源，进而影响系统稳定性。StarRocks 2.5 版本支持通过资源组对导入计算进行资源隔离，从而间接控制导入任务对集群资源的消耗。自 v3.3.5 起，StarRocks 支持对 CPU 资源进行硬隔离。
 
 通过资源隔离功能，您可以将 BE 节点的计算资源划分成若干个资源组，并且为每个资源组关联一个或多个分类器（Classifier）。根据在分类器中设置的条件，系统将匹配查询任务的对应信息。当您发起查询任务时，分类器会根据查询任务的相关信息进行匹配。其中匹配度最高的分类器才会生效，系统则会根据生效的分类器所属的资源组为查询任务分配资源。
 
@@ -14,13 +14,13 @@ displayed_sidebar: docs
 
 资源隔离功能支持计划
 
-|  | 内部表 | 外部表 | 大查询熔断 | INSERT 计算资源隔离 | BROKER LOAD 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 | CPU 硬隔离 |
-|---|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × | x |
-| 2.3 | √ | √ |√ | × | × | × | x |
-| 2.5 | √ | √ |√ | √ | × | × | x |
-| 3.1 | √ | √ |√ | √ | √ | × | x |
-| 3.3.5 及以后 | √ | √ |√ | √ | √ | √ | √ |
+|             | 内部表 | 外部表 | 大查询熔断 | INSERT 计算资源隔离 | BROKER LOAD 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 | CPU 硬隔离 |
+| ----------- | ----- | ----- | -------- | ----------------- | ---------------------- | ----------------------------------------------- | --------- |
+| 2.2         | √     | ×     | ×        | ×                 | ×                      | ×                                               | x         |
+| 2.3         | √     | √     |√         | ×                 | ×                      | ×                                               | x         |
+| 2.5         | √     | √     |√         | √                 | ×                      | ×                                               | x         |
+| 3.1 & 3.2   | √     | √     |√         | √                 | √                      | ×                                               | x         |
+| 3.3.5 及以后 | √     | √     |√         | √                 | √                      | √                                               | √         |
 
 ## 基本概念
 
@@ -30,112 +30,110 @@ displayed_sidebar: docs
 
 通过将 BE 节点划分为若干个资源组 (resource group)，系统在执行相应资源组的查询任务时，会按照为该资源组划分的资源配额（CPU 及内存）分配查询资源。
 
-
-
 您可以为资源组设置如下的资源限制。
 
-| 配置名称                   | 描述                                                      | 取值范围                                    | 默认值 |
+| 配置名称                    | 描述                                                       | 取值范围                                     | 默认值  |
 | -------------------------- | --------------------------------------------------------- | ------------------------------------------- | ------ |
-| cpu_weight                 | 该资源组在一个 BE 节点上调度的权重。                      | (0, `avg_be_cpu_cores`] (大于 0 时生效)     | 0      |
-| exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                               | (0, `min_be_cpu_cores - 1`] (大于 0 时生效) | 0      |
-| mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。          | (0, 1] (必填项)                             | -      |
-| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                          | (0, 1]                                      | 1.0    |
-| concurrency_limit          | 该资源组中并发查询数的上限。                              | 整数 (大于 0 才生效)                        | 0      |
-| big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。 | 整数 (大于 0 才生效)                        | 0      |
-| big_query_scan_rows_limit  | 该资源组的大查询任务在每个 BE 上可以扫描的行数上限。      | 整数 (大于 0 才生效)                        | 0      |
-| big_query_mem_limit        | 该资源组的大查询任务在每个 BE 上可以使用的内存上限。      | 整数 (大于 0 才生效)                        | 0      |
+| cpu_weight                 | 该资源组在一个 BE 节点上调度的权重。                           | (0, `avg_be_cpu_cores`] (大于 0 时生效)       | 0      |
+| exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                                  | (0, `min_be_cpu_cores - 1`] (大于 0 时生效)   | 0      |
+| mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。                 | (0, 1] (必填项)                              | -      |
+| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
+| concurrency_limit          | 该资源组中并发查询数的上限。                                  | 整数 (大于 0 才生效)                           | 0      |
+| big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。         | 整数 (大于 0 才生效)                          | 0      |
+| big_query_scan_rows_limit  | 该资源组的大查询任务在每个 BE 上可以扫描的行数上限。              | 整数 (大于 0 才生效)                          | 0      |
+| big_query_mem_limit        | 该资源组的大查询任务在每个 BE 上可以使用的内存上限。              | 整数 (大于 0 才生效)                          | 0      |
 
+#### CPU 资源相关配置项
 
+##### `cpu_weight`
 
-#### CPU 相关的资源配置
+该资源组在单个 BE 节点上调度的权重。该值指定了该资源组的任务可用的 CPU 时间的相对份额。在 v3.3.5 以前，该配置名称为 `cpu_core_limit`。
 
-- `cpu_weight`：该资源组在一个 BE 节点上调度的权重。
+取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数。
 
-  - 该值指定了该资源组的任务可用的 CPU 时间的相对份额。
+> **说明**
+>
+> 例如，假设设置了三个资源组 rg1、rg2、rg3，`cpu_weight` 分别设置为 `2`、`6`、`8`。如果当前 BE 节点满载，那么资源组 rg1、rg2、rg3 能分配到的 CPU 时间分别为 12.5%、37.5%、50%。如果当前 BE 节点资源非满载，rg1、rg2 有负载，rg3 无负载，那么资源组 rg1、rg2 分配到的 CPU 时间分别为 25% 和 75%。
 
-  - 取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。`cpu_weight`  和 `exclusive_cpu_cores` 有且只能有一个为正数。
+##### `exclusive_cpu_cores`
 
-  - 在 3.3.5 以前，该配置名称为 `cpu_core_limit`。
+该项为资源组的 CPU 硬隔离参数，有如下双重含义：
 
+- **专属**：为该资源组预留 `exclusive_cpu_cores` 个 CPU Core，其余资源组不可以使用，即使这些 CPU 处于空闲状态。
+- **限额**：该资源组只能使用这 `exclusive_cpu_cores` 个 CPU Core。即使其他资源组有空闲的 CPU 资源，该资源组也不能使用。
 
-  > 例如，假设设置了三个资源组 rg1、rg2、rg3，`cpu_weight` 分别设置为 `2`、`6`、`8`。如果当前 BE 节点满载，那么资源组 rg1、rg2、rg3 能分配到的 CPU 时间分别为 12.5%、37.5%、50%。如果当前 BE 节点资源非满载，rg1、rg2 有负载，rg3 无负载，那么资源组 rg1、rg2 分配到的 CPU 时间分别为 25% 和 75%。
+该项取值范围为 (0, `min_be_cpu_cores - 1`]，其中 `min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。只有大于 0 时才生效。`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数。
 
-- `exclusive_cpu_cores`：资源组的 CPU 硬隔离参数。
+- `exclusive_cpu_cores` 大于 0 的资源组称为 Exclusive 资源组，分配给它的 CPU Core 称为 Exclusive Core。其余资源组称为 Shared 资源组，他们运行在非 Exclusive Core 上，称为 Shared Core。
+- 所有资源组的 `exclusive_cpu_cores` 之和不能超过 `min_be_cpu_cores - 1`。之所以最大值为 `min_be_cpu_cores - 1` 而非 `min_be_cpu_cores`，是为了让 Shared Core 至少为 1。
 
-  - 它有如下的两重含义：
-    - **专属**：为该资源组预留 `exclusive_cpu_cores` 个 CPU cores，其余资源组不可以使用，即使这些 CPU 处于空闲状态。
+该项与 `cpu_weight` 的关系：
 
-    - **限额**：该资源组只能使用这 `exclusive_cpu_cores` 个 CPU cores。即使其他资源组有空闲的 CPU 资源，该资源组也不能使用。
-
-  - 取值范围
-    - 一个资源组的 `exclusive_cpu_cores` 的取值范围为 (0, `min_be_cpu_cores - 1`]，其中 `min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。只有大于 0 时才生效。
-    - `exclusive_cpu_cores` 大于 0 的资源组称为 exclusive 资源组，分配给它的 CPU core 称为 exclusive cores；其余资源组称为 shared 资源组，他们运行在非 exclusive cores 上，称为 shared cores。
-    - 所有资源组的 `exclusive_cpu_cores` 之和不能超过 `min_be_cpu_cores - 1`。之所以最大值为 `min_be_cpu_cores - 1` 而非 `min_be_cpu_cores`，是为了让 shared cores 至少能被分配到一个 CPU core。
-
-  - 与 `cpu_weight` 的关系：
-    - `cpu_weight`  和 `exclusive_cpu_cores` 有且仅有一个为正数，即有且仅有一个生效。因为 exclusive 资源组可以在自己完全拥有的为其预留的 `exclusive_cpu_cores` 个 CPU cores 上运行，无须通过 `cpu_weight` 分配到相对份额的 CPU 时间片。
+`cpu_weight`  和 `exclusive_cpu_cores` 有且仅有一个为正数，即有且仅有一个生效。因为 Exclusive 资源组可以在自己完全拥有的为其预留的 `exclusive_cpu_cores` 个 CPU Core 上运行，无须通过 `cpu_weight` 分配到相对份额的 CPU 时间片。
     
-- 此外，be.conf 有一个配置项 `enable_resource_group_cpu_borrowing`  来指定是否允许 shared 资源组借用 exclusive 资源组的 exclusive cores。该配置项的值为 true 时，表示允许借用。默认为 true。
-    - 具体来讲，当开启该功能时，
-      - 在一个 BE 上，当一个 exclusive 资源组没有任务运行时，shared 资源组可以暂时借用该 exclusive 资源组的 exclusive cores。
-      - 在一个 BE 上，当该 exclusive 有任务到来后，shared 资源组不可以再借用该 exclusive 资源组的 exclusive cores，需要尽快让出使用的 exclusive cores。这里可能会有一些调度的延迟和开销，所以如果对隔离性要求极强并且允许浪费一定的 CPU，那么可以选择关闭借用功能。
+此外，您可以使用 BE 配置项 `enable_resource_group_cpu_borrowing` 来指定是否允许 Shared 资源组借用 Exclusive 资源组的 Exclusive Core。将该配置项设置为 `true` 表示允许借用。默认为 `true`。具体来讲，当开启该功能时：
+
+- 在一个 BE 上，当一个 Exclusive 资源组没有任务运行时，Shared 资源组可以暂时借用该 Exclusive 资源组的 Exclusive Core。
+- 在一个 BE 上，当该 Exclusive 有任务到来后，Shared 资源组不可以再借用该 Exclusive 资源组的 Exclusive Core，需要尽快让出使用的 Exclusive Core。这里可能会有一些调度的延迟和开销，所以如果对隔离性要求极强并且允许浪费一定的 CPU，那么可以选择关闭借用功能。
   
-  - 该配置可以运行时动态修改，通过 `update information_schema.be_configs set value = "false" where name= "enable_resource_group_cpu_borrowing"`。
+您可以通过以下命令动态修改该配置：
 
+```SQL
+UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
+```
 
-#### 内存相关的资源配置
+#### 内存资源相关配置项
 
-- `mem_limit`：该资源组在当前 BE 节点可使用于查询的内存（query_pool）占总内存的百分比（%）。取值范围为 (0,1]。
+##### `mem_limit`
 
-  > 说明：query_pool 的查看方式，参见 [内存管理](Memory_management.md)。
+该资源组在当前 BE 节点可使用于查询的内存（query_pool）占总内存的百分比（%）。取值范围为 (0,1]。 有关 `query_pool` 的查看方式，参见 [内存管理](Memory_management.md)。
 
-- `spill_mem_limit_threshold`：该资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)，默认值为 1，即不生效。该参数自 v3.1.7 版本引入。
+##### `spill_mem_limit_threshold`
 
-  - 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过 `query_mem_limit` 的 80% 时触发中间结果落盘。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
-  - 如果开启自动落盘功能且查询命中资源组（包括所有系统内建资源组）后，该查询满足以下任意情况时，都将触发中间结果落盘：
-    - 当前资源组内所有查询使用的内存超过 `当前 BE 节点内存上限 * mem_limit * spill_mem_limit_threshold` 时
-    - 当前查询占用超过 `query_mem_limit` 的 80% 时。
+该资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)，默认值为 1，即不生效。该参数自 v3.1.7 版本引入。
 
-#### 并发查询数量限制
+- 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过 `query_mem_limit` 的 80% 时触发中间结果落盘。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
+- 如果开启自动落盘功能且查询命中资源组（包括所有系统内建资源组）后，该查询满足以下任意情况时，都将触发中间结果落盘：
+  - 当前资源组内所有查询使用的内存超过 `当前 BE 节点内存上限 * mem_limit * spill_mem_limit_threshold` 时
+  - 当前查询占用超过 `query_mem_limit` 的 80% 时。
 
-- `concurrency_limit`：该资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。只有大于 0 时才生效，默认值为 0。
+#### 查询并发相关配置项
 
-#### 大查询相关的资源配置
+##### `concurrency_limit`
 
-在以上资源限制的基础上，您可以通过以下大查询限制进一步对资源组进行如下的配置：
+该资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。只有大于 0 时才生效，默认值为 0。
 
-- `big_query_cpu_second_limit`：大查询任务在每个 BE 上可以使用 CPU 的时间上限，其中的并行任务将累加 CPU 实际使用时间。单位为秒。只有大于 0 时才生效，默认值为 0。
-- `big_query_scan_rows_limit`：大查询任务在每个 BE 上可以扫描的行数上限。只有大于 0 时才生效，默认值为 0。
-- `big_query_mem_limit`：大查询任务在每个 BE 上可以使用的内存上限。单位为 Byte。只有大于 0 时才生效，默认值为 0。
+#### 大查询资源相关配置项
+
+在以上资源限制的基础上，您可以通过以下大查询限制进一步对资源组进行如下的配置。
+
+##### `big_query_cpu_second_limit`
+
+大查询任务在每个 BE 上可以使用 CPU 的时间上限，其中的并行任务将累加 CPU 实际使用时间。单位为秒。只有大于 0 时才生效，默认值为 0。
+
+##### `big_query_scan_rows_limit`
+
+大查询任务在每个 BE 上可以扫描的行数上限。只有大于 0 时才生效，默认值为 0。
+
+##### `big_query_mem_limit`
+
+大查询任务在每个 BE 上可以使用的内存上限。单位为 Byte。只有大于 0 时才生效，默认值为 0。
 
 > **说明**
 >
 > 当资源组中运行的查询超过以上大查询限制时，查询将会终止，并返回错误。您也可以在 FE 节点 **fe.audit.log** 的 `ErrorCode` 列中查看错误信息。
 
-#### type (deprected)
+#### type (自 v3.3.5 起弃用)
 
-在 3.3.5 版本之前，我们支持 `type` 为 short_query 类型的资源组：
-
-> 资源组的类型 `type` 支持 `short_query` 与 `normal`。
->
-> - 默认为 `normal` 资源组，无需通过 `type` 参数指定。
-> - 当 `short_query` 资源组有查询正在运行时，当前 BE 节点会为其预留 `short_query.cpu_core_limit` 的 CPU 资源，即所有 `normal` 资源组的总 CPU 核数使用上限会被硬限制为 BE 节点核数 - `short_query.cpu_core_limit`。
-> - 当 `short_query` 资源组没有查询正在运行时，所有 `normal` 资源组的 CPU 核数没有硬限制。
->
-> > **注意**
-> >
-> > - 您最多只能创建一个 `short_query` 资源组。
-> > - StarRocks 不会硬限制 `short_query` 资源组的 CPU 资源。
-
-目前 `type` 为 short_query 类型的资源组已经被废弃，因为它的功能已经被 `exclusive_cpu_cores` CPU 硬隔离所代替。对于之前创建的 short_query 类型的资源组，在 3.3.5 版本之后，会将其当做 `exclusive_cpu_cores` 值为 `cpu_weight` 的 exclusive 资源组。
+在 v3.3.5 之前，StarRocks 支持设置 `type` 为 `short_query` 类型的资源组。目前，该参数已经被废弃，由 `exclusive_cpu_cores` 所代替。对于已有的该类型的资源组，在集群升级至 v3.3.5 后，系统会将其替换为 `exclusive_cpu_cores` 值等于 `cpu_weight` 的 Exclusive 资源组。
 
 #### 系统定义资源组
 
-每个 StarRocks 示例中有两个系统定义资源组：`default_wg` 和 `default_mv_wg`。可以通过 `ALTER RESOURCE GROUP` 来修改系统定义资源组的配置，但是不能为其定义分类器，也不能删除系统定义资源组。
+每个 StarRocks 示例中有两个系统定义资源组：`default_wg` 和 `default_mv_wg`。您可以通过 `ALTER RESOURCE GROUP` 来修改系统定义资源组的配置，但不能为其定义分类器，也不能删除系统定义资源组。
 
 ##### default_wg
 
-如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的资源配置如下：
+如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的默认资源配置如下：
 
 - `cpu_core_limit`：1 (&le;2.3.7 版本) 或 BE 的 CPU 核数（&gt;2.3.7版本）。
 - `mem_limit`：100%。
@@ -147,7 +145,7 @@ displayed_sidebar: docs
 
 ##### default_mv_wg
 
-如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的资源配置如下：
+如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的默认资源配置如下：
 
 - `cpu_core_limit`：1。
 - `mem_limit`：80%。
