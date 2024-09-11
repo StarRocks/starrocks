@@ -420,12 +420,20 @@ bool FileReader::_filter_group_with_bloom_filter_min_max_conjuncts(const tparque
 bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_group) {
     // runtime_in_filter, the sql-original in_filter and is_null/not_null filter will be in
     // _scanner_ctx->conjunct_ctxs_by_slot
+    auto slot_descs = _scanner_ctx->slot_descs;
+    std::map<SlotId, SlotDescriptor*> id_2_slot;
+    for (auto item : slot_descs) {
+        id_2_slot.emplace(item->id(), item);
+    }
+
     for (auto kv : _scanner_ctx->conjunct_ctxs_by_slot) {
         StatisticsHelper::StatSupportedFilter filter_type;
         for (auto ctx : kv.second) {
             if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
-                const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
-                SlotDescriptor* slot = tuple_desc.get_slot_by_id(kv.first);
+                if (UNLIKELY(id_2_slot.find(kv.first) == id_2_slot.end())) {
+                    continue;
+                }
+                SlotDescriptor* slot = id_2_slot[kv.first];
                 if (UNLIKELY(slot == nullptr)) {
                     // it shouldn't be here, just some defensive code
                     DCHECK(false) << "couldn't find slot id " << kv.first << " in tuple desc";
