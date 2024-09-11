@@ -15,9 +15,16 @@
 package com.starrocks.sql.common;
 
 import com.google.api.client.util.Lists;
+import com.google.api.client.util.Sets;
+import com.google.common.collect.ImmutableList;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * {@code PListCell} means a list partition's multiple values.
@@ -27,6 +34,7 @@ import java.util.Objects;
  */
 public final class PListCell extends PCell implements Comparable<PListCell> {
     // multi values: the order is only associated comparing.
+    @SerializedName(("partitionItems"))
     private final List<List<String>> partitionItems;
 
     public PListCell(List<List<String>> items) {
@@ -34,10 +42,31 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
         this.partitionItems = items;
     }
 
+    // single value with single partition column cell
+    public PListCell(String item) {
+        Objects.requireNonNull(item);
+        this.partitionItems = ImmutableList.of(ImmutableList.of(item));
+    }
+
     public List<List<String>> getPartitionItems() {
         return partitionItems;
     }
 
+    public int getItemSize() {
+        if (partitionItems == null) {
+            return 0;
+        }
+        return partitionItems.size();
+    }
+
+    public Set<PListCell> toSingleValueCells() {
+        if (partitionItems == null) {
+            return Sets.newHashSet();
+        }
+        return partitionItems.stream()
+                .map(item -> new PListCell(ImmutableList.of(item)))
+                .collect(Collectors.toSet());
+    }
     /**
      * Add a list of partition items as the partition values
      * @param items new partition items
@@ -65,11 +94,17 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
     public int compareTo(PListCell o) {
         int len1 = partitionItems.size();
         int len2 = o.partitionItems.size();
-        int ans = Integer.compare(len1, len2);
-        if (ans != 0) {
-            return ans;
-        }
-        for (int i = 0; i < len1; i++) {
+        int len = Math.min(len1, len2);
+        int ans = 0;
+        // compare each partition item by item's value
+        // eg:
+        // partitionItems1: '20240101'
+        // partitionItems2: '20240102', '20240103'
+        // 1. compare '20240101' and '20240102'
+        // 2. then compare lengths of partitionItems1 and partitionItems2
+        // compare each partition item by item's value
+        for (int i = 0; i < len; i++) {
+            // prefer the partition item with greater values
             List<String> atom1 = partitionItems.get(i);
             List<String> atom2 = o.partitionItems.get(i);
             if (atom1.size() != atom2.size()) {
@@ -82,7 +117,8 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
                 }
             }
         }
-        return 0;
+        // compare len if all partition items are equal
+        return Integer.compare(len1, len2);
     }
 
     @Override
@@ -110,5 +146,53 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
         return "PListCell{" +
                 "items=" + partitionItems +
                 '}';
+    }
+
+    /**
+     * Serialize the partition items to string
+     * @return
+     */
+    public String serialize() {
+        return GsonUtils.GSON.toJson(this);
+    }
+
+    public static PListCell deserialize(String str) {
+        if (StringUtils.isEmpty(str)) {
+            return null;
+        }
+        return GsonUtils.GSON.fromJson(str, PListCell.class);
+    }
+
+    public static class BatchPListCellJSONRecord {
+        @SerializedName("data")
+        private final Set<PListCell> pListCells;
+
+        public BatchPListCellJSONRecord(Set<PListCell> pListCells) {
+            this.pListCells = pListCells;
+        }
+
+        public Set<PListCell> getPListCells() {
+            return pListCells;
+        }
+
+        public static BatchPListCellJSONRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, BatchPListCellJSONRecord.class);
+        }
+    }
+
+    public static String serializePListCells(Set<PListCell> partitionValues) {
+        if (partitionValues == null) {
+            return null;
+        }
+        BatchPListCellJSONRecord batch = new BatchPListCellJSONRecord(partitionValues);
+        return GsonUtils.GSON.toJson(batch);
+    }
+
+    public static Set<PListCell> deserializePListCells(String partitionValues) {
+        if (StringUtils.isEmpty(partitionValues)) {
+            return null;
+        }
+        BatchPListCellJSONRecord batch = BatchPListCellJSONRecord.fromJson(partitionValues);
+        return batch.getPListCells();
     }
 }

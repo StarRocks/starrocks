@@ -65,6 +65,9 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("executeOption")
     private ExecuteOption executeOption = new ExecuteOption(true);
 
+    @SerializedName("planBuilderMessage")
+    public Map<String, String> planBuilderMessage = Maps.newHashMap();
+
     public MVTaskRunExtraMessage() {
     }
 
@@ -173,6 +176,11 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public void setProcessStartTime(long processStartTime) {
         this.processStartTime = processStartTime;
+    }
+
+    public void setPlanBuilderMessage(Map<String, String> planBuilderMessage) {
+        this.planBuilderMessage = MvUtils.shrinkToSize(planBuilderMessage,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     @Override
