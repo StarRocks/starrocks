@@ -92,13 +92,7 @@ public:
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
     // Is pk compaction output writer
     bool is_pk_compaction = false;
-<<<<<<< HEAD
-=======
-    // is compaction job
-    bool is_compaction = false;
-
     std::map<string, string>* column_to_expr_value = nullptr;
->>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
 };
 
 } // namespace starrocks

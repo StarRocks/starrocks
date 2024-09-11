@@ -174,15 +174,9 @@ private:
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
     bool _is_incremental_channel{false};
-<<<<<<< HEAD
-=======
-    lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
-    TxnLogCollector _txn_log_collector;
-    std::set<int64_t> _immutable_partition_ids;
-    std::map<string, string> _column_to_expr_value;
->>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
 
     std::set<int64_t> _immutable_partition_ids;
+    std::map<string, string> _column_to_expr_value;
 };
 
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
@@ -561,11 +555,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_immutable_tablet_size(params.immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)
                                               .set_schema_id(schema_id)
-<<<<<<< HEAD
-=======
-                                              .set_partial_update_mode(params.partial_update_mode())
                                               .set_column_to_expr_value(&_column_to_expr_value)
->>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

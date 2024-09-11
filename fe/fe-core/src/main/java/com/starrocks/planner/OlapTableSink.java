@@ -295,23 +295,15 @@ public class OlapTableSink extends DataSink {
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
-<<<<<<< HEAD
-            columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
-=======
             Map<String, String> columnToExprValue = new HashMap<>();
-            columns.addAll(indexMeta
-                    .getSchema()
-                    .stream()
-                    .map(column -> column.isShadowColumn() ? column.getName() : column.getColumnId().getId())
-                    .collect(Collectors.toList()));
->>>>>>> 18ba78e3fb ([Enhancement] Partial update support const expr (#50287))
+            columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
                 columnsDesc.add(tColumn);
                 if (column.getDefaultExpr() != null && column.calculatedDefaultValue() != null) {
-                    columnToExprValue.put(column.getColumnId().getId(), column.calculatedDefaultValue());
+                    columnToExprValue.put(column.getName(), column.calculatedDefaultValue());
                 }
             }
             if (indexMeta.getSortKeyUniqueIds() != null) {
