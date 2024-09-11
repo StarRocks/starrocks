@@ -37,6 +37,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.fs.HdfsUtil;
@@ -44,7 +45,12 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
@@ -65,12 +71,14 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 import java.util.Arrays;
 import java.util.List;
@@ -84,6 +92,8 @@ import java.util.stream.IntStream;
 import static com.starrocks.common.util.UnitTestUtil.DB_NAME;
 import static com.starrocks.common.util.UnitTestUtil.MATERIALIZED_VIEW_NAME;
 import static com.starrocks.common.util.UnitTestUtil.TABLE_NAME;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -106,13 +116,10 @@ public class RestoreJobMaterializedViewTest {
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
-
     private MockBackupHandler backupHandler;
-
     private MockRepositoryMgr repoMgr;
-
     private MvRestoreContext mvRestoreContext;
-
+    static MockedStatic<DynamicPartitionUtil> mockedDynamicPartitionUtil = Mockito.mockStatic(DynamicPartitionUtil.class);
 
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
@@ -144,14 +151,13 @@ public class RestoreJobMaterializedViewTest {
     private SystemInfoService systemInfoService;
     @Mocked
     private NodeSelector nodeSelector;
-
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
-            new BlobStorage("broker", Maps.newHashMap()));
-
+                new BlobStorage("broker", Maps.newHashMap()));
     private BackupMeta backupMeta;
-
     private Object[] arrayIds;
+    private SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+
     private void setUpMocker() {
         MetricRepo.init();
 
@@ -162,19 +168,37 @@ public class RestoreJobMaterializedViewTest {
         arrayIds = new Object[ID_SIZE];
         IntStream.range(0, ID_SIZE).forEach(i -> arrayIds[i] = id.getAndIncrement());
 
+        // mock DynamicPartitionUtil
+        mockedDynamicPartitionUtil
+                .when(() -> DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(anyLong(), any()))
+                .thenAnswer(new Answer<Void>() {
+                    @Override
+                    public Void answer(InvocationOnMock invocation) throws Throwable {
+                        return null;
+                    }
+                });
+
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = sqlParser;
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                minTimes = 0;
-                result = systemInfoService;
+                // GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                // minTimes = 0;
+                // result = systemInfoService;
 
                 globalStateMgr.mayGetDb(anyLong);
                 minTimes = 0;
@@ -247,6 +271,35 @@ public class RestoreJobMaterializedViewTest {
         new MockUp<HdfsUtil>() {
             @Mock
             public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws UserException {
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
+        new MockUp<Analyzer>() {
+            @Mock
+            public void analyze(StatementBase statement, ConnectContext context) {
+            }
+        };
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public void fixRelationship() {
             }
         };
     }
@@ -436,23 +489,14 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
-    @Order(1)
-    public void testMVRestore_TestOneTable1() {
+    public void testMVRestore() {
         RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
         checkJobRun(job);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Ignore
-    public void testMVRestore_TestOneTable2() {
-        RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.TABLE_NAME));
-        checkJobRun(job);
-        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
-    }
-
     @Test
-    @Order(3)
-    public void testMVRestore_TestMVWithBaseTable1() {
+    public void testMVRestoreMVWithBaseTable1() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
         // backup & restore
@@ -461,8 +505,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
-    @Order(4)
-    public void testMVRestore_TestMVWithBaseTable2() {
+    public void testMVRestoreMVWithBaseTable2() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME, TABLE_NAME));
         // backup & restore
@@ -470,8 +513,14 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Ignore
-    public void testMVRestore_TestMVWithBaseTable3() {
+    @Test
+    public void testMVRestoreMVWithBaseTable3() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            }
+        };
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(TABLE_NAME));
         // backup & restore
@@ -484,8 +533,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
-    @Order(6)
-    public void testMVRestore_TestMVWithBaseTable4() {
+    public void testMVRestoreMVWithBaseTable4() {
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
@@ -511,4 +559,3 @@ public class RestoreJobMaterializedViewTest {
         Assert.assertEquals(mv.isActive(), expect);
     }
 }
-
