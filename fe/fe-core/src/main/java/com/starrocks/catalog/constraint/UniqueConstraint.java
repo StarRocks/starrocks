@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.catalog;
+package com.starrocks.catalog.constraint;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -31,12 +33,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// unique constraint is used to guide optimizer rewrite for now,
-// and is not enforced during ingestion.
-// the unique property of data should be guaranteed by user.
-//
-// a table may have multi unique constraints.
-public class UniqueConstraint {
+// Unique constraint is used to guide optimizer rewrite for now, and is not enforced during ingestion.
+// User should guarantee the unique property of data.
+// A table may have multi unique constraints.
+public class UniqueConstraint extends Constraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
     private final List<ColumnId> uniqueColumns;
 
@@ -47,6 +47,7 @@ public class UniqueConstraint {
     private Table referencedTable;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
+        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
@@ -55,6 +56,7 @@ public class UniqueConstraint {
 
     // Used for primaryKey/uniqueKey table to create default uniqueConstraints.
     public UniqueConstraint(Table referencedTable, List<ColumnId> uniqueColumns) {
+        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
         this.referencedTable = referencedTable;
         this.uniqueColumns = uniqueColumns;
     }
@@ -228,5 +230,15 @@ public class UniqueConstraint {
         }
 
         return Pair.create(new TableName(catalogName, dbName, tableName), uniqueConstraintColumns);
+    }
+
+    public void onTableRename(Table newTable, String oldTableName) {
+        LOG.info("UniqueConstraint onTableRename: {} -> {}", oldTableName, newTable.getName());
+        if (this.tableName.equals(oldTableName)) {
+            this.tableName = newTable.getName();
+        } else {
+            LOG.warn("UniqueConstraint onTableRename: old table name not match, old: {}, new: {}",
+                    oldTableName, newTable.getName());
+        }
     }
 }

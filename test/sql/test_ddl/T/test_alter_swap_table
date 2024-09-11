@@ -1,0 +1,76 @@
+-- name: test_alter_swap_table
+create database db_test_alter_swap_table;
+use db_test_alter_swap_table;
+
+CREATE TABLE s1 
+(
+    k1 int not null, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'unique_constraints'='s1.k1');
+
+CREATE TABLE s2 
+(
+    k1 int not null, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'foreign_key_constraints'='s2(k1) REFERENCES s1(k1)');
+
+CREATE TABLE s3 
+(
+    k1 int not null, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');
+
+INSERT INTO s1 values (1, 1, 1), (2, 2, 2);
+INSERT INTO s2 values (1, 1, 1), (2, 2, 2);
+INSERT INTO s3 values (1, 1, 1), (2, 2, 2);
+
+set enable_rbo_table_prune = true;
+set enable_cbo_table_prune = true;
+
+function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
+function: assert_explain_not_contains('select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;', 's1')
+
+select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;
+select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;
+
+ALTER TABLE s2 SWAP WITH s3;
+SHOW CREATE TABLE s2;
+SHOW CREATE TABLE s3;
+
+function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
+function: assert_explain_not_contains('select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;', 's1')
+
+select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;
+select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;
+
+CREATE TABLE s1_new
+(
+    k1 int, k2 int, k3 int
+)
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY RANDOM 
+PROPERTIES("replication_num" = "1", 'unique_constraints'='s1_new.k1');
+
+ALTER TABLE s1 SWAP WITH s1_new;
+SHOW CREATE TABLE s1;
+SHOW CREATE TABLE s1_new;
+SHOW CREATE TABLE s2;
+SHOW CREATE TABLE s3;
+
+function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
+function: assert_explain_not_contains('select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;', 's1')
+
+select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;
+select s3.k1, s3.k2 from s1 join s3 on s1.k1 = s3.k1 order by 1, 2;
+
+DROP TABLE s1;
+SHOW CREATE TABLE s2;
+SHOW CREATE TABLE s3;
+
+DROP DATABASE db_test_alter_swap_table;
