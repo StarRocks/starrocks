@@ -166,7 +166,6 @@ protected:
     bool _valmutable;
     std::string _last_set_val;
     std::string _current_set_val;
-    int _config_value_size = 32;
 };
 
 template <typename T, typename = void>
