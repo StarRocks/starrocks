@@ -691,7 +691,7 @@ jobs:
         run: |
           echo "package=${package}" >> "$GITHUB_ENV"
           if [[ "${be_change}" != "true" && "${fe_change}" != "true" ]]; then
-            oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/${build_type}/inspection/pr/ubuntu/StarRocks-
+            oss_path=oss://${bucket_prefix}-bak-ci-release/${BRANCH}/${build_type}/inspection/pr/ubuntu/StarRocks-
             package=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "tar.gz" | sort -n -r | head -n 1 | awk '{print $NF}')
             echo "package=${package}" >> $GITHUB_ENV
           fi
@@ -799,7 +799,7 @@ jobs:
           
           if [[ "${{ needs.build.outputs.is_self_build }}" == 'true' ]]; then 
             bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-            tar_path="oss://${bucket_prefix}-ci-release/${{github.base_ref}}/Release/pr/${LINUX_DISTRO}/${{needs.build.outputs.build_output_tar}}"
+            tar_path="oss://${bucket_prefix}-bak-ci-release/${{github.base_ref}}/Release/pr/${LINUX_DISTRO}/${{needs.build.outputs.build_output_tar}}"
           else
             tar_path="${{ needs.build.outputs.build_output_tar }}"
           fi
@@ -872,7 +872,7 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          xml_oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
+          xml_oss_path=oss://${bucket_prefix}-bak-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
           ossutil64 --config-file ~/.ossutilconfig rm ${xml_oss_path} -rf
           ossutil64 --config-file ~/.ossutilconfig cp test/ ${xml_oss_path} --include "*.xml" --recursive --force --tagging="type=ci"
 
@@ -989,7 +989,7 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          xml_oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
+          xml_oss_path=oss://${bucket_prefix}-bak-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
           ossutil64 --config-file ~/.ossutilconfig rm ${xml_oss_path} -rf
           ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result ${xml_oss_path} --include "*.xml" --recursive --force --tagging="type=ci"
 
