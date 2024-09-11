@@ -18,6 +18,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_pool.h"
+#include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/schema.h"
 #include "column/struct_column.h"
@@ -554,15 +555,17 @@ bool ChunkPipelineAccumulator::_check_json_schema_equallity(const Chunk* one, co
     for (size_t i = 0; i < one->num_columns(); i++) {
         auto& c1 = one->get_column_by_index(i);
         auto& c2 = two->get_column_by_index(i);
+        const auto* a1 = ColumnHelper::get_data_column(c1.get());
+        const auto* a2 = ColumnHelper::get_data_column(c2.get());
 
-        if (c1->is_json() && c2->is_json()) {
-            auto json1 = down_cast<JsonColumn*>(c1.get());
-            if (!json1->is_equallity_schema(c2.get())) {
+        if (a1->is_json() && a2->is_json()) {
+            auto json1 = down_cast<const JsonColumn*>(a1);
+            if (!json1->is_equallity_schema(a2)) {
                 return false;
             }
-        } else if (c1->is_json() || c2->is_json()) {
+        } else if (a1->is_json() || a2->is_json()) {
             // never hit
-            DCHECK_EQ(c1->is_json(), c2->is_json());
+            DCHECK_EQ(a1->is_json(), a2->is_json());
             return false;
         }
     }
