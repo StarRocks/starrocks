@@ -47,7 +47,6 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;

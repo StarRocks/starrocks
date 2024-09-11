@@ -23,13 +23,9 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
