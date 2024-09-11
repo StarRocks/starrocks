@@ -517,7 +517,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c3, sum(c4) from test_base_part3 where date_format(c3,'%Y%m%d')='20240602' group by c3")
                 .contains("TABLE: partial_mv_14\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: '%Y%m%d') = '20240602', date_format(col$: c3\n" +
+                        "     PREDICATES: col$: c3 = '2024-06-02'\n" +
                         "     partitions=1/5");
         starRocksAssert.dropMaterializedView("partial_mv_14");
     }
