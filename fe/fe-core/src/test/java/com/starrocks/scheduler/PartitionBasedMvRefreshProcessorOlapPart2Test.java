@@ -318,13 +318,8 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                     "refresh deferred manual\n" +
                                     "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                                     "as select k1, k2 from tbl6;");
-<<<<<<< HEAD
-                    String mvName = "mv_refresh_priority";
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
-=======
                     String mvName = "test_task_run";
                     Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
->>>>>>> 4bd744cdeb ([UT] Fix unstable testRefreshPriority (#50932))
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 

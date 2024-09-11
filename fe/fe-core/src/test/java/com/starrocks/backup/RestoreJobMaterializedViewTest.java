@@ -45,6 +45,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.StatementBase;
@@ -120,7 +121,6 @@ public class RestoreJobMaterializedViewTest {
     private MvRestoreContext mvRestoreContext;
     static MockedStatic<DynamicPartitionUtil> mockedDynamicPartitionUtil = Mockito.mockStatic(DynamicPartitionUtil.class);
 
-
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
         public MockBackupHandler(GlobalStateMgr globalStateMgr) {
@@ -153,19 +153,11 @@ public class RestoreJobMaterializedViewTest {
     private NodeSelector nodeSelector;
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
-<<<<<<< HEAD
-            new BlobStorage("broker", Maps.newHashMap()));
-
-=======
                 new BlobStorage("broker", Maps.newHashMap()));
->>>>>>> 4bd744cdeb ([UT] Fix unstable testRefreshPriority (#50932))
     private BackupMeta backupMeta;
     private Object[] arrayIds;
-<<<<<<< HEAD
-=======
     private SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
 
->>>>>>> 4bd744cdeb ([UT] Fix unstable testRefreshPriority (#50932))
     private void setUpMocker() {
         MetricRepo.init();
 
@@ -188,28 +180,25 @@ public class RestoreJobMaterializedViewTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
-<<<<<<< HEAD
-=======
                 globalStateMgr.getSqlParser();
                 minTimes = 0;
                 result = sqlParser;
 
-                globalStateMgr.getLocalMetastore().getTable(UnitTestUtil.DB_NAME, MATERIALIZED_VIEW_NAME);
-                minTimes = 0;
-                result = db.getTable(MATERIALIZED_VIEW_NAME);
-
->>>>>>> 4bd744cdeb ([UT] Fix unstable testRefreshPriority (#50932))
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                minTimes = 0;
-                result = systemInfoService;
+                // GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                // minTimes = 0;
+                // result = systemInfoService;
 
                 globalStateMgr.mayGetDb(anyLong);
                 minTimes = 0;
@@ -502,17 +491,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     public void testMVRestore() {
         RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
-<<<<<<< HEAD
-        checkJobRun(job);
-        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
-    }
-
-    @Ignore
-    public void testMVRestore_TestOneTable2() {
-        RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.TABLE_NAME));
-=======
-
->>>>>>> 4bd744cdeb ([UT] Fix unstable testRefreshPriority (#50932))
         checkJobRun(job);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
