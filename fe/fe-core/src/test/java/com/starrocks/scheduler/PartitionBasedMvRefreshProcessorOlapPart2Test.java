@@ -24,6 +24,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -315,13 +316,13 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                 ),
                 () -> {
                     starRocksAssert
-                            .withMaterializedView("create materialized view mv_refresh_priority\n" +
+                            .withMaterializedView("create materialized view test_task_run \n" +
                                     "partition by date_trunc('month',k1) \n" +
                                     "distributed by hash(k2) buckets 10\n" +
                                     "refresh deferred manual\n" +
                                     "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                                     "as select k1, k2 from tbl6;");
-                    String mvName = "mv_refresh_priority";
+                    String mvName = "test_task_run";
                     Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -358,7 +359,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
                     }
-                    starRocksAssert.dropMaterializedView("mv_refresh_priority");
+                    starRocksAssert.dropMaterializedView("test_task_run");
                 }
         );
     }
@@ -402,12 +403,16 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                     initAndExecuteTaskRun(taskRun);
-
-                    TaskRun run = taskRunScheduler.getRunnableTaskRun(taskId);
-                    Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), run.getStatus().getPriority());
-                    while (taskRunScheduler.getRunningTaskCount() > 0) {
+                    TGetTasksParams params = new TGetTasksParams();
+                    params.setTask_name(task.getName());
+                    List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
+                    while (statuses.size() != 1) {
+                        statuses = tm.getMatchedTaskRunStatus(params);
                         Thread.sleep(100);
                     }
+                    Assert.assertEquals(1, statuses.size());
+                    TaskRunStatus status = statuses.get(0);
+                    Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), status.getPriority());
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
