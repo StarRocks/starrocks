@@ -180,6 +180,10 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
                 }
                 tmp += "))";
                 conjuncts.emplace_back(tmp);
+            } else {
+                // there is in predicate, but no value in it
+                // so there is no row from mysql node.
+                conjuncts.emplace_back("(0 = 1)");
             }
         }
 
