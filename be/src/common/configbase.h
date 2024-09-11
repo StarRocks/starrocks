@@ -119,12 +119,6 @@ public:
     explicit Field(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
             : _type(type), _name(name), _storage(storage), _defval(defval), _valmutable(valmutable) {
         _s_field_map.insert(std::make_pair(std::string(_name), this));
-        if (strlen(defval) + 1 > _config_value_size) {
-            _config_value_size = strlen(defval) + 1;
-        }
-        _last_set_val = new char[_config_value_size];
-        _current_set_val = new char[_config_value_size];
-        strcpy(_current_set_val, defval);
     }
 
     virtual ~Field() = default;
@@ -170,8 +164,8 @@ protected:
     void* _storage;
     const char* _defval;
     bool _valmutable;
-    char* _last_set_val;
-    char* _current_set_val;
+    std::string _last_set_val;
+    std::string _current_set_val;
     int _config_value_size = 32;
 };
 

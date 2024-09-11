@@ -191,34 +191,19 @@ bool Field::set_value(std::string value) {
     StripWhiteSpace(&value);
     bool flag = parse_value(value);
     if (flag) {
-        if (value.length() + 1 > _config_value_size) {
-            delete[] _current_set_val;
-            _config_value_size = value.length() + 1;
-            _current_set_val = new char[_config_value_size];
-        }
-        strcpy(_current_set_val, value.c_str());
+        _current_set_val = value;
     }
     return flag;
 }
 
 void Field::set_last_update_value() {
-    if (strlen(_current_set_val) + 1 > _config_value_size) {
-        delete[] _last_set_val;
-        _config_value_size = strlen(_current_set_val) + 1;
-        _last_set_val = new char[_config_value_size];
-    }
-
-    strcpy(_last_set_val, _current_set_val);
+    _last_set_val = _current_set_val;
 }
 
 bool Field::rollback_last_value() {
-    std::string last_set_value = _last_set_val;
-    bool flag = parse_value(last_set_value);
+    bool flag = parse_value(_last_set_val);
     if (flag) {
-        delete[] _current_set_val;
-        _config_value_size = strlen(last_set_value.c_str()) + 1;
-        _current_set_val = new char[_config_value_size];
-        strcpy(_current_set_val, _last_set_val);
+        _current_set_val = _last_set_val;
     }
     return flag;
 }
