@@ -135,10 +135,10 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         options.use_adaptor = _enable_cache_io_adaptor;
         SCOPED_RAW_TIMER(&read_cache_ns);
         if (_enable_block_buffer) {
-            res = _cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
+            res = _cache->read(_cache_key, block_offset, load_size, &block.buffer, &options);
             read_size = load_size;
         } else {
-            StatusOr<size_t> r = _cache->read_buffer(_cache_key, offset, size, out, &options);
+            StatusOr<size_t> r = _cache->read(_cache_key, offset, size, out, &options);
             res = r.status();
             read_size = size;
         }
@@ -252,7 +252,7 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
             options.callback = cb;
             options.allow_zero_copy = true;
         }
-        Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
+        Status r = _cache->write(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
         if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += write_size;
@@ -441,7 +441,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
             options.callback = cb;
             options.allow_zero_copy = true;
         }
-        Status r = _cache->write_buffer(_cache_key, off, size, buf, &options);
+        Status r = _cache->write(_cache_key, off, size, buf, &options);
         if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += size;

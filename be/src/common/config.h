@@ -282,7 +282,6 @@ CONF_mBool(enable_bitmap_index_memory_page_cache, "false");
 CONF_mBool(enable_zonemap_index_memory_page_cache, "false");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "false");
-CONF_mBool(storage_page_cache_based_on_datacache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "true");
 
@@ -1164,6 +1163,8 @@ CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
 // cache quota will be reset to zero to avoid overly frequent population and eviction.
 // Default: 100G
 CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
+
+CONF_mBool(construct_object_cache_based_on_datacache, "false");
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with

@@ -94,7 +94,9 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
                 // Clear the residual datacache files
                 std::filesystem::path sp(root_path.path);
                 auto old_path = sp.parent_path() / "datacache";
-                clean_residual_datacache(old_path.string());
+                if (std::filesystem::exists(old_path)) {
+                    clean_residual_datacache(old_path.string());
+                }
             });
             config::datacache_disk_path = JoinStrings(datacache_paths, ";");
         }
@@ -136,7 +138,7 @@ Status init_object_cache(GlobalEnv* global_env) {
     if (object_cache->initialized()) {
         return Status::OK();
     }
-    if (config::storage_page_cache_based_on_datacache) {
+    if (config::construct_object_cache_based_on_datacache) {
         BlockCache* block_cache = BlockCache::instance();
         return object_cache->init(block_cache->starcache_instance());
     } else {
