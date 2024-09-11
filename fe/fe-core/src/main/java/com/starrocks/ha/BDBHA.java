@@ -50,7 +50,6 @@ import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationGroup;
 import com.sleepycat.je.rep.ReplicationMutableConfig;
 import com.sleepycat.je.rep.ReplicationNode;
-import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.CloseSafeDatabase;
@@ -160,8 +159,8 @@ public class BDBHA implements HAProtocol {
             for (ReplicationNode replicationNode : replicationGroup.getSecondaryNodes()) {
                 ret.add(replicationNode.getSocketAddress());
             }
-        } catch (UnknownMasterException e) {
-            LOG.warn("Catch UnknownMasterException when calling getObserverNodes.", e);
+        } catch (Throwable t) {
+            LOG.warn("Catch Exception when calling getObserverNodes.", t);
             return Lists.newArrayList();
         }
         return ret;
@@ -185,8 +184,8 @@ public class BDBHA implements HAProtocol {
                     }
                 }
             }
-        } catch (UnknownMasterException e) {
-            LOG.warn("Catch UnknownMasterException when calling getElectableNodes.", e);
+        } catch (Throwable t) {
+            LOG.warn("catch exception when calling getElectableNodes.", t);
             return Lists.newArrayList();
         }
         return ret;

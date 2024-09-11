@@ -664,7 +664,7 @@ public class NodeMgr {
      * frontend log is deleted because of checkpoint.
      */
     public void checkCurrentNodeExist() {
-        if (Config.bdbje_reset_election_group.equals("true")) {
+        if (Config.bdbje_reset_election_group) {
             return;
         }
 
@@ -756,7 +756,7 @@ public class NodeMgr {
             }
             if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
                 BDBHA bdbha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-                if (role == FrontendNodeType.FOLLOWER) {
+                if (role == FrontendNodeType.FOLLOWER && !Config.bdbje_reset_election_group) {
                     bdbha.addUnstableNode(host, getFollowerCnt());
                 }
 
@@ -765,7 +765,11 @@ public class NodeMgr {
                 // So we should remove those nodes before joining the group,
                 // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
                 // xxx. It conflicts with the socket already used by the member: xxxx)
-                bdbha.removeNodeIfExist(host, editLogPort, nodeName);
+                try {
+                    bdbha.removeNodeIfExist(host, editLogPort, nodeName);
+                } catch (Throwable t) {
+                    LOG.warn("remove duplicate node from BDB failed", t);
+                }
             }
 
             GlobalStateMgr.getCurrentState().getEditLog().logAddFrontend(fe);
