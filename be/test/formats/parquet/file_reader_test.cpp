@@ -3248,7 +3248,7 @@ TEST_F(FileReaderTest, TestMapKeyIsStruct) {
 TEST_F(FileReaderTest, TestIsNotNullStatistics) {
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(_file1_path), 100000);
+                                                    std::filesystem::file_size(_file1_path));
     // init
     auto* ctx = _create_file1_base_context();
     std::vector<TExpr> t_conjuncts;
@@ -3264,7 +3264,7 @@ TEST_F(FileReaderTest, TestIsNullStatistics) {
     const std::string small_page_file = "./be/test/formats/parquet/test_data/read_range_test.parquet";
     auto file = _create_file(small_page_file);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 0);
+                                                    std::filesystem::file_size(small_page_file));
 
     auto ctx = _create_file_random_read_context(small_page_file);
     std::vector<TExpr> t_conjuncts;
@@ -3281,7 +3281,7 @@ TEST_F(FileReaderTest, TestInFilterStatitics) {
     const std::string multi_rg_file = "./be/test/formats/parquet/test_data/page_index_big_page.parquet";
     auto file = _create_file(multi_rg_file);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(multi_rg_file), 0);
+                                                    std::filesystem::file_size(multi_rg_file));
 
     auto ctx = _create_file_random_read_context(multi_rg_file);
     // min value and max value in this file, so it will be in the first and last row group
