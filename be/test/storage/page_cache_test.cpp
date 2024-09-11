@@ -59,7 +59,7 @@ public:
         }
 #endif
         auto obj_cache = std::make_shared<ObjectCache>();
-        (void)obj_cache->init(options).ok();
+        (void)obj_cache->init(options);
         return obj_cache;
     }  
 
@@ -78,9 +78,9 @@ TEST_P(StoragePageCacheTest, normal) {
     StoragePageCache::CacheKey key("abc", 0);
     StoragePageCache::CacheKey memory_key("mem", 0);
 
+    /*
     // put too many page to eliminate first page
-    for (int i = 0; i < 3 * kNumShards; ++i) {
-    //for (int i = 0; i < 1; ++i) {
+    for (int i = 0; i < 10 * kNumShards; ++i) {
         StoragePageCache::CacheKey key("bcd", i);
         PageCacheHandle handle;
         Slice data(new char[1024], 1024);
@@ -89,8 +89,7 @@ TEST_P(StoragePageCacheTest, normal) {
 
     obj_cache->shutdown();
     return;
-
-
+    */
 
     {
         // insert normal page

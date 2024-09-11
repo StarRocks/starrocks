@@ -35,6 +35,8 @@ public:
     virtual Status remove(const std::string& key) = 0;
 
     virtual void release(ObjectCacheHandlePtr handle) = 0;
+    
+    virtual const void* value(ObjectCacheHandlePtr handle) = 0;
 
     virtual Slice value_slice(ObjectCacheHandlePtr handle) = 0;
 

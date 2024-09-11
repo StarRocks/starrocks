@@ -133,7 +133,7 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
 
 Status init_object_cache(GlobalEnv* global_env) {
     ObjectCache* object_cache = ObjectCache::instance();
-    if (object_cache->is_initialized()) {
+    if (object_cache->initialized()) {
         return Status::OK();
     }
     if (config::storage_page_cache_based_on_datacache) {

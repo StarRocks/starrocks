@@ -73,6 +73,11 @@ void LRUCacheModule::release(ObjectCacheHandlePtr handle) {
     _cache->release(lru_handle);
 }
 
+const void* LRUCacheModule::value(ObjectCacheHandlePtr handle) {
+    auto lru_handle = reinterpret_cast<Cache::Handle*>(handle);
+    return _cache->value(lru_handle);
+}
+
 Slice LRUCacheModule::value_slice(ObjectCacheHandlePtr handle) {
     auto lru_handle = reinterpret_cast<Cache::Handle*>(handle);
     return _cache->value_slice(lru_handle);

@@ -96,6 +96,11 @@ void StarCacheModule::release(ObjectCacheHandlePtr handle) {
     delete obj_hdl;
 }
 
+const void* StarCacheModule::value(ObjectCacheHandlePtr handle) {
+    auto obj_hdl = reinterpret_cast<starcache::ObjectHandle*>(handle);
+    return obj_hdl->ptr();
+}
+
 Slice StarCacheModule::value_slice(ObjectCacheHandlePtr handle) {
     auto obj_hdl = reinterpret_cast<starcache::ObjectHandle*>(handle);
     Slice slice((char*)obj_hdl->ptr(), obj_hdl->size());

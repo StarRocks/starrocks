@@ -62,6 +62,10 @@ public:
     // The handle must have not been released yet.
     void release(ObjectCacheHandlePtr handle);
 
+    // Return the value in the given handle returned by a previous insert() or lookup().
+    // The handle must have not been released yet.
+    const void* value(ObjectCacheHandlePtr handle);
+
     // Return the value in Slice format encapsulated in the given handle returned by a previous insert() or lookup().
     // The handle must have not been released yet.
     Slice value_slice(ObjectCacheHandlePtr handle);
@@ -94,9 +98,9 @@ public:
     // Shutdown the cache instance to save some state meta.
     Status shutdown();
 
-    bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
+    bool initialized() const { return _initialized.load(std::memory_order_relaxed); }
 
-    bool available() const { return is_initialized() && capacity() > 0; }
+    bool available() const { return initialized() && capacity() > 0; }
 
 private:
 #ifndef BE_TEST

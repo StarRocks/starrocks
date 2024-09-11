@@ -27,8 +27,7 @@
 #include <utility>
 #include <vector>
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/kv_cache.h"
+#include "cache/object_cache/object_cache.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -150,8 +149,8 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
 #ifdef WITH_STARCACHE
     // Only support file metacache in starcache engine
-    if (ctx->use_file_metacache && config::datacache_enable) {
-        _cache = BlockCache::instance();
+    if (ctx->use_file_metacache && ObjectCache::instance()->available()) {
+        _cache = ObjectCache::instance();
     }
 #endif
     RETURN_IF_ERROR(_get_footer());
@@ -260,15 +259,16 @@ Status FileReader::_get_footer() {
         return _parse_footer(&_file_metadata, &file_metadata_size);
     }
 
-    BlockCache* cache = _cache;
-    DataCacheHandle cache_handle;
+    ObjectCacheHandle* cache_handle = nullptr;
     std::string metacache_key = _build_metacache_key();
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
-        Status st = cache->read_object(metacache_key, &cache_handle);
+
+        Status st = _cache->lookup(metacache_key, &cache_handle, nullptr);
         if (st.ok()) {
-            _file_metadata = *(static_cast<const FileMetaDataPtr*>(cache_handle.ptr()));
+            _file_metadata = *(static_cast<const FileMetaDataPtr*>(_cache->value(cache_handle)));
             _scanner_ctx->stats->footer_cache_read_count += 1;
+            _cache->release(cache_handle);
             return st;
         }
     }
@@ -280,19 +280,21 @@ Status FileReader::_get_footer() {
         // so we have to new a object to hold this shared ptr.
         FileMetaDataPtr* capture = new FileMetaDataPtr(_file_metadata);
         Status st = Status::InternalError("write footer cache failed");
-        DeferOp op([&st, this, capture, file_metadata_size]() {
+        DeferOp op([&st, this, capture, file_metadata_size, &cache_handle]() {
             if (st.ok()) {
                 _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
                 _scanner_ctx->stats->footer_cache_write_count += 1;
+                _cache->release(cache_handle);
             } else {
                 _scanner_ctx->stats->footer_cache_write_fail_count += 1;
                 delete capture;
             }
         });
-        auto deleter = [capture]() { delete capture; };
-        WriteCacheOptions options;
+        auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (FileMetaDataPtr*)value; };
+        ObjectCacheWriteOptions options;
         options.evict_probability = _datacache_options.datacache_evict_probability;
-        st = cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle, &options);
+        st = _cache->insert(metacache_key, capture, file_metadata_size, file_metadata_size, deleter, &cache_handle,
+                            &options);
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
     }

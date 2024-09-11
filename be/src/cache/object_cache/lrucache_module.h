@@ -39,6 +39,8 @@ public:
 
     void release(ObjectCacheHandlePtr handle) override;
 
+    const void* value(ObjectCacheHandlePtr handle) override;
+
     Slice value_slice(ObjectCacheHandlePtr handle) override;
 
     Status adjust_capacity(int64_t delta, size_t min_capacity) override;

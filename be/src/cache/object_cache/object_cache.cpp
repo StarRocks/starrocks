@@ -99,6 +99,10 @@ void ObjectCache::release(ObjectCacheHandlePtr handle) {
     return _cache_module->release(handle);
 }
 
+const void* ObjectCache::value(ObjectCacheHandlePtr handle) {
+    return _cache_module->value(handle);
+}
+
 Slice ObjectCache::value_slice(ObjectCacheHandlePtr handle) {
     return _cache_module->value_slice(handle);
 }

@@ -20,7 +20,6 @@
 #include <string>
 #include <vector>
 
-#include "cache/block_cache/block_cache.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -50,6 +49,8 @@ namespace parquet {
 struct ParquetField;
 } // namespace parquet
 struct TypeDescriptor;
+
+class ObjectCache;
 
 } // namespace starrocks
 
@@ -147,7 +148,7 @@ private:
     size_t _scan_row_count = 0;
     bool _no_materialized_column_scan = false;
 
-    BlockCache* _cache = nullptr;
+    ObjectCache* _cache = nullptr;
     FileMetaDataPtr _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped
