@@ -1011,8 +1011,8 @@ public class AlterTest {
         createTable(s2);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
-        String replaceStmt = "ALTER TABLE test.s1 SWAP WITH test.s2";
-        alterTableWithNewParser(replaceStmt, true);
+        String replaceStmt = "ALTER TABLE s1 SWAP WITH s2";
+        alterTableWithNewParser(replaceStmt, false);
 
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
@@ -1058,8 +1058,8 @@ public class AlterTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         // swap child tables
-        String replaceStmt = "ALTER TABLE test.s2 SWAP WITH test.s3";
-        alterTableWithNewParser(replaceStmt, true);
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s3";
+        alterTableWithNewParser(replaceStmt, false);
 
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
@@ -1133,8 +1133,8 @@ public class AlterTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         // swap parent tables
-        String replaceStmt = "ALTER TABLE test.s2 SWAP WITH test.s1";
-        alterTableWithNewParser(replaceStmt, true);
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s1";
+        alterTableWithNewParser(replaceStmt, false);
 
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
@@ -1157,13 +1157,13 @@ public class AlterTest {
         BaseTableInfo parentTableInfo = fk30.getParentTableInfo();
         Assert.assertTrue(parentTableInfo != null);
         Assert.assertEquals("s1", parentTableInfo.getTableName());
-        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+        Assert.assertEquals(tbl2.getId(), parentTableInfo.getTableId());
 
         // test global constraint manager
         GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
         Assert.assertTrue(cm != null);
 
-        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
+        Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl2);
         Assert.assertTrue(tableWithFKConstraintSet != null);
         Assert.assertTrue(tableWithFKConstraintSet.size() == 1);
         Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
