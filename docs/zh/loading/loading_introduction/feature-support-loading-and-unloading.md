@@ -31,18 +31,18 @@ sidebar_label: "能力边界"
         <td>本地文件系统、应用及 Connector</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td>/</td>
-        <td>/</td>
-        <td colspan="3">/</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td colspan="3">待支持</td>
     </tr>
     <tr>
         <td>INSERT from FILES</td>
         <td rowspan="2">HDFS, S3, OSS, Azure, GCS</td>
         <td>Yes (v3.3+)</td>
-        <td>/</td>
+        <td>待支持</td>
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="3">/</td>
+        <td colspan="3">待支持</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -50,45 +50,45 @@ sidebar_label: "能力边界"
         <td>Yes (v3.2.3+)</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">/</td>
+        <td colspan="3">待支持</td>
     </tr>
     <tr>
         <td>Routine Load</td>
         <td>Kafka</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
         <td>Yes (v3.0+) [1]</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>Spark Load</td>
         <td></td>
         <td>Yes</td>
-        <td>/</td>
+        <td>待支持</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">/</td>
+        <td colspan="3">待支持</td>
     </tr>
     <tr>
         <td>Connectors</td>
         <td>Flink, Spark</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td>/</td>
-        <td>/</td>
-        <td colspan="3">/</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td colspan="3">待支持</td>
     </tr>
     <tr>
         <td>Kafka Connector [2]</td>
         <td>Kafka</td>
         <td colspan="2">Yes (v3.0+)</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
         <td colspan="2">Yes (v3.0+)</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>PIPE [4]</td>
@@ -121,13 +121,13 @@ sidebar_label: "能力边界"
         <td>Debezium</td>
         <td>将在 v3.4 版本中支持</td>
         <td>将在 v3.4 版本中支持</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
         <td>Yes (v3.0+) [1]</td>
     </tr>
     <tr>
         <td>Canal</td>
-        <td colspan="5" rowspan="2">/</td>
+        <td colspan="5" rowspan="2">待支持</td>
     </tr>
     <tr>
         <td>Maxwell</td>
@@ -158,10 +158,10 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>INSERT INTO FILES</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>HDFS, S3, OSS, Azure, GCS</td>
         <td>Yes (v3.3+)</td>
-        <td>/</td>
+        <td>待支持</td>
         <td>Yes (v3.2+)</td>
         <td>Yes (v3.3+)</td>
     </tr>
@@ -170,35 +170,35 @@ sidebar_label: "能力边界"
         <td>Hive</td>
         <td>HDFS, S3, OSS, Azure, GCS</td>
         <td>Yes (v3.3+)</td>
-        <td>/</td>
+        <td>待支持</td>
         <td>Yes (v3.2+)</td>
         <td>Yes (v3.3+)</td>
     </tr>
     <tr>
         <td>Iceberg</td>
         <td>HDFS, S3, OSS, Azure, GCS</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
         <td>Yes (v3.2+)</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>Hudi/Delta</td>
         <td></td>
-        <td colspan="4">/</td>
+        <td colspan="4">待支持</td>
     </tr>
     <tr>
         <td>EXPORT</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>HDFS, S3, OSS, Azure, GCS</td>
         <td>Yes [1]</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>PIPE</td>
-        <td colspan="6">/ [2]</td>
+        <td colspan="6">待支持 [2]</td>
     </tr>
 </table>
 
@@ -239,21 +239,21 @@ sidebar_label: "能力边界"
         <td>Yes</td>
         <td>Yes [2] (v3.1+)</td>
         <td>Yes [3] (v2.2+)</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>enclose</td>
         <td rowspan="4">Yes (v3.0+)</td>
         <td rowspan="4">Yes (v3.0+)</td>
         <td rowspan="2">Yes (v3.0+)</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">待支持</td>
     </tr>
     <tr>
         <td>escape</td>
     </tr>
     <tr>
         <td>skip_header</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>trim_space</td>
@@ -263,10 +263,10 @@ sidebar_label: "能力边界"
         <td rowspan="4">JSON</td>
         <td>jsonpaths</td>
         <td rowspan="4">Yes</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">待支持</td>
         <td rowspan="4">Yes (v3.2.3+)</td>
         <td rowspan="3">Yes</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">待支持</td>
     </tr>
     <tr>
         <td>strip_outer_array</td>
@@ -276,7 +276,7 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>ignore_json_size</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
 </table>
 
@@ -349,17 +349,17 @@ sidebar_label: "能力边界"
         </td>
         <td>Yes [1]</td>
         <td>Yes [2]</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>JSON</td>
         <td>Yes (v3.2.7+) [3]</td>
-        <td>/</td>
-        <td>-</td>
-        <td>/</td>
-        <td>-</td>
+        <td>待支持</td>
+        <td>N/A</td>
+        <td>待支持</td>
+        <td>N/A</td>
     </tr>
     <tr>
         <td>Parquet</td>
@@ -372,9 +372,9 @@ sidebar_label: "能力边界"
                 <li>zstd</li>
             </ul>
         </td>
-        <td rowspan="2">-</td>
+        <td rowspan="2">N/A</td>
         <td rowspan="2" colspan="2">Yes [4]</td>
-        <td rowspan="2">/</td>
+        <td rowspan="2">待支持</td>
         <td rowspan="2">Yes [4]</td>
     </tr>
     <tr>
@@ -423,20 +423,20 @@ sidebar_label: "能力边界"
                 <li>zstd</li>
             </ul>
         </td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>JSON</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
     </tr>
     <tr>
         <td>Parquet</td>
@@ -451,8 +451,8 @@ sidebar_label: "能力边界"
         <td rowspan="2">Yes (v3.2+)</td>
         <td rowspan="2">Yes (v3.2+)</td>
         <td rowspan="2">Yes (v3.2+)</td>
-        <td rowspan="2">/</td>
-        <td rowspan="2">-</td>
+        <td rowspan="2">待支持</td>
+        <td rowspan="2">N/A</td>
     </tr>
     <tr>
         <td>ORC</td>
@@ -477,7 +477,7 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>单 Kerberos</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes (v3.1+)</td>
         <td>Yes [1] (versions earlier than v2.5)</td>
         <td>Yes [2] (v3.1.4+)</td>
@@ -485,17 +485,17 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>Kerberos 自动续签</td>
-        <td>-</td>
-        <td rowspan="2" colspan="3">/</td>
+        <td>N/A</td>
+        <td rowspan="2" colspan="3">待支持</td>
         <td rowspan="2">Yes (v3.1.10+/v3.2.1+)</td>
     </tr>
     <tr>
         <td>单 KDC 多 Kerberos</td>
-        <td>-</td>
+        <td>N/A</td>
     </tr>
     <tr>
         <td>用户名密码认证 (Access Key pair, IAM Role)</td>
-        <td>-</td>
+        <td>N/A</td>
         <td colspan="2">Yes (HDFS 和兼容 S3 的对象存储)</td>
         <td>Yes [3]</td>
         <td>Yes</td>
@@ -516,7 +516,7 @@ sidebar_label: "能力边界"
 
 |             | INSERT INTO FILES  | EXPORT  |
 | :---------- | :----------------: | :-----: |
-| 单 Kerberos | /                 | /      |
+| 单 Kerberos | 待支持              | 待支持   |
 
 ## 导入相关其他参数或功能
 
@@ -539,27 +539,27 @@ sidebar_label: "能力边界"
         <td>Yes (v3.0+)</td>
         <td colspan="2">Yes [1] (v3.3+)</td>
         <td>Yes (v3.0+)</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes (v3.0+)</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>partial_update_mode</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="2">/</td>
+        <td colspan="2">待支持</td>
         <td>Yes (v3.1+)</td>
-        <td>-</td>
-        <td>/</td>
-        <td>/</td>
+        <td>N/A</td>
+        <td>待支持</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>COLUMNS FROM PATH</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes (v3.2+)</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes</td>
-        <td>-</td>
-        <td>-</td>
+        <td>N/A</td>
+        <td>N/A</td>
         <td>Yes</td>
     </tr>
     <tr>
@@ -568,9 +568,9 @@ sidebar_label: "能力边界"
         <td>Yes [4]</td>
         <td>Yes [4]</td>
         <td>Yes [4]</td>
-        <td>/</td>
+        <td>待支持</td>
         <td>Yes [4]</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>时间精度 - Microsecond</td>
@@ -578,7 +578,7 @@ sidebar_label: "能力边界"
         <td>Yes</td>
         <td>Yes</td>
         <td>Yes (v3.1.11+/v3.2.6+)</td>
-        <td>/</td>
+        <td>待支持</td>
         <td>Yes</td>
         <td>Yes</td>
     </tr>
@@ -607,7 +607,7 @@ sidebar_label: "能力边界"
     <tr>
         <td>target_max_file_size</td>
         <td rowspan="3">Yes (v3.2+)</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">待支持</td>
     </tr>
     <tr>
         <td>single</td>
@@ -617,12 +617,12 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>Session variable time_zone</td>
-        <td>/</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>Time accuracy - Microsecond</td>
-        <td>/</td>
-        <td>/</td>
+        <td>待支持</td>
+        <td>待支持</td>
     </tr>
 </table>
 
