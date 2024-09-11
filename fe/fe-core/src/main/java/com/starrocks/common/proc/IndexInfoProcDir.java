@@ -77,7 +77,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
@@ -116,7 +116,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -138,7 +138,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
@@ -158,7 +158,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
             }
             return node;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

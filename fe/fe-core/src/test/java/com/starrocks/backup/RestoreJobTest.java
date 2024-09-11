@@ -179,7 +179,11 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.getAndIncrement();
+                result = 50000;
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = 50001;
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -371,7 +375,7 @@ public class RestoreJobTest {
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.getAndIncrement();
+                result = id.incrementAndGet();
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;

@@ -269,7 +269,7 @@ public class ColocateMetaService {
                 return;
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                 if (table == null) {
@@ -286,7 +286,7 @@ public class ColocateMetaService {
                 response.appendContent("update succeed");
                 sendResult(request, response);
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
     }

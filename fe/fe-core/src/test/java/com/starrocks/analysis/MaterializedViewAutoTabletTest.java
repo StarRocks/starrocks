@@ -57,7 +57,7 @@ public class MaterializedViewAutoTabletTest {
         int bucketNum1 = 0;
         int bucketNum2 = 0;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
             if (table == null) {
@@ -75,7 +75,7 @@ public class MaterializedViewAutoTabletTest {
                 bucketNum2 += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         Assert.assertEquals(bucketNum1, 6);
         Assert.assertEquals(bucketNum2, 6);

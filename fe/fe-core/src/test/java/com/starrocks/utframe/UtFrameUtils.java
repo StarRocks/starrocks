@@ -1026,7 +1026,7 @@ public class UtFrameUtils {
         }
         for (Database db : dbs.values()) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -1037,7 +1037,7 @@ public class UtFrameUtils {
         }
         for (Database db : dbs.values()) {
             Locker locker = new Locker();
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

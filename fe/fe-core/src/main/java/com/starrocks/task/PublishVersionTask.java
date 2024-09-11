@@ -204,7 +204,7 @@ public class PublishVersionTask extends AgentTask {
             LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             // TODO: persistent replica version
             for (int i = 0; i < tabletVersions.size(); i++) {
@@ -216,7 +216,7 @@ public class PublishVersionTask extends AgentTask {
                 replica.updateVersion(tabletVersion.version);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
             if (span != null) {
                 span.addEvent("update_replica_version_finish");
             }

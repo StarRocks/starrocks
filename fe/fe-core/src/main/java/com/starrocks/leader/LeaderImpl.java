@@ -480,7 +480,7 @@ public class LeaderImpl {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
@@ -491,7 +491,7 @@ public class LeaderImpl {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         } finally {
@@ -542,7 +542,7 @@ public class LeaderImpl {
         LOG.debug("push report state: {}", pushState.name());
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (olapTable == null) {
@@ -619,7 +619,7 @@ public class LeaderImpl {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             LOG.warn("finish push replica error", e);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -783,7 +783,7 @@ public class LeaderImpl {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 // local migration just set path hash
                 Replica replica =
@@ -791,7 +791,7 @@ public class LeaderImpl {
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());
@@ -907,7 +907,7 @@ public class LeaderImpl {
 
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
 
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
@@ -1113,7 +1113,7 @@ public class LeaderImpl {
             LOG.info("error msg: {}", e.getMessage(), e);
             response.setStatus(status);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return response;
     }

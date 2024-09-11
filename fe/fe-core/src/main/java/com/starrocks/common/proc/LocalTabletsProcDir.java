@@ -103,7 +103,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
 
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             // get infos
             for (Tablet tablet : index.getTablets()) {
@@ -162,7 +162,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return tabletInfos;
     }

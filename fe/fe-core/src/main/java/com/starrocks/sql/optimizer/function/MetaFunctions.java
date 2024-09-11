@@ -149,12 +149,12 @@ public class MetaFunctions {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
         }
     }
 
@@ -174,7 +174,7 @@ public class MetaFunctions {
 
         Locker locker = new Locker();
         try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
 
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
@@ -192,7 +192,7 @@ public class MetaFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
         }
     }
 

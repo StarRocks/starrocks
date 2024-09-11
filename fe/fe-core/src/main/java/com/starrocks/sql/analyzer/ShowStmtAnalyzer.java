@@ -337,7 +337,7 @@ public class ShowStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table = null;
                 try {
@@ -480,7 +480,7 @@ public class ShowStmtAnalyzer {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
@@ -543,7 +543,7 @@ public class ShowStmtAnalyzer {
             final String tableName = statement.getTableName();
             final boolean isTempPartition = statement.isTempPartition();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
                 if (!(table instanceof OlapTable)) {
@@ -574,7 +574,7 @@ public class ShowStmtAnalyzer {
                         analyzeOrderBy(statement.getOrderByElements(), statement.getNode());
                 statement.setOrderByPairs(orderByPairs);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
             return null;
         }

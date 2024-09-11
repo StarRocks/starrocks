@@ -395,7 +395,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
         // Only OlapTable has DynamicPartitionProperty
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
             if (!olapTable.dynamicPartitionExists()) {
                 LOG.warn("Automatically removes the schedule because " +
                             "table[{}] does not have dynamic partition", olapTable.getName());
@@ -461,7 +461,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
 
@@ -547,8 +547,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
             String tableName = olapTable.getName();
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
-                try (AutoCloseableLock ignore
-                            = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
+                try (AutoCloseableLock ignore = new AutoCloseableLock(
+                            new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
                     AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                     analyzer.analyze(new ConnectContext(), dropPartitionClause);
                     GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
@@ -695,7 +695,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(dbId)) {
                     if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
@@ -711,7 +711,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         LOG.info("finished to find all schedulable tables, cost: {}ms, dynamic partition tables: {}, " +

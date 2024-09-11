@@ -133,7 +133,7 @@ public class StatisticProcDir implements ProcDirInterface {
             ++totalDbNum;
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 int dbTableNum = 0;
                 int dbPartitionNum = 0;
@@ -210,7 +210,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 totalTabletNum += dbTabletNum;
                 totalReplicaNum += dbReplicaNum;
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } // end for dbs
 

@@ -83,7 +83,7 @@ public class SysObjectDependencies {
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             String catalog = Optional.ofNullable(db.getCatalogName())
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     // If it is not a materialized view, we do not need to verify permissions
@@ -123,7 +123,7 @@ public class SysObjectDependencies {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 

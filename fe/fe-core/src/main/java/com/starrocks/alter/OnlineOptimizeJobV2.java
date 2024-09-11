@@ -246,7 +246,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             dbName = db.getFullName();
             OlapTable tbl = checkAndGetTable(db, tableId);
@@ -265,7 +265,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             tableColumnNames = tbl.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
                         .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // start insert job
@@ -291,19 +291,19 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
     private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tmpPartitionName) {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             tbl.addDoubleWritePartition(sourcePartitionName, tmpPartitionName);
             LOG.info("job {} add double write partition {} to {}", jobId, tmpPartitionName, sourcePartitionName);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
     private void disableDoubleWritePartition(Database db, OlapTable tbl) {
         try (AutoCloseableLock ignored =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             tbl.clearDoubleWritePartition();
             LOG.info("job {} clear double write partitions", jobId);
@@ -392,13 +392,13 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             }
 
             try (AutoCloseableLock ignore =
-                        new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                        new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
                 onTaskFinished(db, tbl, rewriteTask);
             }
         }
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             onFinished(db, tbl);
         }
 
@@ -565,7 +565,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         } catch (Exception e) {
             LOG.warn("exception when cancel optimize job.", e);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -586,7 +586,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             return;
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl == null) {
@@ -596,7 +596,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         this.jobState = JobState.PENDING;
@@ -618,7 +618,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         }
         OlapTable tbl = null;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl == null) {
@@ -626,7 +626,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                 return;
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         for (long id : replayedJob.getTmpPartitionIds()) {
@@ -680,14 +680,14 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 if (tbl != null) {
                     onReplayFinished(replayedJob, tbl);
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
 

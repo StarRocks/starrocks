@@ -2544,7 +2544,7 @@ public class GlobalStateMgr {
 
             // lock all dbs
             for (Database db : lockedDbMap.values()) {
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
             }
             LOG.info("acquired all the dbs' read lock.");
 
@@ -2560,7 +2560,7 @@ public class GlobalStateMgr {
         } finally {
             // unlock all
             for (Database db : lockedDbMap.values()) {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
             unlock();
         }

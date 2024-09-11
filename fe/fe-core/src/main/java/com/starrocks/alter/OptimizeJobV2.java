@@ -262,7 +262,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             tableColumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
                         .map(col -> ParseUtil.backquote(col.getName())).collect(Collectors.toList());
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // start insert job
@@ -386,7 +386,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // replace partition
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             onFinished(db, tbl);
         }
 
@@ -590,7 +590,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         } catch (Exception e) {
             LOG.warn("exception when cancel optimize job.", e);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -616,7 +616,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
         }
@@ -696,7 +696,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (tbl != null) {
                 try (AutoCloseableLock ignore =
-                            new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
                     onReplayFinished(replayedJob, tbl);
                 }
             }

@@ -78,11 +78,11 @@ public class MetaUtil {
     public static <T> Result<T> criticalRegion(Database db, List<Long> tableIdList, LockType lockType,
                                                Result.ThrowableSupplier<T> codeBlock) {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, lockType);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, lockType);
         try {
             return Result.wrap(codeBlock);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, lockType);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, lockType);
         }
     }
 

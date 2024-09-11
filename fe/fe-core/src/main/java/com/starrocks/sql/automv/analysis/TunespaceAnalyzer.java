@@ -66,14 +66,14 @@ public class TunespaceAnalyzer {
                 throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Optional<SemanticException> optError = check.apply(Optional.ofNullable(db.getTable(simpleTblName)));
                 if (optError.isPresent()) {
                     throw optError.get();
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 

@@ -1271,7 +1271,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
@@ -1279,7 +1279,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             return table;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

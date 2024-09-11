@@ -101,14 +101,14 @@ public class ShowTabletStmtAnalyzer {
                 String tableName = statement.getTableName();
                 Table table = null;
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                     if (table == null) {
                         throw new SemanticException("Table %s is not found", tableName);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
 
                 orderByPairs = new ArrayList<>();

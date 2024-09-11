@@ -139,7 +139,7 @@ public class MVPCTMetaRepairer {
         try {
             MVMetaVersionRepairer.repairExternalBaseTableInfo(mv, oldBaseTableInfo, newTable, updatedPartitionNames);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
         }
     }
 }

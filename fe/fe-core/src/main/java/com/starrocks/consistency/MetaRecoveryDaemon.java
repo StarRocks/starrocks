@@ -77,7 +77,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.READ);
+            locker.lockDatabase(database.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
                     if (!table.isOlapTableOrMaterializedView()) {
@@ -171,7 +171,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                     }
                 }
             } finally {
-                locker.unLockDatabase(database, LockType.READ);
+                locker.unLockDatabase(database.getId(), LockType.READ);
             }
         }
 
@@ -192,7 +192,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 continue;
             }
             Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.WRITE);
+            locker.lockDatabase(database.getId(), LockType.WRITE);
             try {
                 Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(database.getId(), version.getTableId());
@@ -244,7 +244,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
                         table.getName(), partition.getName(), physicalPartition.getId(), null));
             } finally {
-                locker.unLockDatabase(database, LockType.WRITE);
+                locker.unLockDatabase(database.getId(), LockType.WRITE);
             }
         }
     }

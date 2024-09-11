@@ -422,7 +422,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
         dbs.stream().map(dbId -> globalStateMgr.getLocalMetastore().getDb(dbId)).forEach(db -> {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
                         .filter(Table::isOlapTableOrMaterializedView)
@@ -448,7 +448,7 @@ public class SystemInfoService implements GsonPostProcessable {
                                     });
                         }));
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         });
     }

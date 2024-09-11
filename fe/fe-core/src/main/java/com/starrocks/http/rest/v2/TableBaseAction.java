@@ -97,7 +97,7 @@ public abstract class TableBaseAction extends RestBaseAction {
         }
 
         final Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (null == table) {
@@ -115,7 +115,7 @@ public abstract class TableBaseAction extends RestBaseAction {
 
             return tableFunction.apply((OlapTable) table);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

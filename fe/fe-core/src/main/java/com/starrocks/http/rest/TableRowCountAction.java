@@ -98,7 +98,7 @@ public class TableRowCountAction extends RestBaseAction {
                         "Database [" + dbName + "] " + "does not exists");
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
@@ -115,7 +115,7 @@ public class TableRowCountAction extends RestBaseAction {
                 resultMap.put("status", 200);
                 resultMap.put("size", olapTable.proximateRowCount());
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

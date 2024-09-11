@@ -512,7 +512,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() :
@@ -574,7 +574,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return result;
@@ -786,7 +786,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 if (table.isMaterializedView()) {
@@ -805,7 +805,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
@@ -929,7 +929,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db != null) {
             Locker locker = new Locker();
             try {
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 Table table = metadataMgr.getTable(catalogName, params.db, params.table_name);
                 if (table == null) {
                     return result;
@@ -942,7 +942,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return result;
@@ -967,7 +967,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 Locker locker = new Locker();
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     try {
-                        locker.lockDatabase(db, LockType.READ);
+                        locker.lockDatabase(db.getId(), LockType.READ);
                         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                         if (table == null) {
                             continue;
@@ -982,7 +982,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
-                        locker.unLockDatabase(db, LockType.READ);
+                        locker.unLockDatabase(db.getId(), LockType.READ);
                     }
                     if (reachLimit) {
                         return;
@@ -1658,7 +1658,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         timeoutMs = timeoutMs * 3 / 4;
 
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ,
+        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ,
                 timeoutMs, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(
                     "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
@@ -1696,7 +1696,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             return plan;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -1985,12 +1985,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
             try {
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
             if (mutablePartitions.size() <= 0) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -2008,7 +2008,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             long mutablePartitionNum = 0;
             try {
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
@@ -2024,7 +2024,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     buildTablets(physicalPartition, tablets, olapTable, warehouseId);
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         result.setPartitions(partitions);
@@ -2213,7 +2213,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         AddPartitionClause addPartitionClause;
         List<String> partitionColNames = Lists.newArrayList();
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                 LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values);
@@ -2290,7 +2290,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                     LockType.READ)) {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(ctx, addPartitionClause);
@@ -2323,11 +2323,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // update partition info snapshot for txn should be synchronized
         synchronized (txnState) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionColNames);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
     }

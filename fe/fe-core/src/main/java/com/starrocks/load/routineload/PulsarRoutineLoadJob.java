@@ -419,14 +419,14 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
         long tableId = -1L;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), stmt.getTableName());
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
             tableId = table.getId();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // init pulsar routine load job

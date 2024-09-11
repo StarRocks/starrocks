@@ -45,7 +45,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
     @Override
     public void execute() {
         Locker locker = new Locker();
-        locker.lockDatabase(localDatabase, LockType.READ);
+        locker.lockDatabase(localDatabase.getId(), LockType.READ);
 
         try {
             Table localTable = localDatabase.getTable(remoteTable.getName());
@@ -115,7 +115,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
                 }
             }
         } finally {
-            locker.unLockDatabase(localDatabase, LockType.READ);
+            locker.unLockDatabase(localDatabase.getId(), LockType.READ);
         }
     }
 

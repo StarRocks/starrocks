@@ -183,7 +183,7 @@ public class TunespaceExecutor {
             Database db = clause.getDb();
             List<MaterializedView> mvLists = Collections.emptyList();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 mvLists = db.getTables().stream()
                         .filter(Table::isMaterializedView)
@@ -191,7 +191,7 @@ public class TunespaceExecutor {
                         .filter(MaterializedView::isActive)
                         .collect(Collectors.toList());
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             List<PlanPieceInfo> pieceInfos = Lists.newArrayListWithCapacity(mvLists.size());
