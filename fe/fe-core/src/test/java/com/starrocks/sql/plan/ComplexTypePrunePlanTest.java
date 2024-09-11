@@ -312,8 +312,6 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
         FeConstants.runningUnitTest = false;
     }
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/plan/ComplexTypePrunePlanTest.java
-=======
 
     @Test
     public void testSubfieldNoCopy() throws Exception {
@@ -352,5 +350,4 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
     }
->>>>>>> ae37767df1 ([Enhancement] support count distinct on constant semi-type (#48273)):fe/fe-core/src/test/java/com/starrocks/sql/plan/StructTypePlanTest.java
 }
