@@ -116,7 +116,12 @@ public class TunespaceAnalyzer {
             } else if (node.getAlterClause() instanceof AlterTunespaceClause.PopulateFromLegacyMVClause) {
                 AlterTunespaceClause.PopulateFromLegacyMVClause populateFromLegacyMVClause =
                         (AlterTunespaceClause.PopulateFromLegacyMVClause) node.getAlterClause();
-                populateFromLegacyMVClause.setDb(analyzeDbName(populateFromLegacyMVClause.getDbName(), context));
+                QualifiedName dbName = populateFromLegacyMVClause.getDbName();
+                Database db = analyzeDbName(dbName, context);
+                if (db == null) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName.toString());
+                }
+                populateFromLegacyMVClause.setDb(db);
 
             } else if (node.getAlterClause() instanceof AlterTunespaceClause.PopulateFromTunespaceClause) {
                 AlterTunespaceClause.PopulateFromTunespaceClause populateFromTunespaceClause =

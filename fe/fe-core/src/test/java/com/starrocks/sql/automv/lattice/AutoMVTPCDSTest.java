@@ -131,31 +131,36 @@ public class AutoMVTPCDSTest {
                 Pair.create("q1", q1),
                 Pair.create("q2", q2));
 
-        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList, AutoMVUtil::configDefaultAutoMV, results -> {
-            Assert.assertEquals(results.size(), 2);
-            List<String> r0 = results.get(0);
-            List<String> r1 = results.get(1);
-            String mv0 = r0.get(2);
-            String numAcceleratedQueries0 = r0.get(12);
-            Assert.assertTrue(mv0, mv0.contains("SELECT\n" +
-                    "  `tpcds`.`store_sales`.ss_sold_date_sk\n" +
-                    "  ,(bitmap_agg(`tpcds`.`store_sales`.ss_item_sk)) AS _ca0002\n" +
-                    "  ,(max(`tpcds`.`store_sales`.ss_quantity)) AS _ca0003\n" +
-                    "  ,(min(`tpcds`.`store_sales`.ss_quantity)) AS _ca0004\n" +
-                    "  ,(count(1)) AS _ca0005\n" +
-                    "FROM"));
-            Assert.assertEquals(numAcceleratedQueries0, "3");
+        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                },
+                results -> {
+                    Assert.assertEquals(results.size(), 2);
+                    List<String> r0 = results.get(0);
+                    List<String> r1 = results.get(1);
+                    String mv0 = r0.get(2);
+                    String numAcceleratedQueries0 = r0.get(12);
+                    Assert.assertTrue(mv0, mv0.contains("SELECT\n" +
+                            "  `tpcds`.`store_sales`.ss_sold_date_sk\n" +
+                            "  ,(bitmap_agg(`tpcds`.`store_sales`.ss_item_sk)) AS _ca0002\n" +
+                            "  ,(max(`tpcds`.`store_sales`.ss_quantity)) AS _ca0003\n" +
+                            "  ,(min(`tpcds`.`store_sales`.ss_quantity)) AS _ca0004\n" +
+                            "  ,(count(1)) AS _ca0005\n" +
+                            "FROM"));
+                    Assert.assertEquals(numAcceleratedQueries0, "3");
 
-            String mv1 = r1.get(2);
-            String numAcceleratedQueries1 = r1.get(12);
-            Assert.assertTrue(mv1, mv1.contains("SELECT\n" +
-                    "  (1) AS _ca0002\n" +
-                    "  ,(max(`tpcds`.`store_sales`.ss_quantity)) AS _ca0003\n" +
-                    "  ,(min(`tpcds`.`store_sales`.ss_quantity)) AS _ca0004\n" +
-                    "  ,(bitmap_agg(`tpcds`.`store_sales`.ss_item_sk)) AS _ca0005\n" +
-                    "FROM"));
-            Assert.assertEquals(numAcceleratedQueries1, "2");
-        });
+                    String mv1 = r1.get(2);
+                    String numAcceleratedQueries1 = r1.get(12);
+                    Assert.assertTrue(mv1, mv1.contains("SELECT\n" +
+                            "  (1) AS _ca0002\n" +
+                            "  ,(max(`tpcds`.`store_sales`.ss_quantity)) AS _ca0003\n" +
+                            "  ,(min(`tpcds`.`store_sales`.ss_quantity)) AS _ca0004\n" +
+                            "  ,(bitmap_agg(`tpcds`.`store_sales`.ss_item_sk)) AS _ca0005\n" +
+                            "FROM"));
+                    Assert.assertEquals(numAcceleratedQueries1, "2");
+                });
 
     }
 
@@ -171,7 +176,11 @@ public class AutoMVTPCDSTest {
         AutoMVUtil.testHelper(
                 getStarRocksAssert().getCtx(),
                 queryList,
-                sv -> sv.setAutoMVEnableComplexDerivedMetrics(false),
+                sv -> {
+                    sv.setAutoMVEnableComplexDerivedMetrics(false);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                },
                 results -> {
                     Assert.assertTrue(results.isEmpty());
                 });
@@ -179,7 +188,11 @@ public class AutoMVTPCDSTest {
         AutoMVUtil.testHelper(
                 getStarRocksAssert().getCtx(),
                 queryList,
-                sv -> sv.setAutoMVEnableComplexDerivedMetrics(true),
+                sv -> {
+                    sv.setAutoMVEnableComplexDerivedMetrics(true);
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
+                },
                 results -> {
                     Assert.assertEquals(results.size(), 2);
                     String mv0 = results.get(0).get(2);
@@ -241,6 +254,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVDefaultPartitionByTimeGranule("none");
                 },
                 results -> {
@@ -275,21 +289,40 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVDefaultPartitionByTimeGranule("none");
                 },
                 results -> {
-                    String mv = results.get(0).get(2);
-                    String numAcceleratedQueries = results.get(0).get(12);
-                    Assert.assertTrue(mv, mv.contains("SELECT\n" +
-                            "  `tpcds`.`call_center`.cc_name\n" +
-                            "  ,`tpcds`.`call_center`.cc_mkt_desc\n" +
+                    String mv0 = results.get(0).get(2);
+                    String numAcceleratedQueries0 = results.get(0).get(12);
+                    Assert.assertTrue(mv0, mv0.contains("SELECT\n" +
+                            "  `tpcds`.`call_center`.cc_mkt_desc\n" +
                             "  ,(sum(`tpcds`.`call_center`.cc_sq_ft)) AS _ca0002\n" +
                             "  ,(bitmap_agg(`tpcds`.`call_center`.cc_sq_ft)) AS _ca0003\n" +
                             "FROM\n" +
                             "  `tpcds`.`call_center`\n" +
                             "GROUP BY\n" +
-                            "  `tpcds`.`call_center`.cc_name"));
-                    Assert.assertEquals(numAcceleratedQueries, "3");
+                            "  `tpcds`.`call_center`.cc_mkt_desc"));
+                    Assert.assertEquals(numAcceleratedQueries0, "2");
+
+                    String mv1 = results.get(1).get(2);
+                    String numAcceleratedQueries1 = results.get(1).get(12);
+                    Assert.assertTrue(mv1, mv1.contains("SELECT\n" +
+                            "  _ta0000.cc_mkt_desc\n" +
+                            "  ,(bitmap_agg(_ta0000.cc_sq_ft)) AS _ca0003\n" +
+                            "FROM\n" +
+                            "  (\n" +
+                            "    SELECT\n" +
+                            "      `tpcds`.`call_center`.cc_sq_ft\n" +
+                            "      ,`tpcds`.`call_center`.cc_mkt_desc\n" +
+                            "    FROM\n" +
+                            "      `tpcds`.`call_center`\n" +
+                            "    WHERE\n" +
+                            "      (`tpcds`.`call_center`.cc_name != \"\")\n" +
+                            "  ) _ta0000\n" +
+                            "GROUP BY\n" +
+                            "  _ta0000.cc_mkt_desc"));
+                    Assert.assertEquals(numAcceleratedQueries1, "1");
                 });
     }
 
@@ -312,6 +345,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVDefaultPartitionByTimeGranule("none");
                 },
                 results -> {
@@ -322,24 +356,30 @@ public class AutoMVTPCDSTest {
                     String numAcceleratedQueries1 = results.get(1).get(12);
 
                     Assert.assertTrue(mv0, mv0.contains("SELECT\n" +
-                            "  `tpcds`.`call_center`.cc_name\n" +
-                            "  ,`tpcds`.`call_center`.cc_mkt_desc\n" +
-                            "  ,(bitmap_agg(`tpcds`.`call_center`.cc_sq_ft)) AS _ca0002\n" +
-                            "FROM\n" +
-                            "  `tpcds`.`call_center`\n" +
-                            "GROUP BY\n" +
-                            "  `tpcds`.`call_center`.cc_name\n" +
-                            "  ,`tpcds`.`call_center`.cc_mkt_desc"));
-
-                    Assert.assertEquals(numAcceleratedQueries0, "4");
-
-                    Assert.assertTrue(mv1, mv1.contains("SELECT\n" +
                             "  `tpcds`.`call_center`.cc_mkt_desc\n" +
                             "  ,(bitmap_agg(`tpcds`.`call_center`.cc_sq_ft)) AS _ca0002\n" +
                             "FROM\n" +
                             "  `tpcds`.`call_center`\n" +
                             "GROUP BY\n" +
                             "  `tpcds`.`call_center`.cc_mkt_desc"));
+
+                    Assert.assertEquals(numAcceleratedQueries0, "2");
+
+                    Assert.assertTrue(mv1, mv1.contains("SELECT\n" +
+                            "  _ta0000.cc_mkt_desc\n" +
+                            "  ,(bitmap_agg(_ta0000.cc_sq_ft)) AS _ca0003\n" +
+                            "FROM\n" +
+                            "  (\n" +
+                            "    SELECT\n" +
+                            "      `tpcds`.`call_center`.cc_sq_ft\n" +
+                            "      ,`tpcds`.`call_center`.cc_mkt_desc\n" +
+                            "    FROM\n" +
+                            "      `tpcds`.`call_center`\n" +
+                            "    WHERE\n" +
+                            "      (`tpcds`.`call_center`.cc_name != \"\")\n" +
+                            "  ) _ta0000\n" +
+                            "GROUP BY\n" +
+                            "  _ta0000.cc_mkt_desc"));
                     Assert.assertEquals(numAcceleratedQueries1, "2");
                 });
 
@@ -348,6 +388,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVUseBitmapCountDistinct(false);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(true);
                 },
@@ -368,6 +409,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVUseBitmapCountDistinct(false);
                     sv.setAutoMVUseHllCountDistinct(true);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(true);
@@ -375,16 +417,22 @@ public class AutoMVTPCDSTest {
                 },
                 results -> {
                     Assert.assertEquals(results.size(), 2);
-                    String mv = results.get(0).get(2);
-                    Assert.assertTrue(mv, mv.contains("SELECT\n" +
-                            "  `tpcds`.`call_center`.cc_name\n" +
-                            "  ,`tpcds`.`call_center`.cc_mkt_desc\n" +
-                            "  ,(hll_union(hll_hash(`tpcds`.`call_center`.cc_sq_ft))) AS _ca0002\n" +
+                    List<String> mvList = results.stream().map(r -> r.get(2)).collect(Collectors.toList());
+                    Assert.assertTrue(String.join("\n", mvList), mvList.stream().anyMatch(mv -> mv.contains("SELECT\n" +
+                            "  _ta0000.cc_mkt_desc\n" +
+                            "  ,(hll_union(hll_hash(_ta0000.cc_sq_ft))) AS _ca0003\n" +
                             "FROM\n" +
-                            "  `tpcds`.`call_center`\n" +
+                            "  (\n" +
+                            "    SELECT\n" +
+                            "      `tpcds`.`call_center`.cc_sq_ft\n" +
+                            "      ,`tpcds`.`call_center`.cc_mkt_desc\n" +
+                            "    FROM\n" +
+                            "      `tpcds`.`call_center`\n" +
+                            "    WHERE\n" +
+                            "      (`tpcds`.`call_center`.cc_name != \"\")\n" +
+                            "  ) _ta0000\n" +
                             "GROUP BY\n" +
-                            "  `tpcds`.`call_center`.cc_name\n" +
-                            "  ,`tpcds`.`call_center`.cc_mkt_desc"));
+                            "  _ta0000.cc_mkt_desc")));
                 });
 
         AutoMVUtil.testHelper(
@@ -392,6 +440,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVUseBitmapCountDistinct(false);
                     sv.setAutoMVUseHllCountDistinct(false);
                     sv.setAutoMVUseArrayAggCountDistinct(true);
@@ -402,14 +451,12 @@ public class AutoMVTPCDSTest {
                     Assert.assertEquals(results.size(), 2);
                     String mv = results.get(0).get(2);
                     Assert.assertTrue(mv, mv.contains("SELECT\n" +
-                            "  `tpcds`.`call_center`.cc_name\n" +
-                            "  ,`tpcds`.`call_center`.cc_mkt_desc\n" +
+                            "  `tpcds`.`call_center`.cc_mkt_desc\n" +
                             "  ,(array_agg(DISTINCT `tpcds`.`call_center`.cc_sq_ft)) AS _ca0002\n" +
                             "FROM\n" +
                             "  `tpcds`.`call_center`\n" +
                             "GROUP BY\n" +
-                            "  `tpcds`.`call_center`.cc_name\n" +
-                            "  ,`tpcds`.`call_center`.cc_mkt_desc"));
+                            "  `tpcds`.`call_center`.cc_mkt_desc"));
                 });
 
     }
@@ -447,6 +494,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                 },
                 results -> {
                     Assert.assertTrue(results.isEmpty());
@@ -457,6 +505,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(false);
                 },
                 results -> {
@@ -525,6 +574,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(false);
                     sv.setAutoMVEnableComplexDerivedDimensions(true);
                 },
@@ -633,6 +683,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(false);
                     sv.setAutoMVDefaultPartitionByTimeGranule("none");
                 },
@@ -692,6 +743,7 @@ public class AutoMVTPCDSTest {
                 queryList,
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(false);
                     sv.setAutoMVEnableComplexDerivedMetrics(true);
                     sv.setAutoMVPartialRollupMinAggPieces(2);
@@ -717,17 +769,17 @@ public class AutoMVTPCDSTest {
                             "    FROM\n" +
                             "      `tpcds`.`catalog_sales`\n" +
                             "      INNER JOIN\n" +
+                            "      `tpcds`.`warehouse`\n" +
+                            "      ON (`tpcds`.`catalog_sales`.cs_warehouse_sk = `tpcds`.`warehouse`.w_warehouse_sk)\n" +
+                            "      INNER JOIN\n" +
+                            "      `tpcds`.`ship_mode`\n" +
+                            "      ON (`tpcds`.`catalog_sales`.cs_ship_mode_sk = `tpcds`.`ship_mode`.sm_ship_mode_sk)\n" +
+                            "      INNER JOIN\n" +
                             "      `tpcds`.`call_center`\n" +
                             "      ON (`tpcds`.`catalog_sales`.cs_call_center_sk = `tpcds`.`call_center`.cc_call_center_sk)\n" +
                             "      INNER JOIN\n" +
                             "      `tpcds`.`date_dim`\n" +
                             "      ON (`tpcds`.`catalog_sales`.cs_ship_date_sk = `tpcds`.`date_dim`.d_date_sk)\n" +
-                            "      INNER JOIN\n" +
-                            "      `tpcds`.`ship_mode`\n" +
-                            "      ON (`tpcds`.`catalog_sales`.cs_ship_mode_sk = `tpcds`.`ship_mode`.sm_ship_mode_sk)\n" +
-                            "      INNER JOIN\n" +
-                            "      `tpcds`.`warehouse`\n" +
-                            "      ON (`tpcds`.`catalog_sales`.cs_warehouse_sk = `tpcds`.`warehouse`.w_warehouse_sk)\n" +
                             "    WHERE\n" +
                             "      (\"2023-06-02\" <= `tpcds`.`call_center`.cc_rec_start_date)\n" +
                             "  ) _ta0001\n" +

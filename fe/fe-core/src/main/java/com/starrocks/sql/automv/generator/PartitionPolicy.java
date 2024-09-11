@@ -34,8 +34,8 @@ import java.util.Optional;
 // 1. partition by data_trunc('day', dt);
 // 2. partition by str2date(dt, '%Y-%m-%d');
 public class PartitionPolicy {
-    public static Optional<PrettyPrinter> getPartitionExpr(AggregatePiece aggPiece,
-                                                           TieredMap<Integer, ColumnAlias> columnAliases) {
+
+    public static Optional<Integer> getPartitionColumnId(AggregatePiece aggPiece) {
         if (aggPiece.getDimensions().isEmpty()) {
             return Optional.empty();
         }
@@ -59,10 +59,15 @@ public class PartitionPolicy {
         if (timeGranule.isFineGrained(TimeGranule.Unit.MINUTE)) {
             return Optional.empty();
         }
+        return Optional.of(timeGranuleId);
+    }
 
-        PrettyPrinter printer = new PrettyPrinter()
-                .add("PARTITION BY ")
-                .add(Objects.requireNonNull(columnAliases.get(timeGranuleId)).getName()).newLine();
-        return Optional.of(printer);
+    public static Optional<PrettyPrinter> getPartitionExpr(AggregatePiece aggPiece,
+                                                           TieredMap<Integer, ColumnAlias> columnAliases) {
+        return getPartitionColumnId(aggPiece).map(timeGranuleId ->
+                new PrettyPrinter()
+                        .add("PARTITION BY ")
+                        .add(Objects.requireNonNull(columnAliases.get(timeGranuleId)).getName()).newLine()
+        );
     }
 }

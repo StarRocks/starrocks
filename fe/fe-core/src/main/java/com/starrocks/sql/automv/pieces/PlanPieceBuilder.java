@@ -334,26 +334,33 @@ public final class PlanPieceBuilder extends OptExpressionVisitor<PlanPiece, Plan
     @Override
     public PlanPiece visitLogicalAggregate(OptExpression optExpression, PlanPieceBuildContext args) {
         LogicalAggregationOperator agg = optExpression.getOp().cast();
-        PlanPiece flatTable = args.arg0();
+        PlanPiece flatTablePiece = args.arg0();
         ColumnRefToIdConverter idConverter = args.getIdConverter();
         TieredMap<Integer, GenericColumn> dimensions =
-                convColumnRefs(agg.getGroupingKeys(), idConverter, flatTable.getColumns());
+                convColumnRefs(agg.getGroupingKeys(), idConverter, flatTablePiece.getColumns());
 
         ColumnRefSet groupKeyColRefSet = ColumnRefSet.createByIds(dimensions.keySet());
-        Map<Boolean, TieredList<Op>> conjGroups = flatTable.getConjuncts().stream().collect(
+        Map<Boolean, TieredList<Op>> conjGroups = flatTablePiece.getConjuncts().stream().collect(
                 Collectors.partitioningBy(op -> groupKeyColRefSet.containsAll(op.getIds()), TieredList.<Op>toList()));
 
         TieredList<Op> hoistConjuncts = conjGroups.get(true);
         TieredList<Op> nonHoistConjuncts = conjGroups.get(false);
-        Set<Integer> rollupColumnRefs = nonHoistConjuncts.stream().flatMap(op -> op.getIdSet().stream())
+        Map<Boolean, TieredList<Op>> nonHoistConjunctGroups = nonHoistConjuncts
+                .stream()
+                .collect(Collectors.partitioningBy(OpUtil::isStiffPredicate, TieredList.<Op>toList()));
+
+        TieredList<Op> stiffConjuncts = nonHoistConjunctGroups.get(true);
+        TieredList<Op> flexibleConjuncts = nonHoistConjunctGroups.get(false);
+
+        Set<Integer> rollupColumnRefs = flexibleConjuncts.stream().flatMap(op -> op.getIdSet().stream())
                 .filter(colRef -> !groupKeyColRefSet.contains(colRef)).collect(Collectors.toSet());
 
-        TieredMap<Integer, GenericColumn> rollupDimension = flatTable.getColumns().entrySet()
+        TieredMap<Integer, GenericColumn> rollupDimension = flatTablePiece.getColumns().entrySet()
                 .stream().filter(e -> rollupColumnRefs.contains(e.getKey()))
                 .collect(TieredMap.toMap());
 
         TieredMap<Integer, GenericColumn> allMetrics =
-                convAggCalls(agg.getAggregations(), idConverter, flatTable.getColumns());
+                convAggCalls(agg.getAggregations(), idConverter, flatTablePiece.getColumns());
         Map<Boolean, TieredMap<Integer, GenericColumn>> metricsGroup = allMetrics.entrySet()
                 .stream()
                 .collect(Collectors.partitioningBy(e -> OpUtil.isDistinct(e.getValue()), TieredMap.toMap()));
@@ -361,8 +368,9 @@ public final class PlanPieceBuilder extends OptExpressionVisitor<PlanPiece, Plan
         TieredMap<Integer, GenericColumn> distinctMetrics = metricsGroup.get(true);
 
         TieredMap<Integer, GenericColumn> metrics = metricsGroup.get(false);
-
-        flatTable = flatTable.setConjuncts(TieredList.<Op>genesis().concat(nonHoistConjuncts));
+        flatTablePiece = flatTablePiece.setConjuncts(TieredList.<Op>genesis());
+        AggregatePiece.FlatTable flatTable =
+                new AggregatePiece.FlatTable(flatTablePiece, stiffConjuncts, flexibleConjuncts);
 
         AggregatePiece aggPiece = AggregatePiece.newBuilder()
                 .setFlatTable(flatTable)

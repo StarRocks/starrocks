@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.estimation.CardEstimator;
@@ -181,6 +182,42 @@ public class LatticeTest {
     }
 
     @Test
+    public void testEstimateCardSqlWithStiffConjuncts() {
+        ConnectContext ctx = getStarRocksAssert().getCtx();
+        List<Pair<String, String>> queryList = Lists.newArrayList(
+                Pair.create("q1", "select count(1) from lineorder " +
+                        "where lo_shipmode != '' " +
+                        "group by lo_orderdate")
+        );
+        CardEstimator estimator = getEstimator(ctx, queryList);
+        Optional<String> optEstimateSql = estimator.getEstimateSql();
+        Assert.assertTrue(optEstimateSql.isPresent());
+        String estimateSql = optEstimateSql.get();
+        String expectSql = "WITH cte_0 AS (\n" +
+                "  SELECT\n" +
+                "    _ta0000._ca0001 AS __STIFF__\n" +
+                "    ,coalesce(murmur_hash3_32(_ta0000.lo_orderdate), 1) AS c0\n" +
+                "  FROM (\n" +
+                "    SELECT\n" +
+                "      ((`ssb`.`lineorder`.lo_shipmode != \"\")) AS _ca0001\n" +
+                "      ,`ssb`.`lineorder`.lo_orderdate\n" +
+                "      ,`ssb`.`lineorder`.lo_shipmode\n" +
+                "    FROM\n" +
+                "      `ssb`.`lineorder`\n" +
+                "    WHERE\n" +
+                "      (coalesce(((murmur_hash3_32(`ssb`.`lineorder`.lo_orderdate) % 512) + 512), 0) <= 16)\n" +
+                "  ) _ta0000\n" +
+                ")\n" +
+                "SELECT\n" +
+                "  COUNT(1) as rowCount\n" +
+                "  ,json_array(\n" +
+                "    ndv(CASE WHEN(__STIFF__)THEN(c0)ELSE NULL END)\n" +
+                "  ) AS cards\n" +
+                "FROM cte_0";
+        Assert.assertEquals(estimateSql, estimateSql, expectSql);
+    }
+
+    @Test
     public void testEstimateCardSql() {
         ConnectContext ctx = getStarRocksAssert().getCtx();
         Set<String> selectedQuerySet = ImmutableSet.of("Q1.1", "Q1.2", "Q1.3");
@@ -221,6 +258,9 @@ public class LatticeTest {
                 .map(Optional::get)
                 .collect(Collectors.toList());
         Assert.assertEquals(sqlList.size(), snippetPerIteration.length);
+        for (String sql : sqlList) {
+            System.out.println(sql);
+        }
         Assert.assertTrue(sqlList.stream().allMatch(sql -> sql.contains(commonSnippet)));
         Assert.assertTrue(IntStream.range(0, snippetPerIteration.length)
                 .allMatch(i -> sqlList.get(i).contains(snippetPerIteration[i][0])));
@@ -441,6 +481,10 @@ public class LatticeTest {
                 Pair.create("q4", q4));
 
         AutoMVUtil.mockUpCustomizedQueryExecutor(queryList);
+        ctx.getSessionVariable().setAutoMVCardRowCountRatioHWM(1.0);
+        ctx.getSessionVariable().setAutoMVCardRowCountRatioLWM(1.0);
+        GlobalVariable.setAutoMVPerLatticeMVLimit(-1);
+        GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(-1.0);
         List<Pair<String, AggregatePiece>> pieces = AutoMVUtil.getPieces(ctx, queryList);
         List<PlanPiece> pieceList = pieces.stream().map(p -> p.second).collect(Collectors.toList());
         AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());

@@ -32,6 +32,7 @@ import com.starrocks.system.SystemInfoService;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class PropertiesPolicy {
@@ -50,7 +51,7 @@ public class PropertiesPolicy {
     }
 
     public static PrettyPrinter getProperties(AggregatePiece aggPiece, Map<Integer, ColumnAlias> columAliases,
-                                              boolean isPartitioned) {
+                                              boolean isPartitioned, Optional<String> optCollocateGroup) {
         List<TablePiece> tablePieces = PlanPiece.collect(aggPiece, TablePiece.class);
         List<Table> cloudTables = tablePieces.stream()
                 .map(tablePiece -> tablePiece.getTable().getTable())
@@ -83,6 +84,8 @@ public class PropertiesPolicy {
         if (hasExternalTables) {
             propItems.put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, "CHECKED");
         }
+        optCollocateGroup.ifPresent(
+                collocateGroup -> propItems.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, collocateGroup));
         propItems.put("session.enable_spill", "true");
         if (isPartitioned) {
             propItems.put("partition_refresh_number", "1");

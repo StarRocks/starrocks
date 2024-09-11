@@ -45,8 +45,8 @@ public class TimeGranuleExtractPolicy extends AggregatePolicy.SimplePolicy {
     public Optional<AggregatePiece> convert(AggregatePiece aggPiece) {
         Preconditions.checkArgument(aggPiece.getDistinctMetrics().isEmpty());
         Preconditions.checkArgument(aggPiece.getMetrics().values().stream().allMatch(AggregatePolicies::isRollupAble));
-        TieredList<Op> conjuncts = aggPiece.getFlatTable().getConjuncts();
-        TieredMap<Integer, GenericColumn> columns = aggPiece.getFlatTable().getColumns();
+        TieredList<Op> conjuncts = aggPiece.getFlatTable().getFlexibleConjuncts();
+        TieredMap<Integer, GenericColumn> columns = aggPiece.getFlatTable().getPiece().getColumns();
         TieredMap<StrictOp, Integer> alreadyExists = OpUtil.columnsToStrictOpMap(columns);
 
         ColumnRefToIdConverter newIdConverter = aggPiece.getCommonState().getIdConverter().duplicate();
@@ -90,11 +90,14 @@ public class TimeGranuleExtractPolicy extends AggregatePolicy.SimplePolicy {
                 new PieceCommonState(newIdConverter, aggPiece.getCommonState().getCoveredQueries(),
                         aggPiece.getCommonState().getFqTableMap());
 
-        PlanPiece newFlatTable = aggPiece.getFlatTable().builder()
-                .setConjuncts(newConjuncts)
+        PlanPiece newFlatTablePiece = aggPiece.getFlatTable().getPiece().builder()
+                .setConjuncts(TieredList.genesis())
                 .setColumns(newColumns)
                 .setCommonState(newCommonState)
                 .build();
+        AggregatePiece.FlatTable newFlatTable =
+                new AggregatePiece.FlatTable(newFlatTablePiece, aggPiece.getFlatTable().getStiffConjuncts(),
+                        newConjuncts);
         AggregatePiece newAggPiece = aggPiece.builder().mustCast(AggregatePiece.Builder.class)
                 .setRollupDimensions(newRollupDimensions)
                 .setNonHoistConjuncts(newConjuncts)

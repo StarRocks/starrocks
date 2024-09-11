@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Responsible for determining whether the corresponding statement
@@ -63,7 +64,7 @@ public class AuditEncryptionChecker implements AstVisitorEPack<Boolean, Void> {
         if (statement == null) {
             return false;
         }
-        return getInstance().visit(statement);
+        return Optional.ofNullable(getInstance().visit(statement)).orElse(false);
     }
 
     @Override

@@ -14,7 +14,13 @@
 
 package com.starrocks.sql.automv.estimation;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.automv.options.AutoMVOptions;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class CardEstimateState {
     private final AutoMVOptions options;
@@ -93,6 +99,19 @@ public class CardEstimateState {
         EXCELLENT,
         GOOD,
         PASS,
-        FAIL,
+        FAIL;
+
+        public static void validate(String value) {
+            List<String> acceptableValues = Stream.concat(Stream.of("none"), Stream.of(CardQuality.values())
+                    .map(Enum::name)
+                    .map(String::toLowerCase)).collect(Collectors.toList());
+
+            String lcValue = Optional.ofNullable(value).orElse("").toLowerCase();
+            if (!acceptableValues.contains(lcValue)) {
+                String s = String.join("/", acceptableValues);
+                throw new SemanticException(
+                        String.format("unsupported value: '%s', supported values are %s", value, s));
+            }
+        }
     }
 }

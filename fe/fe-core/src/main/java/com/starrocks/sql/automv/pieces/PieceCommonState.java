@@ -44,4 +44,8 @@ public class PieceCommonState {
     public Set<String> getCoveredQueries() {
         return coveredQueries;
     }
+
+    public PieceCommonState duplicate() {
+        return new PieceCommonState(idConverter.duplicate(), coveredQueries, fqTableMap);
+    }
 }

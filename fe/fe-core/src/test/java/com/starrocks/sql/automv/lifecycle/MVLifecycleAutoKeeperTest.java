@@ -17,6 +17,8 @@ package com.starrocks.sql.automv.lifecycle;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.MVLifecycleAutoKeeper;
 import com.starrocks.sql.automv.generator.MVName;
@@ -100,9 +102,14 @@ public class MVLifecycleAutoKeeperTest {
 
     private Set<String> createMVs(String catalog, String db, String mvDb, List<Pair<String, String>> queryList)
             throws Throwable {
+        GlobalVariable.setAutoMVPerLatticeMVLimit(-1);
+        GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(-1.0);
         AutoMVUtil.mockUpCustomizedQueryExecutor(queryList, catalog, db);
         MVLifecycleAutoKeeper keeper = new MVLifecycleAutoKeeper();
-        keeper.process(getStarRocksAssert().getCtx());
+        ConnectContext ctx = getStarRocksAssert().getCtx();
+        ctx.getSessionVariable().setAutoMVCardRowCountRatioLWM(1.0);
+        ctx.getSessionVariable().setAutoMVCardRowCountRatioHWM(1.0);
+        keeper.process(ctx, () -> true);
         return collectMVDigests(mvDb);
     }
 
@@ -146,9 +153,6 @@ public class MVLifecycleAutoKeeperTest {
         List<Pair<String, String>> queryList = TestUtil.getSsbLineorderFlatQueryList().stream()
                 .filter(p -> p.first.equals(queryName))
                 .collect(Collectors.toList());
-        if (queryName.equals("Q2.3")) {
-            System.out.println("SATANSON");
-        }
         testHelper("default_catalog", "ssb", "automv_db", queryList);
     }
 

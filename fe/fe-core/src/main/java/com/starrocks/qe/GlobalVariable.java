@@ -77,7 +77,7 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
 
     //AutoMV's MVLifecycle
-    public static final String ENABLE_AUTOMV_LIFECYCLE_KEEPER =  "enable_automv_lifecycle_keeper";
+    public static final String ENABLE_AUTOMV_LIFECYCLE_KEEPER = "enable_automv_lifecycle_keeper";
     public static final String AUTOMV_LIFECYCLE_INFANT_ABORTION_MAX_TIME = "automv_lifecycle_infant_abortion_max_time";
     public static final String AUTOMV_LIFECYCLE_INITIAL_REFRESH_MAX_TIME = "automv_lifecycle_initial_refresh_max_time";
     public static final String AUTOMV_LIFECYCLE_INTERNSHIP_PERIOD = "automv_lifecycle_internship_period";
@@ -88,6 +88,16 @@ public final class GlobalVariable {
             "automv_lifecycle_performance_evaluation_interval";
     public static final String AUTOMV_LIFECYCLE_EXTINCTION_RETENTION_MAX_TIME =
             "automv_lifecycle_extinction_retention_max_time";
+
+    public static final String AUTOMV_LIFECYCLE_MV_RECOMMENDATION_INTERVAL =
+            "automv_lifecycle_mv_recommendation_interval";
+    public static final String AUTOMV_UNPARTITIONED_MV_CARD_MAX = "automv_unpartitioned_mv_card_max";
+    public static final String AUTOMV_PARTITIONED_MV_CARD_MAX = "automv_partitioned_mv_card_max";
+    public static final String AUTOMV_PER_LATTICE_MV_LIMIT = "automv_per_lattice_mv_limit";
+    public static final String AUTOMV_PER_LATTICE_MV_SELECTIVITY_RATIO = "automv_per_lattice_mv_selectivity_ratio";
+    public static final String AUTOMV_QUERY_LATENCY_LOW_BOUND_MS = "automv_query_latency_low_bound_ms";
+    public static final String AUTOMV_COLOCATE_MV_DIMENSIONS_LIMIT = "automv_colocate_mv_dimensions_limit";
+    public static final String AUTOMV_PER_LATTICE_NODE_LIMIT = "automv_per_lattice_node_limit";
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
@@ -205,6 +215,25 @@ public final class GlobalVariable {
     private static long autoMVLifecyclePerformanceEvaluationInterval = 300L;
     @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_EXTINCTION_RETENTION_MAX_TIME, flag = VariableMgr.GLOBAL)
     private static long autoMVLifecycleExtinctionRetentionMaxTime = 604800L;
+
+    @VariableMgr.VarAttr(name = AUTOMV_LIFECYCLE_MV_RECOMMENDATION_INTERVAL, flag = VariableMgr.GLOBAL)
+    private static long autoMVLifecycleMVRecommendationInterval = 3600L;
+    @VariableMgr.VarAttr(name = AUTOMV_UNPARTITIONED_MV_CARD_MAX, flag = VariableMgr.GLOBAL)
+    private static double autoMVUnpartitionedMVCardMax = 10_000_000.0;
+    @VariableMgr.VarAttr(name = AUTOMV_PARTITIONED_MV_CARD_MAX, flag = VariableMgr.GLOBAL)
+    private static double autoMVPartitionedMVCardMax = 1_000_000_000.0;
+    @VariableMgr.VarAttr(name = AUTOMV_PER_LATTICE_MV_LIMIT, flag = VariableMgr.GLOBAL)
+    private static int autoMVPerLatticeMVLimit = 20;
+    @VariableMgr.VarAttr(name = AUTOMV_PER_LATTICE_MV_SELECTIVITY_RATIO, flag = VariableMgr.GLOBAL)
+    private static double autoMVPerLatticeMvSelectivityRatio = 0.36787944117144233;
+    @VariableMgr.VarAttr(name = AUTOMV_QUERY_LATENCY_LOW_BOUND_MS)
+    private static long autoMVQueryLatencyLowBoundMs = 500;
+
+    @VariableMgr.VarAttr(name = AUTOMV_COLOCATE_MV_DIMENSIONS_LIMIT)
+    private static int autoMVColocateMVDimensionsLimit = 6;
+
+    @VariableMgr.VarAttr(name = AUTOMV_PER_LATTICE_NODE_LIMIT, flag = VariableMgr.INVISIBLE)
+    private static int autoMVPerLatticeNodeLimit = 100;
 
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
@@ -412,6 +441,68 @@ public final class GlobalVariable {
         return autoMVLifecycleExtinctionRetentionMaxTime;
     }
 
+    public static void setAutoMVLifecycleMVRecommendationInterval(long interval) {
+        autoMVLifecycleMVRecommendationInterval = interval;
+    }
+
+    public static long getAutoMVLifecycleMVRecommendationInterval() {
+        return autoMVLifecycleMVRecommendationInterval;
+    }
+
+    public static void setAutoMVUnpartitionedMVCardMax(double value) {
+        autoMVUnpartitionedMVCardMax = value;
+    }
+
+    public static double getAutoMVUnpartitionedMVCardMax() {
+        return autoMVUnpartitionedMVCardMax;
+    }
+
+    public static void setAutoMVPartitionedMVCardMax(double value) {
+        autoMVPartitionedMVCardMax = value;
+    }
+
+    public static double getAutoMVPartitionedMVCardMax() {
+        return autoMVPartitionedMVCardMax;
+    }
+    public static void setAutoMVPerLatticeMVLimit(int value) {
+        autoMVPerLatticeMVLimit = value;
+    }
+
+    public static int getAutoMVPerLatticeMVLimit() {
+        return autoMVPerLatticeMVLimit;
+    }
+
+    public static void setAutoMVPerLatticeMVSelectivityRatio(double value) {
+        autoMVPerLatticeMvSelectivityRatio = value;
+    }
+
+    public static double getAutoMVPerLatticeMVSelectivityRatio() {
+        return autoMVPerLatticeMvSelectivityRatio;
+    }
+
+    public static void setAutoMVQueryLatencyLowBoundMs(long lowBoundMs) {
+        autoMVQueryLatencyLowBoundMs = lowBoundMs;
+    }
+
+    public static long getAutoMVQueryLatencyLowBoundMs() {
+        return autoMVQueryLatencyLowBoundMs;
+    }
+
+    public static void setAutoMVColocateMVDimensionsLimit(int limit) {
+        autoMVColocateMVDimensionsLimit = limit;
+    }
+
+    public static int getAutoMVColocateMVDimensionsLimit() {
+        return autoMVColocateMVDimensionsLimit;
+    }
+
+    public static void setAutoMVPerLatticeNodeLimit(int limit) {
+        autoMVPerLatticeMVLimit = limit;
+    }
+
+    public static int getAutoMVPerLatticeNodeLimit() {
+        return autoMVPerLatticeNodeLimit;
+    }
     // Don't allow create instance.
     private GlobalVariable() {
 

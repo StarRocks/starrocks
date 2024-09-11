@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -63,6 +64,8 @@ import org.mockito.Mockito;
 import org.mockito.internal.stubbing.answers.DoesNothing;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.Month;
@@ -77,6 +80,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class AutoMVUtil {
     private static MockedStatic<Authorizer> authorizerMockedStatic;
@@ -121,6 +125,7 @@ public class AutoMVUtil {
                     SelectList selectList = selectRelation.getSelectList();
                     int numCards = selectList.getItems().get(1).getExpr().getChildren().size();
                     MultiColumnCards mcCards = new MultiColumnCards();
+
                     long rowCount = 100_000_000_000L;
                     mcCards.setRowCount(rowCount);
                     List<Long> cards = IntStream.range(0, numCards)
@@ -175,6 +180,7 @@ public class AutoMVUtil {
         sv.setAutoMVEnableComplexDerivedMetrics(true);
         sv.setAutoMVEnableComplexDerivedDimensions(true);
         sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(false);
+        sv.setAutoMVCardRowCountRatioLWM(1.0);
         sv.setAutoMVCardRowCountRatioHWM(1.0);
     }
 
@@ -227,15 +233,45 @@ public class AutoMVUtil {
         });
     }
 
+    private static Map<String, Object> saveGlobalVariable() {
+        return Stream.of(GlobalVariable.class.getDeclaredFields())
+                .filter(field -> Modifier.isStatic(field.getModifiers()))
+                .peek(field -> field.setAccessible(true))
+                .collect(Collectors.toMap(
+                        Field::getName,
+                        f -> Result.wrap(() -> f.get(null)).unwrap().orElse(null)));
+    }
+
+    private static void restoreGlobalVariable(Map<String, Object> values) {
+        Map<String, Field> fieldMap = Stream.of(GlobalVariable.class.getDeclaredFields())
+                .filter(field -> Modifier.isStatic(field.getModifiers()))
+                .peek(field -> field.setAccessible(true))
+                .collect(Collectors.toMap(Field::getName, field -> field));
+        values.forEach((n, v) -> Result.wrap(() -> fieldMap.get(n).set(null, v)));
+    }
+
     public static void testHelper(ConnectContext ctx, List<Pair<String, String>> queryList,
                                   Consumer<SessionVariable> svSetter,
+                                  BiFunction<List<Pair<String, AggregatePiece>>, List<List<String>>, Void> resultChecker) {
+        testHelper(ctx, queryList, svSetter, ignored -> {
+            GlobalVariable.setAutoMVPerLatticeMVLimit(-1);
+            GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(-1.0);
+        }, resultChecker);
+    }
+
+    public static void testHelper(ConnectContext ctx, List<Pair<String, String>> queryList,
+                                  Consumer<SessionVariable> svSetter,
+                                  Consumer<Object> gvSetter,
                                   BiFunction<List<Pair<String, AggregatePiece>>, List<List<String>>, Void> resultChecker) {
         mockUpCustomizedQueryExecutor(queryList);
         TableName tableName = new TableName(null, "db", "_tunespace_");
         ShowRecommendationsStmt stmt = new ShowRecommendationsStmt(tableName, -1, -1);
         String savedSv = null;
+        Map<String, Object> savedGv = null;
         try {
             savedSv = ctx.getSessionVariable().getJsonString();
+            savedGv = saveGlobalVariable();
+            gvSetter.accept(null);
             svSetter.accept(ctx.getSessionVariable());
             List<Pair<String, AggregatePiece>> pieces = getPieces(ctx, queryList);
             ShowResultSet showResultSet = TunespaceExecutor.execute(stmt, ctx);
@@ -245,6 +281,7 @@ public class AutoMVUtil {
         } finally {
             try {
                 ctx.getSessionVariable().replayFromJson(savedSv);
+                restoreGlobalVariable(savedGv);
             } catch (IOException e) {
                 Assert.fail();
             }

@@ -71,9 +71,6 @@ public class ReverseTranscriptase extends ScalarOperatorVisitor<Op, List<Op>> {
                 SymbolSet symbolSet = (SymbolSet) e;
                 symbolSet.getEntries().forEach(sym -> {
                     if (!sym.isTenured()) {
-                        if (!substMap.containsKey(sym.getId())) {
-                            System.out.println("haha");
-                        }
                         sym.tenured(Objects.requireNonNull(substMap.get(sym.getId())));
                     }
                 });

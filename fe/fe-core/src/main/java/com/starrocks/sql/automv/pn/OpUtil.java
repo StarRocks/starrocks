@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.math.BigInteger;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -1013,5 +1014,26 @@ public class OpUtil {
                 OpUtil.columnsToOpMap(newTrivialColumns.merge(newNonTrivialColumns));
         substMap = TieredMap.mergeIntegerKey(substMap, extraTrivialSubstMap);
         return ColumnsAndSubstMap.of(newColumns, substMap);
+    }
+
+    public static boolean isStiffPredicate(Op op) {
+        Set<String> defaultValues = ImmutableSet.of("n/a", "na", "none", "", "unknown", "tbd",
+                "-1", "" + Integer.MAX_VALUE, "" + Integer.MIN_VALUE, "" + Long.MAX_VALUE, "" + Long.MIN_VALUE,
+                BigInteger.ONE.negate().toString(),
+                BigInteger.ONE.shiftLeft(127).subtract(BigInteger.ONE).toString(),
+                BigInteger.ONE.shiftLeft(127).negate().toString(),
+                "1970-01-01", "0000-00-00", "1900-01-01", "9999-12-31",
+                "1970-01-01 00:00:00", "1900-01-01 00:00:00", "9999-12-31 23:59:59", "0000-00-00 00:00:00");
+
+        if (op.isVarNeVal()) {
+            return defaultValues.contains(op.arg(1).mustCast(Val.class).getValue().toString().toLowerCase());
+        } else if (op.isVarNotLikeVal()) {
+            return defaultValues.contains(
+                    op.unmodified().arg(1).mustCast(Val.class).getValue().toString().toLowerCase());
+        } else if (op.isOr()) {
+            return op.getArgs().stream().allMatch(OpUtil::isStiffPredicate);
+        } else {
+            return op.isVarIsNotNull();
+        }
     }
 }

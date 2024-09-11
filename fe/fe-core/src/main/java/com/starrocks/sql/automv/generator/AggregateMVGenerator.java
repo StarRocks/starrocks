@@ -24,6 +24,7 @@ import com.starrocks.sql.automv.util.TieredMap;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 // AggregateMVGenerator is used generate a textual MV schema from AggregatePiece.
@@ -41,10 +42,6 @@ public class AggregateMVGenerator {
                 .map(p -> columnAliases.get(p.first))
                 .map(ColumnAlias::getName).collect(Collectors.toList());
 
-        List<String> mvDimensionColumns = result.getOrderedDimensions().stream()
-                .map(p -> columnAliases.get(p.first))
-                .map(ColumnAlias::getName).collect(Collectors.toList());
-
         String mvName = context.getMvNameGenerator().apply(result.getSubquery().getResult());
         mvSchema.add("CREATE MATERIALIZED VIEW").spaces(1).add(mvName).spaces(1).add("(").newLine();
         mvSchema.indentEnclose(() -> mvSchema.addItemsWithNlDel(", ", mvColumns));
@@ -52,12 +49,26 @@ public class AggregateMVGenerator {
         mvSchema.add("COMMENT").spaces(1).addDoubleQuoted("MV recommended by AutoMV").newLine();
         Optional<PrettyPrinter> optPartitionExpr = PartitionPolicy.getPartitionExpr(aggPiece, columnAliases);
         optPartitionExpr.ifPresent(mvSchema::addSuperStep);
+        Optional<Set<Integer>> optCollocateBucketKey =
+                optPartitionExpr.map(ignored -> aggPiece.getAuxState().getColocateBucketKey().orElse(null));
+
+        List<Pair<Integer, GenericColumn>> bucketKey = result.getOrderedDimensions();
+        if (optCollocateBucketKey.isPresent()) {
+            Set<Integer> collocateBucketKey = optCollocateBucketKey.get();
+            bucketKey = result.getOrderedDimensions().stream()
+                    .filter(p -> collocateBucketKey.contains(p.first))
+                    .collect(Collectors.toList());
+        }
+
+        List<String> mvDimensionColumns = bucketKey.stream()
+                .map(p -> columnAliases.get(p.first))
+                .map(ColumnAlias::getName).collect(Collectors.toList());
+
         mvSchema.addSuperStep(DistributionPolicy.getDistribution(aggPiece, mvDimensionColumns));
         List<Pair<Integer, GenericColumn>> candidateOrderByColumns = Lists.newArrayList();
 
         final int maxOrderByColumns = context.getOptions().getMaxOrderByColumns();
-        for (int i = 0; i < result.getOrderedDimensions().size(); ++i) {
-            Pair<Integer, GenericColumn> columnPair = result.getOrderedDimensions().get(i);
+        for (Pair<Integer, GenericColumn> columnPair : bucketKey) {
             GenericColumn column = columnPair.second;
             if (!column.getType().canDistributedBy() || candidateOrderByColumns.size() >= maxOrderByColumns) {
                 break;
@@ -76,7 +87,9 @@ public class AggregateMVGenerator {
         // MV expert should specify one. in future (since AutoMV-L3 stage), a sophisticated refresh
         // policy will be developed.
         mvSchema.add("REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)").newLine();
-        mvSchema.addSuperStep(PropertiesPolicy.getProperties(aggPiece, columnAliases, optPartitionExpr.isPresent()));
+        Optional<String> optCollocateGroup = optCollocateBucketKey.map(ignored -> mvName);
+        mvSchema.addSuperStep(PropertiesPolicy.getProperties(aggPiece, columnAliases, optPartitionExpr.isPresent(),
+                optCollocateGroup));
         mvSchema.add("AS").newLine();
         mvSchema.addSuperStep(result.getSubquery());
         QueryGenerateResult mvResult = result.updateSubquery(mvSchema)

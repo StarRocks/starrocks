@@ -94,9 +94,10 @@ public class CardEstimator {
         });
 
         List<Pair<Var, Integer>> varFreqs =
-                collectUsedOriginalVars(lattice.getFlatTable(), this.dimensionColumnIds, dimensionColumnFreqs);
+                collectUsedOriginalVars(lattice.getFlatTable().getPiece(), this.dimensionColumnIds,
+                        dimensionColumnFreqs);
 
-        this.dimensionalVarAndTableIds = pickupVarsForSampleConjunct(lattice.getFlatTable(), varFreqs, 3);
+        this.dimensionalVarAndTableIds = pickupVarsForSampleConjunct(lattice.getFlatTable().getPiece(), varFreqs, 3);
         this.nextCteName = Util.nextStringGenerator("cte_", "");
         List<Var> conjunctVars = this.dimensionalVarAndTableIds.stream().map(p -> p.first).collect(Collectors.toList());
 
@@ -191,7 +192,7 @@ public class CardEstimator {
     // by add the each sampling conjunct to the corresponding TablePiece that has the
     // OriginalColumn used by the sampling conjunct.
     public Optional<PlanPiece> reviseFlatTable() {
-        PlanPiece flatTable = lattice.getFlatTable();
+        PlanPiece flatTable = lattice.getFlatTable().getPiece();
         Optional<List<Op>> optConjuncts;
         do {
             optConjuncts = this.nextSamplingConjuncts.get();
@@ -211,7 +212,9 @@ public class CardEstimator {
                                 Collectors.mapping(p -> p.second, TieredList.<Op>toList())));
 
         ColumnRefSet requiredColumnIds = ColumnRefSet.createByIds(this.dimensionColumnIds);
-        flatTable.getConjuncts().forEach(conjunct -> requiredColumnIds.union(conjunct.getIds()));
+        TieredList<Op> stiffConjuncts = lattice.getFlatTable().getStiffConjuncts();
+        TieredList<Op> flatTableConjuncts = stiffConjuncts.concat(flatTable.getConjuncts());
+        flatTableConjuncts.forEach(conjunct -> requiredColumnIds.union(conjunct.getIds()));
         Map<Boolean, List<Pair<Integer, GenericColumn>>> columnGroups = requiredColumnIds.getStream()
                 .map(cId -> Pair.create(cId, flatTable.getColumns().get(cId)))
                 .collect(Collectors.partitioningBy(p -> p.second.isOriginal()));
@@ -224,7 +227,7 @@ public class CardEstimator {
         ColumnRefSet extraColumnIds = ColumnRefSet.of();
         derivedColumnList.forEach(p -> p.second.getUsedColumns().ifPresent(extraColumnIds::union));
         Optional.ofNullable(tableIdToConjuncts.get(flatTable.getAuxState().getId()))
-                .ifPresent(flatTableConjuncts -> flatTableConjuncts.forEach(op -> extraColumnIds.union(op.getIds())));
+                .ifPresent(conjunctList -> conjunctList.forEach(op -> extraColumnIds.union(op.getIds())));
         extraColumnIds.except(originalColumnIds);
 
         TieredMap<Integer, GenericColumn> extraOriginalColumns = flatTable.getColumns().entrySet()
@@ -240,22 +243,37 @@ public class CardEstimator {
                 Optional.ofNullable(tableIdToConjuncts.get(piece.getAuxState().getId()))
                         .map(piece::setConjuncts)
                         .orElse(piece.builder().build());
-        PlanPiece revisedFlatTable = flatTable.revise(revisor).setColumns(columns);
+        PlanPiece revisedFlatTable = flatTable.revise(revisor);
+        revisedFlatTable = revisedFlatTable.setColumns(columns);
         return Optional.of(revisedFlatTable);
     }
 
     public Optional<String> getEstimateSql() {
         Preconditions.checkArgument(!bfsNodes.isEmpty());
 
-        Optional<PlanPiece> revisedFlatTable = reviseFlatTable();
-        if (!revisedFlatTable.isPresent()) {
+        Optional<PlanPiece> optRevisedFlatTable = reviseFlatTable();
+        if (!optRevisedFlatTable.isPresent()) {
             return Optional.empty();
         }
 
         String cteName = this.nextCteName.get();
+        PlanPiece revisedFlatTable = optRevisedFlatTable.get();
+        Op stiffOp = Op.and(lattice.getFlatTable().getStiffConjuncts());
 
-        QueryGenerateContext context = QueryGenerateContext.of(false, false);
-        QueryGenerateResult result = QueryGenerator.generate(revisedFlatTable.get(), context);
+        Optional<GenericColumn> optStiffColumn = Optional.empty();
+        if (!stiffOp.isTrueVal()) {
+            optStiffColumn = Optional.of(GenericColumn.derived(stiffOp));
+        }
+        Optional<Pair<Integer, GenericColumn>> optIdAndStiffColumn = optStiffColumn
+                .map(col -> Pair.create(revisedFlatTable.getCommonState().getIdConverter().duplicate().nextId(), col));
+
+        PlanPiece finalRevisedFlatTable = optIdAndStiffColumn
+                .map(idAndCol -> revisedFlatTable.getColumns().newTier().put(idAndCol.first, idAndCol.second).build())
+                .map(revisedFlatTable::setColumns)
+                .orElse(revisedFlatTable);
+
+        QueryGenerateContext context = QueryGenerateContext.ofNoTopAlias();
+        QueryGenerateResult result = QueryGenerator.generate(finalRevisedFlatTable, context);
         Map<Integer, ColumnAlias> columnAliases = result.getColumnAliases();
 
         Supplier<Integer> nextDefaultValue = Util.nextIdGenerator(1);
@@ -263,22 +281,29 @@ public class CardEstimator {
         List<String> cteColumnNames = Lists.newArrayListWithCapacity(this.dimensionColumnIds.size());
         this.dimensionColumnIds.forEach(cId -> cteColumnNames.add(nextColName.get()));
         Iterator<String> colNameIter = cteColumnNames.iterator();
-        List<PrettyPrinter> items = this.dimensionColumnIds.stream()
+        TieredList<PrettyPrinter> items = this.dimensionColumnIds.stream()
                 .map(columnAliases::get)
                 .map(ColumnAlias::getQualifiedName)
                 .map(name -> new PrettyPrinter()
                         .add("coalesce(murmur_hash3_32(").add(name).add("), ")
                         .add(nextDefaultValue.get())
                         .add(") AS ").add(colNameIter.next()))
-                .collect(Collectors.toList());
+                .collect(TieredList.<PrettyPrinter>toList());
+        final String STIFF = "__STIFF__";
+        if (optIdAndStiffColumn.isPresent()) {
+            ColumnAlias stiffAlias = columnAliases.get(optIdAndStiffColumn.get().first);
+            PrettyPrinter stiffItem = new PrettyPrinter().add(stiffAlias.getQualifiedName()).add(" AS ").add(STIFF);
+            items = TieredList.<PrettyPrinter>genesis().concatOne(stiffItem).concat(items);
+        }
 
+        TieredList<PrettyPrinter> finalItems = items;
         PrettyPrinter cteSqlMaker = new PrettyPrinter();
         cteSqlMaker.add("SELECT").newLine();
         cteSqlMaker.indentEnclose(() -> {
-            if (items.isEmpty()) {
+            if (finalItems.isEmpty()) {
                 cteSqlMaker.add(1);
             } else {
-                cteSqlMaker.addSuperStepsWithNlDel(",", items);
+                cteSqlMaker.addSuperStepsWithNlDel(",", finalItems);
             }
         });
         if (result.getTableAlias() == null) {
@@ -302,8 +327,9 @@ public class CardEstimator {
 
         PrettyPrinter rowCount = new PrettyPrinter().add("COUNT(1) as rowCount");
 
+        Optional<String> optStiff = optIdAndStiffColumn.map(p -> STIFF);
         TieredList<PrettyPrinter> ndvCards = bfsNodes.stream()
-                .map(node -> cardEstimation(node.getId().getColumnOrdinals(), cteColumnNames))
+                .map(node -> cardEstimation(node.getId().getColumnOrdinals(), cteColumnNames, optStiff))
                 .collect(TieredList.toList());
 
         PrettyPrinter jsonArrayCards = new PrettyPrinter();
@@ -322,7 +348,7 @@ public class CardEstimator {
         return Optional.of(sqlMaker.getResult());
     }
 
-    private PrettyPrinter cardEstimation(List<Integer> columnOrdinals, List<String> names) {
+    private PrettyPrinter cardEstimation(List<Integer> columnOrdinals, List<String> names, Optional<String> optStiff) {
         if (columnOrdinals.isEmpty()) {
             return new PrettyPrinter().add(1);
         }
@@ -333,6 +359,11 @@ public class CardEstimator {
             PrettyPrinter newHashMaker = new PrettyPrinter();
             newHashMaker.add("(").addSuperStep(hashMaker).add(")*31+").add(name);
             hashMaker = newHashMaker;
+        }
+        if (optStiff.isPresent()) {
+            hashMaker = new PrettyPrinter().add("CASE WHEN(")
+                    .add(optStiff.get())
+                    .add(")THEN(").addSuperStep(hashMaker).add(")ELSE NULL END");
         }
         PrettyPrinter ndvMaker = new PrettyPrinter();
         ndvMaker.add("ndv(").addSuperStep(hashMaker).add(")");

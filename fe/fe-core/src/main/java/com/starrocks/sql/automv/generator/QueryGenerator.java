@@ -76,7 +76,7 @@ public class QueryGenerator {
 
         @Override
         public QueryGenerateResult visitAggregate(AggregatePiece aggPiece, QueryGenerateContext context) {
-
+            Preconditions.checkState(aggPiece.getFlatTable().getFlexibleConjuncts().isEmpty());
             QueryGenerateResult result = context.getInputResults().get(0);
             String newTableAlias = aliasGenerator.nextAliasIfTableNameAbsent(null);
             QueryGenerateResult newResult = synthesizeSubquery(aggPiece, newTableAlias, result, context);
@@ -178,7 +178,22 @@ public class QueryGenerator {
                     .map(p -> Objects.requireNonNull(columnAliases.get(p.first)))
                     .map(ColumnAlias::getName).collect(Collectors.toSet()).size() < outputColumns.size();
 
-            if (planPiece.isTop() || !allOriginal || hasNameCollision || !planPiece.getConjuncts().isEmpty()) {
+            TieredList<Op> conjuncts = planPiece.getConjuncts();
+            // when extract sub-plans from query, we should save AggregatePieces' hoistConjuncts
+            // in tunespace, these conjuncts will be used to determine short key of recommended MVs.
+            TieredList<Op> extraConjuncts = planPiece.getTopAggregateIfFlatTable().map(aggPiece -> {
+                TieredList<Op> newConjuncts = TieredList.<Op>genesis();
+                if (context.isReserveConjuncts()) {
+                    newConjuncts = newConjuncts.concat(aggPiece.getHoistConjuncts());
+                }
+                newConjuncts = newConjuncts.concat(aggPiece.getFlatTable().getStiffConjuncts());
+                return newConjuncts;
+            }).orElse(TieredList.<Op>genesis());
+
+            conjuncts = conjuncts.concat(extraConjuncts);
+
+            if ((context.isNewTableAliasForTopPiece() && planPiece.isTop()) || !allOriginal || hasNameCollision ||
+                    !conjuncts.isEmpty()) {
                 newTableAlias = aliasGenerator.nextAliasIfTableNameAbsent(null);
             }
 
@@ -210,17 +225,6 @@ public class QueryGenerator {
             });
 
             TieredMap<Integer, ColumnAlias> newColumnAliases = newColumnAliasesBuilder.build();
-
-            TieredList<Op> conjuncts = planPiece.getConjuncts();
-            // when extract sub-plans from query, we should save AggregatePieces' hoistConjuncts
-            // in tunespace, these conjuncts will be used to determine short key of recommended MVs.
-            if (context.isReserveConjuncts() && !planPiece.isTop() && planPiece.getAuxState().getParent().isTop()) {
-                TieredList<Op> topAggHoistConjuncts = planPiece.getAuxState().getParent()
-                        .cast(AggregatePiece.class)
-                        .map(AggregatePiece::getHoistConjuncts)
-                        .orElse(TieredList.genesis());
-                conjuncts = conjuncts.concat(topAggHoistConjuncts);
-            }
 
             ColumnRefSet columnIds = ColumnRefSet.createByIds(columnAliases.keySet());
             TieredMap<Integer, GenericColumn> derivedColumns = planPiece.getColumns().entrySet().stream()
@@ -463,9 +467,7 @@ public class QueryGenerator {
                 outputColumnIds.union(ColumnRefSet.createByIds(aggPiece.getMetrics().keySet()));
             }
             List<Pair<Integer, GenericColumn>> outputColumns = piece.getOutputColumns(outputColumnIds);
-            QueryGenerateContext newContext =
-                    QueryGenerateContext.of(context.isTrace(), context.isReserveConjuncts(), outputColumns,
-                            outputColumnIds);
+            QueryGenerateContext newContext = context.derive(outputColumns, outputColumnIds);
             return generateImpl(piece, newContext);
         }
 
@@ -513,9 +515,7 @@ public class QueryGenerator {
             List<Pair<Integer, GenericColumn>> outputColumns =
                     piece.getOutputColumns(superiorInputColumnIds);
             ColumnRefSet inputColumnIds = piece.getInputColumnIds(outputColumns);
-            QueryGenerateContext currentContext =
-                    QueryGenerateContext.of(superiorContext.isTrace(), superiorContext.isReserveConjuncts(),
-                            outputColumns, inputColumnIds);
+            QueryGenerateContext currentContext = superiorContext.derive(outputColumns, inputColumnIds);
             List<QueryGenerateResult> results = piece.getInputPieces().stream()
                     .map(input -> generateImpl(input, currentContext))
                     .collect(Collectors.toList());

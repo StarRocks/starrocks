@@ -21,12 +21,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.generator.AggregateMVGenerator;
 import com.starrocks.sql.automv.generator.MVGenerateContext;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
+import com.starrocks.sql.automv.lifecycle.MVRecommendationSelectOptions;
+import com.starrocks.sql.automv.lifecycle.MVRecommendationSelector;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PlanPiece;
@@ -134,7 +137,7 @@ public class MVRecommender {
             AggregatePiece aggPiece = pieceAndColumn.first;
             ColumnRefSet columnId = new ColumnRefSet(pieceAndColumn.second);
 
-            Map<Boolean, TieredList<Op>> conjunctsGroup = aggPiece.getFlatTable().getConjuncts()
+            Map<Boolean, TieredList<Op>> conjunctsGroup = aggPiece.getFlatTable().getFlexibleConjuncts()
                     .stream()
                     .collect(Collectors.partitioningBy(op -> op.getIds().equals(columnId), TieredList.<Op>toList()));
 
@@ -281,7 +284,7 @@ public class MVRecommender {
 
     private Optional<QueryGenerateResult> recommendOneMv(PlanPiece piece) {
         AggregatePiece aggPiece = piece.cast();
-        ColumnRefToIdConverter idConverter = aggPiece.getFlatTable().getCommonState().getIdConverter();
+        ColumnRefToIdConverter idConverter = aggPiece.getFlatTable().getPiece().getCommonState().getIdConverter();
         MVGenerateContext mvGenerateContext = MVGenerateContext.builder()
                 .setOptions(options)
                 .enableGenerateTraceLog()
@@ -305,7 +308,14 @@ public class MVRecommender {
     private TieredList<MVRecommendation> pickupRecommendations(List<PlanPiece> pieces,
                                                                CardEstimationPolicy cardEstimationPolicy) {
         Lattice lattice = Lattice.createLattice(pieces);
-        return cardEstimationPolicy.estimate(lattice);
+        TieredList<MVRecommendation> recommendations = cardEstimationPolicy.estimate(lattice);
+        if (GlobalVariable.getAutoMVPerLatticeMVLimit() <= 0 &&
+                GlobalVariable.getAutoMVPerLatticeMVSelectivityRatio() <= 0) {
+            return recommendations;
+        }
+        MVRecommendationSelectOptions selectOptions = new MVRecommendationSelectOptions();
+        MVRecommendationSelector selector = new MVRecommendationSelector(selectOptions);
+        return selector.select(recommendations);
     }
 
     public List<MVRecommendation> recommendUsingCardinalityEstimation(Collection<List<PlanPiece>> pieceGroups,
@@ -321,7 +331,8 @@ public class MVRecommender {
                 .reduce(TieredList.genesis(), TieredList::concat);
 
         List<MVRecommendation> recommendations = Lists.newArrayList(recommendationList).stream()
-                .sorted(Collections.reverseOrder(Comparator.comparingDouble(MVRecommendation::getTotalBenefit)))
+                .sorted(Collections.reverseOrder(
+                        Comparator.comparingDouble(MVRecommendation::getEffectiveTotalBenefit)))
                 .collect(Collectors.toList());
 
         Preconditions.checkArgument(endIdx >= 0);

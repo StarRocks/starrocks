@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -114,10 +113,6 @@ public abstract class PlanPiece {
         return optObj.get();
     }
 
-    public final PlanPiece removeConjuncts() {
-        return this.builder().setConjuncts(TieredList.genesis()).build();
-    }
-
     public List<Pair<Integer, GenericColumn>> getOutputColumns(ColumnRefSet superiorInputColumns) {
         List<Pair<Integer, GenericColumn>> outputColumns = Lists.newArrayList();
         //TieredMap may have duplicates, just use the first one.
@@ -146,7 +141,18 @@ public abstract class PlanPiece {
             }
         });
         getConjuncts().forEach(op -> inputColumnIds.union(op.getIds()));
+        getTopAggregateIfFlatTable().ifPresent(aggPiece -> {
+            Preconditions.checkState(aggPiece.getFlatTable().getFlexibleConjuncts().isEmpty());
+            aggPiece.getFlatTable().getStiffConjuncts().forEach(op -> inputColumnIds.union(op.getIds()));
+        });
         return inputColumnIds;
+    }
+
+    public Optional<AggregatePiece> getTopAggregateIfFlatTable() {
+        if (isTop() || !getAuxState().getParent().isTop()) {
+            return Optional.empty();
+        }
+        return getAuxState().getParent().cast(AggregatePiece.class);
     }
 
     public List<PlanPiece> getInputPieces() {
@@ -193,7 +199,7 @@ public abstract class PlanPiece {
 
     public String getNormHash() {
         return this.cast(AggregatePiece.class)
-                .map(aggPiece -> aggPiece.getFlatTable().getAuxState().getNormHash())
+                .map(aggPiece -> aggPiece.getFlatTable().getNormHash())
                 .orElseGet(() -> this.getAuxState().getNormHash());
     }
 
@@ -202,6 +208,7 @@ public abstract class PlanPiece {
     }
 
     public void assignPieceIds() {
+        this.getAuxState().setParent(null);
         assignPieceIdsImpl(Util.nextIdGenerator());
     }
 
@@ -209,26 +216,6 @@ public abstract class PlanPiece {
         getInputPieces().forEach(piece -> piece.assignPieceIdsImpl(idGenerator));
         getInputPieces().forEach(piece -> piece.getAuxState().setParent(this));
         this.getAuxState().setId(idGenerator.get());
-    }
-
-    public PlanPiece postOrderTravel(Consumer<PlanPiece> traveler) {
-        this.getInputPieces().forEach(traveler);
-        traveler.accept(this);
-        return this;
-    }
-
-    public Optional<TablePiece> getLeftMostTable() {
-        if (this.isTableScan()) {
-            return Optional.of(this.cast());
-        } else if (this.isAggregate()) {
-            AggregatePiece aggPiece = this.cast();
-            return aggPiece.getFlatTable().getLeftMostTable();
-        } else if (this.isStarJoin()) {
-            StarJoinPiece starJoinPiece = this.cast();
-            return starJoinPiece.getCentre().getLeftMostTable();
-        } else {
-            return Optional.empty();
-        }
     }
 
     public PlanPiece revise(Function<PlanPiece, PlanPiece> revisor) {

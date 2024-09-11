@@ -25,14 +25,16 @@ import java.util.Objects;
 public final class QueryGenerateContext {
     private final boolean trace;
     private final boolean reserveConjuncts;
+    private final boolean newTableAliasForTopPiece;
     private final List<Pair<Integer, GenericColumn>> outputColumns;
     private final ColumnRefSet inputColumnIds;
     private List<QueryGenerateResult> inputResults;
 
-    private QueryGenerateContext(boolean trace, boolean reserveConjuncts,
+    private QueryGenerateContext(boolean trace, boolean reserveConjuncts, boolean newTableAliasForTopPiece,
                                  List<Pair<Integer, GenericColumn>> outputColumns, ColumnRefSet inputColumnIds) {
         this.trace = trace;
         this.reserveConjuncts = reserveConjuncts;
+        this.newTableAliasForTopPiece = newTableAliasForTopPiece;
         this.outputColumns = outputColumns;
         this.inputColumnIds = inputColumnIds;
     }
@@ -40,7 +42,11 @@ public final class QueryGenerateContext {
     public static QueryGenerateContext of(
             boolean trace,
             boolean reserveConjuncts) {
-        return new QueryGenerateContext(trace, reserveConjuncts, Collections.emptyList(), ColumnRefSet.of());
+        return new QueryGenerateContext(trace, reserveConjuncts, true, Collections.emptyList(), ColumnRefSet.of());
+    }
+
+    public static QueryGenerateContext ofNoTopAlias() {
+        return new QueryGenerateContext(false, false, false, Collections.emptyList(), ColumnRefSet.of());
     }
 
     public static QueryGenerateContext of(
@@ -48,7 +54,16 @@ public final class QueryGenerateContext {
             boolean reserveConjuncts,
             List<Pair<Integer, GenericColumn>> outputColumns,
             ColumnRefSet inputColumnIds) {
-        return new QueryGenerateContext(trace, reserveConjuncts, outputColumns, inputColumnIds);
+        return new QueryGenerateContext(trace, reserveConjuncts, true, outputColumns, inputColumnIds);
+    }
+
+    public boolean isNewTableAliasForTopPiece() {
+        return newTableAliasForTopPiece;
+    }
+
+    public QueryGenerateContext derive(List<Pair<Integer, GenericColumn>> outputColumns, ColumnRefSet inputColumnIds) {
+        return new QueryGenerateContext(trace, reserveConjuncts, newTableAliasForTopPiece, outputColumns,
+                inputColumnIds);
     }
 
     public boolean isTrace() {

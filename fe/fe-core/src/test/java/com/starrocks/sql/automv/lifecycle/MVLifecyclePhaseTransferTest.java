@@ -120,7 +120,7 @@ public class MVLifecyclePhaseTransferTest {
                 .setMVHitRatioProvider(env.getMVLifecycleManager()::getMVHitRatio)
                 .build();
         env.getMVLifecycleManager().setMVPhasePolicySupplier(policySupplier);
-        env.getMVLifecycleAutoKeeper().process(getStarRocksAssert().getCtx());
+        env.getMVLifecycleAutoKeeper().process(getStarRocksAssert().getCtx(), () -> true);
         Assert.assertTrue(mvLifecycle.isDetached());
         Assert.assertSame(mvLifecycle.getPhase(), MVPhase.MP_EXTINCTION);
         env.cleanup();
@@ -641,8 +641,10 @@ public class MVLifecyclePhaseTransferTest {
         }
 
         public MVLifecycle getMVLifecycle() throws Throwable {
-            mvLifecycleAutoKeeper.process(getStarRocksAssert().getCtx());
-            mvLifecycleAutoKeeper.process(getStarRocksAssert().getCtx());
+            GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(-1.0);
+            GlobalVariable.setAutoMVPerLatticeMVLimit(-1);
+            mvLifecycleAutoKeeper.process(getStarRocksAssert().getCtx(), () -> true);
+            mvLifecycleAutoKeeper.process(getStarRocksAssert().getCtx(), () -> true);
             List<MaterializedViewPlus> mvs = MetaUtil.listLegacyMVs(null, "automv_db");
             Assert.assertEquals(mvs.size(), 1);
             Assert.assertEquals(mvLifecycleManager.getNameToMVLifecycles().size(), 1);

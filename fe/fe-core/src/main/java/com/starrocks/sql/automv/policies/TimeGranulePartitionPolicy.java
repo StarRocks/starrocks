@@ -79,7 +79,8 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
         Preconditions.checkArgument(aggPiece.getDistinctMetrics().isEmpty());
         Preconditions.checkArgument(aggPiece.getMetrics().values().stream().allMatch(AggregatePolicies::isRollupAble));
 
-        PlanPiece flatTable = aggPiece.getFlatTable();
+        AggregatePiece.FlatTable flatTable = aggPiece.getFlatTable();
+        PlanPiece flatTablePiece = flatTable.getPiece();
         // extract all partition-by columns from base tables.
         List<TableAndPartitionColumn>
                 tpList = aggPiece.getPartitionColumns().stream()
@@ -102,7 +103,7 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
                 true
         ).or(() -> addCoarseTimeGranuleAsPartitionByColumn(
                 aggPiece,
-                flatTable.getColumns(),
+                flatTablePiece.getColumns(),
                 partitionByColumnIds,
                 false)
         );

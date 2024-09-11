@@ -32,14 +32,16 @@ public final class BenefitTable {
     public BenefitTable(List<MVRecommendation> candiMVBenefits, List<QueryBenefit> queryBenefits) {
         this.candidateMVs = Objects.requireNonNull(candiMVBenefits);
         this.queryBenefits = Objects.requireNonNull(queryBenefits);
-        for (MVRecommendation candiMV : this.candidateMVs) {
-            List<TentativeQueryBenefit> tentativeBenefits = IntStream.range(0, this.queryBenefits.size())
-                    .mapToObj(i -> Pair.create(i, this.queryBenefits.get(i)))
-                    .filter(p -> canRewrite(candiMV.getLatticeNode(), p.second))
-                    .map(p -> new TentativeQueryBenefit(p.second.getId(), p.first))
-                    .collect(ImmutableList.toImmutableList());
-            candiMV.setTentativeBenefits(tentativeBenefits);
-        }
+        candidateMVs.forEach(candiMV -> computeTentativeBenefit(candiMV, queryBenefits));
+    }
+
+    public static void computeTentativeBenefit(MVRecommendation mvRecommendation, List<QueryBenefit> queryBenefits) {
+        List<TentativeQueryBenefit> tentativeBenefits = IntStream.range(0, queryBenefits.size())
+                .mapToObj(i -> Pair.create(i, queryBenefits.get(i)))
+                .filter(p -> canRewrite(mvRecommendation.getLatticeNode(), p.second))
+                .map(p -> new TentativeQueryBenefit(p.second.getId(), p.first))
+                .collect(ImmutableList.toImmutableList());
+        mvRecommendation.setTentativeBenefits(tentativeBenefits);
     }
 
     private static boolean canRewrite(LatticeNode node, QueryBenefit queryBenefit) {
@@ -52,12 +54,20 @@ public final class BenefitTable {
             case UNCOVERABLE_I:
                 return !isUncoverII && node.getId().equals(queryBenefit.getId());
             case UNCOVERABLE_II: {
-                String norm = piece.getFlatTable().getAuxState().getConjunctsNormHash();
+                String norm = piece.getFlatTable().getFlexibleConjunctsNormHash();
                 boolean identicalNorm = Objects.equals(norm, queryBenefit.getConjunctsNormHash());
                 return isUncoverII && node.getId().equals(queryBenefit.getId()) && identicalNorm;
             }
         }
         return false;
+    }
+
+    public List<MVRecommendation> getCandidateMVs() {
+        return candidateMVs;
+    }
+
+    public List<QueryBenefit> getQueryBenefits() {
+        return queryBenefits;
     }
 
     private boolean calculateOnce() {
@@ -85,7 +95,7 @@ public final class BenefitTable {
 
         Optional<MVRecommendation> optMostPromisingCandidateMV = candidateMVs.stream()
                 .filter(candiMV -> !candiMV.isProcessed())
-                .max(Comparator.comparingDouble(MVRecommendation::getTotalBenefit));
+                .max(Comparator.comparingDouble(MVRecommendation::getEffectiveTotalBenefit));
 
         optMostPromisingCandidateMV.ifPresent(candiMV -> {
             candiMV.setProcessed(true);
@@ -107,7 +117,6 @@ public final class BenefitTable {
     public TieredList<MVRecommendation> calculate() {
         while (calculateOnce()) {
         }
-        ;
         return candidateMVs.stream().filter(MVRecommendation::isProcessed).collect(TieredList.toList());
     }
 }

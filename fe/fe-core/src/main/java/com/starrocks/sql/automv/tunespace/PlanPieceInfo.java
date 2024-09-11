@@ -192,10 +192,14 @@ public class PlanPieceInfo {
             traits.setRollupAbleAggs(rollupAbleAggNames);
             traits.setRollupConvertibleAggs(rollupConvertibleAggNames);
             traits.setRollupUnableAggs(rollupUnableAggNames);
-            traits.setNumHoistedConjuncts(aggPiece.getFlatTable().getConjuncts().size());
-            List<String> hoistedConjuncts = aggPiece.getFlatTable().getConjuncts()
+
+            TieredList<Op> hoistedConjuncts = aggPiece.getFlatTable().getFlexibleConjuncts()
+                    .concat(aggPiece.getFlatTable().getStiffConjuncts());
+
+            traits.setNumHoistedConjuncts(hoistedConjuncts.size());
+            List<String> textualHoistedConjuncts = hoistedConjuncts
                     .stream().map(Op::toString).collect(Collectors.toList());
-            traits.setHoistedConjuncts(hoistedConjuncts);
+            traits.setHoistedConjuncts(textualHoistedConjuncts);
         });
         pieceInfo.setTraits(traits);
         return pieceInfo;

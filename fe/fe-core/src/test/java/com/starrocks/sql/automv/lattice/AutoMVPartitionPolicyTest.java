@@ -14,18 +14,28 @@
 
 package com.starrocks.sql.automv.lattice;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.GlobalVariable;
+import com.starrocks.sql.automv.estimation.CardEstimateState;
 import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class AutoMVPartitionPolicyTest {
@@ -56,7 +66,11 @@ public class AutoMVPartitionPolicyTest {
             String granuleStr = Optional.ofNullable(defaultGranule).map(Enum::name).orElse("none");
             String[] expectLines = (String[]) tc[2];
             AutoMVUtil.testSingleQueryHelper(STARROCKS_ASSERT.get(), q,
-                    sv -> sv.setAutoMVDefaultPartitionByTimeGranule(granuleStr),
+                    sv -> {
+                        sv.setAutoMVDefaultPartitionByTimeGranule(granuleStr);
+                        sv.setAutoMVCardRowCountRatioLWM(1.0);
+                        sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    },
                     results -> {
                         Assert.assertFalse(results.isEmpty());
                         String mv = results.get(0).get(2);
@@ -376,5 +390,139 @@ public class AutoMVPartitionPolicyTest {
                 }
         };
         testHelper(testCases);
+    }
+
+    @Test
+    public void testCollocateMV() {
+        Set<String> queryNames = ImmutableSet.of("Q17", "Q18", "Q19");
+        List<Pair<String, String>> queryList = TestUtil.getClickBenchQueryList()
+                .stream()
+                .filter(p -> queryNames.contains(p.first))
+                .map(p -> Pair.create(p.first, p.second.replace("hits", "hits_daily")))
+                .collect(Collectors.toList());
+        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                    sv.setAutoMVCardRowCountRatioLWM(0.1);
+                    sv.setAutoMVCardRowCountRatioHWM(0.5);
+                },
+                result -> {
+                    Assert.assertEquals(1, result.size());
+                    String mv = result.get(0).get(2);
+                    Assert.assertTrue(mv.contains("DISTRIBUTED BY HASH (EventDate, UserID, SearchPhrase)"));
+                    Assert.assertTrue(mv.contains("colocate_with"));
+                    String acceleratedQueries = result.get(0).get(14);
+                    Assert.assertEquals("[\"Q17.part.0\", \"Q18.part.0\", \"Q19.part.0\"]", acceleratedQueries);
+                });
+    }
+
+    @Test
+    public void testStiffConjuncts() {
+        Set<String> queryNames = ImmutableSet.of("Q29");
+        List<Pair<String, String>> queryList = TestUtil.getClickBenchQueryList()
+                .stream()
+                .filter(p -> queryNames.contains(p.first))
+                .map(p -> Pair.create(p.first, p.second.replace("hits", "hits_daily")))
+                .collect(Collectors.toList());
+        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                    sv.setAutoMVCardRowCountRatioLWM(0.1);
+                    sv.setAutoMVCardRowCountRatioHWM(0.5);
+                },
+                result -> {
+                    Assert.assertEquals(1, result.size());
+                    String mv = result.get(0).get(2);
+                    Assert.assertTrue(mv, mv.contains("SELECT\n" +
+                            "  _ta0000.EventDate\n" +
+                            "  ,(regexp_replace(_ta0000.Referer, \"^https?://(?:www.)?([^/]+)/.*$\", \"1\")) AS _ca0003\n" +
+                            "  ,(sum(length(_ta0000.Referer))) AS _ca0004\n" +
+                            "  ,(count(length(_ta0000.Referer))) AS _ca0005\n" +
+                            "  ,(count(1)) AS _ca0006\n" +
+                            "  ,(min(_ta0000.Referer)) AS _ca0007\n" +
+                            "FROM\n" +
+                            "  (\n" +
+                            "    SELECT\n" +
+                            "      `db0`.`hits_daily`.EventDate\n" +
+                            "      ,`db0`.`hits_daily`.Referer\n" +
+                            "    FROM\n" +
+                            "      `db0`.`hits_daily`\n" +
+                            "    WHERE\n" +
+                            "      (`db0`.`hits_daily`.Referer != \"\")\n" +
+                            "  ) _ta0000\n" +
+                            "GROUP BY\n" +
+                            "  _ta0000.EventDate\n" +
+                            "  ,regexp_replace(_ta0000.Referer, \"^https?://(?:www.)?([^/]+)/.*$\", \"1\")"));
+                    String acceleratedQueries = result.get(0).get(14);
+                    Assert.assertEquals("[\"Q29.part.0\"]", acceleratedQueries);
+                });
+    }
+
+    @Test
+    public void testMVSelection1() {
+        Set<String> queryNames = ImmutableSet.of("Q17", "Q18", "Q19", "Q29");
+        List<Pair<String, String>> queryList = TestUtil.getClickBenchQueryList()
+                .stream()
+                .filter(p -> queryNames.contains(p.first))
+                .map(p -> Pair.create(p.first, p.second.replace("hits", "hits_daily")))
+                .collect(Collectors.toList());
+        new MockUp<CardEstimateState>() {
+            @Mock
+            public double getSamplingRatio() {
+                return 0.6;
+            }
+        };
+        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                    GlobalVariable.setAutoMVPerLatticeMVLimit(1);
+                    GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(0.1);
+                    GlobalVariable.setAutoMVPartitionedMVCardMax(1.0E11);
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
+                },
+                result -> {
+                    Assert.assertEquals(2, result.size());
+                });
+
+        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                    GlobalVariable.setAutoMVPerLatticeMVLimit(10);
+                    GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(0.1);
+                    GlobalVariable.setAutoMVPartitionedMVCardMax(1.0E11);
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
+                },
+                result -> {
+                    Assert.assertEquals(3, result.size());
+                });
+    }
+
+    @Test
+    public void testMVSelection2() {
+        String sqlFmt = "select murmur_hash3_32(concat(UserId,'%d'))%%1024, sum(M0) \n" +
+                "from hits_daily  \n" +
+                "group by murmur_hash3_32(concat(UserId,'%d'))%%1024";
+        List<Pair<String, String>> queryList = IntStream.range(0, 50)
+                .mapToObj(i -> Pair.create("Q" + i, String.format(sqlFmt, i, i)))
+                .collect(Collectors.toList());
+        new MockUp<CardEstimateState>() {
+            @Mock
+            public double getSamplingRatio() {
+                return 0.6;
+            }
+        };
+        for (int n = 1; n < 50; n += 4) {
+            int mvLimit = n;
+            AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
+                    sv -> {
+                        GlobalVariable.setAutoMVPerLatticeMVLimit(mvLimit);
+                        GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(0.3);
+                        GlobalVariable.setAutoMVPartitionedMVCardMax(1.0E11);
+                        sv.setAutoMVCardRowCountRatioHWM(1.0);
+                        sv.setAutoMVCardRowCountRatioLWM(1.0);
+                    },
+                    result -> {
+                        Assert.assertTrue(
+                                (mvLimit < 30 && result.size() == mvLimit) || (mvLimit >= 30 && result.size() == 30));
+                    });
+        }
     }
 }

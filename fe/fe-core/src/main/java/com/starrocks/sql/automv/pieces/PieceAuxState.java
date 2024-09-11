@@ -14,13 +14,13 @@
 
 package com.starrocks.sql.automv.pieces;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.Util;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 public class PieceAuxState {
     private int id = -1;
@@ -30,9 +30,7 @@ public class PieceAuxState {
 
     private transient String normHash = null;
 
-    private List<String> conjuncts = null;
-    private transient PrettyPrinter conjunctsNorm = null;
-    private transient String conjunctsNormHash = null;
+    private Set<Integer> colocateBucketKey = null;
 
     public PieceAuxState() {
     }
@@ -41,7 +39,15 @@ public class PieceAuxState {
         this.id = auxState.id;
         this.parent = auxState.parent;
         this.norm = auxState.norm;
-        this.conjuncts = auxState.conjuncts;
+    }
+
+    public Optional<Set<Integer>> getColocateBucketKey() {
+        return Optional.ofNullable(colocateBucketKey);
+    }
+
+    public void setColocateBucketKey(Set<Integer> colocateBucketKey) {
+        Preconditions.checkState(this.colocateBucketKey == null);
+        this.colocateBucketKey = Objects.requireNonNull(colocateBucketKey);
     }
 
     public int getId() {
@@ -61,15 +67,11 @@ public class PieceAuxState {
     }
 
     public PrettyPrinter getNorm() {
-        return Objects.requireNonNull(norm);
+        return norm;
     }
 
     public void setNorm(PrettyPrinter norm) {
         this.norm = Objects.requireNonNull(norm);
-    }
-
-    public void setConjuncts(List<String> conjuncts) {
-        this.conjuncts = Objects.requireNonNull(conjuncts);
     }
 
     public String getNormHash() {
@@ -77,21 +79,6 @@ public class PieceAuxState {
             normHash = Util.md5(norm.getResult());
         }
         return normHash;
-    }
-
-    public PrettyPrinter getConjunctsNorm() {
-        if (conjunctsNorm == null) {
-            List<String> conjuncts = Optional.ofNullable(this.conjuncts).orElse(Collections.emptyList());
-            this.conjunctsNorm = new PrettyPrinter().addItemsWithDelNl(",", conjuncts);
-        }
-        return this.conjunctsNorm;
-    }
-
-    public String getConjunctsNormHash() {
-        if (this.conjunctsNormHash == null) {
-            this.conjunctsNormHash = Util.md5(getConjunctsNorm().getResult());
-        }
-        return this.conjunctsNormHash;
     }
 
     public PieceAuxState duplicate() {

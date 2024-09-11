@@ -80,7 +80,11 @@ public class AutoMVClickBenchTest {
 
         AutoMVUtil.testHelper(STARROCKS_ASSERT.get().getCtx(),
                 queryList,
-                sv -> sv.setAutoMVEnableComplexDerivedDimensions(true),
+                sv -> {
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVCardRowCountRatioLWM(1.0);
+                    sv.setAutoMVEnableComplexDerivedDimensions(true);
+                },
                 results -> Assert.assertFalse(results.isEmpty()));
     }
 

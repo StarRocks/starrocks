@@ -2584,7 +2584,8 @@ public class StmtExecutor {
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
-
+            coord.setTopProfileSupplier(this::buildTopLevelProfile);
+            coord.setExecPlan(plan);
             coord.exec();
             RowBatch batch;
             do {
@@ -2593,10 +2594,20 @@ public class StmtExecutor {
                     sqlResult.add(batch.getBatch());
                 }
             } while (!batch.isEos());
+            context.getState().setEof();
         } catch (Exception e) {
+            context.getState().setError(e.getMessage());
             LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
+            boolean async = false;
+            if (context.isProfileEnabled()) {
+                async = tryProcessProfileAsync(plan, 0);
+            }
+            if (async) {
+                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                        context.getSessionVariable().getProfileTimeout() * 1000L);
+            }
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
         return Pair.create(sqlResult, coord.getExecStatus());

@@ -19,6 +19,7 @@ import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -44,6 +45,19 @@ public class LatticeNodeId {
         ColumnRefSet value = ColumnRefSet.of();
         for (GenericColumn dim : dimensions) {
             value.union(columnToOrdinalMap.get(dim.getNorm().toString()));
+        }
+        return new LatticeNodeId(value);
+    }
+
+    public static LatticeNodeId intersectAll(Collection<LatticeNodeId> ids) {
+        ColumnRefSet value = ColumnRefSet.of();
+        if (ids.isEmpty()) {
+            return new LatticeNodeId(value);
+        }
+        Iterator<LatticeNodeId> idIter = ids.iterator();
+        value.union(idIter.next().value);
+        while (idIter.hasNext()) {
+            value.intersect(idIter.next().value);
         }
         return new LatticeNodeId(value);
     }

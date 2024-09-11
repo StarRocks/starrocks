@@ -18,6 +18,8 @@ import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.StarJoinPiece;
+import com.starrocks.sql.automv.pn.Op;
+import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
@@ -36,10 +38,12 @@ public class EliminateSemiAntiJoinPolicy extends AggregatePolicy.SimplePolicy {
 
     @Override
     public Optional<AggregatePiece> convert(AggregatePiece aggPiece) {
-        if (!aggPiece.getFlatTable().isStarJoin()) {
+        AggregatePiece.FlatTable flatTable = aggPiece.getFlatTable();
+        PlanPiece flatTablePiece = flatTable.getPiece();
+        if (!flatTablePiece.isStarJoin()) {
             return Optional.empty();
         }
-        StarJoinPiece starJoin = aggPiece.getFlatTable().cast();
+        StarJoinPiece starJoin = aggPiece.getFlatTable().getPiece().cast();
 
         Map<Boolean, List<StarJoinPiece.StarCorner>> cornerGroups = starJoin.getCorners().stream()
                 .collect(Collectors.partitioningBy(corner -> corner.getJoinType().isLeftSemiAntiJoin()));
@@ -64,15 +68,15 @@ public class EliminateSemiAntiJoinPolicy extends AggregatePolicy.SimplePolicy {
         ColumnRefSet aggColumnIds = ColumnRefSet.createByIds(aggPiece.getColumns().keySet());
         columnIds.except(aggColumnIds);
 
-        PlanPiece newFlatTable;
+        PlanPiece newFlatTablePiece;
         if (restCorners.isEmpty()) {
-            newFlatTable = centre.builder().setConjuncts(starJoin.getConjuncts()).build();
+            newFlatTablePiece = centre.builder().setConjuncts(TieredList.<Op>genesis()).build();
         } else {
-            newFlatTable = starJoin.builder().mustCast(StarJoinPiece.Builder.class)
+            newFlatTablePiece = starJoin.builder().mustCast(StarJoinPiece.Builder.class)
                     .setCentre(centre)
                     .setCorners(restCorners)
                     .setColumns(starJoin.getColumns())
-                    .setConjuncts(starJoin.getConjuncts())
+                    .setConjuncts(TieredList.<Op>genesis())
                     .build().cast();
         }
 
@@ -80,6 +84,9 @@ public class EliminateSemiAntiJoinPolicy extends AggregatePolicy.SimplePolicy {
                 .filter(e -> columnIds.contains(e.getKey()))
                 .collect(TieredMap.toMap());
 
+        AggregatePiece.FlatTable newFlatTable =
+                new AggregatePiece.FlatTable(newFlatTablePiece, flatTable.getStiffConjuncts(),
+                        flatTable.getFlexibleConjuncts());
         AggregatePiece newAggPiece = aggPiece.builder().mustCast(AggregatePiece.Builder.class)
                 .setFlatTable(newFlatTable)
                 .setDimensions(aggPiece.getDimensions().merge(newAddedColumns))

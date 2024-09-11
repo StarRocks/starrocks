@@ -61,7 +61,6 @@ public class LatticeNode {
     private TieredList<AggregatePiece> uncoverableIPieces;
     private TieredList<AggregatePiece> uncoverableIIPieces;
     private transient CardRecord card;
-    private transient Set<LatticeNodeId> ancestors;
     private transient TieredMap<LatticeNodeId, Integer> offsprings;
 
     public LatticeNode(Lattice lattice, LatticeNodeId id, AggregatePiece aggPiece) {
@@ -81,8 +80,8 @@ public class LatticeNode {
             return pieces;
         }
         AggregatePiece firstAggPiece = pieces.get(0);
-        ColumnRefToIdConverter idConverter = firstAggPiece.getFlatTable().getCommonState().getIdConverter();
-        Map<String, Op> normToOpMap = firstAggPiece.getFlatTable().getColumns().entrySet()
+        ColumnRefToIdConverter idConverter = firstAggPiece.getFlatTable().getPiece().getCommonState().getIdConverter();
+        Map<String, Op> normToOpMap = firstAggPiece.getFlatTable().getPiece().getColumns().entrySet()
                 .stream()
                 .collect(ImmutableMap.toImmutableMap(
                         e -> e.getValue().getNorm().toString(),
@@ -143,7 +142,7 @@ public class LatticeNode {
             }
             ColumnRefSet usedColumns = ColumnRefSet.of();
             uniqueConjuncts.stream().map(Op::getIds).forEach(usedColumns::union);
-            Map<Integer, Op> idToOpMap = aggPiece.getFlatTable().getColumns()
+            Map<Integer, Op> idToOpMap = aggPiece.getFlatTable().getPiece().getColumns()
                     .entrySet()
                     .stream()
                     .filter(e -> usedColumns.contains(e.getKey()))
@@ -176,7 +175,7 @@ public class LatticeNode {
             ColumnRefSet usedColumns = ColumnRefSet.of();
             metrics.forEach(metric -> metric.getUsedColumns().ifPresent(usedColumns::union));
 
-            Map<Integer, Op> idToOpMap = aggPiece.getFlatTable().getColumns()
+            Map<Integer, Op> idToOpMap = aggPiece.getFlatTable().getPiece().getColumns()
                     .entrySet()
                     .stream()
                     .filter(e -> usedColumns.contains(e.getKey()))
@@ -196,10 +195,11 @@ public class LatticeNode {
             return aggPieces;
         }
 
-        PlanPiece initFlatTable = aggPieces.get(0).mustCast(AggregatePiece.class).getFlatTable();
+        aggPieces.forEach(PlanPieceNormalizer::normalize);
+        PlanPiece initFlatTablePiece = aggPieces.get(0).mustCast(AggregatePiece.class).getFlatTable().getPiece();
         Set<String> uniqueColumnNorms = Sets.newHashSet();
         TieredMap.Builder<Integer, GenericColumn> initUniqueOriginalColumnsBuilder = TieredMap.newGenesisTier();
-        for (Map.Entry<Integer, GenericColumn> e : initFlatTable.getColumns().entrySet()) {
+        for (Map.Entry<Integer, GenericColumn> e : initFlatTablePiece.getColumns().entrySet()) {
             String norm = e.getValue().getNorm().toString();
             if (e.getValue().isDerived() || uniqueColumnNorms.contains(norm)) {
                 continue;
@@ -218,13 +218,13 @@ public class LatticeNode {
                         e -> e.getValue().getNorm().toString(),
                         e -> OpUtil.columnToOp(e.getKey(), e.getValue())));
 
-        ColumnRefToIdConverter initIdConverter = initFlatTable.getCommonState().getIdConverter();
+        ColumnRefToIdConverter initIdConverter = initFlatTablePiece.getCommonState().getIdConverter();
 
         TieredMap<Integer, GenericColumn> columns = initUniqueOriginalColumns;
 
         for (PlanPiece piece : aggPieces) {
             AggregatePiece aggPiece = piece.cast();
-            PlanPiece flatTable = aggPiece.getFlatTable();
+            PlanPiece flatTable = aggPiece.getFlatTable().getPiece();
             Map<Boolean, TieredMap<Integer, GenericColumn>> columnGroups = flatTable.getColumns().entrySet()
                     .stream()
                     .collect(Collectors.partitioningBy(e -> e.getValue().isOriginal(), TieredMap.toMap()));
@@ -257,13 +257,15 @@ public class LatticeNode {
         PieceCommonState commonState = new PieceCommonState(
                 initIdConverter.duplicate(),
                 ImmutableSet.of(),
-                initFlatTable.getCommonState().getFqTableMap());
+                initFlatTablePiece.getCommonState().getFqTableMap());
 
-        PlanPiece realFlatTable = initFlatTable.builder()
+        PlanPiece realFlatTablePiece = initFlatTablePiece.builder()
                 .setColumns(columns)
                 .setConjuncts(TieredList.genesis())
                 .setCommonState(commonState)
                 .build();
+
+        AggregatePiece.FlatTable realFlatTable = new AggregatePiece.FlatTable(realFlatTablePiece);
 
         Map<String, Op> normToOp = columns.entrySet().stream().collect(ImmutableMap.toImmutableMap(
                 e -> e.getValue().getNorm().toString(),
@@ -272,15 +274,16 @@ public class LatticeNode {
         List<PlanPiece> newAggPieces = Lists.newArrayListWithCapacity(aggPieces.size());
         for (PlanPiece piece : aggPieces) {
             AggregatePiece aggPiece = piece.cast();
-            PlanPiece flatTable = aggPiece.getFlatTable();
-            Map<Integer, Op> idToOp = flatTable.getColumns().entrySet()
+            AggregatePiece.FlatTable flatTable = aggPiece.getFlatTable();
+            PlanPiece flatTablePiece = flatTable.getPiece();
+            Map<Integer, Op> idToOp = flatTablePiece.getColumns().entrySet()
                     .stream()
                     .collect(ImmutableMap.toImmutableMap(
                             Map.Entry::getKey,
                             e -> Objects.requireNonNull(normToOp.get(e.getValue().getNorm().toString()))
                     ));
 
-            ColumnRefToIdConverter idConverter = realFlatTable.getCommonState().getIdConverter().duplicate();
+            ColumnRefToIdConverter idConverter = realFlatTable.getPiece().getCommonState().getIdConverter().duplicate();
 
             List<TieredMap<Integer, GenericColumn>> columnsList = Stream.of(
                             aggPiece.getDimensions(),
@@ -291,7 +294,8 @@ public class LatticeNode {
                     .collect(Collectors.toList());
 
             List<TieredList<Op>> conjunctsList = Stream.of(
-                            flatTable.getConjuncts(),
+                            flatTable.getStiffConjuncts(),
+                            flatTable.getFlexibleConjuncts(),
                             aggPiece.getHoistConjuncts(),
                             aggPiece.getNonHoistConjuncts())
                     .map(conjuncts -> OpUtil.subst(conjuncts, idToOp))
@@ -301,19 +305,22 @@ public class LatticeNode {
                     new PieceCommonState(idConverter, piece.getCommonState().getCoveredQueries(),
                             commonState.getFqTableMap());
 
-            PlanPiece newFlatTable = realFlatTable.builder()
-                    .setConjuncts(conjunctsList.get(0))
+            Preconditions.checkState(flatTablePiece.getConjuncts().isEmpty());
+            PlanPiece newFlatTablePiece = realFlatTable.getPiece().builder()
+                    .setConjuncts(TieredList.<Op>genesis())
                     .setCommonState(pieceCommonState)
                     .build();
 
+            AggregatePiece.FlatTable newFlatTable = new AggregatePiece.FlatTable(
+                    newFlatTablePiece, conjunctsList.get(0), conjunctsList.get(1));
             AggregatePiece newAggPiece = AggregatePiece.newBuilder()
                     .setFlatTable(newFlatTable)
                     .setDimensions(columnsList.get(0))
                     .setRollupDimensions(columnsList.get(1))
                     .setMetrics(columnsList.get(2))
                     .setDistinctMetrics(columnsList.get(3))
-                    .setHoistConjuncts(conjunctsList.get(1))
-                    .setNonHoistConjuncts(conjunctsList.get(2))
+                    .setHoistConjuncts(conjunctsList.get(2))
+                    .setNonHoistConjuncts(conjunctsList.get(3))
                     .setCommonState(pieceCommonState)
                     .setConjuncts(TieredList.genesis())
                     .build().cast();
@@ -427,14 +434,14 @@ public class LatticeNode {
             }
             case UNCOVERABLE_I: {
                 uncoverableIPieces = uncoverableIPieces.concatOne(aggPiece);
-                Preconditions.checkState(aggPiece.getFlatTable().getConjuncts().isEmpty());
+                Preconditions.checkState(aggPiece.getFlatTable().getStiffConjuncts().isEmpty());
                 lattice.updateNodeIds(id, Category.UNCOVERABLE_I, null);
                 break;
             }
             case UNCOVERABLE_II: {
                 uncoverableIIPieces = uncoverableIIPieces.concatOne(aggPiece);
-                Preconditions.checkState(!aggPiece.getFlatTable().getConjuncts().isEmpty());
-                String conjunctsNorm = aggPiece.getFlatTable().getAuxState().getConjunctsNormHash();
+                Preconditions.checkState(!aggPiece.getFlatTable().getStiffConjuncts().isEmpty());
+                String conjunctsNorm = aggPiece.getFlatTable().getFlexibleConjunctsNormHash();
                 lattice.updateNodeIds(id, Category.UNCOVERABLE_II, conjunctsNorm);
                 break;
             }
@@ -469,7 +476,7 @@ public class LatticeNode {
         Collection<List<AggregatePiece>> pieceGroups = getUncoverableIIPieces()
                 .stream()
                 .collect(Collectors.groupingBy(aggPiece ->
-                        aggPiece.getFlatTable().getAuxState().getConjunctsNorm().getResult())).values();
+                        aggPiece.getFlatTable().getFlexibleConjunctsNorm().getResult())).values();
         List<AggregatePiece> pieces = Lists.newArrayListWithCapacity(pieceGroups.size());
         for (List<AggregatePiece> group : pieceGroups) {
             pieces.addAll(consolidate(group));
@@ -552,9 +559,10 @@ public class LatticeNode {
                 .map(lattice.getColumnNorms()::get)
                 .collect(Collectors.toSet());
 
-        TieredMap<Integer, GenericColumn> extraDimensions = aggPiece.getFlatTable().getColumns().entrySet().stream()
-                .filter(e -> extraDimensionNorms.contains(e.getValue().getNorm().toString()))
-                .collect(TieredMap.toMap());
+        TieredMap<Integer, GenericColumn> extraDimensions =
+                aggPiece.getFlatTable().getPiece().getColumns().entrySet().stream()
+                        .filter(e -> extraDimensionNorms.contains(e.getValue().getNorm().toString()))
+                        .collect(TieredMap.toMap());
         TieredMap<Integer, GenericColumn> newDimensions = aggPiece.getDimensions().merge(extraDimensions);
 
         return aggPiece.builder().mustCast(AggregatePiece.Builder.class)
@@ -668,7 +676,7 @@ public class LatticeNode {
 
         public static Category getCategory(AggregatePiece piece) {
             if (AggregatePolicies.hasRollupUnable(piece.getMetrics().values())) {
-                if (piece.getFlatTable().getConjuncts().isEmpty()) {
+                if (piece.getFlatTable().getStiffConjuncts().isEmpty()) {
                     return UNCOVERABLE_I;
                 } else {
                     return UNCOVERABLE_II;

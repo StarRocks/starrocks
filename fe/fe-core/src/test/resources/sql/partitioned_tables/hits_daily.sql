@@ -5,6 +5,8 @@ CREATE TABLE hits_daily (
     EventDateS VARCHAR(128) NOT NULL,
     EventTimeS VARCHAR(128) NOT NULL,
     UserID BIGINT NOT NULL,
+    SearchPhrase VARCHAR(256),
+    Referer VARCHAR(128),
     M0 DECIMAL(7,2)
 )  
 DUPLICATE KEY (EventDate,EventTime,EventDateS,EventTimeS,UserID)

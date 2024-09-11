@@ -318,13 +318,9 @@ public class TieredList<T> implements List<T> {
         throw new UnsupportedOperationException();
     }
 
-    @NotNull
     @Override
-    @Deprecated
-    @CanIgnoreReturnValue
-    @DoNotCall("Always throws UnsupportedOperationException")
     public List<T> subList(int i, int i1) {
-        throw new UnsupportedOperationException();
+        return TieredList.<T>genesis().concat(untiered().subList(i, i1));
     }
 
     private void formatImpl(String name, PrettyPrinter printer) {

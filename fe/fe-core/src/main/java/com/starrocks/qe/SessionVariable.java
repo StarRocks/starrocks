@@ -2202,25 +2202,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean autoMVUseBitmapCountDistinct = true;
     @VarAttr(name = AUTOMV_USE_HLL_COUNT_DISTINCT)
     private boolean autoMVUseHllCountDistinct = false;
-    @VarAttr(name = AUTOMV_SAMPLING_RATIO_LOW_BOUND)
+    @VarAttr(name = AUTOMV_SAMPLING_RATIO_LOW_BOUND, flag = VariableMgr.INVISIBLE)
     private double autoMVSamplingRatioLowBound = 0.01;
-    @VarAttr(name = AUTOMV_MIN_SAMPLING_ROWS)
+    @VarAttr(name = AUTOMV_MIN_SAMPLING_ROWS, flag = VariableMgr.INVISIBLE)
     private long autoMVMinSamplingRows = 1073741824;
-    @VarAttr(name = AUTOMV_RELATIVE_ERROR_BOUND)
+    @VarAttr(name = AUTOMV_RELATIVE_ERROR_BOUND, flag = VariableMgr.INVISIBLE)
     private double autoMVRelativeErrorBound = 0.05;
 
-    @VarAttr(name = AUTOMV_SAMPLING_BUCKETS)
+    @VarAttr(name = AUTOMV_SAMPLING_BUCKETS, flag = VariableMgr.INVISIBLE)
     private int autoMVSamplingBuckets = 512;
-    @VarAttr(name = AUTOMV_SAMPLING_TIMEOUT)
+    @VarAttr(name = AUTOMV_SAMPLING_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private long autoMVSamplingTimeout = 300000;
 
     @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_LWM)
-    private double autoMVCardRowCountRatioLWM = 0.0;
+    private double autoMVCardRowCountRatioLWM = 0.1;
 
     @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_HWM)
-    private double autoMVCardRowCountRatioHWM = 0.5;
+    private double autoMVCardRowCountRatioHWM = 0.6;
 
-    @VarAttr(name = AUTOMV_MAX_CALCULATE_STEPS)
+    @VarAttr(name = AUTOMV_MAX_CALCULATE_STEPS, flag = VariableMgr.INVISIBLE)
     private int autoMVMaxCalculateSteps = Integer.MAX_VALUE;
 
     @VarAttr(name = AUTOMV_ENABLE_COMPLEX_DERIVED_METRICS)

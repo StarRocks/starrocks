@@ -22,7 +22,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.automv.generator.MVName;
@@ -30,15 +30,19 @@ import com.starrocks.sql.automv.lifecycle.MVLifecycleManager;
 import com.starrocks.sql.automv.lifecycle.TunespaceIngester;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.automv.util.Util;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 public class MVLifecycleAutoKeeper extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(MVLifecycleAutoKeeper.class);
     private final MVLifecycleManager mvLifecycleManager = new MVLifecycleManager();
+
+    private long lastCreateTime = -1;
 
     public MVLifecycleAutoKeeper() {
     }
@@ -61,11 +65,21 @@ public class MVLifecycleAutoKeeper extends FrontendDaemon {
         ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        ctx.setSessionVariable(new SessionVariable());
+        ctx.setSessionVariable(VariableMgr.newSessionVariable());
         ctx.setThreadLocalInfo();
 
         try {
-            process(ctx);
+            Supplier<Boolean> shouldCreateMVs = () -> {
+                long now = System.currentTimeMillis();
+                long interval = GlobalVariable.getAutoMVLifecycleMVRecommendationInterval();
+                if (lastCreateTime == -1 || Util.timeDiff(now, lastCreateTime) > interval) {
+                    lastCreateTime = System.currentTimeMillis();
+                    return true;
+                } else {
+                    return false;
+                }
+            };
+            process(ctx, shouldCreateMVs);
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of MVActiveChecker", e);
         } finally {
@@ -73,17 +87,7 @@ public class MVLifecycleAutoKeeper extends FrontendDaemon {
         }
     }
 
-    public void process(ConnectContext ctx) throws Throwable {
-        // starrocks_audit_db__.starrocks_audit_tbl__
-        String auditDb = "starrocks_audit_db__";
-        String auditTbl = "starrocks_audit_tbl__";
-        String tsDb = "automv_ts_db__";
-        String tsTbl = "automv_ts_tbl__";
-        String mvDb = "automv_db";
-
-        TunespaceIngester ingester =
-                TunespaceIngester.of(ctx, mvLifecycleManager, auditDb, auditTbl, tsDb, tsTbl, mvDb);
-        ingester.prepare();
+    private void createMVs(TunespaceIngester ingester) throws Throwable {
         ingester.ingest(mvLifecycleManager);
 
         List<Pair<MVName, MaterializedViewPlus>> legacyMVs = ingester.listLegacyMVs();
@@ -105,6 +109,23 @@ public class MVLifecycleAutoKeeper extends FrontendDaemon {
                 .collect(TieredMap.toMap());
 
         ingester.createMVs(newMvMap);
+    }
+
+    public void process(ConnectContext ctx, Supplier<Boolean> shouldCreateMV) throws Throwable {
+        // starrocks_audit_db__.starrocks_audit_tbl__
+        String auditDb = "starrocks_audit_db__";
+        String auditTbl = "starrocks_audit_tbl__";
+        String tsDb = "automv_ts_db__";
+        String tsTbl = "automv_ts_tbl__";
+        String mvDb = "automv_db";
+
+        TunespaceIngester ingester =
+                TunespaceIngester.of(ctx, mvLifecycleManager, auditDb, auditTbl, tsDb, tsTbl, mvDb);
+        ingester.prepare();
+        if (shouldCreateMV.get()) {
+            createMVs(ingester);
+        }
+        mvLifecycleManager.associateMVWithLifecycle(ingester.listLegacyMVs());
         ingester.collectMVHitRatio();
         mvLifecycleManager.scanMVLifecycles();
     }

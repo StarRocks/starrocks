@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.options.AutoMVOptions;
@@ -41,6 +42,7 @@ import com.starrocks.sql.automv.util.Util;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -81,7 +83,7 @@ public class Lattice {
     private final List<Integer> columnIds;
     private final List<Integer> dimensionColumnIds;
     private final List<String> columnNorms;
-    private final PlanPiece flatTable;
+    private final AggregatePiece.FlatTable flatTable;
     private final Map<String, Op> flatTableNormToOpMap;
 
     private final List<LatticeNodeId> coverableNodeIds = Lists.newArrayList();
@@ -96,12 +98,13 @@ public class Lattice {
     private Map<LatticeNodeId, Long> accCoverableNumAcceleratedQueries = null;
     private Map<LatticeNodeId, Long> uncoverableINumAcceleratedQueries = null;
     private Map<LatticeNodeId, Map<String, Long>> uncoverableIINumAcceleratedQueries = null;
+    private BenefitTable benefitTable;
 
     public Lattice(Map<String, Integer> columnToOrdinalMap,
                    List<Integer> columnIds,
                    List<Integer> dimensionColumnIds,
                    List<String> columnNorms,
-                   PlanPiece flatTable,
+                   AggregatePiece.FlatTable flatTable,
                    LatticeNodeId rootId,
                    AggregatePiece rootAggPiece) {
         this.columnToOrdinalMap = Objects.requireNonNull(columnToOrdinalMap);
@@ -109,27 +112,27 @@ public class Lattice {
         this.dimensionColumnIds = Objects.requireNonNull(dimensionColumnIds);
         this.columnNorms = Objects.requireNonNull(columnNorms);
         this.flatTable = Objects.requireNonNull(flatTable);
-        this.flatTableNormToOpMap = flatTable.getColumns().entrySet()
+        this.flatTableNormToOpMap = flatTable.getPiece().getColumns().entrySet()
                 .stream()
                 .collect(ImmutableMap.toImmutableMap(
                         e -> e.getValue().getNorm().toString(),
                         e -> OpUtil.columnToOp(e.getKey(), e.getValue())));
-        this.flatTableNorms = flatTable.getColumns().entrySet().stream()
+        this.flatTableNorms = flatTable.getPiece().getColumns().entrySet().stream()
                 .collect(TieredMap.toMap(Map.Entry::getKey, e -> e.getValue().getNorm()));
         this.root = new LatticeNode(this, rootId, rootAggPiece);
     }
 
-    private static AggregatePiece createRootPiece(PlanPiece piece) {
+    private static AggregatePiece createRootPiece(AggregatePiece.FlatTable flatTable) {
         return AggregatePiece.newBuilder()
-                .setFlatTable(piece)
-                .setDimensions(piece.getColumns())
+                .setFlatTable(flatTable)
+                .setDimensions(flatTable.getPiece().getColumns())
                 .setRollupDimensions(TieredMap.genesis())
                 .setMetrics(TieredMap.genesis())
                 .setDistinctMetrics(TieredMap.genesis())
                 .setHoistConjuncts(TieredList.genesis())
                 .setNonHoistConjuncts(TieredList.genesis())
                 .setConjuncts(TieredList.genesis())
-                .setCommonState(piece.getCommonState())
+                .setCommonState(flatTable.getPiece().getCommonState())
                 .build().cast();
     }
 
@@ -148,12 +151,13 @@ public class Lattice {
     }
 
     private static Lattice createLattice(PlanPiece seed, Set<String> dimensionNorms) {
-        PlanPiece flatTable = seed.cast(AggregatePiece.class).map(AggregatePiece::getFlatTable).orElse(seed);
-
+        AggregatePiece aggPiece = seed.mustCast(AggregatePiece.class);
+        AggregatePiece.FlatTable flatTable = aggPiece.getFlatTable();
+        PlanPiece flatTablePiece = flatTable.getPiece();
         Set<String> uniqueColumnNorms = Sets.newHashSet();
         List<Pair<Integer, GenericColumn>> uniqueColumns =
-                Lists.newArrayListWithCapacity(flatTable.getColumns().size());
-        for (Map.Entry<Integer, GenericColumn> e : flatTable.getColumns().entrySet()) {
+                Lists.newArrayListWithCapacity(flatTablePiece.getColumns().size());
+        for (Map.Entry<Integer, GenericColumn> e : flatTablePiece.getColumns().entrySet()) {
             int columnId = e.getKey();
             GenericColumn column = e.getValue();
             if (!uniqueColumnNorms.contains(column.getNorm().toString())) {
@@ -185,8 +189,8 @@ public class Lattice {
 
         AggregatePiece rootPiece = createRootPiece(flatTable);
         LatticeNodeId rootId = LatticeNodeId.calcRootId(columnNorms.size());
-        return new Lattice(columnToOrdinalMap, columnIds, dimensionColumnIds, columnNorms, flatTable, rootId,
-                rootPiece);
+        return new Lattice(columnToOrdinalMap, columnIds, dimensionColumnIds, columnNorms, rootPiece.getFlatTable(),
+                rootId, rootPiece);
     }
 
     public void updateNodeIds(LatticeNodeId id, LatticeNode.Category category, String conjunctsNorm) {
@@ -227,7 +231,7 @@ public class Lattice {
         return dimensionColumnIds;
     }
 
-    public PlanPiece getFlatTable() {
+    public AggregatePiece.FlatTable getFlatTable() {
         return flatTable;
     }
 
@@ -246,7 +250,11 @@ public class Lattice {
     }
 
     private boolean addAllMinimalCoveringNodesOnePass(Set<Pair<LatticeNodeId, LatticeNodeId>> processed) {
+        int nodeLimit = GlobalVariable.getAutoMVPerLatticeNodeLimit();
         int numNodes = nodes.size();
+        if (numNodes >= nodeLimit) {
+            return false;
+        }
         List<LatticeNode> bfsNodes = bfsIncludingRoot();
         List<Pair<LatticeNode, LatticeNode>> partialOverlappingPairs = Lists.newArrayList();
         for (int n = numNodes - 1; n >= 0; --n) {
@@ -268,15 +276,23 @@ public class Lattice {
                     if (!nodeA.getId().isOverlappingPartially(nodeB.getId())) {
                         continue;
                     }
+                    // number of dimensions is too large so that later card estimation query would be
+                    // time-consuming, and these nodes' cardinality are approaching to row count of the
+                    // underlying table, so the corresponding MVs would BE poor-performance.
+                    if (idPair.first.merge(idPair.second).size() >= 10) {
+                        continue;
+                    }
                     processed.add(idPair);
                     partialOverlappingPairs.add(Pair.create(nodeA, nodeB));
                 }
             }
         }
+        int n = Math.min(nodeLimit - numNodes, partialOverlappingPairs.size());
+        partialOverlappingPairs = partialOverlappingPairs.subList(0, n);
         for (Pair<LatticeNode, LatticeNode> pair : partialOverlappingPairs) {
             insert(cover(pair.first, pair.second));
         }
-        return !partialOverlappingPairs.isEmpty();
+        return !partialOverlappingPairs.isEmpty() && nodes.size() < nodeLimit;
     }
 
     private AggregatePiece cover(List<LatticeNode> nodes) {
@@ -291,9 +307,9 @@ public class Lattice {
 
         TieredMap<Integer, GenericColumn> dimensions = id.getColumnOrdinals().stream()
                 .map(columnIds::get)
-                .collect(TieredMap.toMap(Function.identity(), flatTable.getColumns()::get));
+                .collect(TieredMap.toMap(Function.identity(), flatTable.getPiece().getColumns()::get));
 
-        ColumnRefToIdConverter idConverter = flatTable.getCommonState().getIdConverter().duplicate();
+        ColumnRefToIdConverter idConverter = flatTable.getPiece().getCommonState().getIdConverter().duplicate();
         TieredMap<Integer, GenericColumn> metrics =
                 LatticeNode.mergeMetrics(idConverter, flatTableNormToOpMap, aggPieces);
         TieredList<Op> hoistConjuncts = LatticeNode.mergeHoistConjuncts(flatTableNormToOpMap, aggPieces);
@@ -303,7 +319,8 @@ public class Lattice {
                 .flatMap(piece -> piece.getCommonState().getCoveredQueries().stream())
                 .collect(ImmutableSet.toImmutableSet());
         PieceCommonState commonState =
-                new PieceCommonState(idConverter, mergedCoveredQueries, flatTable.getCommonState().getFqTableMap());
+                new PieceCommonState(idConverter, mergedCoveredQueries,
+                        flatTable.getPiece().getCommonState().getFqTableMap());
         AggregatePiece aggPiece = AggregatePiece.newBuilder()
                 .setFlatTable(flatTable)
                 .setDimensions(dimensions)
@@ -327,8 +344,8 @@ public class Lattice {
     }
 
     public void insert(AggregatePiece aggPiece) {
-        Preconditions.checkArgument(aggPiece.getFlatTable().getAuxState().getNormHash()
-                .equals(flatTable.getAuxState().getNormHash()));
+        Preconditions.checkArgument(aggPiece.getFlatTable().getPiece().getAuxState().getNormHash()
+                .equals(flatTable.getPiece().getAuxState().getNormHash()));
         LatticeNodeId id = LatticeNodeId.calcId(aggPiece.getDimensions().values(), columnToOrdinalMap);
         insertWithId(aggPiece, id);
     }
@@ -561,15 +578,92 @@ public class Lattice {
         nodes.forEach(this::insertNode);
     }
 
+    public LatticeNode getFarthestAncestor(LatticeNode node, Set<Box<LatticeNode>> nodeSet) {
+        return node.getParents()
+                .stream()
+                .filter(parent -> nodeSet.contains(Box.of(parent)))
+                .map(parent -> getFarthestAncestor(parent, nodeSet))
+                .max(Comparator.comparingDouble(ancestor -> ancestor.getCard().getCardRowCountRatio()))
+                .orElse(node);
+    }
+
+    public Set<Box<LatticeNode>> getSubtree(LatticeNode node, Set<Box<LatticeNode>> nodeSet) {
+        Set<Box<LatticeNode>> subtreeNodes = node.getChildren()
+                .stream()
+                .filter(child -> nodeSet.contains(Box.of(child)))
+                .flatMap(child -> getSubtree(child, nodeSet).stream())
+                .collect(Collectors.toSet());
+        subtreeNodes.add(Box.of(node));
+        return subtreeNodes;
+    }
+
+    public TieredList<MVRecommendation> pickupCollocateMVRecommendations(List<LatticeNode> nodes,
+                                                                         List<QueryBenefit> queryBenefits) {
+        Set<Box<LatticeNode>> nodeSet = nodes.stream().map(Box::of).collect(Collectors.toSet());
+        Set<Box<LatticeNode>> coveredNodes = Sets.newHashSet();
+        TieredList.Builder<MVRecommendation> recBuilder = TieredList.<MVRecommendation>newGenesisTier();
+        for (LatticeNode node : nodes) {
+            if (coveredNodes.contains(Box.of(node))) {
+                continue;
+            }
+
+            LatticeNode farthestAncestor = getFarthestAncestor(node, nodeSet);
+            Set<Box<LatticeNode>> offsprings = getSubtree(farthestAncestor, nodeSet);
+            List<LatticeNodeId> ids = offsprings.stream()
+                    .map(Box::unboxed)
+                    .map(LatticeNode::getId)
+                    .collect(Collectors.toList());
+            LatticeNodeId greatestCommonIds = LatticeNodeId.intersectAll(ids);
+
+            if (greatestCommonIds.size() == 0) {
+                farthestAncestor = node;
+                offsprings = Collections.emptySet();
+                greatestCommonIds = node.getId();
+            }
+
+            coveredNodes.add(Box.of(farthestAncestor));
+            coveredNodes.addAll(offsprings);
+            Set<Integer> collocateBucketKey = greatestCommonIds.getColumnOrdinals()
+                    .stream()
+                    .map(this.columnIds::get)
+                    .collect(Collectors.toSet());
+            if (collocateBucketKey.isEmpty()) {
+                continue;
+            }
+            farthestAncestor.getFinalAggPiece().getAuxState().setColocateBucketKey(collocateBucketKey);
+            MVRecommendation mvRec = new MVRecommendation(farthestAncestor);
+            recBuilder.add(mvRec);
+        }
+        TieredList<MVRecommendation> collocateMVs = recBuilder.build();
+        collocateMVs.forEach(candiMV -> BenefitTable.computeTentativeBenefit(candiMV, queryBenefits));
+        collocateMVs.forEach(candiMV -> {
+            double mvCost = candiMV.getLatticeNode().getCard().getCardinality();
+            double totalBenefit = 0;
+            int numQueriesAccelerated = 0;
+            for (TentativeQueryBenefit tBenefit : candiMV.getTentativeBenefits()) {
+                QueryBenefit qBenefit = queryBenefits.get(tBenefit.getIndex());
+                double prevCost = qBenefit.getCost();
+                if (mvCost < prevCost) {
+                    totalBenefit += (prevCost - mvCost) * qBenefit.getWeight();
+                }
+                numQueriesAccelerated += Double.valueOf(qBenefit.getWeight()).intValue();
+            }
+            candiMV.setTotalBenefit(totalBenefit);
+            candiMV.setNumQueriesAccelerated(numQueriesAccelerated);
+        });
+        return collocateMVs;
+    }
+
     public TieredList<MVRecommendation> pickupRecommendations(AutoMVOptions options) {
         if (nodes.isEmpty()) {
             return TieredList.<MVRecommendation>genesis();
         }
+        int collocateDimensionsLimit = GlobalVariable.getAutoMVColocateMVDimensionsLimit();
         Function<LatticeNode, Integer> classifier = node -> {
             double ratio = node.getCard().getCardRowCountRatio();
-            if (ratio > options.getCardRowCountRatioHWM()) {
+            if (ratio <= options.getCardRowCountRatioLWM()) {
                 return 0;
-            } else if (ratio < options.getCardRowCountRatioLWM()) {
+            } else if (ratio <= options.getCardRowCountRatioHWM() && node.getId().size() <= collocateDimensionsLimit) {
                 return 1;
             } else {
                 return 2;
@@ -581,40 +675,31 @@ public class Lattice {
         Map<Integer, List<LatticeNode>> nodeGroups = nodes.stream()
                 .collect(Collectors.groupingBy(classifier));
 
-        List<LatticeNode> nodesWithHighCard = nodeGroups.getOrDefault(0, Collections.emptyList());
-        List<LatticeNode> nodesWithLowCard = nodeGroups.getOrDefault(1, Collections.emptyList());
-        List<LatticeNode> nodesWithModerateCard = nodeGroups.getOrDefault(2, Collections.emptyList());
+        List<LatticeNode> nodesWithLowCard = nodeGroups.getOrDefault(0, Collections.emptyList());
+        List<LatticeNode> nodesWithModerateCard = nodeGroups.getOrDefault(1, Collections.emptyList());
 
         // high-cardinality MV is pruned here
         // TODO(by satanson): in future, a bundle of high-cardinality MVs should merge into
         //  a flat table MV that based on cardinality-preserving join.
-        Set<LatticeNodeId> prunedMVs = Sets.newHashSet();
-        nodesWithHighCard.forEach(node -> prunedMVs.add(node.getId()));
+        List<LatticeNode> nodesWithHighCard = nodeGroups.getOrDefault(2, Collections.emptyList());
 
-        List<MVRecommendation> candidateMVs = nodesWithModerateCard
-                .stream().map(MVRecommendation::new).collect(Collectors.toList());
-
-        Function<LatticeNode, MVRecommendation> lowCardNodeBenefitGetter = node -> {
-            MVRecommendation mvRec = new MVRecommendation(node);
-            mvRec.setProcessed(true);
-            int numQueriesAccelerated = (int) getNumAcceleratedQueries(node);
-            mvRec.setNumQueriesAccelerated(numQueriesAccelerated);
-            mvRec.setTotalBenefit(node.getCard().getBenefit() * numQueriesAccelerated);
-            return mvRec;
-        };
-
-        TieredList<MVRecommendation> nodeAndBenefitWithLowCardList = nodesWithLowCard
-                .stream().map(lowCardNodeBenefitGetter)
-                .collect(TieredList.toList());
+        List<MVRecommendation> candidateMVs =
+                nodesWithLowCard.stream().map(MVRecommendation::new).collect(Collectors.toList());
 
         double rowCount = nodes.iterator().next().getCard().getRowCount();
 
         List<QueryBenefit> queryBenefits = collectQueryBenefits(rowCount);
 
-        BenefitTable benefitTable = new BenefitTable(candidateMVs, queryBenefits);
-        TieredList<MVRecommendation> selectedNodeAndBenefitList = benefitTable.calculate();
+        this.benefitTable = new BenefitTable(candidateMVs, queryBenefits);
+        TieredList<MVRecommendation> selectedNodeAndBenefitList = this.benefitTable.calculate();
+        TieredList<MVRecommendation> collocateMVs =
+                pickupCollocateMVRecommendations(nodesWithModerateCard, queryBenefits);
 
-        return selectedNodeAndBenefitList.concat(nodeAndBenefitWithLowCardList);
+        return selectedNodeAndBenefitList.concat(collocateMVs);
+    }
+
+    public BenefitTable getBenefitTable() {
+        return benefitTable;
     }
 
     private List<QueryBenefit> collectQueryBenefits(double initialCost) {
@@ -694,7 +779,7 @@ public class Lattice {
 
     private long getNumAcceleratedQueriesForUncoverableII(LatticeNode node) {
         Preconditions.checkNotNull(this.uncoverableIINumAcceleratedQueries);
-        String conjunctsNormHash = node.getFinalAggPiece().getFlatTable().getAuxState().getConjunctsNormHash();
+        String conjunctsNormHash = node.getFinalAggPiece().getFlatTable().getFlexibleConjunctsNormHash();
         Long repetitionCount = Optional.ofNullable(uncoverableIINumAcceleratedQueries.get(node.getId()))
                 .map(repetitionCounts -> repetitionCounts.get(conjunctsNormHash))
                 .orElse(null);

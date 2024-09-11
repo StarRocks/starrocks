@@ -14,10 +14,12 @@
 
 package com.starrocks.sql.automv.lifecycle;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 import com.starrocks.sql.automv.generator.MVName;
@@ -42,7 +44,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class TunespaceIngester {
@@ -95,14 +96,19 @@ public class TunespaceIngester {
         boolean brandNewTs = !MetaUtil.hasData(tuneSpace.getFqTableName());
         Optional<Long> optSinceTs = brandNewTs ? Optional.empty() : mgr.getAuditLatestTimestamp();
 
-        Supplier<String> conditionBuilder = () -> optSinceTs
+        String sinceCondition = optSinceTs
                 .map(Instant::ofEpochMilli)
                 .map(instant -> instant.atZone(ZoneId.of("UTC")).format(DateUtils.DATE_TIME_FORMATTER_UNIX))
                 .map(s -> new PrettyPrinter().addBacktickQuoted("timestamp").add(">=").addDoubleQuoted(s).getResult())
                 .orElse("`timestamp` >= days_sub(now(), 7)");
 
-        List<QueryAuditEntry> auditInfoList =
-                queryAuditSource.getQueryAuditInfoList(ctx, () -> Collections.singletonList(conditionBuilder.get()));
+        long lowBound = GlobalVariable.getAutoMVQueryLatencyLowBoundMs();
+        String latencyCondition = new PrettyPrinter()
+                .addBacktickQuoted("queryTime").add(" > ").add(lowBound).getResult();
+
+        List<String> conditions = ImmutableList.of(sinceCondition, latencyCondition);
+
+        List<QueryAuditEntry> auditInfoList = queryAuditSource.getQueryAuditInfoList(ctx, () -> conditions);
         auditInfoList.stream().map(QueryAuditEntry::getTimestamp)
                 .map(Timestamp::getTime).max(Comparator.comparingLong(t -> t))
                 .ifPresent(mgr::updateAuditLatestTimestamp);

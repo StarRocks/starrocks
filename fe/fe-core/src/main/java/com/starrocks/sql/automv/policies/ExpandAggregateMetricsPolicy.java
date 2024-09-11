@@ -34,7 +34,7 @@ public class ExpandAggregateMetricsPolicy extends AggregatePolicy.SimplePolicy {
 
     @Override
     public Optional<AggregatePiece> convert(AggregatePiece aggPiece) {
-        Map<Boolean, TieredMap<Integer, GenericColumn>> columnGroups = aggPiece.getFlatTable().getColumns()
+        Map<Boolean, TieredMap<Integer, GenericColumn>> columnGroups = aggPiece.getFlatTable().getPiece().getColumns()
                 .entrySet().stream()
                 .collect(Collectors.partitioningBy(e -> e.getValue().isOriginal(), TieredMap.toMap()));
         TieredMap<Integer, GenericColumn> originalColumns = columnGroups.get(true);
@@ -68,9 +68,12 @@ public class ExpandAggregateMetricsPolicy extends AggregatePolicy.SimplePolicy {
         TieredMap<Integer, GenericColumn> newMetrics = OpUtil.subst(aggPiece.getMetrics(), substMap);
         TieredMap<Integer, GenericColumn> newDistinctMetrics = OpUtil.subst(aggPiece.getDistinctMetrics(), substMap);
 
-        PlanPiece newFlatTable = aggPiece.getFlatTable().builder()
+        PlanPiece newFlatTablePiece = aggPiece.getFlatTable().getPiece().builder()
                 .setColumns(originalColumns.merge(reservedDerivedColumns))
                 .build();
+        AggregatePiece.FlatTable newFlatTable =
+                new AggregatePiece.FlatTable(newFlatTablePiece, aggPiece.getFlatTable().getStiffConjuncts(),
+                        aggPiece.getFlatTable().getFlexibleConjuncts());
         AggregatePiece newAggPiece = aggPiece.builder().mustCast(AggregatePiece.Builder.class)
                 .setFlatTable(newFlatTable)
                 .setMetrics(newMetrics)

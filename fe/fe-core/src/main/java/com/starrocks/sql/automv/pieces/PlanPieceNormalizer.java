@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -109,25 +108,18 @@ public class PlanPieceNormalizer extends PlanPieceVisitor<PlanPiece, ColumnUnfol
         TieredMap<Integer, GenericColumn> originalColumns = columnGroups.get(true);
         TieredMap<Integer, GenericColumn> derivedColumns = columnGroups.get(false);
 
-        // for flat table under AggregatePiece, we just normalize its conjuncts, but
-        // the conjuncts are not taken into consideration in flat table's normalized from.
-        Optional<PlanPiece> optParent = Optional.ofNullable(piece.getAuxState().getParent());
-        boolean isFlatTableUnderAgg = optParent
-                .map(parent -> parent.isTop() && parent.isAggregate())
-                .orElse(false);
-
+        boolean isFlatTablePieceUnderAgg = piece.getTopAggregateIfFlatTable().isPresent();
+        Preconditions.checkState(!isFlatTablePieceUnderAgg || piece.getConjuncts().isEmpty());
         List<String> columnList;
         List<String> conjunctList;
-        if (isFlatTableUnderAgg) {
+        if (isFlatTablePieceUnderAgg) {
             columnList = columnUnfolder.unfold(originalColumns);
             columnUnfolder.unfold(derivedColumns);
-            piece.getAuxState().setConjuncts(columnUnfolder.unfold(piece.getConjuncts()));
             conjunctList = Collections.emptyList();
         } else {
             columnList = columnUnfolder.unfold(piece.getColumns());
             conjunctList = columnUnfolder.unfold(piece.getConjuncts());
         }
-
         List<PrettyPrinter> items = Arrays.asList(
                 new PrettyPrinter().addKeyValue("piece", piece.getClass().getSimpleName()),
                 new PrettyPrinter().addNameToArray("columns", columnList),
@@ -187,19 +179,25 @@ public class PlanPieceNormalizer extends PlanPieceVisitor<PlanPiece, ColumnUnfol
         );
 
         printer.addObject(items);
-        PlanPiece newJoinPiece = joinPiece.builder().mustCast(StarJoinPiece.Builder.class)
-                .setCentre(normalizedCentre)
-                .setCorners(normalizedCorners)
-                .build();
-
-        newJoinPiece.getAuxState().setNorm(printer);
-        return newJoinPiece;
+        joinPiece.getAuxState().setNorm(printer);
+        return joinPiece;
     }
 
     @Override
     public PlanPiece visitAggregate(AggregatePiece aggPiece, ColumnUnfolder columnUnfolder) {
-        PlanPiece normalizedFlatTable = visit(aggPiece.getFlatTable(), columnUnfolder);
-        PrettyPrinter flatTableNorm = normalizedFlatTable.getAuxState().getNorm();
+        PlanPiece normalizedFlatTablePiece = visit(aggPiece.getFlatTable().getPiece(), columnUnfolder);
+        PrettyPrinter flatTablePieceNorm = normalizedFlatTablePiece.getAuxState().getNorm();
+
+        List<String> stiffConjunctNorms = columnUnfolder.unfold(aggPiece.getFlatTable().getStiffConjuncts());
+        columnUnfolder.unfold(aggPiece.getFlatTable().getFlexibleConjuncts());
+        List<PrettyPrinter> flatTableItems = Arrays.asList(
+                new PrettyPrinter().addNameToObject("piece", flatTablePieceNorm),
+                new PrettyPrinter().addNameToArray("stiffConjuncts", stiffConjunctNorms)
+        );
+        PrettyPrinter flatTableNorm = new PrettyPrinter();
+        flatTableNorm.addObject(flatTableItems);
+        aggPiece.getFlatTable().setNorm(flatTableNorm);
+
         List<String> dimensionNorms = columnUnfolder.unfold(aggPiece.getDimensions());
         List<String> rollupDimensionNorms = columnUnfolder.unfold(aggPiece.getRollupDimensions());
         List<String> metricNorms = columnUnfolder.unfold(aggPiece.getMetrics());
@@ -215,12 +213,10 @@ public class PlanPieceNormalizer extends PlanPieceVisitor<PlanPiece, ColumnUnfol
                 new PrettyPrinter().addNameToArray("distinctMetrics", distinctMetricNorms),
                 new PrettyPrinter().addNameToObject("flatTable", flatTableNorm)
         );
+
         printer.addObject(items);
-        PlanPiece newAggPiece = aggPiece.builder().mustCast(AggregatePiece.Builder.class)
-                .setFlatTable(normalizedFlatTable)
-                .build();
-        newAggPiece.getAuxState().setNorm(printer);
-        return newAggPiece;
+        aggPiece.getAuxState().setNorm(printer);
+        return aggPiece;
     }
 
     private PlanPiece normalize(PlanPiece piece, ColumnUnfolder columnUnfolder) {

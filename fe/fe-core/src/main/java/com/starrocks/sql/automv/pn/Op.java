@@ -594,6 +594,15 @@ public abstract class Op {
         return isEq() && arg(0).isVar() && arg(1).isVar();
     }
 
+    // var <> val
+    public boolean isVarNeVal() {
+        return isNe() && arg(0).isVar() && arg(1).isVal();
+    }
+
+    public boolean isVarNotLikeVal() {
+        return isNotLike() && unmodified().arg(0).isVar() && unmodified().arg(1).isVal();
+    }
+
     public boolean isVE() {
         return isEq() && arg(0).isVar();
     }

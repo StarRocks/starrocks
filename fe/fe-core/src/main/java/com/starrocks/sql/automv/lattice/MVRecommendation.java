@@ -62,10 +62,14 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
         return latticeNode;
     }
 
-    public double getTotalBenefit() {
+    public double getEffectiveTotalBenefit() {
         int numDimensions = latticeNode.getId().size();
-        return numDimensions <= 5 ? totalBenefit :
+        double effectiveTotalBenefit = numDimensions <= 5 ? totalBenefit :
                 totalBenefit / (Math.expm1(Math.log1p(0.2) * (numDimensions - 4)) + 1);
+        if (latticeNode.getFinalAggPiece().getAuxState().getColocateBucketKey().isPresent()) {
+            effectiveTotalBenefit = effectiveTotalBenefit * 100;
+        }
+        return effectiveTotalBenefit;
     }
 
     public void setTotalBenefit(double totalBenefit) {
@@ -121,7 +125,7 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
             nodeInfoListBuilder.add("" + latticeNode.getCard().getCardRowCountRatio());
             nodeInfoListBuilder.add("" + latticeNode.getCard().getBenefit());
             nodeInfoListBuilder.add("" + numQueriesAccelerated);
-            nodeInfoListBuilder.add("" + totalBenefit);
+            nodeInfoListBuilder.add("" + getEffectiveTotalBenefit());
         } else {
             nodeInfoListBuilder.add("-1");
             nodeInfoListBuilder.add("-1");

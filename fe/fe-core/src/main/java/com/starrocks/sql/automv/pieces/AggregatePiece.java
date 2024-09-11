@@ -20,8 +20,10 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
+import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.HashSet;
@@ -32,7 +34,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class AggregatePiece extends PlanPiece {
-    private final PlanPiece flatTable;
+    private final FlatTable flatTable;
     private final TieredMap<Integer, GenericColumn> dimensions;
     private final TieredMap<Integer, GenericColumn> rollupDimensions;
     private final TieredMap<Integer, GenericColumn> metrics;
@@ -45,14 +47,20 @@ public class AggregatePiece extends PlanPiece {
             TieredList<Op> conjuncts,
             PieceCommonState commonState,
             PieceAuxState auxState,
-            PlanPiece flatTable,
+            FlatTable flatTable,
             TieredMap<Integer, GenericColumn> dimensions,
             TieredMap<Integer, GenericColumn> rollupDimensions,
             TieredMap<Integer, GenericColumn> metrics,
             TieredMap<Integer, GenericColumn> distinctMetrics,
             TieredList<Op> hoistConjuncts,
             TieredList<Op> nonHoistConjuncts) {
-        super(ImmutableList.of(flatTable), columns, conjuncts, commonState, auxState);
+        super(ImmutableList.of(flatTable.getPiece()), columns, conjuncts, commonState, auxState);
+
+        ColumnRefSet rollupDimensionIds = ColumnRefSet.of();
+        flatTable.getFlexibleConjuncts().forEach(op -> rollupDimensionIds.union(op.getIds()));
+        rollupDimensionIds.except(ColumnRefSet.createByIds(dimensions.keySet()));
+        Preconditions.checkState(ColumnRefSet.createByIds(rollupDimensions.keySet()).equals(rollupDimensionIds));
+
         this.flatTable = Objects.requireNonNull(flatTable);
         this.dimensions = Objects.requireNonNull(dimensions);
         this.rollupDimensions = Objects.requireNonNull(rollupDimensions);
@@ -76,7 +84,7 @@ public class AggregatePiece extends PlanPiece {
 
     public AggregatePiece toRollup() {
         return this.builder().mustCast(AggregatePiece.Builder.class)
-                .setFlatTable(flatTable.removeConjuncts())
+                .setFlatTable(flatTable.toRollup())
                 .setDimensions(this.dimensions.merge(this.rollupDimensions))
                 .setRollupDimensions(TieredMap.genesis())
                 .setMetrics(this.getMetrics())
@@ -105,6 +113,7 @@ public class AggregatePiece extends PlanPiece {
 
     public AggregatePiece toPerfect() {
         return this.builder().mustCast(AggregatePiece.Builder.class)
+                .setFlatTable(flatTable.toPerfect())
                 .setRollupDimensions(TieredMap.genesis())
                 .setMetrics(this.metrics.merge(distinctMetrics))
                 .setDistinctMetrics(TieredMap.genesis())
@@ -114,22 +123,23 @@ public class AggregatePiece extends PlanPiece {
 
     public AggregatePiece toPartialRollup(TieredList<Op> hoistingConjuncts, TieredList<Op> reservedConjuncts) {
         Preconditions.checkArgument(this.getDistinctMetrics().isEmpty());
-        PlanPiece flatTable = this.getFlatTable().revise(Function.identity());
-        flatTable = flatTable.setConjuncts(reservedConjuncts);
+        PlanPiece flatTablePiece = this.getFlatTable().getPiece().revise(Function.identity());
+        FlatTable newFlatTable = new FlatTable(flatTablePiece, flatTable.stiffConjuncts.concat(reservedConjuncts),
+                TieredList.<Op>genesis());
         ColumnRefSet rollupColumnIds = new ColumnRefSet();
         hoistingConjuncts.forEach(op -> rollupColumnIds.union(op.getIds()));
         ColumnRefSet dimensionIds = ColumnRefSet.createByIds(this.getDimensions().keySet());
-        ColumnRefSet flatTableColumnIds = ColumnRefSet.createByIds(flatTable.getColumns().keySet());
+        ColumnRefSet flatTableColumnIds = ColumnRefSet.createByIds(flatTablePiece.getColumns().keySet());
         rollupColumnIds.except(dimensionIds);
         Preconditions.checkArgument(flatTableColumnIds.containsAll(rollupColumnIds));
-        TieredMap<Integer, GenericColumn> flatTableColumns = flatTable.getColumns();
+        TieredMap<Integer, GenericColumn> flatTableColumns = flatTablePiece.getColumns();
         TieredMap<Integer, GenericColumn> rollupDimensions =
                 rollupColumnIds.getStream().collect(TieredMap.toMap(Function.identity(), flatTableColumns::get));
         return this.builder().mustCast(AggregatePiece.Builder.class)
-                .setFlatTable(flatTable)
+                .setFlatTable(newFlatTable)
                 .setRollupDimensions(TieredMap.genesis())
                 .setDimensions(this.getDimensions().merge(rollupDimensions))
-                .build();
+                .build().cast();
     }
 
     @Override
@@ -146,11 +156,11 @@ public class AggregatePiece extends PlanPiece {
     public PlanPiece replaceInputPieces(List<PlanPiece> pieces) {
         Preconditions.checkArgument(pieces.size() == 1);
         return this.builder().mustCast(AggregatePiece.Builder.class)
-                .setFlatTable(pieces.get(0))
+                .setFlatTable(new FlatTable(pieces.get(0), flatTable.stiffConjuncts, flatTable.flexibleConjuncts))
                 .build();
     }
 
-    public PlanPiece getFlatTable() {
+    public FlatTable getFlatTable() {
         return flatTable;
     }
 
@@ -170,8 +180,90 @@ public class AggregatePiece extends PlanPiece {
         return distinctMetrics;
     }
 
+    public static final class FlatTable {
+        private final PlanPiece piece;
+        private final TieredList<Op> stiffConjuncts;
+        private final TieredList<Op> flexibleConjuncts;
+
+        private transient PrettyPrinter norm = null;
+        private transient String normHash = null;
+        private transient PrettyPrinter flexibleConjunctsNorm = null;
+        private transient String flexibleConjunctsNormHash = null;
+
+        public FlatTable(PlanPiece piece) {
+            this(piece, TieredList.<Op>genesis(), TieredList.<Op>genesis());
+        }
+
+        public FlatTable(PlanPiece piece, TieredList<Op> stiffConjuncts, TieredList<Op> flexibleConjuncts) {
+            this.piece = piece;
+            this.stiffConjuncts = stiffConjuncts;
+            this.flexibleConjuncts = flexibleConjuncts;
+        }
+
+        public PlanPiece getPiece() {
+            return piece;
+        }
+
+        public TieredList<Op> getStiffConjuncts() {
+            return stiffConjuncts;
+        }
+
+        public TieredList<Op> getFlexibleConjuncts() {
+            return flexibleConjuncts;
+        }
+
+        public FlatTable toRollup() {
+            return new FlatTable(piece, stiffConjuncts, TieredList.<Op>genesis());
+        }
+
+        public FlatTable toPerfect() {
+            return new FlatTable(piece, stiffConjuncts.concat(flexibleConjuncts), TieredList.<Op>genesis());
+        }
+
+        public FlatTable toPartialRollup(TieredList<Op> hoistingConjuncts, TieredList<Op> reservedConjuncts) {
+            return new FlatTable(piece, stiffConjuncts.concat(reservedConjuncts), hoistingConjuncts);
+        }
+
+        public PrettyPrinter getFlexibleConjunctsNorm() {
+            if (flexibleConjunctsNorm == null) {
+                List<String> conjunctNormItems = flexibleConjuncts
+                        .stream()
+                        .map(Op::getNorm)
+                        .map(Op::toString)
+                        .sorted()
+                        .collect(Collectors.toList());
+                flexibleConjunctsNorm = new PrettyPrinter().addItemsWithDelNl(",", conjunctNormItems);
+            }
+            return this.flexibleConjunctsNorm;
+        }
+
+        public String getFlexibleConjunctsNormHash() {
+            if (this.flexibleConjunctsNormHash == null) {
+                this.flexibleConjunctsNormHash = Util.md5(getFlexibleConjunctsNorm().getResult());
+            }
+            return this.flexibleConjunctsNormHash;
+        }
+
+        public PrettyPrinter getNorm() {
+            return Objects.requireNonNull(this.norm);
+        }
+
+        public void setNorm(PrettyPrinter norm) {
+            if (this.norm == null) {
+                this.norm = norm;
+            }
+        }
+
+        public String getNormHash() {
+            if (normHash == null) {
+                normHash = Util.md5(getNorm().getResult());
+            }
+            return normHash;
+        }
+    }
+
     public static class Builder extends PlanPiece.Builder<AggregatePiece> {
-        private PlanPiece flatTable;
+        private FlatTable flatTable;
         private TieredMap<Integer, GenericColumn> dimensions;
         private TieredMap<Integer, GenericColumn> rollupDimensions;
         private TieredMap<Integer, GenericColumn> metrics;
@@ -181,7 +273,7 @@ public class AggregatePiece extends PlanPiece {
         private TieredList<Op> nonHoistConjuncts;
 
         Builder(AggregatePiece aggPiece) {
-            super(ImmutableList.of(aggPiece.getFlatTable()), aggPiece.getColumns(), aggPiece.getConjuncts(),
+            super(ImmutableList.of(aggPiece.getFlatTable().getPiece()), aggPiece.getColumns(), aggPiece.getConjuncts(),
                     aggPiece.getCommonState(), aggPiece.getAuxState());
 
             this.flatTable = aggPiece.getFlatTable();
@@ -215,11 +307,11 @@ public class AggregatePiece extends PlanPiece {
             return this;
         }
 
-        public PlanPiece getFlatTable() {
+        public FlatTable getFlatTable() {
             return flatTable;
         }
 
-        public Builder setFlatTable(PlanPiece flatTable) {
+        public Builder setFlatTable(FlatTable flatTable) {
             this.flatTable = Objects.requireNonNull(flatTable);
             return this;
         }
@@ -266,12 +358,8 @@ public class AggregatePiece extends PlanPiece {
             TieredMap<Integer, GenericColumn> columns =
                     dimensions.merge(rollupDimensions).merge(metrics).merge(distinctMetrics);
             boolean shouldUnique = columns.size() == new HashSet<>(columns.keySet()).size();
-            boolean noIdConflict =
-                    Sets.intersection(flatTable.getColumns().keySet(), metrics.merge(distinctMetrics).keySet())
-                            .isEmpty();
-            if (!shouldUnique || !noIdConflict) {
-                System.out.println("SATANSON");
-            }
+            boolean noIdConflict = Sets.intersection(flatTable.getPiece().getColumns().keySet(),
+                    metrics.merge(distinctMetrics).keySet()).isEmpty();
             Preconditions.checkArgument(shouldUnique && noIdConflict);
             if (getColumns() != null) {
                 ColumnRefSet columnIds = ColumnRefSet.createByIds(columns.keySet());
