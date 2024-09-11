@@ -38,6 +38,10 @@
                     <groupId>com.alibaba</groupId>
                     <artifactId>fastjson</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.eclipse.jetty.http2</groupId>
+                    <artifactId>http2-common</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
