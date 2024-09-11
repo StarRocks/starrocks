@@ -247,7 +247,6 @@ public:
         *rs_meta_pb = *_rowset_meta_pb;
         if (!skip_schema) {
             const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
-
             if (target_schema != nullptr) {
                 rs_meta_pb->clear_tablet_schema();
                 TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();

@@ -396,24 +396,10 @@ Status DataDir::load() {
         }
         if (rowset_meta->rowset_state() == RowsetStatePB::COMMITTED &&
             rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            //LOG(INFO) << "rowset meta has schmea_pb: " << rowset_meta->has_tablet_schema_pb();
             if (!rowset_meta->tablet_schema()) {
                 auto tablet_schema_ptr = tablet->tablet_schema();
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
-                //LOG(INFO) << "tablet: " << tablet->tablet_id() << " rowset skip_tablet_schema: " << rowset_meta->skip_tablet_schema();
                 rowset_meta->set_skip_tablet_schema(true);
-                //LOG(INFO) << "tablet: " << tablet->tablet_id() << " rowset skip_tablet_schema: " << rowset_meta->skip_tablet_schema();
-                /*
-                RowsetMetaPB meta_pb;
-                rowset_meta->get_full_meta_pb(&meta_pb);
-                Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
-                if (!rs_meta_save_status.ok()) {
-                    LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
-                                 << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
-                    error_rowset_count++;
-                    return true;
-                }
-                */
             }
             Status commit_txn_status = _txn_manager->commit_txn(
                     _kv_store, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
@@ -430,23 +416,9 @@ Status DataDir::load() {
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
             Status publish_status = tablet->load_rowset(rowset);
-            //LOG(INFO) << "rowset meta has schmea_pb: " << rowset_meta->has_tablet_schema_pb();
             if (!rowset_meta->tablet_schema()) {
                 rowset_meta->set_tablet_schema(tablet->tablet_schema());
-                //LOG(INFO) << "tablet: " << tablet->tablet_id() << " rowset skip_tablet_schema: " << rowset_meta->skip_tablet_schema();
                 rowset_meta->set_skip_tablet_schema(true);
-                //LOG(INFO) << "tablet: " << tablet->tablet_id() << " rowset skip_tablet_schema: " << rowset_meta->skip_tablet_schema();
-                /*
-                RowsetMetaPB meta_pb;
-                rowset_meta->get_full_meta_pb(&meta_pb);
-                Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
-                if (!rs_meta_save_status.ok()) {
-                    LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
-                                 << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
-                    error_rowset_count++;
-                    return true;
-                }
-                */
             }
             if (!publish_status.ok() && !publish_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()

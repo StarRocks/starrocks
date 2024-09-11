@@ -326,6 +326,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_sch
         }
         if (!rs_meta->tablet_schema()) {
             rs_meta->set_tablet_schema(_schema);
+            rs_meta->set_skip_tablet_schema(true);
         }
         _rs_metas.push_back(std::move(rs_meta));
     }
@@ -333,6 +334,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_sch
         auto rs_meta = std::make_shared<RowsetMeta>(it);
         if (!rs_meta->tablet_schema()) {
             rs_meta->set_tablet_schema(_schema);
+            rs_meta->set_skip_tablet_schema(true);
         }
         _inc_rs_metas.push_back(std::move(rs_meta));
     }
@@ -396,24 +398,18 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
         break;
     }
     for (auto& rs : _rs_metas) {
-        bool skip_schema = skip_tablet_schema;
-        if (skip_schema && _schema != nullptr && rs->tablet_schema() != nullptr) {
-            skip_schema &=
-                    (_schema->id() != TabletSchema::invalid_id()) && (_schema->id() == rs->tablet_schema()->id());
-        } else {
-            skip_schema = false;
+        bool skip_schema = false;
+        if (skip_tablet_schema && _schema != nullptr && rs->tablet_schema() != nullptr) {
+            skip_schema = (_schema->id() != TabletSchema::invalid_id()) && (_schema->id() == rs->tablet_schema()->id());
         }
         rs->get_full_meta_pb(tablet_meta_pb->add_rs_metas(), skip_schema);
     }
     for (const auto& rs : _inc_rs_metas) {
-        bool skip_schema = skip_tablet_schema;
-        if (skip_schema && _schema != nullptr && rs->tablet_schema() != nullptr) {
-            skip_schema &=
-                    (_schema->id() != TabletSchema::invalid_id()) && (_schema->id() == rs->tablet_schema()->id());
-        } else {
-            skip_schema = false;
+        bool skip_schema = false;
+        if (skip_tablet_schema && _schema != nullptr && rs->tablet_schema() != nullptr) {
+            skip_schema = (_schema->id() != TabletSchema::invalid_id()) && (_schema->id() == rs->tablet_schema()->id());
         }
-        rs->get_full_meta_pb(tablet_meta_pb->add_rs_metas(), skip_schema);
+        rs->get_full_meta_pb(tablet_meta_pb->add_inc_rs_metas(), skip_schema);
     }
     if (_schema != nullptr) {
         _schema->to_schema_pb(tablet_meta_pb->mutable_schema());

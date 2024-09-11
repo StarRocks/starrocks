@@ -83,19 +83,7 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
-
-    // if !_tablet_meta->all_rs_metas()[0]->tablet_schema(),
-    // that mean the tablet_meta is still no upgrade to support-light-schema-change versions.
-    // Before support-light-schema-change version, rowset metas don't have tablet schema.
-    // And when upgrade to starrocks support-light-schema-change version,
-    // all rowset metas will be set the tablet schema from tablet meta.
-    if (_tablet_meta->all_rs_metas().empty() || !_tablet_meta->all_rs_metas()[0]->tablet_schema()) {
-        _max_version_schema = BaseTablet::tablet_schema();
-    } else {
-        _max_version_schema =
-                TabletMeta::rowset_meta_with_max_rowset_version(_tablet_meta->all_rs_metas())->tablet_schema();
-    }
-
+    _max_version_schema = BaseTablet::tablet_schema();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
