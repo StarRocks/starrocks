@@ -6,6 +6,7 @@ toc_max_heading_level: 4
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
 
 ## Description
 
@@ -259,4 +260,5 @@ GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 
 <UserPrivilegeCase />
 
-For the best practices of multi-service access control, see [Multi-service access control](../../../administration/user_privs/User_privilege.md#multi-service-access-control).
+<MultiServiceAccess />
+

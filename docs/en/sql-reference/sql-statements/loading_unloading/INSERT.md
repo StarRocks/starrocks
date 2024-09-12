@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Description
 
-Inserts data into a specific table or overwrites a specific table with data. For detailed information about the application scenarios, see [Load data with INSERT](../../../loading/InsertInto.md). From v3.2.0 onwards, INSERT supports writing data into files in remote storage. You can [use INSERT INTO FILES() to unload data from StarRocks to remote storage](../../../unloading/unload_using_insert_into_files.md).
+Inserts data into a specific table or overwrites a specific table with data. From v3.2.0 onwards, INSERT supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
 
 You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.md).
 
@@ -45,7 +45,7 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.m
 | expression    | Expression that assigns values to the column.                |
 | DEFAULT       | Assigns default value to the column.                         |
 | query         | Query statement whose result will be loaded into the destination table. It can be any SQL statement supported by StarRocks. |
-| FILES()       | Table function [FILES()](../../sql-functions/table-functions/files.md). You can use this function to unload data into remote storage. For more information, see [Use INSERT INTO FILES() to unload data to remote storage](../../../unloading/unload_using_insert_into_files.md). |
+| FILES()       | Table function [FILES()](../../sql-functions/table-functions/files.md). You can use this function to unload data into remote storage. |
 
 ## Return
 
