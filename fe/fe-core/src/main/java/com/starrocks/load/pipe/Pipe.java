@@ -314,7 +314,7 @@ public class Pipe implements GsonPostProcessable {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
-            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipeId.getDbId())
+            String dbName = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(pipeId.getDbId())
                     .map(Database::getOriginName)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);

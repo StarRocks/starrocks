@@ -272,7 +272,7 @@ public abstract class MVPCTRefreshPartitioner {
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
             analyzer.analyze(new ConnectContext(), dropPartitionClause);
 
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, materializedView, dropPartitionClause);
+            GlobalStateMgr.getCurrentState().getStarRocksMeta().dropPartition(db, materializedView, dropPartitionClause);
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     db.getFullName(), materializedView.getName());

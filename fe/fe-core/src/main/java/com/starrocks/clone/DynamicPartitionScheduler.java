@@ -352,6 +352,10 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 Range<PartitionKey> checkDropPartitionKey = idToRange.getValue();
                 RangeUtils.checkRangeIntersect(reservePartitionKeyRange, checkDropPartitionKey);
                 if (checkDropPartitionKey.upperEndpoint().compareTo(reservePartitionKeyRange.lowerEndpoint()) <= 0) {
+
+                    Partition partition = GlobalStateMgr.getCurrentState().getStarRocksMeta().getPartition(
+                            db, olapTable, checkDropPartitionId);
+
                     String dropPartitionName = olapTable.getPartition(checkDropPartitionId).getName();
                     dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, true));
                 }
@@ -456,7 +460,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(ctx, dropPartitionClause);
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
+                GlobalStateMgr.getCurrentState().getStarRocksMeta().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
             } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -471,7 +475,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     AlterTableClauseAnalyzer alterTableClauseVisitor = new AlterTableClauseAnalyzer(olapTable);
                     alterTableClauseVisitor.analyze(ctx, addPartitionClause);
 
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(ctx,
+                    GlobalStateMgr.getCurrentState().getStarRocksMeta().addPartitions(ctx,
                                 db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
                 } catch (DdlException e) {
@@ -551,7 +555,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                             new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
                     AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                     analyzer.analyze(new ConnectContext(), dropPartitionClause);
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
+                    GlobalStateMgr.getCurrentState().getStarRocksMeta().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {
                     recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());

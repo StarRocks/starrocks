@@ -44,6 +44,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -72,6 +73,7 @@ public class MetadataViewer {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
 
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -109,7 +111,7 @@ public class MetadataViewer {
 
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                        for (Tablet tablet : index.getTablets()) {
+                        for (Tablet tablet : tabletMetastore.getAllTablets(index)) {
                             long tabletId = tablet.getId();
                             int count = replicationNum;
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

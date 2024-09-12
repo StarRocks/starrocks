@@ -119,8 +119,12 @@ public class TabletStatMgr extends FrontendDaemon {
                 Map<Long, Long> indexRowCountMap = Maps.newHashMap();
                 try {
                     OlapTable olapTable = (OlapTable) table;
-                    for (Partition partition : olapTable.getAllPartitions()) {
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    List<Partition> partitionList = GlobalStateMgr.getCurrentState().getStarRocksMeta()
+                            .getAllPartitions(db, olapTable);
+                    for (Partition partition : partitionList) {
+                        List<PhysicalPartition> physicalPartitionList = GlobalStateMgr.getCurrentState().getTabletMetastore()
+                                .getAllPhysicalPartition(partition);
+                        for (PhysicalPartition physicalPartition : physicalPartitionList) {
                             long version = physicalPartition.getVisibleVersion();
                             for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                                     IndexExtState.VISIBLE)) {

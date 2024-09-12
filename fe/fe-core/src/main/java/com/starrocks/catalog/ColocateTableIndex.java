@@ -1008,12 +1008,12 @@ public class ColocateTableIndex implements Writable {
         for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
-            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database database = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
             if (database == null) {
                 LOG.warn("cannot find db {}, will remove invalid table {} from group {}",
                         dbId, tableId, entry.getValue());
             } else {
-                Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
+                Table table = globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(database, tableId);
                 if (table != null) {
                     // this is a valid table/database, do nothing
                     continue;
@@ -1064,8 +1064,8 @@ public class ColocateTableIndex implements Writable {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
             // database and table should be valid if reach here
-            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
-            Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
+            Database database = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
+            Table table = globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(database, tableId);
             if (table.isCloudNativeTable()) {
                 lakeGroups.add(entry.getValue());
             }

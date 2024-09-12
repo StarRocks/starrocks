@@ -35,16 +35,18 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.sleepycat.je.Transaction;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.TxnMeta;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class DatabaseInfo implements Writable {
+public class DatabaseInfo extends TxnMeta implements Writable {
 
     @SerializedName("db")
     private String dbName;
@@ -130,4 +132,5 @@ public class DatabaseInfo implements Writable {
         return quotaType;
     }
 
+    public Transaction transaction;
 }

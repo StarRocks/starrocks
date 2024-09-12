@@ -137,7 +137,7 @@ public class DbPEntryObject implements PEntryObject {
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            return globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+            return globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
         }
         // do not validate privilege of external database
         return true;

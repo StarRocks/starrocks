@@ -145,9 +145,9 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : allIndices) {
-                Optional<Tablet> unfinishedTablet =
-                        index.getTablets().stream().filter(t -> !finishedTabletsOfThisTable.contains(t.getId()))
-                                .findAny();
+                List<Tablet> tabletList = GlobalStateMgr.getCurrentState().getTabletMetastore().getAllTablets(index);
+                Optional<Tablet> unfinishedTablet = tabletList.stream().filter(
+                        t -> !finishedTabletsOfThisTable.contains(t.getId())).findAny();
                 if (!unfinishedTablet.isPresent()) {
                     continue;
                 }

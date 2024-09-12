@@ -37,12 +37,13 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.TxnMeta;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class ReplicaPersistInfo implements Writable {
+public class ReplicaPersistInfo extends TxnMeta implements Writable {
 
     public enum ReplicaOperationType {
         ADD(0),

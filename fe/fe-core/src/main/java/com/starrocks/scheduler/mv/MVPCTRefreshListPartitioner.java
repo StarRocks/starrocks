@@ -323,7 +323,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
             analyzer.analyze(mvContext.getCtx(), addPartitionClause);
             try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
+                GlobalStateMgr.getCurrentState().getStarRocksMeta().addPartitions(
                         mvContext.getCtx(), database, materializedView.getName(), addPartitionClause);
             } catch (Exception e) {
                 throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),

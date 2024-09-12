@@ -1564,7 +1564,7 @@ public class PropertyAnalyzer {
                 StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
                 svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .setLakeStorageInfo(db, materializedView, storageVolumeId, properties);
             }
 

@@ -56,7 +56,7 @@ public class PartitionUtils {
                                                           List<Long> tmpPartitionIds,
                                                           DistributionDesc distributionDesc,
                                                           long warehouseId) throws DdlException {
-        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getLocalMetastore()
+        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getStarRocksMeta()
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
                         tmpPartitionIds, distributionDesc, warehouseId);
         Locker locker = new Locker();

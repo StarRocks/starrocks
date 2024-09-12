@@ -69,7 +69,7 @@ public class AdminStmtTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMeta().createDb(createDbStmt.getFullDbName());
 
         String sql = "CREATE TABLE test.tbl1 (\n" +
                 "  `id` int(11) NULL COMMENT \"\",\n" +
@@ -112,7 +112,7 @@ public class AdminStmtTest {
                 + backendId + "', 'status' = 'bad');";
         AdminSetReplicaStatusStmt stmt =
                 (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        GlobalStateMgr.getCurrentState().getTabletManager().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertTrue(replica.isBad());
 
@@ -120,7 +120,7 @@ public class AdminStmtTest {
         adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
                 + backendId + "', 'status' = 'ok');";
         stmt = (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        GlobalStateMgr.getCurrentState().getTabletManager().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertFalse(replica.isBad());
     }

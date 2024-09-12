@@ -102,7 +102,7 @@ public class TableKeeper {
     public void correctTable() {
         int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().mayGetTable(databaseName, tableName)
+                .getStarRocksMeta().mayGetTable(databaseName, tableName)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
         if (numBackends < tableReplicas) {
@@ -142,7 +142,7 @@ public class TableKeeper {
 
     private Optional<OlapTable> mayGetTable() {
         return GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().mayGetTable(databaseName, tableName)
+                .getStarRocksMeta().mayGetTable(databaseName, tableName)
                 .flatMap(x -> Optional.of((OlapTable) x));
     }
 

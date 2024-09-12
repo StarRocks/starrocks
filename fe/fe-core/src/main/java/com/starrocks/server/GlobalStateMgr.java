@@ -127,6 +127,7 @@ import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -157,8 +158,11 @@ import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.meta.MetadataHandler;
+import com.starrocks.meta.StarRocksMeta;
+import com.starrocks.meta.TabletManager;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageHeader;
@@ -346,6 +350,8 @@ public class GlobalStateMgr {
 
     private EditLog editLog;
     private Journal journal;
+    private MetadataHandler metadataHandler;
+
     // For checkpoint and observer memory replayed marker
     private final AtomicLong replayedJournalId;
 
@@ -358,6 +364,9 @@ public class GlobalStateMgr {
     private final JournalObservable journalObservable;
 
     private final TabletInvertedIndex tabletInvertedIndex;
+    private final TabletMetastore tabletMetastore;
+    private final TabletManager tabletManager;
+
     private ColocateTableIndex colocateTableIndex;
 
     private final CatalogRecycleBin recycleBin;
@@ -439,6 +448,7 @@ public class GlobalStateMgr {
     private final InsertOverwriteJobMgr insertOverwriteJobMgr;
 
     private final LocalMetastore localMetastore;
+    private final StarRocksMeta starRocksMeta;
     private final GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -534,10 +544,17 @@ public class GlobalStateMgr {
         return this.tabletInvertedIndex;
     }
 
+    public TabletMetastore getTabletMetastore() {
+        return tabletMetastore;
+    }
+
+    public TabletManager getTabletManager() {
+        return tabletManager;
+    }
+
     // only for test
     public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
         this.colocateTableIndex = colocateTableIndex;
-        localMetastore.setColocateTableIndex(colocateTableIndex);
     }
 
     public ColocateTableIndex getColocateTableIndex() {
@@ -562,6 +579,10 @@ public class GlobalStateMgr {
 
     public LocalMetastore getLocalMetastore() {
         return localMetastore;
+    }
+
+    public StarRocksMeta getStarRocksMeta() {
+        return starRocksMeta;
     }
 
     public TemporaryTableMgr getTemporaryTableMgr() {
@@ -644,6 +665,9 @@ public class GlobalStateMgr {
         this.journalObservable = new JournalObservable();
 
         this.tabletInvertedIndex = new TabletInvertedIndex();
+        this.tabletMetastore = new TabletMetastore();
+        this.tabletManager = new TabletManager();
+
         this.colocateTableIndex = new ColocateTableIndex();
         this.recycleBin = new CatalogRecycleBin();
         this.functionSet = new FunctionSet();
@@ -704,12 +728,13 @@ public class GlobalStateMgr {
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
-        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
+        this.localMetastore = new LocalMetastore(this, recycleBin);
+        this.starRocksMeta = new StarRocksMeta();
         this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
+        this.metadataMgr = new MetadataMgr(starRocksMeta, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.connectorTableTriggerAnalyzeMgr = new ConnectorTableTriggerAnalyzeMgr();
 
@@ -1150,6 +1175,8 @@ public class GlobalStateMgr {
         journalWriter = new JournalWriter(journal, journalQueue);
 
         editLog = new EditLog(journalQueue);
+
+        metadataHandler = new MetadataHandler(((BDBJEJournal) journal).getBdbEnvironment());
     }
 
     // wait until FE is ready.
@@ -2062,6 +2089,10 @@ public class GlobalStateMgr {
         return journal;
     }
 
+    public MetadataHandler getMetadataHandler() {
+        return metadataHandler;
+    }
+
     // Get the next available, lock-free because nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
@@ -2427,10 +2458,6 @@ public class GlobalStateMgr {
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
-    }
-
-    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
-        localMetastore.replayUpdateClusterAndBackends(info);
     }
 
     public String dumpImage() {

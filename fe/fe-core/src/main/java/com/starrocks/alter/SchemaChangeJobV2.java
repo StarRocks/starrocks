@@ -467,7 +467,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 Preconditions.checkState(shadowIndex.getState() == IndexState.SHADOW, shadowIndex.getState());
-                partition.createRollupIndex(shadowIndex);
+                GlobalStateMgr.getCurrentState().getTabletMetastore().addMaterializedIndex(partition, shadowIndex);
             }
         }
 
@@ -866,6 +866,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         droppedIdx = physicalPartition.getBaseIndex();
                     } else {
                         droppedIdx = physicalPartition.deleteRollupIndex(originIdxId);
+
+                        GlobalStateMgr.getCurrentState().getTabletMetastore().dropMaterializedIndex(
+                                physicalPartition, originIdxId);
                     }
                     Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 

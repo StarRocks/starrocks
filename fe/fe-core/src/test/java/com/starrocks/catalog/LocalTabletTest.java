@@ -50,11 +50,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.List;
 
 public class LocalTabletTest {
@@ -155,25 +150,6 @@ public class LocalTabletTest {
 
     @Test
     public void testSerialization() throws Exception {
-        File file = new File("./olapTabletTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        tablet.write(dos);
-        dos.flush();
-        dos.close();
-
-        // Read an object from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        LocalTablet rTablet1 = LocalTablet.read(dis);
-        Assert.assertEquals(1, rTablet1.getId());
-        Assert.assertEquals(3, rTablet1.getImmutableReplicas().size());
-        Assert.assertEquals(rTablet1.getImmutableReplicas().get(0).getVersion(),
-                rTablet1.getImmutableReplicas().get(1).getVersion());
-
-        Assert.assertTrue(rTablet1.equals(tablet));
-        Assert.assertTrue(rTablet1.equals(rTablet1));
-        Assert.assertFalse(rTablet1.equals(this));
-
         LocalTablet tablet2 = new LocalTablet(1);
         Replica replica1 = new Replica(1L, 1L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
         Replica replica2 = new Replica(2L, 2L, 100L, 0, 200001L, 3001L, ReplicaState.NORMAL, 0, 0);
@@ -189,9 +165,6 @@ public class LocalTabletTest {
         tablet3.addReplica(replica2);
         tablet3.addReplica(new Replica(4L, 4L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0));
         Assert.assertFalse(tablet3.equals(tablet));
-
-        dis.close();
-        file.delete();
 
         // Read an object from json
         String jsonStr = GsonUtils.GSON.toJson(tablet);

@@ -16,21 +16,32 @@
 package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.RestBaseResult;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * eg:
@@ -98,8 +109,7 @@ public class GlobalDictMetaService {
                     return;
                 }
                 boolean isEnable = Boolean.parseBoolean(enableParam.trim());
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .setHasForbiddenGlobalDict(dbName, tableName, isEnable);
+                setHasForbiddenGlobalDict(dbName, tableName, isEnable);
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
@@ -107,6 +117,39 @@ public class GlobalDictMetaService {
                 return;
             }
             sendResult(request, response);
+        }
+
+        public void setHasForbiddenGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+            Map<String, String> property = new HashMap<>();
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                throw new DdlException("the DB " + dbName + " is not exist");
+            }
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                if (table == null) {
+                    throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
+                }
+
+                if (table instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) table;
+                    olapTable.setHasForbiddenGlobalDict(isForbit);
+                    if (isForbit) {
+                        property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
+                        IDictManager.getInstance().disableGlobalDict(olapTable.getId());
+                    } else {
+                        property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+                        IDictManager.getInstance().enableGlobalDict(olapTable.getId());
+                    }
+                    ModifyTablePropertyOperationLog info =
+                            new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+                    GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbiddenGlobalDict(info);
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+            }
         }
     }
 }

@@ -101,9 +101,9 @@ public class MetaFunctions {
     }
 
     public static Pair<Database, Table> inspectTable(TableName tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb())
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(tableName.getDb(), tableName.getTbl())
+        Table table = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetTable(tableName.getDb(), tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
@@ -167,7 +167,7 @@ public class MetaFunctions {
         Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
         if (table.isNativeTableOrMaterializedView()) {
-            mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
+            mayDb = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(tableName.getDb());
         } else {
             mayDb = Optional.empty();
         }
@@ -179,7 +179,7 @@ public class MetaFunctions {
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
             for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
+                String mvName = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetTable(mv.getDbId(), mv.getId())
                         .map(Table::getName)
                         .orElse(null);
                 JsonObject obj = new JsonObject();
@@ -246,7 +246,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         authOperatorPrivilege();
         String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(connectContext.getDatabase())
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(connectContext.getDatabase())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
         String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
         return ConstantOperator.createVarchar(json);

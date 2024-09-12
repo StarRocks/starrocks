@@ -42,7 +42,7 @@ public class RecycleLakeRangePartitionInfo extends RecycleRangePartitionInfo  {
             WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Warehouse warehouse = manager.getBackgroundWarehouse();
             if (LakeTableHelper.removePartitionDirectory(partition, warehouse.getId())) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+                GlobalStateMgr.getCurrentState().getStarRocksMeta().onErasePartition(partition);
                 return true;
             } else {
                 return false;

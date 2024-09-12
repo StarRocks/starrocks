@@ -48,9 +48,9 @@ import com.starrocks.thrift.TIndexState;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import javax.annotation.Nullable;
 
 public class MaterializedIndex extends MetaObject implements Writable, GsonPostProcessable {
@@ -136,7 +136,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
         this.id = id;
         this.state = state == null ? IndexState.NORMAL : state;
-        this.idToTablets = new HashMap<>();
+        this.idToTablets = new TreeMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
         this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
@@ -227,7 +227,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     public long getDataSize() {
         long dataSize = 0;
-        for (Tablet tablet : getTablets()) {
+        for (Tablet tablet : GlobalStateMgr.getCurrentState().getTabletMetastore().getAllTablets(this)) {
             dataSize += tablet.getDataSize(false);
         }
         return dataSize;
@@ -235,7 +235,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     public long getTabletMaxDataSize() {
         long maxDataSize = 0;
-        for (Tablet tablet : getTablets()) {
+        for (Tablet tablet : GlobalStateMgr.getCurrentState().getTabletMetastore().getAllTablets(this)) {
             maxDataSize = Math.max(maxDataSize, tablet.getDataSize(true));
         }
         return maxDataSize;
@@ -252,7 +252,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         } else {
             Preconditions.checkState(t instanceof LocalTablet);
             long replicaCount = 0;
-            for (Tablet tablet : getTablets()) {
+            for (Tablet tablet : GlobalStateMgr.getCurrentState().getTabletMetastore().getAllTablets(this)) {
                 LocalTablet localTablet = (LocalTablet) tablet;
                 replicaCount += localTablet.getImmutableReplicas().size();
             }

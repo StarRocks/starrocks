@@ -600,7 +600,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
         for (Pipe pipe : pipes.values()) {
-            String databaseName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getPipeId().getDbId())
+            String databaseName = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(pipe.getPipeId().getDbId())
                     .map(Database::getOriginName)
                     .orElse(null);
 
@@ -648,7 +648,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             file.setPipe_id(record.pipeId);
             file.setDatabase_name(
                     mayPipe.flatMap(p ->
-                                    GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(p.getDbAndName().first)
+                                    GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(p.getDbAndName().first)
                                             .map(Database::getOriginName))
                             .orElse(""));
             file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
@@ -1965,7 +1965,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
             if (mutablePartitions.size() <= 0) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .addSubPartitions(db, olapTable, partition, 1, warehouseId);
             }
         }
@@ -2236,7 +2236,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
-                    state.getLocalMetastore().cancelAlter(
+                    state.getAlterJobMgr().cancelAlter(
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.ROLLUP,
                                     new TableName(db.getFullName(), olapTable.getName())),
@@ -2245,7 +2245,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
-                    state.getLocalMetastore().cancelAlter(
+                    state.getAlterJobMgr().cancelAlter(
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.COLUMN,
                                     new TableName(db.getFullName(), olapTable.getName())),
@@ -2265,7 +2265,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(ctx, addPartitionClause);
             }
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+            state.getStarRocksMeta().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to cancel alter operation", e);
             errorStatus.setError_msgs(Lists.newArrayList(

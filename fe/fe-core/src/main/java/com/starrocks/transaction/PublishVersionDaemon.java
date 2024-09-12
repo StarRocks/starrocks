@@ -52,6 +52,7 @@ import com.starrocks.lake.PartitionPublishVersionData;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
@@ -509,16 +510,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                 txnState.getTransactionId());
                         continue;
                     }
+
+                    TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
+                    List<Tablet> tablets = tabletMetastore.getAllTablets(index);
+
                     if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
                         if (shadowTabletsMap.containsKey(versions.get(i))) {
-                            shadowTabletsMap.get(versions.get(i)).addAll(index.getTablets());
+                            shadowTabletsMap.get(versions.get(i)).addAll(tablets);
                         } else {
-                            Set<Tablet> tabletsNew = new HashSet<>(index.getTablets());
+                            Set<Tablet> tabletsNew = new HashSet<>(tablets);
                             shadowTabletsMap.put(versions.get(i), tabletsNew);
                         }
                     } else {
                         normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
-                        normalTablets.addAll(index.getTablets());
+                        normalTablets.addAll(tablets);
                     }
                 }
             }
@@ -791,12 +796,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     LOG.info("Ignored index {} for transaction {}", table.getIndexNameById(index.getId()), txnId);
                     continue;
                 }
+
+                List<Tablet> tabletList = GlobalStateMgr.getCurrentState().getTabletMetastore().getAllTablets(index);
+
                 if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
                     shadowTablets = (shadowTablets == null) ? Lists.newArrayList() : shadowTablets;
-                    shadowTablets.addAll(index.getTablets());
+                    shadowTablets.addAll(tabletList);
                 } else {
                     normalTablets = (normalTablets == null) ? Lists.newArrayList() : normalTablets;
-                    normalTablets.addAll(index.getTablets());
+                    normalTablets.addAll(tabletList);
                 }
             }
         } finally {

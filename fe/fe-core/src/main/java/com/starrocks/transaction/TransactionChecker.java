@@ -23,6 +23,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
@@ -99,7 +100,7 @@ public class TransactionChecker {
         List<PartitionChecker> partitions = new ArrayList<>();
         for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), tableCommitInfo.getTableId());
+                    .getTable(db.getId(), tableCommitInfo.getTableId());
             if (table == null || table.isCloudNativeTableOrMaterializedView()) {
                 continue;
             }
@@ -119,7 +120,9 @@ public class TransactionChecker {
                     List<MaterializedIndex> allIndices =
                             txn.getPartitionLoadedTblIndexes(tableCommitInfo.getTableId(), partition);
                     for (MaterializedIndex index : allIndices) {
-                        for (Tablet tablet : index.getTablets()) {
+                        TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
+                        List<Tablet> tablets = tabletMetastore.getAllTablets(index);
+                        for (Tablet tablet : tablets) {
                             partitionChecker.tablets.add((LocalTablet) tablet);
                         }
                     }

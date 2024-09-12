@@ -328,7 +328,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         Set<GroupId> toIgnoreGroupIds = new HashSet<>();
         boolean isAnyGroupChanged = false;
         for (GroupId groupId : groupIds) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+            Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 continue;
             }
@@ -726,7 +726,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         long lockTotalTime = 0;
         long waitTotalTimeMs = 0;
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+        Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(groupId.dbId);
         if (db == null) {
             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
         }
@@ -746,7 +746,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         try {
             TABLE:
             for (Long tableId : tableIds) {
-                OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+                OlapTable olapTable = (OlapTable) globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, tableId);
                 if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
                     continue;
                 }
@@ -755,7 +755,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     continue;
                 }
 
-                for (Partition partition : globalStateMgr.getLocalMetastore().getPartitionsIncludeRecycleBin(olapTable)) {
+                for (Partition partition : globalStateMgr.getStarRocksMeta().getPartitionsIncludeRecycleBin(olapTable)) {
                     partitionChecked++;
 
                     boolean isPartitionUrgent =
@@ -771,20 +771,20 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         locker.unLockDatabase(db.getId(), LockType.READ);
                         locker.lockDatabase(db.getId(), LockType.READ);
                         lockStart = System.nanoTime();
-                        if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
+                        if (globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
                         }
-                        if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
+                        if (globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
                         }
-                        if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partition.getId()) ==
+                        if (globalStateMgr.getStarRocksMeta().getPartitionIncludeRecycleBin(olapTable, partition.getId()) ==
                                 null) {
                             continue;
                         }
                     }
                     short replicationNum =
-                            globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
-                                    partition.getId());
+                            globalStateMgr.getStarRocksMeta()
+                                    .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
                     if (replicationNum == (short) -1) {
                         continue;
                     }

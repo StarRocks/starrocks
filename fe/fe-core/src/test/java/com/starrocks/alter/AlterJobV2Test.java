@@ -187,7 +187,7 @@ public class AlterJobV2Test {
             String sql = "CREATE MATERIALIZED VIEW test.mv2 DISTRIBUTED BY HASH(k1) " +
                         " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
+            GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             // modify column which define in mv
@@ -197,7 +197,7 @@ public class AlterJobV2Test {
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv2 =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("mv2");
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getStarRocksMeta().getDb("test").getTable("mv2");
             Assert.assertFalse(mv2.isActive());
         } catch (Exception e) {
             e.printStackTrace();
@@ -215,7 +215,7 @@ public class AlterJobV2Test {
                         " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
                         "AS SELECT * FROM modify_column_test3";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
+            GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             String alterStmtStr = "alter table test.modify_column_test3 modify column k2 varchar(20)";
@@ -223,7 +223,7 @@ public class AlterJobV2Test {
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
 
             waitForSchemaChangeAlterJobFinish();
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .getDb("test").getTable("mv3");
             Assert.assertTrue(!mv.isActive());
         } finally {
@@ -241,7 +241,7 @@ public class AlterJobV2Test {
                         " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
                         "AS SELECT * FROM testModifyWithSelectStarMV2";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
+            GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             String alterStmtStr = "alter table test.testModifyWithSelectStarMV2 add column k4 bigint";
@@ -250,7 +250,7 @@ public class AlterJobV2Test {
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
-                        .getLocalMetastore().getDb("test").getTable("mv6");
+                        .getStarRocksMeta().getDb("test").getTable("mv6");
             Assert.assertTrue(mv.isActive());
         } catch (Exception e) {
             e.printStackTrace();
@@ -270,7 +270,7 @@ public class AlterJobV2Test {
                         " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
                         "AS SELECT * FROM modify_column_test5";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
+            GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             String alterStmtStr = "alter table test.modify_column_test5 drop column k2";
@@ -279,7 +279,7 @@ public class AlterJobV2Test {
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
-                        .getLocalMetastore().getDb("test").getTable("mv5");
+                        .getStarRocksMeta().getDb("test").getTable("mv5");
             Assert.assertTrue(!mv.isActive());
         } catch (Exception e) {
             Assert.fail();
@@ -297,7 +297,7 @@ public class AlterJobV2Test {
                         " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1')" +
                         " AS SELECT k1, k2 + 1 FROM modify_column_test4";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
+            GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             {
@@ -309,7 +309,7 @@ public class AlterJobV2Test {
 
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
-                            .getCurrentState().getLocalMetastore().getDb("test").getTable("mv4");
+                            .getCurrentState().getStarRocksMeta().getDb("test").getTable("mv4");
                 Assert.assertTrue(mv.isActive());
             }
 
@@ -322,7 +322,7 @@ public class AlterJobV2Test {
 
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
-                            .getCurrentState().getLocalMetastore().getDb("test").getTable("mv4");
+                            .getCurrentState().getStarRocksMeta().getDb("test").getTable("mv4");
                 Assert.assertFalse(mv.isActive());
                 System.out.println(mv.getInactiveReason());
                 Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
@@ -341,7 +341,7 @@ public class AlterJobV2Test {
             String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
                         " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
+            GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             // modify column which not define in mv
@@ -351,7 +351,7 @@ public class AlterJobV2Test {
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("mv1");
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getStarRocksMeta().getDb("test").getTable("mv1");
             Assert.assertTrue(mv.isActive());
         } catch (Exception e) {
             e.printStackTrace();

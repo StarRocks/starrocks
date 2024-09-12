@@ -870,17 +870,20 @@ public class RestoreJob extends AbstractJob {
                             .getTable(db.getId(), idChain.getTblId());
                 PhysicalPartition part = tbl.getPhysicalPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
-                LocalTablet tablet = (LocalTablet) index.getTablet(idChain.getTabletId());
-                Replica replica = tablet.getReplicaById(idChain.getReplicaId());
+
+                Tablet tablet = GlobalStateMgr.getCurrentState().getTabletMetastore().getTablet(index, idChain.getTabletId());
+                Replica replica = GlobalStateMgr.getCurrentState().getTabletMetastore().getReplica(
+                        (LocalTablet) tablet, idChain.getReplicaId());
+
                 long signature = globalStateMgr.getNextId();
                 SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), signature,
                         jobId, db.getId(),
-                        tbl.getId(), part.getId(), index.getId(), tablet.getId(),
+                        tbl.getId(), part.getId(), index.getId(), idChain.getTabletId(),
                         part.getVisibleVersion(),
                         tbl.getSchemaHashByIndexId(index.getId()), timeoutMs,
                         true /* is restore task*/);
                 batchTask.addTask(task);
-                unfinishedSignatureToId.put(signature, tablet.getId());
+                unfinishedSignatureToId.put(signature, idChain.getTabletId());
                 bePathsMap.put(replica.getBackendId(), replica.getPathHash());
             }
         } finally {

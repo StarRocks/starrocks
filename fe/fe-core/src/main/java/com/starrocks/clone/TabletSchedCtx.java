@@ -60,6 +60,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
@@ -848,7 +849,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING,
         // we create a new replica with state CLONE
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMeta().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
@@ -923,15 +924,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 tabletId, tablet.getSingleReplica(), tablet.getSingleReplica().getBackendId(), destBackendId);
 
         final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
         }
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db.getId(), LockType.WRITE);
-            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(
-                    globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId),
+            OlapTable olapTable = (OlapTable) globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(
+                    globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId),
                     tblId);
             if (olapTable == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "table " + tblId + " does not exist");
@@ -1010,6 +1011,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         Preconditions.checkArgument(cloneTask.getTaskVersion() == CloneTask.VERSION_2);
         setLastVisitedTime(System.currentTimeMillis());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
 
         // check if clone task success
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
@@ -1035,32 +1037,33 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         // 1. check the tablet status first
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db.getId(), LockType.WRITE);
-            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+            OlapTable olapTable = (OlapTable) globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, tblId);
             if (olapTable == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
 
-            PhysicalPartition partition = globalStateMgr.getLocalMetastore()
+            PhysicalPartition partition = globalStateMgr.getStarRocksMeta()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
             }
 
             short replicationNum =
-                    globalStateMgr.getLocalMetastore()
+                    globalStateMgr.getStarRocksMeta()
                             .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
             if (replicationNum == (short) -1) {
                 throw new SchedException(Status.UNRECOVERABLE, "invalid replication number");
             }
 
-            MaterializedIndex index = partition.getIndex(indexId);
+            MaterializedIndex index =
+                    GlobalStateMgr.getCurrentState().getTabletMetastore().getMaterializedIndex(partition, indexId);
             if (index == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
@@ -1071,7 +1074,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                         + ", task's: " + schemaHash);
             }
 
-            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+            LocalTablet tablet = (LocalTablet) tabletMetastore.getTablet(index, tabletId);
             if (tablet == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet does not exist");
             }
@@ -1184,7 +1187,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (replica.getState() == ReplicaState.CLONE) {
             replica.setState(ReplicaState.NORMAL);
             tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
-            GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
+            GlobalStateMgr.getCurrentState().getTabletMetastore().addReplica(info, tablet, replica);
         } else {
             // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
             // so, we keep it state unchanged, and log update replica

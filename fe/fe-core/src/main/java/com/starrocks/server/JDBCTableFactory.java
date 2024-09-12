@@ -37,7 +37,7 @@ public class JDBCTableFactory implements AbstractTableFactory {
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
         Map<String, String> properties = stmt.getProperties();
-        long tableId = metastore.getNextId();
+        long tableId = GlobalStateMgr.getCurrentState().getNextId();
         return new JDBCTable(tableId, tableName, columns, properties);
     }
 }

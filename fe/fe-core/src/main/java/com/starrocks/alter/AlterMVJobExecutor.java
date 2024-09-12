@@ -407,7 +407,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         alterMaterializedViewStatus(materializedView, status, false);
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    GlobalStateMgr.getCurrentState().getStarRocksMeta()
                             .refreshMaterializedView(dbName, materializedView.getName(), true, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }

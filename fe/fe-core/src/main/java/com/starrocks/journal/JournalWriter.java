@@ -16,12 +16,19 @@
 package com.starrocks.journal;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -104,6 +111,20 @@ public class JournalWriter {
         currentJournal = journalQueue.take();
         long nextJournalId = nextVisibleJournalId;
         initBatch();
+
+        JournalEntity journalEntity = new JournalEntity();
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(currentJournal.getBuffer().getData()));
+        try {
+            journalEntity.readFields(in);
+            if (journalEntity.getOpCode() == OperationType.OP_RENAME_DB_V2) {
+                Writable data = GsonUtils.GSON.fromJson(Text.readString(in), DatabaseInfo.class);
+                DatabaseInfo databaseInfo = (DatabaseInfo) data;
+
+                //databaseInfo.transaction;
+            }
+        } catch (Exception e) {
+
+        }
 
         try {
             this.journal.batchWriteBegin();

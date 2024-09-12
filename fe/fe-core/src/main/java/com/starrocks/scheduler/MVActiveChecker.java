@@ -125,7 +125,8 @@ public class MVActiveChecker extends FrontendDaemon {
         }
 
         long dbId = mv.getDbId();
-        Optional<String> dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbId).map(Database::getFullName);
+        Optional<String> dbName = GlobalStateMgr.getCurrentState().getStarRocksMeta()
+                .mayGetDb(dbId).map(Database::getFullName);
         if (!dbName.isPresent()) {
             LOG.warn("[MVActiveChecker] cannot activate MV {} since database {} not found", mv.getName(), dbId);
             return;

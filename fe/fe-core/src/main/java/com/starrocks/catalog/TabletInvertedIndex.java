@@ -57,6 +57,8 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
+
 /*
  * this class stores an inverted index
  * key is tablet id. value is the related ids of this tablet
@@ -432,11 +434,52 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
+    public void recreateTabletInvertIndex() {
+        if (isCheckpointThread()) {
+            return;
+        }
+
+        // create inverted index
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (Database db : GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values()) {
+            long dbId = db.getId();
+            for (com.starrocks.catalog.Table table : db.getTables()) {
+                if (!table.isNativeTableOrMaterializedView()) {
+                    continue;
+                }
+
+                OlapTable olapTable = (OlapTable) table;
+                long tableId = olapTable.getId();
+                for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+                    long physicalPartitionId = partition.getId();
+                    TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
+                            partition.getParentId()).getStorageMedium();
+                    for (MaterializedIndex index : partition
+                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        long indexId = index.getId();
+                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partition.getParentId(), physicalPartitionId,
+                                indexId, schemaHash, medium, table.isCloudNativeTableOrMaterializedView());
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
+                            invertedIndex.addTablet(tabletId, tabletMeta);
+                            if (table.isOlapTableOrMaterializedView()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                    invertedIndex.addReplica(tabletId, replica);
+                                }
+                            }
+                        }
+                    } // end for indices
+                } // end for partitions
+            } // end for tables
+        } // end for dbs
+    }
+
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size(),
-                               "TabletCount", getTabletCount(),
-                               "ReplicateCount", getReplicaCount());
+                "TabletCount", getTabletCount(),
+                "ReplicateCount", getReplicaCount());
     }
 
     @Override
