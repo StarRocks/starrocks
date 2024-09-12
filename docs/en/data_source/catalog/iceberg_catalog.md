@@ -8,7 +8,7 @@ import QSTip from '../_assets/commonMarkdown/quickstat-iceberg-tip.mdx'
 
 # Iceberg catalog
 
-<QSTip>
+<QSTip />
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
