@@ -17,10 +17,10 @@ displayed_sidebar: docs
 |             | 内部表 | 外部表 | 大查询熔断 | INSERT 计算资源隔离 | BROKER LOAD 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 | CPU 硬隔离 |
 | ----------- | ----- | ----- | -------- | ----------------- | ---------------------- | ----------------------------------------------- | --------- |
 | 2.2         | √     | ×     | ×        | ×                 | ×                      | ×                                               | x         |
-| 2.3         | √     | √     |√         | ×                 | ×                      | ×                                               | x         |
-| 2.5         | √     | √     |√         | √                 | ×                      | ×                                               | x         |
-| 3.1 & 3.2   | √     | √     |√         | √                 | √                      | ×                                               | x         |
-| 3.3.5 及以后 | √     | √     |√         | √                 | √                      | √                                               | √         |
+| 2.3         | √     | √     | √        | ×                 | ×                      | ×                                               | x         |
+| 2.5         | √     | √     | √        | √                 | ×                      | ×                                               | x         |
+| 3.1 & 3.2   | √     | √     | √        | √                 | √                      | ×                                               | x         |
+| 3.3.5 及以后 | √     | √     | √        | √                 | √                      | √                                               | √         |
 
 ## 基本概念
 
@@ -248,7 +248,7 @@ TO (
     source_ip='cidr'
 ) -- 创建分类器，多个分类器间用英文逗号（,）分隔。
 WITH (
-    "cpu_weight/exclusive_cpu_cores" = "INT",
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
     "mem_limit" = "m%",
     "concurrency_limit" = "INT"
 );
@@ -323,7 +323,7 @@ mysql> SHOW RESOURCE GROUPS ALL;
 
 查询资源组的所有字段（包括被废弃的字段）。
 
-- 为上述三个命令增加关键字 `VERBOSE`，可以显示资源组的所有字段，包括被废弃的字段，主要包括 `type` 和 `max_cpu_cores`。
+为上述三个命令增加关键字 `VERBOSE`，可以显示资源组的所有字段，包括被废弃的字段，主要包括 `type` 和 `max_cpu_cores`。
 
 ```sql
 SHOW VERBOSE RESOURCE GROUPS ALL;
@@ -372,11 +372,13 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ### 查看查询命中的资源组
 
-在查询正在运行时，可以通过 `show proc "/current_queries"` 和 `show proc "/global_current_queries"`  的 `ResourceGroup` 列来查看正在运行的查询命中的资源组。
+对于尚未被执行的查询，您可以通过 `EXPLAIN VERBOSE <query>` 的 `RESOURCE GROUP` 字段查看该查询所匹配的资源组。
 
-在查询运行结束后，FE 节点 **fe.audit.log** 的 `ResourceGroup` 列和 `EXPLAIN VERBOSE <query>` 的 `RESOURCE GROUP` 列表示特定查询任务最终所匹配的资源组。
+在查询正在运行时，您可以通过 `SHOW PROC '/current_queries'` 和 `SHOW PROC '/global_current_queries'`  的 `ResourceGroup` 字段来查看正在运行的查询命中的资源组。
 
-对于上述命中显示资源组信息：
+在查询运行结束后，您可以通过 FE 节点 **fe.audit.log** 的 `ResourceGroup` 字段查看特定查询任务最终所匹配的资源组。
+
+对于上述资源组信息：
 
 - 如果该查询不受资源组管理，那么该列值为空字符串 `""`。
 
@@ -450,16 +452,16 @@ MySQL [(none)]> SHOW USAGE RESOURCE GROUPS;
 +------------+----+-----------+-----------------+-----------------+------------------+
 ```
 
-### 查看 exclusive 和 shared 资源组的线程信息
+### 查看 Exclusive 和 Shared 资源组的线程信息
 
-查询执行主要涉及三个线程池（pip_exec、pip_scan、pip_con_scan）。
+查询执行主要涉及三个线程池（`pip_exec`、`pip_scan` 以及 `pip_con_scan`）。
 
-- exclusive 资源组创建并且运行在自己独占的上述三个线程池，并绑定到分配给它的 exclusive CPU cores 上。
-- shared 资源组运行在共享的线程池上，并绑定到剩余的 shared CPU cores 上。
+- Exclusive 资源组创建并且运行在自己独占的上述三个线程池，并绑定到分配给它的 Exclusive CPU Core 上。
+- Shared 资源组运行在共享的线程池上，并绑定到剩余的 Shared CPU Core 上。
 
-上述三个线程池中的线程命名规则为 `{pip_exec,pip_scan,pip_con_scan}_{com,<resource_group_id>}`。其中，`com` 表共享的线程池，`<resource_group_id>` 为 exclusive 资源组的 ID。
+上述三个线程池中的线程命名规则为 `{ pip_exec | pip_scan | pip_con_scan }_{ com | <resource_group_id> }`。其中，`com` 表示共享的线程池，`<resource_group_id>` 为 Exclusive 资源组的 ID。
 
-通过系统表 `information_schema.be_threads` 可以查看每个 BE 线程和其绑定的 CPU 信息。其中，`BE_ID`, `NAME`, `BOUND_CPUS` 分别表示 BE 的 ID、线程的名称、该线程绑定的 CPU cores 数量。
+您可以通过系统视图 `information_schema.be_threads` 可以查看每个 BE 线程和其绑定的 CPU 信息。其中，`BE_ID`, `NAME`, `BOUND_CPUS` 分别表示 BE 的 ID、线程的名称、该线程绑定的 CPU Core 数量。
 
 ```sql
 select * from information_schema.be_threads where name like '%pip_exec%';
