@@ -412,17 +412,19 @@ public class InsertAnalyzer {
             newFileTableColumns.putAll(fileTable.getNameToColumn());
             for (int i = 0; i < selectColumnNames.size(); ++i) {
                 String selectColumnName = selectColumnNames.get(i);
-                if (selectColumnName == null) {
+                // if select column is a field of struct and the name is 'struct_name.field_name',
+                // it will be not in newFileTableColumns.
+                if (selectColumnName == null || !newFileTableColumns.containsKey(selectColumnName)) {
                     continue;
                 }
 
-                String columnName = targetColumnNames.get(i);
-                if (!targetTableColumns.containsKey(columnName)) {
+                String targetColumnName = targetColumnNames.get(i);
+                if (!targetTableColumns.containsKey(targetColumnName)) {
                     continue;
                 }
 
                 Column oldCol = newFileTableColumns.get(selectColumnName);
-                Column newCol = targetTableColumns.get(columnName).deepCopy();
+                Column newCol = targetTableColumns.get(targetColumnName).deepCopy();
                 // bad case: complex types may fail to convert in scanner.
                 // such as parquet json -> array<varchar>
                 if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
