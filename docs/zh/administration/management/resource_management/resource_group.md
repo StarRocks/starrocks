@@ -34,7 +34,7 @@ displayed_sidebar: docs
 
 | 配置名称                    | 描述                                                       | 取值范围                                     | 默认值  |
 | -------------------------- | --------------------------------------------------------- | ------------------------------------------- | ------ |
-| cpu_weight                 | 该资源组在一个 BE 节点上调度的权重。                           | (0, `avg_be_cpu_cores`] (大于 0 时生效)       | 0      |
+| cpu_weight                 | 该资源组在一个 BE 节点上调度 CPU 的权重。                           | (0, `avg_be_cpu_cores`] (大于 0 时生效)       | 0      |
 | exclusive_cpu_cores        | 该资源组的 CPU 硬隔离参数。                                  | (0, `min_be_cpu_cores - 1`] (大于 0 时生效)   | 0      |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。                 | (0, 1] (必填项)                              | -      |
 | spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
@@ -47,7 +47,7 @@ displayed_sidebar: docs
 
 ##### `cpu_weight`
 
-该资源组在单个 BE 节点上调度的权重。该值指定了该资源组的任务可用的 CPU 时间的相对份额。在 v3.3.5 以前，该配置名称为 `cpu_core_limit`。
+该资源组在单个 BE 节点上调度 CPU 的权重。该值指定了该资源组的任务可用的 CPU 时间的相对份额。在 v3.3.5 以前，该配置名称为 `cpu_core_limit`。
 
 取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。`cpu_weight` 和 `exclusive_cpu_cores` 有且只能有一个为正数。
 
