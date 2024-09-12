@@ -60,7 +60,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   > **NOTE**
   >
-  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
+  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter.
 
 - `concurrency_limit`
 
