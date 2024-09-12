@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.common.util.Counter;
+import com.starrocks.common.profile.Counter;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
