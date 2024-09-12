@@ -145,7 +145,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    std::string get_name() const override { return "array"; }
+    std::string get_name() const override { return "array-"+ _elements->get_name(); }
 
     Datum get(size_t idx) const override;
 
@@ -194,6 +194,8 @@ public:
     void check_or_die() const override;
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
+
+    static bool is_all_array_lengths_equal(const ColumnPtr& lhs, const ColumnPtr& rhs, const NullColumnPtr& null_data);
 
 private:
     // Elements must be NullableColumn to facilitate handling nested types.

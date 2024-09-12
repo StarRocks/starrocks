@@ -31,6 +31,8 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
@@ -542,6 +544,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const ArrayViewColumn& column) {
+        DCHECK(false);
+        return Status::NotSupported("array view column is not supported");
+    }
+
     int64_t size() const { return _size; }
 
 private:
@@ -604,6 +611,11 @@ public:
     Status do_visit(const JsonColumn& column) {
         _cur = JsonColumnSerde::serialize(column, _cur);
         return Status::OK();
+    }
+
+    Status do_visit(const ArrayViewColumn& column) {
+        DCHECK(false);
+        return Status::NotSupported("array view column is not supported");
     }
 
     uint8_t* cur() const { return _cur; }
@@ -676,6 +688,11 @@ public:
     Status do_visit(JsonColumn* column) {
         _cur = JsonColumnSerde::deserialize(_cur, column);
         return Status::OK();
+    }
+
+    Status do_visit(ArrayViewColumn* column) {
+        DCHECK(false);
+        return Status::NotSupported("array view column is not supported");
     }
 
     const uint8_t* cur() const { return _cur; }

@@ -234,6 +234,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(ArrayViewColumn* column) {
+        DCHECK(false);
+        return Status::NotSupported("Not support");
+    }
+
 private:
     const Columns& _columns;
     const PermutationView& _perm;

@@ -18,6 +18,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
@@ -616,4 +617,19 @@ Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type)
     return Status::OK();
 }
 
+bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& lhs, const ColumnPtr& rhs, const NullColumnPtr& null_column) {
+    if (!lhs->is_array() || !rhs->is_array()) {
+        throw std::runtime_error("input of is_all_array_lengths_equal shoule be array");
+    }
+    if (lhs->size() != rhs->size()) {
+        return false;
+    }
+    // @TODO reject nullable column
+
+    // @TODO consider nullable column
+    // if one of them is null, skip check
+    // otherwise, check length
+    return true;
+
 } // namespace starrocks
+}

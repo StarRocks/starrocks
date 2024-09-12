@@ -15,13 +15,17 @@
 #include "exprs/array_map_expr.h"
 
 #include <fmt/format.h>
+#include <memory>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
+#include "column/array_view_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/constexpr.h"
+#include "common/statusor.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
@@ -41,8 +45,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     std::vector<ColumnPtr> input_elements;
     NullColumnPtr null_column = nullptr;
     bool is_single_nullable_child = false;
-    ArrayColumn* input_array = nullptr;
+    // ArrayColumn* input_array = nullptr;
+    ColumnPtr input_array = nullptr;
     ColumnPtr input_array_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
+
     // for many valid arguments:
     // if one of them is a null literal, the result is a null literal;
     // if one of them is only null, then results are null;
@@ -55,37 +61,80 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         if (child_col->only_null()) {
             return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
         }
+        LOG(INFO) << "eval child: " << child_col->get_name();
         // no optimization for const columns.
-        child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
+        if (child_col->is_constant()) {
+            LOG(INFO) << "unpack const, " << child_col->get_name();
+        }
 
-        auto column = child_col;
-        if (child_col->is_nullable()) {
-            auto nullable = down_cast<const NullableColumn*>(child_col.get());
-            DCHECK(nullable != nullptr);
-            column = nullable->data_column();
+        bool is_const = child_col->is_constant();
+        bool is_nullable = child_col->is_nullable();
+        size_t num_rows = child_col->size();
+
+        auto data_column = child_col;
+        if (is_const) {
+            auto const_column = down_cast<const ConstColumn*>(child_col.get());
+            data_column = const_column->data_column();
+        }
+
+        // child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
+        // @TODO consider const nullable
+        if (is_nullable) {
+            // auto nullable = down_cast<const NullableColumn*>(child_col.get());
+            auto nullable_column = down_cast<const NullableColumn*>(data_column.get());
+            DCHECK(nullable_column);
+            data_column = nullable_column->data_column();
             // empty null array with non-zero elements
-            column->empty_null_in_complex_column(nullable->null_column()->get_data(),
-                                                 down_cast<const ArrayColumn*>(column.get())->offsets().get_data());
+            // @TODO remove this, do all things in align phase?
+            // column->empty_null_in_complex_column(nullable->null_column()->get_data(),
+            //                                      down_cast<const ArrayColumn*>(column.get())->offsets().get_data());
+
+            // @TODO what is is_single_nullable_child..
             if (null_column) {
                 is_single_nullable_child = false;
-                null_column = FunctionHelper::union_null_column(nullable->null_column(), null_column); // merge null
+                null_column = FunctionHelper::union_null_column(nullable_column->null_column(), null_column); // merge null
             } else {
                 is_single_nullable_child = true;
-                null_column = nullable->null_column();
+                null_column = nullable_column->null_column();
             }
         }
-        DCHECK(column->is_array());
-        auto cur_array = down_cast<ArrayColumn*>(column.get());
+        DCHECK(data_column->is_array() && !data_column->is_nullable());
+        // @TODO column maybe const
+        // auto cur_array = down_cast<ArrayColumn*>(column.get());
 
+        // @TODO should keep one column ,make sure array len is same
+
+        // check each array size in this column?
         if (input_array == nullptr) {
-            input_array = cur_array;
-            input_array_ptr_ref = column;
+            // input_array = cur_array;
+            input_array = data_column;
+            input_array_ptr_ref = data_column;
+            LOG(INFO) << "input_array: " << data_column->get_name();
+            // input_array = column;
+            // input_array_ptr_ref = column;
+            // @TODO what if input_array is const column
         } else {
-            if (UNLIKELY(!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column()))) {
-                return Status::InternalError("Input array element's size is not equal in array_map().");
-            }
+            // @TODO need a function to check each array size
+            // if (UNLIKELY(!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column()))) {
+            //     return Status::InternalError("Input array element's size is not equal in array_map().");
+            // }
         }
-        input_elements.push_back(cur_array->elements_column());
+
+        // @TODO
+        // elements maybe const 
+        ColumnPtr elements_column = nullptr;
+        auto array_column = down_cast<const ArrayColumn*>(data_column.get());
+        if (is_const) {
+            // if original column is const column, should keep const
+            elements_column = ConstColumn::create(array_column->elements_column(), num_rows);
+        } else {
+            elements_column = array_column->elements_column();
+        }
+        
+        // @TODO put all element column into input elements
+        input_elements.emplace_back(elements_column);
+
+        // input_elements.push_back(cur_array->elements_column());
     }
 
     if (is_single_nullable_child) {
@@ -96,7 +145,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
 
     ColumnPtr column = nullptr;
-    if (input_array->elements_column()->empty()) { // arrays may be null or empty
+    // @TODO handle empty case?
+    // @TODO if all is null
+    if (null_column->only_null()) {
+        // @TODO need check
+    // if (input_array->elements_column()->empty()) { // arrays may be null or empty
         column = ColumnHelper::create_column(type().children[0],
                                              true); // array->elements must be of return array->elements' type
     } else {
@@ -109,8 +162,12 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         DCHECK(argument_num == input_elements.size());
         for (int i = 0; i < argument_num; ++i) {
             cur_chunk->append_column(input_elements[i], arguments_ids[i]); // column ref
+            LOG(INFO) << "input elements: " << input_elements[i]->get_name() << ", arg id: " << arguments_ids[i];
         }
+
+        // @TODO align all element column
         // put captured columns into the new chunk aligning with the first array's offsets
+        // @TODO we don't need align?
         std::vector<SlotId> slot_ids;
         _children[0]->get_slot_ids(&slot_ids);
         for (auto id : slot_ids) {
@@ -120,16 +177,68 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                 return Status::InternalError(fmt::format(
                         "The size of the captured column {} is less than array's size.", captured->get_name()));
             }
-            cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
+            // @TODO maybe we need binary view column too...
+            // @TODO if capture is a binary column, replicate is expansive too
+            // @TODO not sure if captured is array??
+            LOG(INFO) << "capture column: " << captured->get_name() << ", id: " << id;
+            // if (captured->is_array()) {
+            //     LOG(INFO) << "build array view column from captured, slot id: " << id;
+            //     ASSIGN_OR_RETURN(captured, ArrayViewColumn::from_array_column(captured));
+            //     captured->check_or_die();
+            // }
+            // capture column may be not lambda arguement?
+
+            // align offsets
+            if (!captured->is_constant()) {
+                // @TODO replicate??
+                // for non-const column, we should align-up offsets.
+                // @TODO must replicate...
+                cur_chunk->append_column(captured, id);
+            } else {
+                cur_chunk->append_column(captured, id);
+            }
+
+            // @TODO align array-argument is enough, if other column don't ref to array, replictte is not necessar
+            // @TODO consider alignup, what if first column is const??
+            // cur_chunk->append_column(captured->align_offsets({}), id);
+            // cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }
-        if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
-            ASSIGN_OR_RETURN(column, context->evaluate(_children[0], cur_chunk.get()));
-            column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows(), true);
-        } else { // split large chunks into small ones to avoid too large or various batch_size
+        
+        // @TODO
+        {
+            // @TODO evalu param may be very large??
+            // cut tmp chunk from cur_chunk, and eval
+            // cut data
+            // if cur_chunk has view_column, we should convert view_column to column again
+
+            // @TODO cut row [x,y] into a tmp chunk
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
+                // if contains view, should translate it back
+                // TODO change column 
+                auto new_chunk = std::make_shared<Chunk>();
+                const auto& columns = tmp_chunk->columns();
+                for(size_t idx = 0;idx < columns.size();idx++) {
+                    const auto& column = columns[idx];
+                    if (column->is_array_view()) {
+                        LOG(INFO) << "convert array-view to array, " << column->get_name();
+                        ASSIGN_OR_RETURN(auto new_column, ArrayViewColumn::to_array_column(column));
+                        LOG(INFO) << "convert done";
+                        new_column->check_or_die();
+                        // auto array_view_column = down_cast<const ArrayViewColumn*>(column.get());
+                        // ASSIGN_OR_RETURN(auto new_column, array_view_column->to_array_column());
+                        LOG(INFO) << "update column, idx: " << idx;
+                        tmp_chunk->update_column_by_index(new_column, idx);
+                    }
+                }
+                tmp_chunk->check_or_die();
+                for (const auto& column: tmp_chunk->columns()) {
+                    LOG(INFO) << "column: " << column->get_name();
+                    DCHECK(!column->is_array_view()) << "unexpected array view";
+                }
+
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
                 if (column == nullptr) {
@@ -140,13 +249,40 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             }
         }
 
+
+        // @TODO
+        // evaluate lambda expr?
+        // if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
+        //     ASSIGN_OR_RETURN(column, context->evaluate(_children[0], cur_chunk.get()));
+        //     column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows(), true);
+        // } else { // split large chunks into small ones to avoid too large or various batch_size
+        //     ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
+        //     RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
+        //     accumulator.finalize();
+        //     while (auto tmp_chunk = accumulator.pull()) {
+        //         ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
+        //         tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
+        //         if (column == nullptr) {
+        //             column = tmp_col;
+        //         } else {
+        //             column->append(*tmp_col);
+        //         }
+        //     }
+        // }
+
         // construct the result array
         DCHECK(column != nullptr);
         column = ColumnHelper::cast_to_nullable_column(column);
+    
     }
+    // @TODO handle const?
+
     // attach offsets
-    auto array_col = std::make_shared<ArrayColumn>(
-            column, ColumnHelper::as_column<UInt32Column>(input_array->offsets_column()->clone_shared()));
+    // auto array_col = std::make_shared<ArrayColumn>(
+    //         column, ColumnHelper::as_column<UInt32Column>(input_array->offsets_column()->clone_shared()));
+    auto array_col = std::make_shared<ArrayColumn>(column, UInt32Column::create());
+
+
     if (null_column != nullptr) {
         return NullableColumn::create(std::move(array_col), null_column);
     }
