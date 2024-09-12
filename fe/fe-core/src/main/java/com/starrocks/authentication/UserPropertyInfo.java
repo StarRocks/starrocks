@@ -19,12 +19,11 @@ package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -53,29 +52,8 @@ public class UserPropertyInfo implements Writable {
         return properties;
     }
 
-    public static UserPropertyInfo read(DataInput in) throws IOException {
-        UserPropertyInfo info = new UserPropertyInfo();
-        info.readFields(in);
-        return info;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, ClusterNamespace.getFullName(user));
-        out.writeInt(properties.size());
-        for (Pair<String, String> entry : properties) {
-            Text.writeString(out, entry.first);
-            Text.writeString(out, entry.second);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        user = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String val = Text.readString(in);
-            properties.add(Pair.create(key, val));
-        }
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 }
