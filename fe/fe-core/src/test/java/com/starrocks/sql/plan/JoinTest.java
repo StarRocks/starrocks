@@ -3282,11 +3282,11 @@ public class JoinTest extends PlanTestBase {
                 "    );";
         String plan = getFragmentPlan(query);
         //outer join can not use const expr replacement optimization because it may generate null values
-        assertContains(plan, "12:Project\n" +
+        assertContains(plan, "17:Project\n" +
                 "  |  <slot 29> : 29: expr\n" +
                 "  |  \n" +
-                "  11:NESTLOOP JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN\n" +
+                "  16:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason:");
     }
 }

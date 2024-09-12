@@ -326,26 +326,12 @@ public class SelectStmtTest {
         String sql =
                 "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
         String s = starRocksAssert.query(sql).explainQuery();
-        Assert.assertTrue(s, s.contains("OUTPUT EXPRS:4: b1 | 6: count\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(6: count)\n" +
+        Assert.assertTrue(s, s.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(CAST(split('a,b,c', ',') IS NOT NULL AS BIGINT))\n" +
                 "  |  group by: 4: b1\n" +
-                "  |  \n" +
-                "  3:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(5: a1)\n" +
-                "  |  group by: 4: b1\n" +
-                "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 4: b1, 5: a1\n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 4> : 'aaa'\n" +
-                "  |  <slot 5> : split('a,b,c', ',')\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
