@@ -2,12 +2,11 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
+import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
 
 # STREAM LOAD
 
-:::tip
-The [StarRocks in Docker](../../../quick_start/shared-nothing.md) quick start features Stream Load. Give it a try for hands-on experience and a detailed explanation of a realistic ETL flow.
-:::
+<Tip />
 
 ## Description
 

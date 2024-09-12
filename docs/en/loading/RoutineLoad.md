@@ -5,10 +5,9 @@ displayed_sidebar: docs
 # Load data using Routine Load
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import QSTip from '../_assets/commonMarkdown/quickstat-routine-load-tip.mdx'
 
-:::tip
-Try Routine Load out in this [Quick Start](../quick_start/routine-load.md)
-:::
+<QSTip />
 
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
