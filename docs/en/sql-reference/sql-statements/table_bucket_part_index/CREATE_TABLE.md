@@ -114,11 +114,7 @@ Default value: `olap`. If this parameter is not specified, an OLAP table (StarRo
 
 Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `iceberg`, and `hudi` (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
 
-**From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md).**
-
-**From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../loading_unloading/INSERT.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
-
-**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and you can insert data to these Parquet-formatted Hive tables by using [INSERT INTO](../loading_unloading/INSERT.md). See [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table).**
+**We recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated.**
 
 - For MySQL, specify the following properties:
 
@@ -349,7 +345,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   **Precautions**
   - You can only use random bucketing to create Duplicate Key tables.
   - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
-  - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+  - Spark Load cannot be used to load data into tables bucketed randomly.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
 
   For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
@@ -634,7 +630,7 @@ PROPERTIES (
 
   > **NOTE**
   >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/management/BE_configuration.md).
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`.
 
 - `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
@@ -653,7 +649,7 @@ PROPERTIES (
   > **NOTE**
   >
   > - StarRocks shared-data clusters do not support this parameter.
-  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution).
+  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter `enable_fast_schema_evolution`.
 
 ## Examples
 
