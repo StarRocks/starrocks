@@ -338,9 +338,7 @@ public:
 
     [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
     std::shared_mutex& get_schema_lock() { return _schema_lock; }
-    //bool add_committed_rowset_unlock(const RowsetSharedPtr& rowset);
     bool add_committed_rowset(const RowsetSharedPtr& rowset);
-    //void erase_committed_rowset_unlock(const RowsetSharedPtr& rowset);
     void erase_committed_rowset(const RowsetSharedPtr& rowset);
 
     void on_shutdown() override;

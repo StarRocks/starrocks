@@ -662,9 +662,8 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                 _ignore_rowset_commit(version, rowset);
             } else {
                 RowsetMetaPB meta_pb;
-                if (_tablet.is_update_schema_running()) {
-                    rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
-                } else if (rowset->rowset_meta()->skip_tablet_schema()) {
+                bool skip_schema = !_tablet.is_update_schema_running() && rowset->rowset_meta()->skip_tablet_schema();
+                if (skip_schema) {
                     meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
                 } else {
                     rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
@@ -677,6 +676,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                                  << " version:" << version << " txn_id: " << rowset->txn_id() << " " << st << " "
                                  << _debug_string(false, true);
                     return st;
+                }
+                if (!skip_schema) {
+                    rowset->rowset_meta()->set_skip_tablet_schema(false);
                 }
                 // TODO(zhangqiang)
                 // check rowset meta schema id equal to latest tablet schema
@@ -751,9 +753,8 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     rowset->make_commit(version, rowsetid);
     span->AddEvent("save_meta_begin");
     RowsetMetaPB meta_pb;
-    if (_tablet.is_update_schema_running()) {
-        rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
-    } else if (rowset->rowset_meta()->skip_tablet_schema()) {
+    bool skip_schema = !_tablet.is_update_schema_running() && rowset->rowset_meta()->skip_tablet_schema();
+    if (skip_schema) {
         meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     } else {
         rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
@@ -765,6 +766,9 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     if (!st.ok()) {
         LOG(WARNING) << "rowset commit failed: " << st << " " << _debug_string(false, false);
         return st;
+    }
+    if (!skip_schema) {
+        rowset->rowset_meta()->set_skip_tablet_schema(false);
     }
     // TODO(zhangqiang)
     // check rowset meta schema id equal to latest tablet schema
