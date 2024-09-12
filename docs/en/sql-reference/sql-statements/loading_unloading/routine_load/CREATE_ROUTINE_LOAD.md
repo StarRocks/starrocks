@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-import Tip from '../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
+import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
 
 # CREATE ROUTINE LOAD
 
