@@ -1012,7 +1012,7 @@ public class AstToStringBuilder {
             if (isImplicit) {
                 return visit(node.getChild(0));
             }
-            return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            return node.toSqlImpl();
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
