@@ -39,6 +39,16 @@ public class InsertOverwriteJob {
     @SerializedName(value = "targetTableId")
     private long targetTableId;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "warehouseId")
+    private long warehouseId;
+
+    @SerializedName(value = "sourcePartitionNames")
+    private List<String> sourcePartitionNames;
+
+
+>>>>>>> 4b057ba03c ([BugFix] Fix null exception when insert overwrite job run concurrecy (#50628))
     private transient InsertStmt insertStmt;
 
     public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId, long targetTableId) {
@@ -81,6 +91,14 @@ public class InsertOverwriteJob {
 
     public void setSourcePartitionIds(List<Long> sourcePartitionIds) {
         this.sourcePartitionIds = sourcePartitionIds;
+    }
+
+    public List<String> getSourcePartitionNames() {
+        return sourcePartitionNames;
+    }
+
+    public void setSourcePartitionNames(List<String> sourcePartitionNames) {
+        this.sourcePartitionNames = sourcePartitionNames;
     }
 
     public List<Long> getTmpPartitionIds() {
