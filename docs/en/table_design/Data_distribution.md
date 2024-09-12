@@ -584,7 +584,7 @@ However, note that if you query massive amounts of data and frequently use certa
 
 - You can only use random bucketing to create a Duplicate Key table.
 - You cannot specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
-- [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+- Spark Load cannot be used to load data into tables bucketed randomly.
 
 In the following CREATE TABLE example, the `DISTRIBUTED BY xxx` statement is not used, so StarRocks uses random bucketing by default, and automatically sets the number of buckets.
 
