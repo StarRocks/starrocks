@@ -147,10 +147,11 @@ void ExecutorsManager::change_num_connector_scan_threads(uint32_t num_connector_
 }
 
 void ExecutorsManager::change_enable_resource_group_cpu_borrowing(bool val) {
-    if (_conf.enable_cpu_borrowing == val) {
+    const bool new_val = val && _conf.enable_bind_cpus;
+    if (_conf.enable_cpu_borrowing == new_val) {
         return;
     }
-    _conf.enable_cpu_borrowing = val;
+    _conf.enable_cpu_borrowing = new_val;
 
     update_shared_executors();
 }

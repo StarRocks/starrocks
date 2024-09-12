@@ -26,6 +26,16 @@ namespace starrocks::workgroup {
 // PipelineExecutorSetConfig
 // ------------------------------------------------------------------------------------
 
+static CpuUtil::CpuIds limit_total_cpuids(CpuUtil::CpuIds&& total_cpuids, uint32_t num_total_cores) {
+    if (total_cpuids.empty() || total_cpuids.size() <= num_total_cores) {
+        return std::move(total_cpuids);
+    }
+
+    CpuUtil::CpuIds cpuids;
+    std::copy_n(total_cpuids.begin(), num_total_cores, std::back_inserter(cpuids));
+    return cpuids;
+}
+
 PipelineExecutorSetConfig::PipelineExecutorSetConfig(uint32_t num_total_cores, uint32_t num_total_driver_threads,
                                                      uint32_t num_total_scan_threads,
                                                      uint32_t num_total_connector_scan_threads,
@@ -35,9 +45,9 @@ PipelineExecutorSetConfig::PipelineExecutorSetConfig(uint32_t num_total_cores, u
           num_total_driver_threads(num_total_driver_threads),
           num_total_scan_threads(num_total_scan_threads),
           num_total_connector_scan_threads(num_total_connector_scan_threads),
-          total_cpuids(std::move(total_cpuids)),
+          total_cpuids(limit_total_cpuids(std::move(total_cpuids), num_total_cores)),
           enable_bind_cpus(enable_bind_cpus),
-          enable_cpu_borrowing(enable_cpu_borrowing) {}
+          enable_cpu_borrowing(enable_cpu_borrowing && enable_bind_cpus) {}
 
 std::string PipelineExecutorSetConfig::to_string() const {
     return fmt::format(
@@ -172,7 +182,7 @@ void PipelineExecutorSet::notify_config_changed() const {
 }
 
 uint32_t PipelineExecutorSet::calculate_num_threads(uint32_t num_total_threads) const {
-    if (!_borrowed_cpu_ids.empty() || _cpuids.empty()) {
+    if (!_borrowed_cpu_ids.empty()) {
         return num_total_threads;
     }
     return std::max<uint32_t>(1, num_total_threads * _cpuids.size() / _conf.num_total_cores);
