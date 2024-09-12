@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common.util;
+package com.starrocks.common.profile;
 
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
@@ -44,7 +44,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-// Counter means indicators field. The counter's name is key, the counter itself is value.  
+// Counter means indicators field. The counter's name is key, the counter itself is value.
 public class Counter {
     private volatile int type;
     private volatile TCounterStrategy strategy;
@@ -112,6 +112,25 @@ public class Counter {
     }
 
     public boolean isSkipMinMax() {
+        return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
+    }
+
+    public static boolean isSum(TCounterStrategy strategy) {
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM) ||
+                Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG_SUM);
+    }
+
+    public static boolean isAvg(TCounterStrategy strategy) {
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG)
+                || Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM_AVG);
+    }
+
+    public static boolean isSkipMerge(TCounterStrategy strategy) {
+        return Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_ALL)
+                || Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_SECOND_MERGE);
+    }
+
+    public static boolean isSkipMinMax(TCounterStrategy strategy) {
         return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
     }
 

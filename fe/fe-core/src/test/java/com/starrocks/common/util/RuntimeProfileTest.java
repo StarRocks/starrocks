@@ -40,6 +40,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.starrocks.common.profile.Counter;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
@@ -49,11 +50,15 @@ import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 public class RuntimeProfileTest {
 
@@ -615,6 +620,13 @@ public class RuntimeProfileTest {
         Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("__MAX_OF_count1"));
         Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MAX_OF_count1").getValue());
         Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
+        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count1"));
+        Assertions.assertEquals(2, mergedProfile.getCounterMap().get("count1").getValue());
+        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("__MIN_OF_count1"));
+        Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MIN_OF_count1").getValue());
+        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("__MAX_OF_count1"));
+        Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MAX_OF_count1").getValue());
+        Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
         Assertions.assertEquals(2, mergedProfile.getCounterMap().get("count1_sub").getValue());
         Assertions.assertTrue(mergedProfile.getCounterMap().containsKey("count2"));
         Assertions.assertEquals(5, mergedProfile.getCounterMap().get("count2").getValue());
@@ -899,5 +911,100 @@ public class RuntimeProfileTest {
         Assertions.assertEquals(5, baseC3.getMinValue().get().longValue());
         Assertions.assertTrue(baseC3.getMaxValue().isPresent());
         Assertions.assertEquals(15, baseC3.getMaxValue().get().longValue());
+    }
+
+    private static Stream<Arguments> testProfileMergeArguments() {
+        return Stream.of(
+                Arguments.of(TCounterAggregateType.SUM, TCounterMergeType.MERGE_ALL),
+                Arguments.of(TCounterAggregateType.AVG, TCounterMergeType.MERGE_ALL),
+                Arguments.of(TCounterAggregateType.SUM, TCounterMergeType.SKIP_ALL),
+                Arguments.of(TCounterAggregateType.AVG, TCounterMergeType.SKIP_ALL)
+        );
+    }
+
+    @ParameterizedTest(name = "{index}-{0}")
+    @MethodSource("testProfileMergeArguments")
+    public void testProfileMerge(TCounterAggregateType aggregateType, TCounterMergeType mergeType) {
+        RuntimeProfile fragmentProfile = new RuntimeProfile("fragment-1");
+
+        // add an instance profile
+        {
+            RuntimeProfile instanceProfile = new RuntimeProfile("instance-1");
+            instanceProfile.addCounter("c1", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(1);
+            instanceProfile.addCounter("c2", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(2);
+            instanceProfile.addInfoString("instance-id", "id1");
+
+            // add a child into instance
+            RuntimeProfile pipelineProfile = new RuntimeProfile("pipe-1");
+            instanceProfile.addChild(pipelineProfile);
+            pipelineProfile.addCounter("c3", TUnit.BYTES,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(1);
+
+            fragmentProfile.merge(instanceProfile.toThrift());
+        }
+        // add an instance profile
+        {
+            RuntimeProfile instanceProfile = new RuntimeProfile("instance-2");
+            instanceProfile.addCounter("c1", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(3);
+            instanceProfile.addCounter("c2", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(4);
+            instanceProfile.addInfoString("instance-id", "id2");
+
+            // add a child into instance
+            RuntimeProfile pipelineProfile = new RuntimeProfile("pipe-1");
+            instanceProfile.addChild(pipelineProfile);
+            pipelineProfile.addCounter("c3", TUnit.BYTES,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(5);
+
+            fragmentProfile.merge(instanceProfile.toThrift());
+        }
+
+        // finalize merge
+        fragmentProfile.finalizeMerge();
+        // copy into query
+        RuntimeProfile queryRuntimeProfile = new RuntimeProfile("q1");
+        queryRuntimeProfile.copyAllCountersRecursiveFrom(fragmentProfile);
+        queryRuntimeProfile.copyAllInfoStringsFrom(fragmentProfile, null);
+
+        Assertions.assertEquals(fragmentProfile.getCounter("c1").getValue(),
+                queryRuntimeProfile.getCounter("c1").getValue());
+        Assertions.assertEquals(fragmentProfile.getCounter("c2").getValue(),
+                queryRuntimeProfile.getCounter("c2").getValue());
+        Assertions.assertEquals(fragmentProfile.getChild("pipe-1").getCounter("c3").getValue(),
+                queryRuntimeProfile.getChild("pipe-1").getCounter("c3").getValue());
+        Assertions.assertEquals(fragmentProfile.getInfoString("instance-id"),
+                queryRuntimeProfile.getInfoString("instance-id"));
+
+        if (mergeType == TCounterMergeType.MERGE_ALL && aggregateType == TCounterAggregateType.SUM) {
+            Assertions.assertEquals(4, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(6, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(6, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        } else if (mergeType == TCounterMergeType.MERGE_ALL && aggregateType == TCounterAggregateType.AVG) {
+            Assertions.assertEquals(2, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(3, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(3, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        } else if (mergeType == TCounterMergeType.SKIP_ALL && aggregateType == TCounterAggregateType.SUM) {
+            Assertions.assertEquals(3, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(4, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(5, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        } else if (mergeType == TCounterMergeType.SKIP_ALL && aggregateType == TCounterAggregateType.AVG) {
+            Assertions.assertEquals(3, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(4, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(5, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        }
+
+        Assertions.assertEquals(3, fragmentProfile.getMaxCounter("c1").getValue());
+        Assertions.assertEquals(1, fragmentProfile.getMinCounter("c1").getValue());
+        Assertions.assertEquals(2, fragmentProfile.getMinCounter("c2").getValue());
+        Assertions.assertEquals(1, fragmentProfile.getChild("pipe-1").getMinCounter("c3").getValue());
     }
 }

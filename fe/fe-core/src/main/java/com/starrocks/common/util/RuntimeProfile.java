@@ -44,6 +44,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
+import com.starrocks.common.profile.Counter;
+import com.starrocks.common.profile.SummarizationCounter;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TRuntimeProfileNode;
@@ -90,6 +92,9 @@ public class RuntimeProfile {
     private final Map<String, Set<String>> childCounterMap = Maps.newConcurrentMap();
     private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newCopyOnWriteArrayList();
 
+    // Only used for Fragment Profile, these counters can be accumulated
+    private final Map<String, Pair<SummarizationCounter, String>> fragmentCounterMap = Maps.newConcurrentMap();
+
     private String name;
     private double localTimePercent;
     // The version of this profile. It is used to prevent updating this profile
@@ -131,6 +136,44 @@ public class RuntimeProfile {
     public void removeAllChildren() {
         childList.clear();
         childMap.clear();
+    }
+
+    public SummarizationCounter getOrAddSummarizationCounter(String name, TUnit unit,
+                                                             TCounterStrategy strategy, String parentName) {
+        Pair<SummarizationCounter, String> pair = fragmentCounterMap.get(name);
+        SummarizationCounter result;
+        if (pair == null && parentName != null) {
+            result = addSummarizationCounter(name, unit, strategy, parentName);
+        } else if (pair != null) {
+            result = pair.first;
+        } else {
+            result = null;
+        }
+        return result;
+    }
+
+    public SummarizationCounter addSummarizationCounter(String name, TUnit type, TCounterStrategy strategy,
+                                                        String parentName) {
+        if (strategy == null) {
+            strategy = Counter.createStrategy(type);
+        }
+        Pair<SummarizationCounter, String> pair = this.fragmentCounterMap.get(name);
+        if (pair != null) {
+            return pair.first;
+        } else {
+            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
+                    || this.fragmentCounterMap.containsKey(parentName));
+
+            SummarizationCounter newCounter = new SummarizationCounter(type, strategy);
+            this.fragmentCounterMap.put(name, Pair.create(newCounter, parentName));
+
+            if (!childCounterMap.containsKey(parentName)) {
+                childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
+            }
+            Set<String> childNames = childCounterMap.get(parentName);
+            childNames.add(name);
+            return newCounter;
+        }
     }
 
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy) {
@@ -213,6 +256,10 @@ public class RuntimeProfile {
         return counterMap.get(name);
     }
 
+    public Counter getMinCounter(String name) {
+        return getCounter(MERGED_INFO_PREFIX_MIN + name);
+    }
+
     public Counter getMaxCounter(String name) {
         Counter counter;
         if ((counter = getCounter(MERGED_INFO_PREFIX_MAX + name)) != null) {
@@ -220,6 +267,17 @@ public class RuntimeProfile {
         }
 
         return getCounter(name);
+    }
+
+    public void copyAllCountersRecursiveFrom(RuntimeProfile srcProfile) {
+        copyAllCountersFrom(srcProfile);
+        copyAllInfoStringsFrom(srcProfile, null);
+
+        for (var child : srcProfile.childMap.values()) {
+            RuntimeProfile childProfile = new RuntimeProfile(child.name);
+            childProfile.copyAllCountersRecursiveFrom(child);
+            addChild(childProfile);
+        }
     }
 
     // Copy all the counters from src profile
@@ -261,6 +319,161 @@ public class RuntimeProfile {
         return version;
     }
 
+    /**
+     * Merge the incremental value into existing counters, and remove that counter from thrift if it can be merged
+     */
+    public void merge(final TRuntimeProfileTree thriftProfile) {
+        Reference<Integer> idx = new Reference<>(0);
+        merge(thriftProfile.nodes, idx, false);
+        Preconditions.checkState(idx.getRef().equals(thriftProfile.nodes.size()));
+    }
+
+    private void merge(List<TRuntimeProfileNode> nodes, Reference<Integer> idx, boolean isParentNodeOld) {
+        TRuntimeProfileNode node = nodes.get(idx.getRef());
+
+        boolean isNodeOld;
+        if (isParentNodeOld || (node.isSetVersion() && node.version < version)) {
+            isNodeOld = true;
+        } else {
+            isNodeOld = false;
+            if (node.isSetVersion()) {
+                version = node.version;
+            }
+        }
+
+        // update this level's counters
+        if (!isNodeOld && node.counters != null) {
+            // mapping from counterName to parentCounterName
+            Map<String, String> child2ParentMap = Maps.newHashMap();
+            if (node.child_counters_map != null) {
+                // update childCounters
+                for (Map.Entry<String, Set<String>> entry : node.child_counters_map.entrySet()) {
+                    String parentName = entry.getKey();
+                    for (String childName : entry.getValue()) {
+                        child2ParentMap.put(childName, parentName);
+                    }
+                }
+            }
+
+            // First processing counters by hierarchy
+            Map<String, TCounter> tCounterMap = node.counters.stream()
+                    .collect(Collectors.toMap(TCounter::getName, t -> t));
+            Queue<String> nameQueue = Lists.newLinkedList();
+            nameQueue.offer(ROOT_COUNTER);
+
+            while (!nameQueue.isEmpty()) {
+                String topName = nameQueue.poll();
+
+                if (!Objects.equals(ROOT_COUNTER, topName)) {
+                    TCounter tcounter = tCounterMap.get(topName);
+                    String parentName = child2ParentMap.get(topName);
+
+                    String target = topName;
+                    boolean updateSum = true;
+                    // For this kind of special counter, we need to merge them into another target
+                    // But since the value has been summarized, we only need to update MIN/MAX, but not SUM
+                    if (topName.startsWith(MERGED_INFO_PREFIX_MIN) || topName.startsWith(MERGED_INFO_PREFIX_MAX)) {
+                        updateSum = false;
+                        target = org.apache.commons.lang3.StringUtils.removeStart(target, MERGED_INFO_PREFIX_MIN);
+                        target = org.apache.commons.lang3.StringUtils.removeStart(target, MERGED_INFO_PREFIX_MAX);
+                    }
+
+                    SummarizationCounter summarization =
+                            getOrAddSummarizationCounter(target, tcounter.type, tcounter.strategy, parentName);
+                    if (summarization == null) {
+                        continue;
+                    }
+
+                    summarization.merge(tcounter, updateSum);
+                    tCounterMap.remove(topName);
+                }
+
+                if (node.child_counters_map != null) {
+                    Set<String> childNames = node.child_counters_map.get(topName);
+                    if (childNames != null) {
+                        for (String childName : childNames) {
+                            nameQueue.offer(childName);
+                        }
+                    }
+                }
+            }
+            // Second, processing the remaining counters, set ROOT_COUNTER as it's parent
+            for (TCounter tcounter : tCounterMap.values()) {
+                Pair<SummarizationCounter, String> pair = fragmentCounterMap.get(tcounter.name);
+                if (pair == null) {
+                    SummarizationCounter counter =
+                            addSummarizationCounter(tcounter.name, tcounter.type, tcounter.strategy, ROOT_COUNTER);
+                } else {
+                    Preconditions.checkArgument(pair.first.unit == tcounter.type);
+                    pair.first.merge(tcounter, true);
+                }
+            }
+
+            // Remove counters from this fragment-profile
+            node.counters.clear();
+            node.child_counters_map.clear();
+        }
+
+        if (!isNodeOld && node.info_strings_display_order != null) {
+            Map<String, String> nodeInfoStrings = node.info_strings;
+            for (String key : node.info_strings_display_order) {
+                String value = nodeInfoStrings.get(key);
+                Preconditions.checkState(value != null);
+                addInfoString(key, value);
+            }
+            LOG.debug("clear {} info strings in {}", node.info_strings_display_order.size(), node.getName());
+            node.info_strings.clear();
+            node.info_strings_display_order.clear();
+        }
+
+        idx.setRef(idx.getRef() + 1);
+
+        for (int i = 0; i < node.num_children; i++) {
+            TRuntimeProfileNode tchild = nodes.get(idx.getRef());
+            String childName = tchild.name;
+            RuntimeProfile childProfile = this.childMap.get(childName);
+            if (childProfile == null) {
+                childProfile = new RuntimeProfile(childName);
+                addChild(childProfile);
+            }
+            childProfile.merge(nodes, idx, isNodeOld);
+        }
+    }
+
+    /**
+     * Copy the merged counters into existing counters
+     */
+    public void finalizeMerge() {
+        for (var entry : fragmentCounterMap.entrySet()) {
+            String name = entry.getKey();
+            SummarizationCounter counter = entry.getValue().first;
+            String parentName = entry.getValue().second;
+
+            Counter minCounter = new Counter(counter.unit, counter.strategy, 0);
+            Counter maxCounter = new Counter(counter.unit, counter.strategy, 0);
+            Counter sumCounter = new Counter(counter.unit, counter.strategy, 0);
+            counter.finalized(minCounter, maxCounter, sumCounter);
+
+            counterMap.put(name, Pair.create(sumCounter, parentName));
+            childCounterMap.computeIfAbsent(parentName, (x) -> Sets.newHashSet()).add(name);
+            if (!Counter.isSkipMinMax(counter.strategy)) {
+                addCounter(MERGED_INFO_PREFIX_MIN + name, minCounter.getType(), minCounter.getStrategy(), name)
+                        .setValue(minCounter.getValue());
+                addCounter(MERGED_INFO_PREFIX_MAX + name, maxCounter.getType(), maxCounter.getStrategy(), name)
+                        .setValue(maxCounter.getValue());
+            }
+        }
+        LOG.debug("finalize merge {} counters of {}", fragmentCounterMap.size(), name);
+        fragmentCounterMap.clear();
+
+        for (RuntimeProfile child : childMap.values()) {
+            child.finalizeMerge();
+        }
+    }
+
+    /**
+     * Update existing value of all counters
+     */
     public void update(final TRuntimeProfileTree thriftProfile) {
         Reference<Integer> idx = new Reference<>(0);
         update(thriftProfile.nodes, idx, false);
@@ -488,7 +701,7 @@ public class RuntimeProfile {
 
     // concurrency safe
     public void addChild(RuntimeProfile child) {
-        if (child == null) {
+        if (child == null || childMap.containsKey(child.name)) {
             return;
         }
 
