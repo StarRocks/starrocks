@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: Partition data in StarRocks
+sidebar_position: 10
 ---
 
 # Expression partitioning (recommended)
