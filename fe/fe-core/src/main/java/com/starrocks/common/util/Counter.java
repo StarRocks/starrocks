@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
 import com.starrocks.thrift.TCounterMinMaxType;
@@ -85,6 +86,25 @@ public class Counter {
     }
 
     public boolean isSkipMinMax() {
+        return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
+    }
+
+    public static boolean isSum(TCounterStrategy strategy) {
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM) ||
+                Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG_SUM);
+    }
+
+    public static boolean isAvg(TCounterStrategy strategy) {
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG)
+                || Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM_AVG);
+    }
+
+    public static boolean isSkipMerge(TCounterStrategy strategy) {
+        return Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_ALL)
+                || Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_SECOND_MERGE);
+    }
+
+    public static boolean isSkipMinMax(TCounterStrategy strategy) {
         return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
     }
 
@@ -168,6 +188,35 @@ public class Counter {
         }
     }
 
+    public static final class SummerizationCounter {
+
+        public final TUnit unit;
+        public final TCounterStrategy strategy;
+        public long min = Long.MAX_VALUE;
+        public long max = Long.MIN_VALUE;
+        public long sum = 0L;
+        public long cnt = 0L;
+
+        public SummerizationCounter(TUnit unit, TCounterStrategy strategy) {
+            this.unit = unit;
+            this.strategy = strategy;
+        }
+
+        public void merge(TCounter counter) {
+            sum += counter.value;
+            cnt++;
+            min = Long.min(min, counter.getValue());
+            max = Long.max(max, counter.getValue());
+        }
+
+        public void finalized(Counter minCounter, Counter maxCounter, Counter mergedCounter) {
+            long mergedValue = Counter.isAvg(strategy) ? sum / cnt : sum;
+            minCounter.setValue(min);
+            maxCounter.setValue(max);
+            mergedCounter.setValue(mergedValue);
+        }
+
+    }
     @Override
     public String toString() {
         return "Counter{" +

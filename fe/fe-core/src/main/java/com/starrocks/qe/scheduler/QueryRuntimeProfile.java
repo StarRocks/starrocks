@@ -98,6 +98,7 @@ public class QueryRuntimeProfile {
 
     private RuntimeProfile queryProfile;
     private List<RuntimeProfile> fragmentProfiles;
+    private List<RuntimeProfile> mergedFragmentProfiles;
 
     // The load channel profile is only present if loading to OlapTables.
     // The hierarchy is LoadChannel -> Channel(BE) -> Index
@@ -337,6 +338,11 @@ public class QueryRuntimeProfile {
             saveRunningProfile(profilingPlan, profile);
             LOG.debug("update profile, profilingPlan: {}, profile: {}", profilingPlan, profile);
         }
+
+        // Update fragment profile
+        int fragmentIndex = execState.getFragmentIndex();
+        RuntimeProfile fragmentProfile = mergedFragmentProfiles.get(fragmentIndex);
+        fragmentProfile.merge(params.profile);
     }
 
     public synchronized void saveRunningProfile(ProfilingExecPlan profilingPlan, RuntimeProfile profile) {
@@ -408,11 +414,17 @@ public class QueryRuntimeProfile {
         long maxQueryExecutionWallTime = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
-        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+        for (int i = 0; i < fragmentProfiles.size(); i++) {
+            RuntimeProfile fragmentProfile = fragmentProfiles.get(i);
             RuntimeProfile newFragmentProfile = new RuntimeProfile(fragmentProfile.getName());
             newFragmentProfiles.add(newFragmentProfile);
             newFragmentProfile.copyAllInfoStringsFrom(fragmentProfile, null);
             newFragmentProfile.copyAllCountersFrom(fragmentProfile);
+
+            RuntimeProfile mergedFragmentProfile = mergedFragmentProfiles.get(i);
+            mergedFragmentProfile.finalizeMerge();
+            newFragmentProfile.copyAllCountersFrom(mergedFragmentProfile);
+            newFragmentProfile.copyAllInfoStringsFrom(mergedFragmentProfile, null);
 
             if (fragmentProfile.getChildList().isEmpty()) {
                 continue;
