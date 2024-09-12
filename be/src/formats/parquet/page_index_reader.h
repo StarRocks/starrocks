@@ -44,21 +44,28 @@ class PageIndexReader {
 public:
     PageIndexReader(GroupReader* group_reader, RandomAccessFile* file,
                     const std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers,
-                    const tparquet::RowGroup* meta, const std::vector<ExprContext*> min_max_conjunct_ctxs)
+                    const tparquet::RowGroup* meta, const std::vector<ExprContext*>& min_max_conjunct_ctxs,
+                    const std::unordered_map<SlotId, std::vector<ExprContext*>>& conjunct_ctxs_by_slot)
             : _group_reader(group_reader),
               _file(file),
               _column_readers(column_readers),
               _row_group_metadata(meta),
-              _min_max_conjunct_ctxs(min_max_conjunct_ctxs) {}
+              _min_max_conjunct_ctxs(min_max_conjunct_ctxs),
+              _conjunct_ctxs_by_slot(conjunct_ctxs_by_slot) {}
 
     StatusOr<bool> generate_read_range(SparseRange<uint64_t>& sparse_range);
 
     void select_column_offset_index();
 
 private:
-    Status _decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
-                                     const TypeDescriptor& type, const ParquetField* field,
-                                     const std::string& timezone);
+    void _split_min_max_conjuncts_by_slot(std::unordered_map<SlotId, std::vector<ExprContext*>>& slot_id_to_ctx_map);
+    bool _more_conjunct_for_statistics(SlotId id);
+    Status _deal_with_min_max_conjuncts(const std::vector<ExprContext*>& ctxs,
+                                        const tparquet::ColumnIndex& column_index, SlotId id,
+                                        const TypeDescriptor& type, Filter& page_filter);
+    Status _deal_with_more_conjunct(const std::vector<ExprContext*>& ctxs, const tparquet::ColumnIndex& column_index,
+                                    const tparquet::OffsetIndex& offset_index, const ParquetField* field,
+                                    const std::string& timezone, Filter& page_filter);
 
     GroupReader* _group_reader = nullptr;
     RandomAccessFile* _file = nullptr;
@@ -68,7 +75,10 @@ private:
     const tparquet::RowGroup* _row_group_metadata = nullptr;
 
     // min/max conjuncts
-    std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    const std::vector<ExprContext*>& _min_max_conjunct_ctxs;
+
+    // conjuncts by slot
+    const std::unordered_map<SlotId, std::vector<ExprContext*>>& _conjunct_ctxs_by_slot;
 };
 
 } // namespace starrocks::parquet

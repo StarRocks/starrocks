@@ -19,11 +19,13 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
+#include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/types.h"
 #include "simd/simd.h"
 
 namespace starrocks {
@@ -324,6 +326,35 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         return evaluate_with_filter(context, ptr, nullptr);
+    }
+
+    ColumnPtr get_all_values() const {
+        ColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+        if constexpr (isSliceLT<Type>) {
+            for (auto v : _hash_set) {
+                // v -> SliceWithHash
+                Slice s{v.data, v.size};
+                values->append_datum(s);
+            }
+        } else {
+            for (auto v : _hash_set) {
+                values->append_datum(v);
+            }
+            if constexpr (can_use_array()) {
+                if (is_use_array()) {
+                    for (size_t i = 0; i < _array_size; i++) {
+                        if (_array_buffer[i]) {
+                            values->append_datum(static_cast<ValueType>(i)); //NOLINT
+                        }
+                    }
+                }
+            }
+        }
+
+        if (_null_in_set) {
+            values->append_nulls(1);
+        }
+        return values;
     }
 
     void insert(const ValueType& value) { _hash_set.emplace(value); }

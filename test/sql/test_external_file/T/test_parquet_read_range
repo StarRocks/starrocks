@@ -81,4 +81,7 @@ select * from read_range_big_page_test where c0 in (8193, 12289);
 -- repeated column with page_index need clear level cache when skip to specific page
 select * from repeated_value where c0 = 1;
 
+-- test runtime in filter string type
+select count(*) from read_range_test a join[broadcast] read_range_big_page_test b on a.c2 = b.c2 where b.c0 < 5;
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

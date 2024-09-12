@@ -17,9 +17,16 @@
 #include <utility>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
+#include "common/config.h"
+#include "common/status.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/encoding_plain.h"
+#include "formats/parquet/group_reader.h"
+#include "formats/parquet/schema.h"
+#include "formats/parquet/statistics_helper.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "simd/simd.h"
@@ -39,10 +46,8 @@ void ColumnOffsetIndexCtx::collect_io_range(std::vector<io::SharedBufferedInputS
     }
 }
 
-StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& sparse_range) {
-    // _min_max_conjunct_ctxs to map<slotId, std::vector<ExprContext*>>
-    bool page_filtered_flag = false;
-    std::unordered_map<SlotId, std::vector<ExprContext*>> slot_id_to_ctx_map;
+void PageIndexReader::_split_min_max_conjuncts_by_slot(
+        std::unordered_map<SlotId, std::vector<ExprContext*>>& slot_id_to_ctx_map) {
     for (auto* ctx : _min_max_conjunct_ctxs) {
         std::vector<SlotId> slot_ids;
         ctx->root()->get_slot_ids(&slot_ids);
@@ -59,6 +64,128 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
             slot_id_to_ctx_map[slot_ids[0]].emplace_back(ctx);
         }
     }
+}
+
+bool PageIndexReader::_more_conjunct_for_statistics(SlotId id) {
+    if (!config::parquet_statistics_process_more_filter_enable) {
+        return false;
+    }
+    if (_conjunct_ctxs_by_slot.find(id) == _conjunct_ctxs_by_slot.end()) {
+        return false;
+    }
+    StatisticsHelper::StatSupportedFilter filter_type;
+    for (auto ctx : _conjunct_ctxs_by_slot.at(id)) {
+        if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Status PageIndexReader::_deal_with_min_max_conjuncts(const std::vector<ExprContext*>& ctxs,
+                                                     const tparquet::ColumnIndex& column_index, SlotId id,
+                                                     const TypeDescriptor& type, Filter& page_filter) {
+    auto min_chunk = std::make_unique<Chunk>();
+    ColumnPtr min_column = ColumnHelper::create_column(type, true);
+    min_chunk->append_column(min_column, id);
+    auto max_chunk = std::make_unique<Chunk>();
+    ColumnPtr max_column = ColumnHelper::create_column(type, true);
+    max_chunk->append_column(max_column, id);
+    // deal with min_values
+    auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, type,
+                                                         _column_readers.at(id)->get_column_parquet_field(),
+                                                         _group_reader->_param.timezone);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, slotid " << id << ", type " << type.debug_string();
+        return Status::OK();
+    }
+
+    // deal with max_values
+    st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, type,
+                                                    _column_readers.at(id)->get_column_parquet_field(),
+                                                    _group_reader->_param.timezone);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, slotid " << id << ", type " << type.debug_string();
+        return Status::OK();
+    }
+
+    size_t page_num = column_index.min_values.size();
+    // both min and max value are filtered, the page is filtered.
+    // for example pages {100, 200}, {200, 400}, {400, 600}, {500, 800}, {800, 1000}
+    // conjuncts is >= 300, <= 700
+    // for >= 300, min_selected is {0, 0, 1, 1, 1}, max_selected is {0, 1, 1, 1, 1}
+    // min_selected or max_selected is {0, 1, 1, 1, 1}
+    // so the page_filter will be {0, 1, 1, 1, 1}
+    // for <= 700, min_selected is {1, 1, 1, 1, 0}, max_selected is {1, 1, 1, 0, 0}
+    // min_selected or max_selected is {1, 1, 1, 1, 0}
+    // so the page_filter will be {0, 1, 1, 1, 0}
+    for (auto* ctx : ctxs) {
+        ASSIGN_OR_RETURN(ColumnPtr min_selected, ctx->evaluate(min_chunk.get()));
+        ASSIGN_OR_RETURN(ColumnPtr max_selected, ctx->evaluate(max_chunk.get()));
+        auto unpack_min_selected = ColumnHelper::unpack_and_duplicate_const_column(page_num, min_selected);
+        auto unpack_max_selected = ColumnHelper::unpack_and_duplicate_const_column(page_num, max_selected);
+        Filter min_filter = ColumnHelper::merge_nullable_filter(unpack_min_selected.get());
+        Filter max_filter = ColumnHelper::merge_nullable_filter(unpack_max_selected.get());
+        ColumnHelper::or_two_filters(&min_filter, max_filter.data());
+        ColumnHelper::merge_two_filters(&page_filter, min_filter.data());
+    }
+    return Status::OK();
+}
+
+Status PageIndexReader::_deal_with_more_conjunct(const std::vector<ExprContext*>& ctxs,
+                                                 const tparquet::ColumnIndex& column_index,
+                                                 const tparquet::OffsetIndex& offset_index, const ParquetField* field,
+                                                 const std::string& timezone, Filter& page_filter) {
+    if (!config::parquet_statistics_process_more_filter_enable) {
+        return Status::OK();
+    }
+
+    StatisticsHelper::StatSupportedFilter filter_type;
+    for (auto* ctx : ctxs) {
+        if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
+            if (filter_type == StatisticsHelper::StatSupportedFilter::IS_NULL) {
+                DCHECK(field->max_rep_level() == 0);
+                if (column_index.__isset.null_counts) {
+                    if (UNLIKELY(column_index.null_counts.size() != page_filter.size())) {
+                        return Status::Aborted(
+                                fmt::format("null_counts size doesn't  match page size for {}", field->name));
+                    }
+                    for (size_t i = 0; i < column_index.null_counts.size(); i++) {
+                        page_filter[i] = column_index.null_counts[i] == 0 ? 0 : page_filter[i];
+                    }
+                }
+            } else if (filter_type == StatisticsHelper::StatSupportedFilter::IS_NOT_NULL) {
+                DCHECK(field->max_rep_level() == 0);
+                if (column_index.__isset.null_counts) {
+                    if (UNLIKELY(column_index.null_counts.size() != page_filter.size())) {
+                        return Status::Aborted(
+                                fmt::format("null_counts size doesn't  match page size for {}", field->name));
+                    }
+                    for (size_t i = 0; i < column_index.null_counts.size(); i++) {
+                        int64_t page_size = i == (offset_index.page_locations.size() - 1)
+                                                    ? (_row_group_metadata->num_rows -
+                                                       offset_index.page_locations[i].first_row_index)
+                                                    : (offset_index.page_locations[i + 1].first_row_index -
+                                                       offset_index.page_locations[i].first_row_index);
+                        page_filter[i] = column_index.null_counts[i] == page_size ? 0 : page_filter[i];
+                    }
+                }
+            } else if (filter_type == StatisticsHelper::StatSupportedFilter::FILTER_IN) {
+                RETURN_IF_ERROR(StatisticsHelper::in_filter_on_min_max_stat(
+                        column_index.min_values, column_index.max_values, ctx, field, timezone, page_filter));
+            }
+        }
+    }
+    return Status::OK();
+}
+
+StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& sparse_range) {
+    // _min_max_conjunct_ctxs to map<slotId, std::vector<ExprContext*>>
+    bool page_filtered_flag = false;
+    std::unordered_map<SlotId, std::vector<ExprContext*>> slot_id_to_min_max_ctx_map;
+    _split_min_max_conjuncts_by_slot(slot_id_to_min_max_ctx_map);
 
     for (int idx : _group_reader->_active_column_indices) {
         const auto& column = _group_reader->_param.read_cols[idx];
@@ -68,7 +195,8 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
         }
         SlotId slotId = column.slot_id();
         // no min_max conjunct
-        if (slot_id_to_ctx_map.find(slotId) == slot_id_to_ctx_map.end()) {
+        if (slot_id_to_min_max_ctx_map.find(slotId) == slot_id_to_min_max_ctx_map.end() &&
+            !_more_conjunct_for_statistics(slotId)) {
             continue;
         }
 
@@ -90,48 +218,21 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
         tparquet::ColumnIndex column_index;
         RETURN_IF_ERROR(deserialize_thrift_msg(page_index_data.data(), &column_index_length, TProtocolType::COMPACT,
                                                &column_index));
-        auto min_chunk = std::make_unique<Chunk>();
-        ColumnPtr min_column = ColumnHelper::create_column(column.slot_type(), true);
-        min_chunk->append_column(min_column, slotId);
-        auto max_chunk = std::make_unique<Chunk>();
-        ColumnPtr max_column = ColumnHelper::create_column(column.slot_type(), true);
-        max_chunk->append_column(max_column, slotId);
-        // deal with min_values
-        Status st;
-        st = _decode_value_into_column(min_column, column_index.min_values, column.slot_type(),
-                                       _column_readers.at(slotId)->get_column_parquet_field(),
-                                       _group_reader->_param.timezone);
-        if (!st.ok()) {
-            continue;
-        }
-        // deal with max_values
-        st = _decode_value_into_column(max_column, column_index.max_values, column.slot_type(),
-                                       _column_readers.at(slotId)->get_column_parquet_field(),
-                                       _group_reader->_param.timezone);
-        if (!st.ok()) {
-            continue;
-        }
+
+        ASSIGN_OR_RETURN(const tparquet::OffsetIndex* offset_index,
+                         _column_readers.at(slotId)->get_offset_index(_group_reader->_row_group_first_row));
+
         size_t page_num = column_index.min_values.size();
         Filter page_filter(page_num, 1);
 
-        // both min and max value are filtered, the page is filtered.
-        // for example pages {100, 200}, {200, 400}, {400, 600}, {500, 800}, {800, 1000}
-        // conjuncts is >= 300, <= 700
-        // for >= 300, min_selected is {0, 0, 1, 1, 1}, max_selected is {0, 1, 1, 1, 1}
-        // min_selected or max_selected is {0, 1, 1, 1, 1}
-        // so the page_filter will be {0, 1, 1, 1, 1}
-        // for <= 700, min_selected is {1, 1, 1, 1, 0}, max_selected is {1, 1, 1, 0, 0}
-        // min_selected or max_selected is {1, 1, 1, 1, 0}
-        // so the page_filter will be {0, 1, 1, 1, 0}
-        for (auto* ctx : slot_id_to_ctx_map.at(slotId)) {
-            ASSIGN_OR_RETURN(ColumnPtr min_selected, ctx->evaluate(min_chunk.get()));
-            ASSIGN_OR_RETURN(ColumnPtr max_selected, ctx->evaluate(max_chunk.get()));
-            auto unpack_min_selected = ColumnHelper::unpack_and_duplicate_const_column(page_num, min_selected);
-            auto unpack_max_selected = ColumnHelper::unpack_and_duplicate_const_column(page_num, max_selected);
-            Filter min_filter = ColumnHelper::merge_nullable_filter(unpack_min_selected.get());
-            Filter max_filter = ColumnHelper::merge_nullable_filter(unpack_max_selected.get());
-            ColumnHelper::or_two_filters(&min_filter, max_filter.data());
-            ColumnHelper::merge_two_filters(&page_filter, min_filter.data());
+        if (slot_id_to_min_max_ctx_map.find(slotId) != slot_id_to_min_max_ctx_map.end()) {
+            RETURN_IF_ERROR(_deal_with_min_max_conjuncts(slot_id_to_min_max_ctx_map.at(slotId), column_index, slotId,
+                                                         column.slot_type(), page_filter));
+        }
+        if (SIMD::contain_nonzero(page_filter) && _conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
+            RETURN_IF_ERROR(_deal_with_more_conjunct(_conjunct_ctxs_by_slot.at(slotId), column_index, *offset_index,
+                                                     _column_readers.at(slotId)->get_column_parquet_field(),
+                                                     _group_reader->_param.timezone, page_filter));
         }
 
         if (!SIMD::contain_zero(page_filter)) {
@@ -139,9 +240,6 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
         }
 
         page_filtered_flag = true;
-
-        ASSIGN_OR_RETURN(const tparquet::OffsetIndex* offset_index,
-                         _column_readers.at(slotId)->get_offset_index(_group_reader->_row_group_first_row));
 
         SparseRange<uint64_t> column_sparse_range;
         for (int i = 0; i < page_num; i++) {
@@ -158,83 +256,13 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
             }
         }
         sparse_range = sparse_range.intersection(column_sparse_range);
-    }
-
-    if (sparse_range.empty()) {
-        _group_reader->_is_group_filtered = true;
+        if (sparse_range.empty()) {
+            _group_reader->_is_group_filtered = true;
+            break;
+        }
     }
 
     return page_filtered_flag;
-}
-
-Status PageIndexReader::_decode_value_into_column(const ColumnPtr& column, const std::vector<string>& values,
-                                                  const TypeDescriptor& type, const ParquetField* field,
-                                                  const std::string& timezone) {
-    std::unique_ptr<ColumnConverter> converter;
-    RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
-    bool ret = true;
-    switch (field->physical_type) {
-    case tparquet::Type::type::INT32: {
-        int32_t decode_value = 0;
-        if (!converter->need_convert) {
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
-            }
-        } else {
-            ColumnPtr src_column = converter->create_src_column();
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
-            }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
-        }
-        break;
-    }
-    case tparquet::Type::type::INT64: {
-        int64_t decode_value = 0;
-        if (!converter->need_convert) {
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
-            }
-        } else {
-            ColumnPtr src_column = converter->create_src_column();
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
-            }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
-        }
-        break;
-    }
-    case tparquet::Type::type::BYTE_ARRAY:
-    // todo: FLBA need more test
-    case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
-        Slice decode_value;
-        if (!converter->need_convert) {
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= column->append_strings(std::vector<Slice>{decode_value});
-            }
-        } else {
-            ColumnPtr src_column = converter->create_src_column();
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= src_column->append_strings(std::vector<Slice>{decode_value});
-            }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
-        }
-        break;
-    }
-    default:
-        return Status::InternalError("Not Supported min/max value type");
-    }
-
-    if (UNLIKELY(!ret)) {
-        return Status::InternalError("Decode min-max column failed");
-    }
-    return Status::OK();
 }
 
 void PageIndexReader::select_column_offset_index() {
