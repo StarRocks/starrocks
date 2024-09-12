@@ -2,11 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Tip from '../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
+
 # CREATE ROUTINE LOAD
 
-:::tip
-Try Routine Load out in this [Quick Start](../../../../quick_start/routine-load.md)
-:::
+<Tip />
 
 Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via multiple security protocols, including `plaintext`, `ssl`, `sasl_plaintext`, and `sasl_ssl`.
 
