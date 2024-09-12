@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -73,7 +74,8 @@ public class RemoteFileOperationsTest {
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         List<RemoteFileInfo> remoteFileInfos =
-                ops.getRemoteFiles(null, Lists.newArrayList(partitions.values()), GetRemoteFilesParams.newBuilder().build());
+                ops.getRemoteFiles(new HudiTable(), Lists.newArrayList(partitions.values()),
+                        GetRemoteFilesParams.newBuilder().build());
         Assert.assertEquals(2, remoteFileInfos.size());
         Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
 
