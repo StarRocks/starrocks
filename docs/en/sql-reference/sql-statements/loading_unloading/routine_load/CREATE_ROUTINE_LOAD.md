@@ -333,10 +333,6 @@ FROM KAFKA
 
 To improve loading performance and avoid accumulative consumption, you can increase task parallelism by increasing the `desired_concurrent_number` value when you create the Routine Load job. Task parallelism allows splitting one Routine Load job into as many parallel tasks as possible.
 
-> **Note**
->
-> For more ways to improve loading performance, see [Routine Load FAQ](../../../../faq/loading/Routine_load_faq.md).
-
 Note that the actual task parallelism is determined by the minimum value among the following multiple parameters:
 
 ```SQL
