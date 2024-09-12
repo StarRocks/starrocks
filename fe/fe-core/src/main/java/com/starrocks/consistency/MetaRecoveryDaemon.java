@@ -69,9 +69,9 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
         }
 
         List<PartitionVersion> partitionsToRecover = new ArrayList<>();
-        List<Long> dbIds = stateMgr.getLocalMetastore().getDbIds();
+        List<Long> dbIds = stateMgr.getMetastore().getDbIds();
         for (long dbId : dbIds) {
-            Database database = stateMgr.getLocalMetastore().getDb(dbId);
+            Database database = stateMgr.getMetastore().getDb(dbId);
             if (database == null || database.isSystemDatabase()) {
                 continue;
             }
@@ -79,7 +79,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(database.getId(), LockType.READ);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
+                for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(database.getId())) {
                     if (!table.isOlapTableOrMaterializedView()) {
                         continue;
                     }
@@ -186,7 +186,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
     public void recoverPartitionVersion(PartitionVersionRecoveryInfo recoveryInfo) {
         for (PartitionVersion version : recoveryInfo.getPartitionVersions()) {
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(version.getDbId());
+            Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(version.getDbId());
             if (database == null) {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
@@ -194,7 +194,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(database.getId(), LockType.WRITE);
             try {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                Table table = GlobalStateMgr.getCurrentState().getMetastore()
                             .getTable(database.getId(), version.getTableId());
                 if (table == null) {
                     LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);

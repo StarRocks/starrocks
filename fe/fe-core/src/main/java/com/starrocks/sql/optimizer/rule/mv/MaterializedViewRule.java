@@ -504,7 +504,7 @@ public class MaterializedViewRule extends Rule {
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
             for (Partition partition : olapTable.getPartitions()) {
-                rowCount += partition.getIndex(indexId).getRowCount();
+                rowCount += partition.getDefaultPhysicalPartition().getIndex(indexId).getRowCount();
             }
             if (rowCount < minRowCount) {
                 minRowCount = rowCount;
@@ -783,7 +783,7 @@ public class MaterializedViewRule extends Rule {
 
         return queryExprList.stream()
                 .allMatch(x -> canRewriteQueryAggFunc(x, mvColumnExprList, indexId,
-                    keyColumns, aggregateColumns, usedBaseColumnIds));
+                        keyColumns, aggregateColumns, usedBaseColumnIds));
     }
 
     private boolean canRewriteQueryAggFunc(CallOperator queryExpr,

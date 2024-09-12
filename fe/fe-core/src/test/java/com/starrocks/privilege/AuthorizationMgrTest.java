@@ -110,7 +110,7 @@ public class AuthorizationMgrTest {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         RBACMockedMetadataMgr metadataMgr =
-                new RBACMockedMetadataMgr(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
+                new RBACMockedMetadataMgr(globalStateMgr.getStarRocksMetadata(), globalStateMgr.getConnectorMgr());
         metadataMgr.init();
         globalStateMgr.setMetadataMgr(metadataMgr);
 
@@ -128,7 +128,7 @@ public class AuthorizationMgrTest {
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createMaterializedViewStatement);
     }
 
     @After

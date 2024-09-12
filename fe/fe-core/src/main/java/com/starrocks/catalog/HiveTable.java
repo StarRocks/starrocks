@@ -290,7 +290,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         fullSchemaTemp.addAll(updatedTable.fullSchema);
         dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }

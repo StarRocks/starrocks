@@ -52,6 +52,7 @@ import com.starrocks.lake.PartitionPublishVersionData;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
@@ -427,7 +428,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
             try {
@@ -482,7 +483,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         // version -> shadowTablets
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         try {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 // table has been dropped
                 return true;
@@ -509,16 +510,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                 txnState.getTransactionId());
                         continue;
                     }
+
+                    MetaStore localMetastore = GlobalStateMgr.getCurrentState().getMetastore();
+                    List<Tablet> tablets = localMetastore.getAllTablets(index);
+
                     if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
                         if (shadowTabletsMap.containsKey(versions.get(i))) {
-                            shadowTabletsMap.get(versions.get(i)).addAll(index.getTablets());
+                            shadowTabletsMap.get(versions.get(i)).addAll(tablets);
                         } else {
-                            Set<Tablet> tabletsNew = new HashSet<>(index.getTablets());
+                            Set<Tablet> tabletsNew = new HashSet<>(tablets);
                             shadowTabletsMap.put(versions.get(i), tabletsNew);
                         }
                     } else {
                         normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
-                        normalTablets.addAll(index.getTablets());
+                        normalTablets.addAll(tablets);
                     }
                 }
             }
@@ -655,7 +660,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
 
         if (db == null) {
             LOG.info("the database of transaction batch {} has been deleted", txnStateBatch);
@@ -768,7 +773,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         try {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
@@ -791,12 +796,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     LOG.info("Ignored index {} for transaction {}", table.getIndexNameById(index.getId()), txnId);
                     continue;
                 }
+
+                List<Tablet> tabletList = GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(index);
+
                 if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
                     shadowTablets = (shadowTablets == null) ? Lists.newArrayList() : shadowTablets;
-                    shadowTablets.addAll(index.getTablets());
+                    shadowTablets.addAll(tabletList);
                 } else {
                     normalTablets = (normalTablets == null) ? Lists.newArrayList() : normalTablets;
-                    normalTablets.addAll(index.getTablets());
+                    normalTablets.addAll(tabletList);
                 }
             }
         } finally {

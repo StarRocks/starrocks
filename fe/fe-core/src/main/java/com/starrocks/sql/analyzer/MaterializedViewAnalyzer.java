@@ -297,7 +297,7 @@ public class MaterializedViewAnalyzer {
                         "default_catalog through `set catalog <default_catalog>` statement",
                         statement.getTableName().getPos());
             }
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
+            Database db = context.getGlobalStateMgr().getMetastore().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
                         statement.getTableName().getPos());
@@ -1088,11 +1088,11 @@ public class MaterializedViewAnalyzer {
                                                           ConnectContext context) {
             statement.getMvName().normalization(context);
             TableName mvName = statement.getMvName();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(mvName.getDb());
+            Database db = context.getGlobalStateMgr().getMetastore().getDb(mvName.getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
             }
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                         .getTable(db.getFullName(), mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());

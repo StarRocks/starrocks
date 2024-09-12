@@ -63,10 +63,10 @@ public class CreateTableLikeTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
         String createDbStmtStr2 = "create database test2;";
         CreateDbStmt createDbStmt2 = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr2, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt2.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt2.getFullDbName());
     }
 
     private static void createTable(String sql) throws Exception {
@@ -77,7 +77,7 @@ public class CreateTableLikeTest {
     private static void createTableLike(String sql) throws Exception {
         CreateTableLikeStmt createTableLikeStmt =
                     (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableLikeStmt.getCreateTableStmt());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(createTableLikeStmt.getCreateTableStmt());
     }
 
     private static void checkTableEqual(Table newTable, Table existedTable) {
@@ -94,11 +94,11 @@ public class CreateTableLikeTest {
                                                  String newTblName, String existedTblName) throws Exception {
         createTable(createTableSql);
         createTableLike(createTableLikeSql);
-        Database newDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(newDbName);
-        Database existedDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(existedDbName);
+        Database newDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(newDbName);
+        Database existedDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(existedDbName);
         OlapTable newTbl =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(newDb.getFullName(), newTblName);
-        OlapTable existedTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(newDb.getFullName(), newTblName);
+        OlapTable existedTbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(existedDb.getFullName(), existedTblName);
         checkTableEqual(newTbl, existedTbl);
     }
@@ -109,11 +109,11 @@ public class CreateTableLikeTest {
 
         createTable(createTableSql);
         createTableLike(createTableLikeSql);
-        Database newDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(newDbName);
-        Database existedDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(existedDbName);
+        Database newDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(newDbName);
+        Database existedDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(existedDbName);
         MysqlTable newTbl =
-                    (MysqlTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(newDb.getFullName(), newTblName);
-        MysqlTable existedTbl = (MysqlTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    (MysqlTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(newDb.getFullName(), newTblName);
+        MysqlTable existedTbl = (MysqlTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(existedDb.getFullName(), existedTblName);
         checkTableEqual(newTbl, existedTbl);
     }
@@ -281,7 +281,7 @@ public class CreateTableLikeTest {
                     "like test.duplicate_table_with_null";
         createTableLike(sql);
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(newDbName).getTable("table_like_10");
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getDb(newDbName).getTable("table_like_10");
         Assert.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
         Assert.assertEquals("1", table.getProperties().get("replication_num"));
     }

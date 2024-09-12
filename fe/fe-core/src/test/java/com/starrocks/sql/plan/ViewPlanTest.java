@@ -1722,7 +1722,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         AlterViewStmt alterViewStmt =
                 (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(alterViewStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().alterView(alterViewStmt);
 
         sqlPlan = getFragmentPlan(alterStmt);
         viewPlan = getFragmentPlan("select * from " + viewName);

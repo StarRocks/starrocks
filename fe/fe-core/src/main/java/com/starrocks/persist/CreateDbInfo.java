@@ -17,13 +17,14 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.TxnMeta;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class CreateDbInfo implements Writable {
+public class CreateDbInfo extends TxnMeta implements Writable {
     @SerializedName(value = "i")
     private long id;
 

@@ -43,10 +43,10 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
 
         // inject our test db
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getFullNameToDb();
+                .getMetastore().getFullNameToDb();
         fullNameToDb.put(SHOW_DATA_DB_NAME, db);
 
-        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
+        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getMetastore().getIdToDb();
         idToDb.put(1000 + testDbId, db);
     }
 

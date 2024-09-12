@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -37,7 +38,6 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -59,8 +59,8 @@ public class CatalogLevelTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.withCatalog(createCatalog);
 
-        Table hmsTable = metaClient.getTable("hive_db", "hive_table");
-        com.starrocks.catalog.Table hiveTable = HiveMetastoreApiConverter.toHiveTable(hmsTable, "hive_catalog");
+        org.apache.hadoop.hive.metastore.api.Table hmsTable = metaClient.getTable("hive_db", "hive_table");
+        Table hiveTable = HiveMetastoreApiConverter.toHiveTable(hmsTable, "hive_catalog");
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
             {

@@ -67,11 +67,11 @@ public class MetaScanNode extends ScanNode {
     public void computeRangeLocations() {
         Collection<Partition> partitions = olapTable.getPartitions();
         for (Partition partition : partitions) {
-            MaterializedIndex index = partition.getBaseIndex();
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
             List<Tablet> tablets = index.getTablets();
 
-            long visibleVersion = partition.getVisibleVersion();
+            long visibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
             String visibleVersionStr = String.valueOf(visibleVersion);
 
             for (Tablet tablet : tablets) {

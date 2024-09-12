@@ -50,7 +50,7 @@ public class LockChecker extends FrontendDaemon {
     }
 
     private void checkSlowLocks() {
-        Map<String, Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
+        Map<String, Database> dbs = GlobalStateMgr.getCurrentState().getMetastore().getFullNameToDb();
         JsonArray dbLocks = new JsonArray();
         for (Database db : dbs.values()) {
             boolean hasSlowLock = false;

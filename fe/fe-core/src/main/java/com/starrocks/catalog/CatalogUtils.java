@@ -57,7 +57,7 @@ public class CatalogUtils {
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -115,12 +115,12 @@ public class CatalogUtils {
 
     // Used to temporarily disable some command on lake table and remove later.
     public static void checkIsLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             return;
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             return;
         }
@@ -424,7 +424,7 @@ public class CatalogUtils {
         List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
         boolean dataImported = true;
         for (Partition partition : partitions) {
-            if (partition.getVisibleVersion() == 1) {
+            if (partition.getDefaultPhysicalPartition().getVisibleVersion() == 1) {
                 dataImported = false;
                 break;
             }

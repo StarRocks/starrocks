@@ -127,6 +127,7 @@ import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -156,9 +157,15 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
+import com.starrocks.meta.EditLogReplayer;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.meta.MetaStore;
+import com.starrocks.meta.MetadataHandler;
+import com.starrocks.meta.StarRocksMetadata;
+import com.starrocks.meta.TabletManager;
+import com.starrocks.meta.store.AlterJobMgrIface;
+import com.starrocks.meta.store.bdb.BDBMetaStore;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageHeader;
@@ -257,6 +264,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -314,6 +322,7 @@ public class GlobalStateMgr {
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
+    private ReentrantLock journalLock;
     private Daemon replayer;
     private Daemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
@@ -346,6 +355,8 @@ public class GlobalStateMgr {
 
     private EditLog editLog;
     private Journal journal;
+    private MetadataHandler metadataHandler;
+
     // For checkpoint and observer memory replayed marker
     private final AtomicLong replayedJournalId;
 
@@ -358,6 +369,8 @@ public class GlobalStateMgr {
     private final JournalObservable journalObservable;
 
     private final TabletInvertedIndex tabletInvertedIndex;
+    private final TabletManager tabletManager;
+
     private ColocateTableIndex colocateTableIndex;
 
     private final CatalogRecycleBin recycleBin;
@@ -438,7 +451,9 @@ public class GlobalStateMgr {
     private final TaskManager taskManager;
     private final InsertOverwriteJobMgr insertOverwriteJobMgr;
 
+    public boolean usingBDBMetastore = false;
     private final LocalMetastore localMetastore;
+    private final StarRocksMetadata starRocksMetadata;
     private final GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -530,14 +545,28 @@ public class GlobalStateMgr {
         return heartbeatMgr;
     }
 
+    /*
+    public TabletInvertedIndexIface getTabletInvertedIndex() {
+        if (usingBDBMetastore) {
+            return new TabletInvertedIndexV2();
+        } else {
+            return this.tabletInvertedIndex;
+        }
+    }
+
+     */
+
     public TabletInvertedIndex getTabletInvertedIndex() {
-        return this.tabletInvertedIndex;
+        return tabletInvertedIndex;
+    }
+
+    public TabletManager getTabletManager() {
+        return tabletManager;
     }
 
     // only for test
     public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
         this.colocateTableIndex = colocateTableIndex;
-        localMetastore.setColocateTableIndex(colocateTableIndex);
     }
 
     public ColocateTableIndex getColocateTableIndex() {
@@ -560,8 +589,24 @@ public class GlobalStateMgr {
         return feStartTime;
     }
 
+    public MetaStore getMetastore() {
+        if (isCheckpointThread()) {
+            return localMetastore;
+        }
+
+        if (usingBDBMetastore) {
+            return new BDBMetaStore();
+        } else {
+            return localMetastore;
+        }
+    }
+
     public LocalMetastore getLocalMetastore() {
         return localMetastore;
+    }
+
+    public StarRocksMetadata getStarRocksMetadata() {
+        return starRocksMetadata;
     }
 
     public TemporaryTableMgr getTemporaryTableMgr() {
@@ -616,9 +661,9 @@ public class GlobalStateMgr {
         // Alter Job Manager
         // Alter Job Manager
         this.alterJobMgr = new AlterJobMgr(
-                    new SchemaChangeHandler(),
-                    new MaterializedViewHandler(),
-                    new SystemHandler());
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -644,6 +689,8 @@ public class GlobalStateMgr {
         this.journalObservable = new JournalObservable();
 
         this.tabletInvertedIndex = new TabletInvertedIndex();
+        this.tabletManager = new TabletManager();
+
         this.colocateTableIndex = new ColocateTableIndex();
         this.recycleBin = new CatalogRecycleBin();
         this.functionSet = new FunctionSet();
@@ -675,13 +722,13 @@ public class GlobalStateMgr {
         this.tabletChecker = new TabletChecker(tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
-                    new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
-                                Config.desired_max_waiting_jobs, !isCkptGlobalState);
+                new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
+                        Config.desired_max_waiting_jobs, !isCkptGlobalState);
         // One load job will be split into multiple loading tasks, the queue size is not
         // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
-                    Config.max_broker_load_job_concurrency,
-                    Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
+                Config.max_broker_load_job_concurrency,
+                Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
 
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadMgr = new LoadMgr(loadJobScheduler);
@@ -697,19 +744,20 @@ public class GlobalStateMgr {
         this.smallFileMgr = new SmallFileMgr();
 
         this.dynamicPartitionScheduler = new DynamicPartitionScheduler("DynamicPartitionScheduler",
-                    Config.dynamic_partition_check_interval_seconds * 1000L);
+                Config.dynamic_partition_check_interval_seconds * 1000L);
 
         setMetaDir();
 
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
-        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
+        this.localMetastore = new LocalMetastore(this);
+        this.starRocksMetadata = new StarRocksMetadata();
         this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
+        this.metadataMgr = new MetadataMgr(starRocksMetadata, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.connectorTableTriggerAnalyzeMgr = new ConnectorTableTriggerAnalyzeMgr();
 
@@ -1145,11 +1193,36 @@ public class GlobalStateMgr {
 
     protected void initJournal() throws JournalException, InterruptedException {
         BlockingQueue<JournalTask> journalQueue =
-                    new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+                new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
+        journalLock = new ReentrantLock();
 
         editLog = new EditLog(journalQueue);
+
+        metadataHandler = new MetadataHandler(((BDBJEJournal) journal).getBdbEnvironment());
+
+        /*
+        if (Config.enable_bdb_metastore) {
+            BDBMetaStore bdbMetaStore = new BDBMetaStore();
+            long editLogReplayId = bdbMetaStore.getEditLogReplayId();
+            if (editLogReplayId >= journal.getMaxJournalId()) {
+                usingBDBMetastore = true;
+                LOG.info("Using BDB MetaStore");
+            } else {
+                usingBDBMetastore = false;
+                LOG.info("Using Local MetaStore");
+            }
+        }
+         */
+    }
+
+    public ReentrantLock getJournalLock() {
+        return journalLock;
+    }
+
+    public long getNextVisibleJournalId() {
+        return journalWriter.getNextVisibleJournalId();
     }
 
     // wait until FE is ready.
@@ -1168,17 +1241,17 @@ public class GlobalStateMgr {
             if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
                 lastLoggingTimeMs = System.currentTimeMillis();
                 LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
-                            "it maybe caused by one of the following reasons: " +
-                            "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
-                            "(you can check the create time of image file under meta/image dir). " +
-                            "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
-                            "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
-                            "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
-                            "Ignore this reason if you are using FQDN. " +
-                            "4. The time deviation between FE nodes is greater than 5s, " +
-                            "please use ntp or other tools to keep clock synchronized. " +
-                            "5. The configuration of edit_log_port has changed, please reset to the original value. " +
-                            "6. The replayer thread may get stuck, please use jstack to find the details.");
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
             }
         }
     }
@@ -1219,7 +1292,19 @@ public class GlobalStateMgr {
                 throw new Exception("fencing failed. will exit");
             }
             long maxJournalId = journal.getMaxJournalId();
+
+            if (Config.enable_bdb_metastore) {
+                EditLogReplayer editLogReplayer = new EditLogReplayer();
+                if (editLogReplayer.load(maxJournalId)) {
+                    usingBDBMetastore = true;
+                    LOG.info("Using BDB Metastore");
+                } else {
+                    LOG.info("Using Local Metastore");
+                }
+            }
+
             replayJournal(maxJournalId);
+
             nodeMgr.checkCurrentNodeExist();
             journalWriter.init(maxJournalId);
         } catch (Exception e) {
@@ -1284,9 +1369,9 @@ public class GlobalStateMgr {
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
                 VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
-                                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                                        LiteralExpr.create("true", Type.BOOLEAN)),
-                            false);
+                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                                LiteralExpr.create("true", Type.BOOLEAN)),
+                        false);
             }
         } catch (UserException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
@@ -1480,42 +1565,42 @@ public class GlobalStateMgr {
         }
         replayedJournalId.set(imageLoader.getImageJournalId());
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
-                    GlobalStateMgr.isCheckpointThread());
+                GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
 
         Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
-                    .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
-                    .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
-                    .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
-                    .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
-                    .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
-                    .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
-                    .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
-                    .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
-                    .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
-                    .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
-                    .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
-                    .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
-                    .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
-                    .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
-                    .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
-                    .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
-                    .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
-                    .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
-                    .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
-                    .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
-                    .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
-                    .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
-                    .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
-                    .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
-                    .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
-                    .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
-                    .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
-                    .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
-                    .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
-                    .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
-                    .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
-                    .build();
+                .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
+                .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
+                .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
+                .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
+                .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
         InputStream in = Files.newInputStream(curFile.toPath());
@@ -1537,7 +1622,7 @@ public class GlobalStateMgr {
                          *    the old version ignores the functions of the new version
                          */
                         LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
-                                    "(expect sr meta block id %s)", srMetaBlockID));
+                                "(expect sr meta block id %s)", srMetaBlockID));
                         continue;
                     }
 
@@ -1561,8 +1646,8 @@ public class GlobalStateMgr {
         } catch (EOFException exception) {
             if (!metaMgrMustExists.isEmpty()) {
                 LOG.warn("Miss meta block [" + Joiner.on(",").join(new ArrayList<>(metaMgrMustExists)) + "], " +
-                            "This may not be a fatal error. It may be because there are new features in the version " +
-                            "you upgraded this time, but there is no relevant metadata.");
+                        "This may not be a fatal error. It may be because there are new features in the version " +
+                        "you upgraded this time, but there is no relevant metadata.");
             } else {
                 LOG.info("Load meta-image EOF, successful loading all requires meta module");
             }
@@ -1622,7 +1707,7 @@ public class GlobalStateMgr {
 
         if (starrocksMetaVersion != FeConstants.STARROCKS_META_VERSION) {
             LOG.error("Not compatible with meta version {}, current version is {}",
-                        starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
+                    starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
             System.exit(-1);
         }
 
@@ -1630,6 +1715,12 @@ public class GlobalStateMgr {
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         LOG.info("finished to replay header from image");
+    }
+
+    public void saveKV() {
+        localMetastore.saveKV();
+        localMetastore.buildTabletIndex();
+        //create all tablet index
     }
 
     // Only called by checkpoint thread
@@ -1723,7 +1814,7 @@ public class GlobalStateMgr {
 
             long saveImageEndTime = System.currentTimeMillis();
             LOG.info("Finished save meta block {} in {} ms.",
-                        curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime));
+                    curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime));
         }
     }
 
@@ -1760,7 +1851,7 @@ public class GlobalStateMgr {
 
     public void createTxnTimeoutChecker() {
         txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
-                    Config.transaction_clean_interval_second * 1000L) {
+                Config.transaction_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
@@ -1798,13 +1889,13 @@ public class GlobalStateMgr {
                     metaReplayState.setOk();
                 } catch (JournalInconsistentException | InterruptedException e) {
                     LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
-                                replayedJournalId.get() + 1, e);
+                            replayedJournalId.get() + 1, e);
                     // TODO exit gracefully
                     Util.stdoutWithTime(e.getMessage());
                     System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal {}.",
-                                replayedJournalId.get() + 1, e);
+                            replayedJournalId.get() + 1, e);
                     metaReplayState.setException(e);
                     try {
                         Thread.sleep(5000);
@@ -1837,7 +1928,7 @@ public class GlobalStateMgr {
                         // we still need this log to observe this situation
                         // but service may be continued when there is no log being replayed.
                         LOG.warn("meta out of date. current time: {}, synchronized time: {}, has log: {}, fe type: {}",
-                                    currentTimeMs, synchronizedTimeMs, hasLog, feType);
+                                currentTimeMs, synchronizedTimeMs, hasLog, feType);
                         lastMetaOutOfDateLogTime = currentTimeMs;
                     }
                     if (hasLog || feType == FrontendNodeType.UNKNOWN) {
@@ -1891,8 +1982,8 @@ public class GlobalStateMgr {
             replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
-                        replayedJournalId.get() + 1,
-                        e);
+                    replayedJournalId.get() + 1,
+                    e);
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
@@ -1906,8 +1997,8 @@ public class GlobalStateMgr {
         // verify if all log is replayed
         if (toJournalId != replayedJournalId.get()) {
             throw new JournalException(String.format(
-                        "should replay to %d but actual replayed journal id is %d",
-                        toJournalId, replayedJournalId.get()));
+                    "should replay to %d but actual replayed journal id is %d",
+                    toJournalId, replayedJournalId.get()));
         }
 
         streamLoadMgr.cancelUnDurableTaskAfterRestart();
@@ -1921,7 +2012,7 @@ public class GlobalStateMgr {
      * return true if any journal is replayed
      */
     protected boolean replayJournalInner(JournalCursor cursor, boolean flowControl)
-                throws JournalException, InterruptedException, JournalInconsistentException {
+            throws JournalException, InterruptedException, JournalInconsistentException {
         long startReplayId = replayedJournalId.get();
         long startTime = System.currentTimeMillis();
         long lineCnt = 0;
@@ -1943,7 +2034,7 @@ public class GlobalStateMgr {
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
-                                replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
                     if (!readSucc) {
                         cursor.skipNext();
                     }
@@ -1951,7 +2042,7 @@ public class GlobalStateMgr {
                 }
                 // handled in outer loop
                 LOG.warn("catch exception when replaying journal, id: {}, data: {},",
-                            replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
             }
 
@@ -2012,13 +2103,13 @@ public class GlobalStateMgr {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
                     LOG.warn("skip bad replayed journal id {} because configured {}",
-                                idStr, Config.metadata_journal_skip_bad_journal_ids);
+                            idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
                 }
             }
         } catch (Exception e) {
             LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
-                        Config.metadata_journal_skip_bad_journal_ids, e);
+                    Config.metadata_journal_skip_bad_journal_ids, e);
         }
 
         short opCode = OperationType.OP_INVALID;
@@ -2030,13 +2121,13 @@ public class GlobalStateMgr {
         }
 
         if (opCode != OperationType.OP_INVALID
-                    && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
+                && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
             if (Config.metadata_journal_ignore_replay_failure) {
                 LOG.warn("skip ignorable journal load failure, opCode: {}", opCode);
                 return true;
             } else {
                 LOG.warn("the failure of opCode: {} is ignorable, " +
-                            "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
+                        "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
                 return false;
             }
         }
@@ -2062,6 +2153,14 @@ public class GlobalStateMgr {
         return journal;
     }
 
+    public MetadataHandler getMetadataHandler() {
+        return metadataHandler;
+    }
+
+    public void setMetadataHandler(MetadataHandler metadataHandler) {
+        this.metadataHandler = metadataHandler;
+    }
+
     // Get the next available, lock-free because nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
@@ -2069,6 +2168,14 @@ public class GlobalStateMgr {
 
     public ConsistencyChecker getConsistencyChecker() {
         return consistencyChecker;
+    }
+
+    public AlterJobMgrIface getAlterJobMgrIFace() {
+        if (isCheckpointThread()) {
+            return alterJobMgr;
+        } else {
+            return null;
+        }
     }
 
     public AlterJobMgr getAlterJobMgr() {
@@ -2200,7 +2307,7 @@ public class GlobalStateMgr {
     }
 
     public static short calcShortKeyColumnCount(List<Column> columns, Map<String, String> properties)
-                throws DdlException {
+            throws DdlException {
         List<Integer> sortKeyIdxes = new ArrayList<>();
         for (int i = 0; i < columns.size(); ++i) {
             Column column = columns.get(i);
@@ -2213,7 +2320,7 @@ public class GlobalStateMgr {
 
     public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
                                                 List<Integer> sortKeyIdxes)
-                throws DdlException {
+            throws DdlException {
         LOG.debug("sort key size: {}", sortKeyIdxes.size());
         Preconditions.checkArgument(sortKeyIdxes.size() > 0);
         // figure out shortKeyColumnCount
@@ -2233,7 +2340,7 @@ public class GlobalStateMgr {
             }
             for (int pos = 0; pos < shortKeyColumnCount; pos++) {
                 if (indexColumns.get(sortKeyIdxes.get(pos)).getPrimitiveType() == PrimitiveType.VARCHAR &&
-                            pos != shortKeyColumnCount - 1) {
+                        pos != shortKeyColumnCount - 1) {
                     throw new DdlException("Varchar should not in the middle of short keys.");
                 }
             }
@@ -2327,7 +2434,7 @@ public class GlobalStateMgr {
             }
 
             resultMap.put(fe.getHost(), refreshOtherFesTable(
-                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
         }
 
         String errMsg = "";
@@ -2372,10 +2479,10 @@ public class GlobalStateMgr {
             request.setPartitions(partitions);
             try {
                 TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
-                            ThriftConnectionPool.frontendPool,
-                            thriftAddress,
-                            timeout,
-                            client -> client.refreshTable(request));
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
+                        timeout,
+                        client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
                 LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
@@ -2392,7 +2499,7 @@ public class GlobalStateMgr {
 
     private boolean supportRefreshTableType(Table table) {
         return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
-                    || table.isJDBCTable() || table.isDeltalakeTable();
+                || table.isJDBCTable() || table.isDeltalakeTable();
     }
 
     public void refreshExternalTable(TableName tableName, List<String> partitions) {
@@ -2408,12 +2515,12 @@ public class GlobalStateMgr {
         table = metadataMgr.getTable(catalogName, dbName, tblName);
         if (table == null) {
             throw new StarRocksConnectorException("table %s.%s.%s not exists", catalogName, dbName,
-                        tblName);
+                    tblName);
         }
         if (!supportRefreshTableType(table)) {
             throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
-                        "do not support refresh external table which type is %s", catalogName, dbName,
-                        tblName, table.getType());
+                    "do not support refresh external table which type is %s", catalogName, dbName,
+                    tblName, table.getType());
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
@@ -2427,10 +2534,6 @@ public class GlobalStateMgr {
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
-    }
-
-    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
-        localMetastore.replayUpdateClusterAndBackends(info);
     }
 
     public String dumpImage() {

@@ -80,7 +80,7 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "dbId", 1L);
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(1L);
+                globalStateMgr.getMetastore().getDb(1L);
                 minTimes = 0;
                 result = null;
             }

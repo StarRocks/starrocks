@@ -63,7 +63,7 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertBasicStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
         ColumnBasicStatsCacheLoader basicStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
@@ -104,8 +104,8 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertHistogramStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "t0");
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 
@@ -147,8 +147,8 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertHistogramStatisticsDate() {
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "t0");
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 

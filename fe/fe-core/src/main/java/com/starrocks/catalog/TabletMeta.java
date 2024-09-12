@@ -44,6 +44,7 @@ public class TabletMeta {
     private final long partitionId;
     private final long physicalPartitionId;
     private final long indexId;
+    private final long tabletId = 0;
 
     private final int oldSchemaHash;
     private final int newSchemaHash;

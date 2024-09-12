@@ -140,7 +140,7 @@ public class ShowCreateViewStmtTest {
         String dropSQL = "drop table tbl1";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }
@@ -185,18 +185,18 @@ public class ShowCreateViewStmtTest {
         for (String[] testcase : testCases) {
             String dropViewSql = "drop view if exists " + testcase[0];
             DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(dropViewStmt);
             CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createView(createViewStmt);
 
-            List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+            List<Table> views = GlobalStateMgr.getCurrentState().getMetastore().getDb(createViewStmt.getDbName()).getViews();
             List<String> res = Lists.newArrayList();
             AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                     null, null, false, false, false);
 
             Assert.assertEquals(testcase[2], res.get(0));
 
-            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
+            GlobalStateMgr.getCurrentState().getMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
         }
     }
 
@@ -206,9 +206,9 @@ public class ShowCreateViewStmtTest {
         String createViewSql = "create view test_view (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
                 "as select * from tbl1";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createView(createViewStmt);
 
-        List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+        List<Table> views = GlobalStateMgr.getCurrentState().getMetastore().getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false, false);
@@ -243,7 +243,7 @@ public class ShowCreateViewStmtTest {
                 "\tt0.c4 as d\n" +
                 "from t0";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createView(createViewStmt);
 
         String descViewSql = "describe v2";
 
@@ -271,12 +271,12 @@ public class ShowCreateViewStmtTest {
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(dropViewStmt);
     }
 
     @Test
     public void testDdlComment() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+        List<Table> tables = GlobalStateMgr.getCurrentState().getMetastore().getDb("test").getTables();
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("test", commentTest, res,
@@ -287,7 +287,7 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlStorageType() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+        List<Table> tables = GlobalStateMgr.getCurrentState().getMetastore().getDb("test").getTables();
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,

@@ -1,0 +1,42 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package com.starrocks.meta;
+
+import com.sleepycat.je.EnvironmentConfig;
+import com.sleepycat.je.rep.ReplicatedEnvironment;
+import com.sleepycat.je.rep.ReplicationConfig;
+
+import java.io.File;
+import java.util.concurrent.TimeUnit;
+
+public class BDBEnvironment {
+    public static ReplicatedEnvironment setupEnvironment() {
+        File envHome = new File("." + "/bdb");
+
+        //ReplicationConfig
+        ReplicationConfig replicationConfig = new ReplicationConfig();
+        replicationConfig.setNodeName("node");
+        replicationConfig.setNodeHostPort("127.0.0.1:9010");
+        replicationConfig.setHelperHosts("127.0.0.1:9010");
+        //replicationConfig.setGroupName("g1");
+
+        //EnvironmentConfig
+        EnvironmentConfig environmentConfig = new EnvironmentConfig();
+        environmentConfig.setTransactional(true);
+        environmentConfig.setAllowCreate(true);
+        environmentConfig.setLockTimeout(5, TimeUnit.SECONDS);
+
+        return new ReplicatedEnvironment(envHome, replicationConfig, environmentConfig);
+    }
+}

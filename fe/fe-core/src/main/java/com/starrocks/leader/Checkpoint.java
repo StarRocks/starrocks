@@ -39,7 +39,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.Journal;
+import com.starrocks.meta.EditLogReplayer;
+import com.starrocks.meta.store.bdb.BDBMetaStore;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
@@ -235,23 +238,40 @@ public class Checkpoint extends FrontendDaemon {
 
     private boolean replayAndGenerateGlobalStateMgrImage(long logVersion) {
         assert belongToGlobalStateMgr;
-        long replayedJournalId = -1;
         // generate new image file
         LOG.info("begin to generate new image: image.{}", logVersion);
         globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.setEditLog(new EditLog(null));
         globalStateMgr.setJournal(journal);
         try {
+            long replayedJournalId = globalStateMgr.getReplayedJournalId();
             globalStateMgr.loadImage(imageDir);
             globalStateMgr.replayJournal(logVersion);
             globalStateMgr.clearExpiredJobs();
             globalStateMgr.saveImage();
-            replayedJournalId = globalStateMgr.getReplayedJournalId();
+
+            if (Config.enable_bdb_metastore && GlobalStateMgr.getServingState().getFeType() == FrontendNodeType.LEADER) {
+                BDBMetaStore bdbMetaStore = new BDBMetaStore();
+                long editLogReplayId = bdbMetaStore.getEditLogReplayId();
+                if (editLogReplayId < replayedJournalId) {
+                    globalStateMgr.saveKV();
+                }
+            }
+
+            if (Config.enable_bdb_metastore && GlobalStateMgr.getServingState().getFeType() == FrontendNodeType.LEADER) {
+                EditLogReplayer editLogReplayer = new EditLogReplayer();
+                editLogReplayer.load(logVersion);
+
+                BDBMetaStore bdbMetaStore = new BDBMetaStore();
+                bdbMetaStore.setEditLogID(logVersion);
+            }
+
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
             GlobalStateMgr.getServingState().setImageJournalId(logVersion);
-            LOG.info("checkpoint finished save image.{}", replayedJournalId);
+            LOG.info("checkpoint finished save image.{}", logVersion);
+
             return true;
         } catch (Exception e) {
             LOG.error("Exception when generate new image file", e);

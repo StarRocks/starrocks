@@ -241,8 +241,8 @@ public class MaterializedViewAnalyzerTest {
     @Test
     public void testRefreshMaterializedView() throws Exception {
         analyzeSuccess("refresh materialized view mv");
-        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv");
+        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "mv");
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;

@@ -77,6 +77,7 @@ import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -192,7 +193,7 @@ public class ShowExecutorTest {
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
-                partition.getBaseIndex();
+                partition.getDefaultPhysicalPartition().getBaseIndex();
                 minTimes = 0;
                 result = index1;
             }
@@ -367,7 +368,7 @@ public class ShowExecutorTest {
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        MetaStore localMetastore = new LocalMetastore(globalStateMgr);
         new Expectations(globalStateMgr) {
             {
                 /*
@@ -386,7 +387,7 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore();
+                globalStateMgr.getMetastore();
                 minTimes = 0;
                 result = localMetastore;
 
@@ -527,11 +528,11 @@ public class ShowExecutorTest {
 
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(0);
+                globalStateMgr.getMetastore().getDb(0);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                globalStateMgr.getMetastore().getTable(anyLong, anyLong);
                 minTimes = 0;
                 result = olapTable;
             }
@@ -1091,7 +1092,7 @@ public class ShowExecutorTest {
     public void testShowAlterTable() throws AnalysisException, DdlException {
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
         stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(),
-                    globalStateMgr.getLocalMetastore().getDb("testDb")));
+                    globalStateMgr.getMetastore().getDb("testDb")));
 
         ShowExecutor.execute(stmt, ctx);
     }

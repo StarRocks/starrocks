@@ -133,6 +133,37 @@ public class Locker {
         }
     }
 
+    public void lockDatabaseWithIntendLock(Database database, LockType lockType) {
+        if (Config.lock_manager_enabled) {
+            Preconditions.checkState(database != null);
+            try {
+                lock(database.getId(), lockType, 0);
+            } catch (LockException e) {
+                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            }
+        } else {
+            QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+            if (lockType == LockType.INTENTION_EXCLUSIVE) {
+                LockUtils.dbWriteLock(rwLock, database.getId(), database.getFullName(), database.getSlowLockLogStats());
+            } else {
+                LockUtils.dbReadLock(rwLock, database.getId(), database.getFullName(), database.getSlowLockLogStats());
+            }
+        }
+    }
+
+    public void lockTable(Table table, LockType lockType) {
+        if (Config.lock_manager_enabled) {
+            Preconditions.checkState(table != null);
+            try {
+                lock(table.getId(), lockType, 0);
+            } catch (LockException e) {
+                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            }
+        } else {
+            //
+        }
+    }
+
     /**
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
@@ -433,7 +464,7 @@ public class Locker {
     /**
      * Lock table with intensive db lock.
      *
-     * @param dbId db for intensive db lock
+     * @param dbId     db for intensive db lock
      * @param tableId  table to be locked
      * @param lockType lock type
      */

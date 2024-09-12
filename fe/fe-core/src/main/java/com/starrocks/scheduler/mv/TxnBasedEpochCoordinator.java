@@ -129,7 +129,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     private void commitEpoch(MVEpoch epoch) {
         LOG.info("commitEpoch: {}", epoch);
         long dbId = mvMaintenanceJob.getView().getDbId();
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
 
         try {
             epoch.onCommitting();

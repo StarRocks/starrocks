@@ -160,12 +160,12 @@ public class MetaUtils {
     }
 
     public static boolean isPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
-        Database db = stateMgr.getLocalMetastore().getDb(dbId);
+        Database db = stateMgr.getMetastore().getDb(dbId);
         if (db == null) {
             return false;
         }
         // lake table or lake materialized view
-        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable table = (OlapTable) stateMgr.getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return false;
         }
@@ -219,7 +219,7 @@ public class MetaUtils {
     }
 
     public static Column getColumnByColumnName(long dbId, long tableId, String columnName) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(dbId, tableId);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableId);
         }
@@ -240,7 +240,7 @@ public class MetaUtils {
     }
 
     public static String getColumnNameByColumnId(long dbId, long tableId, ColumnId columnId) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(dbId, tableId);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableId);
         }

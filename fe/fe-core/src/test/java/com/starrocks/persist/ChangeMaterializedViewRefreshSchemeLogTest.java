@@ -15,10 +15,6 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.alter.MaterializedViewHandler;
-import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -31,6 +27,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.thrift.TTabletType;
 import org.junit.After;
 import org.junit.Assert;
@@ -113,11 +110,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
 
     @Test
     public void testReplayWhenDbIsEmpty() {
-        AlterJobMgr alterJobMgr = new AlterJobMgr(
-                new SchemaChangeHandler(),
-                new MaterializedViewHandler(),
-                new SystemHandler());
-        alterJobMgr.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
+        LocalMetastore localMetastore = new LocalMetastore(null);
+        localMetastore.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
     }
-
 }

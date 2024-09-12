@@ -61,9 +61,9 @@ import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.Load;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -172,8 +172,8 @@ public abstract class StarRocksHttpTestCase {
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
-        partition.updateVisibleVersion(testStartVersion);
-        partition.setNextVersion(testStartVersion + 1);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -216,7 +216,7 @@ public abstract class StarRocksHttpTestCase {
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta =
                 new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, testSchemaHash, TStorageMedium.HDD);
-        baseIndex.addTablet(tablet, tabletMeta);
+        baseIndex.addTabletWithInvertedIndex(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);
@@ -225,8 +225,8 @@ public abstract class StarRocksHttpTestCase {
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
-        partition.updateVisibleVersion(testStartVersion);
-        partition.setNextVersion(testStartVersion + 1);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -280,7 +280,7 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(newEmptyTable);
         ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
         nameToDb.put(db.getFullName(), db);
-        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        StarRocksMetadata starRocksMetadata = new StarRocksMetadata();
 
         new Expectations(globalStateMgr) {
             {
@@ -288,11 +288,11 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = true;
 
-                globalStateMgr.getLocalMetastore().getDb("emptyDb");
+                globalStateMgr.getMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getLocalMetastore().getDb(anyString);
+                globalStateMgr.getMetastore().getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -304,19 +304,19 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getLocalMetastore();
+                globalStateMgr.getStarRocksMetadata();
                 minTimes = 0;
-                result = localMetastore;
+                result = starRocksMetadata;
             }
         };
 
-        new Expectations(localMetastore) {
+        new Expectations(starRocksMetadata) {
             {
-                localMetastore.getDb("testDb");
+                starRocksMetadata.getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                localMetastore.getDb(testDbId);
+                starRocksMetadata.getDb(testDbId);
                 minTimes = 0;
                 result = db;
             }
@@ -338,9 +338,8 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(esTable);
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
-
-        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, new TemporaryTableMgr(), null, null);
+        StarRocksMetadata starRocksMetadata = new StarRocksMetadata();
+        MetadataMgr metadataMgr = new MetadataMgr(starRocksMetadata, new TemporaryTableMgr(), null, null);
 
         new Expectations(globalStateMgr) {
             {
@@ -360,9 +359,9 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = metadataMgr;
 
-                globalStateMgr.getLocalMetastore();
+                globalStateMgr.getStarRocksMetadata();
                 minTimes = 0;
-                result = localMetastore;
+                result = starRocksMetadata;
             }
         };
 
@@ -382,13 +381,13 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
-        new Expectations(localMetastore) {
+        new Expectations(starRocksMetadata) {
             {
-                localMetastore.getDb("testDb");
+                starRocksMetadata.getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                localMetastore.getDb(testDbId);
+                starRocksMetadata.getDb(testDbId);
                 minTimes = 0;
                 result = db;
             }

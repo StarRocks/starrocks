@@ -73,9 +73,9 @@ public class LakeTableAlterMetaJobTest {
     public void setUp() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(DB_NAME);
 
         table = createTable(connectContext,
                     "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
@@ -89,16 +89,16 @@ public class LakeTableAlterMetaJobTest {
     public void tearDown() throws DdlException, MetaNotFoundException {
         db.dropTable(table.getName());
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropDb(DB_NAME, true);
         } catch (MetaNotFoundException ignored) {
         }
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
-        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(createTableStmt.getDbName());
+        return (LakeTable) GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                     .getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
@@ -152,7 +152,7 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testDropDb01() throws DdlException, MetaNotFoundException {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(db.getFullName(), true);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropDb(db.getFullName(), true);
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
@@ -172,7 +172,7 @@ public class LakeTableAlterMetaJobTest {
         job.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(db.getFullName(), true);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropDb(db.getFullName(), true);
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
@@ -198,7 +198,7 @@ public class LakeTableAlterMetaJobTest {
         job.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(db.getFullName(), true);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropDb(db.getFullName(), true);
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
@@ -220,8 +220,8 @@ public class LakeTableAlterMetaJobTest {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
-            partition.updateVisibleVersion(commitVersion - 1);
+            Assert.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion(), commitVersion);
+            partition.getDefaultPhysicalPartition().updateVisibleVersion(commitVersion - 1);
         }
 
         replayAlterMetaJob.replay(job);
@@ -238,7 +238,7 @@ public class LakeTableAlterMetaJobTest {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
+            Assert.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion(), commitVersion);
         }
     }
 

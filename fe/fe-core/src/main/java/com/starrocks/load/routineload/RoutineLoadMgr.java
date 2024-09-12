@@ -510,7 +510,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 sortRoutineLoadJob(result);
             } else {
                 long dbId = 0L;
-                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+                Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }

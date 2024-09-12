@@ -66,7 +66,7 @@ public class AnalyzeCreateAnalyzeJobTest {
         String sql = "create analyze full database db";
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("db");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("db");
         Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
         Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
         Assert.assertTrue(analyzeStmt.getColumnNames().isEmpty());
@@ -77,9 +77,9 @@ public class AnalyzeCreateAnalyzeJobTest {
         String sql = "create analyze table db.tbl(kk1, kk2)";
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("db");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("db");
         Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl");
         Assert.assertEquals(table.getId(), analyzeStmt.getTableId());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
     }

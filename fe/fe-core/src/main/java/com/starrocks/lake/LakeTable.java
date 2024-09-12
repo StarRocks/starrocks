@@ -99,7 +99,7 @@ public class LakeTable extends OlapTable {
 
     @Override
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState,
-                                   MaterializedIndex.IndexExtState extState) {
+                                      MaterializedIndex.IndexExtState extState) {
         LakeTable copied = DeepCopy.copyWithGson(this, LakeTable.class);
         if (copied == null) {
             LOG.warn("failed to copy lake table: {}", getName());
@@ -190,7 +190,7 @@ public class LakeTable extends OlapTable {
         }
         for (long shardId : shardIds) {
             LakeTablet tablet = new LakeTablet(shardId);
-            index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
+            index.addTablet(tablet);
         }
         return Status.OK;
     }
@@ -204,7 +204,7 @@ public class LakeTable extends OlapTable {
     public List<Long> getShardGroupIds() {
         List<Long> shardGroupIds = new ArrayList<>();
         for (Partition p : getAllPartitions()) {
-            shardGroupIds.add(p.getShardGroupId());
+            shardGroupIds.add(p.getDefaultPhysicalPartition().getShardGroupId());
         }
         return shardGroupIds;
     }

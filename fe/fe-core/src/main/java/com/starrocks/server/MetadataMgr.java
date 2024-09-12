@@ -62,6 +62,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
@@ -118,7 +119,7 @@ public class MetadataMgr {
         }
     }
 
-    private final LocalMetastore localMetastore;
+    private final StarRocksMetadata starRocksMetadata;
     private final TemporaryTableMgr temporaryTableMgr;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
@@ -148,11 +149,11 @@ public class MetadataMgr {
                         }
                     });
 
-    public MetadataMgr(LocalMetastore localMetastore, TemporaryTableMgr temporaryTableMgr, ConnectorMgr connectorMgr,
+    public MetadataMgr(StarRocksMetadata starrocksMetadata, TemporaryTableMgr temporaryTableMgr, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
-        Preconditions.checkNotNull(localMetastore, "localMetastore is null");
+        Preconditions.checkNotNull(starrocksMetadata, "localMetastore is null");
         Preconditions.checkNotNull(temporaryTableMgr, "temporaryTableMgr is null");
-        this.localMetastore = localMetastore;
+        this.starRocksMetadata = starrocksMetadata;
         this.temporaryTableMgr = temporaryTableMgr;
         this.connectorMgr = connectorMgr;
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
@@ -180,7 +181,7 @@ public class MetadataMgr {
      */
     public Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
         if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
-            return Optional.of(localMetastore);
+            return Optional.of(starRocksMetadata);
         }
 
         CatalogConnector connector = connectorMgr.getConnector(catalogName);
@@ -253,7 +254,7 @@ public class MetadataMgr {
     }
 
     public Database getDb(Long databaseId) {
-        return localMetastore.getDb(databaseId);
+        return starRocksMetadata.getDb(databaseId);
     }
 
     public List<String> listTableNames(String catalogName, String dbName) {
@@ -475,7 +476,7 @@ public class MetadataMgr {
         com.google.common.collect.Table<Long, String, Long> allTables = temporaryTableMgr.getTemporaryTables(sessionId);
 
         for (Long databaseId : allTables.rowKeySet()) {
-            Database database = localMetastore.getDb(databaseId);
+            Database database = starRocksMetadata.getDb(databaseId);
             if (database == null) {
                 // database maybe dropped by force, we should clean temporary tables on it.
                 temporaryTableMgr.dropTemporaryTables(sessionId, databaseId);
@@ -484,7 +485,8 @@ public class MetadataMgr {
             Map<String, Long> tables = allTables.row(databaseId);
             tables.forEach((tableName, tableId) -> {
                 try {
-                    database.dropTemporaryTable(tableId, tableName, true, true);
+                    starRocksMetadata.dropTemporaryTable(database.getFullName(),
+                            tableId, tableName, true, true);
                     temporaryTableMgr.dropTemporaryTable(sessionId, database.getId(), tableName);
                 } catch (DdlException e) {
                     LOG.error("Failed to drop temporary table {}.{} in session {}",
@@ -539,7 +541,7 @@ public class MetadataMgr {
 
     public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
-            return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+            return Optional.ofNullable(starRocksMetadata.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
         } else {
             return Optional.ofNullable(
                     getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
@@ -576,11 +578,11 @@ public class MetadataMgr {
         if (tableId == null) {
             return null;
         }
-        Database database = localMetastore.getDb(databaseId);
+        Database database = starRocksMetadata.getDb(databaseId);
         if (database == null) {
             return null;
         }
-        return localMetastore.getTable(database.getId(), tableId);
+        return starRocksMetadata.getTable(database.getId(), tableId);
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {

@@ -325,7 +325,7 @@ public class CreateMaterializedViewTest {
                 .useDatabase("test");
         starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
         currentState = GlobalStateMgr.getCurrentState();
-        testDb = currentState.getLocalMetastore().getDb("test");
+        testDb = currentState.getMetastore().getDb("test");
 
         UtFrameUtils.setUpForPersistTest();
     }
@@ -411,7 +411,7 @@ public class CreateMaterializedViewTest {
             SlotRef slotRef = tableSlotRefs.get(0);
             TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
             Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
-            Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), baseTableName.getTbl());
+            Table baseTable = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), baseTableName.getTbl());
             Assert.assertNotNull(baseTable);
             Assert.assertEquals(baseTableInfos.get(0).getTableId(), baseTable.getId());
             Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
@@ -619,8 +619,8 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tb1.k1) s1, tb2.k2 s2 from tbl1 tb1 join tbl2 tb2 on tb1.k2 = tb2.k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv1");
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            Table mv1 = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "mv1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
             // test partition
             MaterializedView materializedView = (MaterializedView) mv1;
@@ -640,7 +640,7 @@ public class CreateMaterializedViewTest {
             SlotRef slotRef = slotRefs.get(0);
             TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
             Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
-            Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), baseTableName.getTbl());
+            Table baseTable = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), baseTableName.getTbl());
             Assert.assertNotNull(baseTable);
             Assert.assertTrue(baseTableInfos.stream().anyMatch(baseTableInfo ->
                     baseTableInfo.getTableId() == baseTable.getId()));
@@ -686,8 +686,8 @@ public class CreateMaterializedViewTest {
                 "as select k1, tbl1.k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv1");
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            Table mv1 = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "mv1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
             // test partition
             MaterializedView materializedView = (MaterializedView) mv1;
@@ -742,7 +742,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, tbl1.k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
@@ -1626,7 +1626,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1640,7 +1640,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from base_mv;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1658,7 +1658,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from tbl1;";
         {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         }
 
         String sql2 = "create materialized view mv_from_base_mv2 " +
@@ -1671,7 +1671,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from base_mv2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1689,12 +1689,12 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
 
-        MaterializedView baseInactiveMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "base_inactive_mv"));
+        MaterializedView baseInactiveMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "base_inactive_mv"));
         baseInactiveMv.setInactiveAndReason("");
 
         String sql2 = "create materialized view mv_from_base_inactive_mv " +
@@ -1707,7 +1707,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from base_inactive_mv;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error at line 3, column 24. Detail message: " +
                             "Create/Rebuild materialized view from inactive materialized view: base_inactive_mv.",
@@ -1727,12 +1727,12 @@ public class CreateMaterializedViewTest {
                 "as select k1 ss, *  from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "testAsHasStar"));
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "testAsHasStar"));
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
-            Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1");
+            Table baseTable = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "tbl1");
             List<Column> baseColumns = baseTable.getFullSchema();
 
             Assert.assertEquals(mvColumns.size(), baseColumns.size() + 1);
@@ -1760,7 +1760,7 @@ public class CreateMaterializedViewTest {
                 "as select a.k1 ss, a.*, b.* from tbl1 as a join tbl1 as b on a.k1=b.k1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k1'"));
@@ -1781,7 +1781,7 @@ public class CreateMaterializedViewTest {
                 "as select a.k1 ss, a.k2, b.k2 from tbl1 as a join tbl1 as b on a.k1=b.k1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k2'"));
@@ -1820,8 +1820,8 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "testAsSelectItemAlias1"));
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "testAsSelectItemAlias1"));
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
@@ -1851,8 +1851,8 @@ public class CreateMaterializedViewTest {
                 "select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "testAsSelectItemAlias2"));
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "testAsSelectItemAlias2"));
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
@@ -1878,7 +1878,7 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view partition exp: " +
                     "`tbl1`.`k1` must related to column"));
@@ -1898,7 +1898,7 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage()
                     .contains("No viable statement for input 'distributed by hash(date_trunc('."));
@@ -1981,7 +1981,7 @@ public class CreateMaterializedViewTest {
         new MockUp<OlapTable>() {
             @Mock
             public boolean isEnableColocateMVIndex() throws Exception {
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "colocateTable");
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "colocateTable");
 
                 // If the table's colocate group is empty, return false
                 if (Strings.isNullOrEmpty(table.getColocateGroup())) {
@@ -2001,7 +2001,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from colocateTable;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitingRollupJobV2Finish();
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
             String fullGroupName = testDb.getId() + "_" + "colocate_group1";
@@ -2010,7 +2010,7 @@ public class CreateMaterializedViewTest {
 
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
             Assert.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "colocateTable");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "colocateTable");
             Assert.assertTrue(table.isEnableColocateMVIndex());
 
             dropMv("colocateMv");
@@ -2048,7 +2048,7 @@ public class CreateMaterializedViewTest {
 
         Assert.assertThrows(AnalysisException.class, () -> {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         });
 
         currentState.getColocateTableIndex().clear();
@@ -2072,7 +2072,7 @@ public class CreateMaterializedViewTest {
         new MockUp<OlapTable>() {
             @Mock
             public boolean isEnableColocateMVIndex() throws Exception {
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "colocateTable3");
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "colocateTable3");
 
                 // If the table's colocate group is empty, return false
                 if (Strings.isNullOrEmpty(table.getColocateGroup())) {
@@ -2097,10 +2097,10 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from colocateTable3;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitingRollupJobV2Finish();
             statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitingRollupJobV2Finish();
 
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
@@ -2109,7 +2109,7 @@ public class CreateMaterializedViewTest {
             long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
             Assert.assertNotEquals(-1, tableId);
 
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "colocateTable3");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "colocateTable3");
             Assert.assertTrue(table.isEnableColocateMVIndex());
 
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
@@ -2251,7 +2251,7 @@ public class CreateMaterializedViewTest {
         }
 
         try {
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains(msg));
@@ -2287,8 +2287,8 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             starRocksAssert.getCtx());
-            currentState.getLocalMetastore().createMaterializedView(stmt);
-            Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv_with_property1");
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
+            Table mv1 = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "mv_with_property1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
         } catch (Exception e) {
             Assert.fail();
@@ -2337,7 +2337,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -2470,7 +2470,7 @@ public class CreateMaterializedViewTest {
                 ") " +
                 "as select tbl1.k1 ss, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getStarRocksMetadata().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         String fullGroupName = testDb.getId() + "_" + groupName;
         long tableId = currentState.getColocateTableIndex().getTableIdByGroup(fullGroupName);
         Assert.assertTrue(tableId > 0);
@@ -2544,7 +2544,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -2564,7 +2564,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -2584,7 +2584,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -2704,8 +2704,8 @@ public class CreateMaterializedViewTest {
                 " partition by k1" +
                 " distributed by hash(k3) buckets 10" +
                 " as select k3, k1, sum(v1) as total from tbl5 group by k3, k1");
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv_with_partition_by_not_first_column");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "mv_with_partition_by_not_first_column");
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
@@ -2726,8 +2726,8 @@ public class CreateMaterializedViewTest {
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS select     s_suppkey,     s_nationkey," +
                 "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "supplier_hive_mv");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "supplier_hive_mv");
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
@@ -2742,8 +2742,8 @@ public class CreateMaterializedViewTest {
                 "HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS select     s_suppkey,     n_name,      sum(s_acctbal) " +
                 "as total_s_acctbal,      count(s_phone) as s_phone_count from " +
                 "hive0.tpch.supplier as supp join hive0.tpch.nation group by s_suppkey, n_name order by s_suppkey;");
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "supplier_nation_hive_mv");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "supplier_nation_hive_mv");
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
@@ -2761,8 +2761,8 @@ public class CreateMaterializedViewTest {
                 "AS \n" +
                 "select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n");
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "lineitem_supplier_hive_mv");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "lineitem_supplier_hive_mv");
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
@@ -2782,8 +2782,8 @@ public class CreateMaterializedViewTest {
                 "AS select     s_suppkey,     s_nationkey, sum(s_acctbal) as total_s_acctbal,      " +
                 "count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "supplier_hive_mv");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "supplier_hive_mv");
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
@@ -2912,7 +2912,7 @@ public class CreateMaterializedViewTest {
                 " select c_1_9, c_1_4 from t1";
         try {
             starRocksAssert.withMaterializedView(sql);
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "async_mv_1");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "async_mv_1");
             Assert.assertTrue(mv.getFullSchema().get(0).isKey());
             Assert.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {
@@ -2954,10 +2954,10 @@ public class CreateMaterializedViewTest {
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
             Assert.assertEquals(stmt.getDBName(), "test");
             Assert.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
             waitingRollupJobV2Finish();
 
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl5");
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "tbl5");
             Assert.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
             Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
@@ -3008,9 +3008,9 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(stmt.getTableName().getDb(), "test");
             Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
             newStarRocksAssert.dropDatabase("test_mv_different_db");
-            Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "test_mv_use_different_tbl");
+            Table mv1 = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "test_mv_use_different_tbl");
             Assert.assertTrue(mv1 instanceof MaterializedView);
             starRocksAssert.dropMaterializedView("test_mv_use_different_tbl");
         } catch (Exception e) {
@@ -3034,10 +3034,10 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
             Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
-            currentState.getLocalMetastore().createMaterializedView(stmt);
+            currentState.getStarRocksMetadata().createMaterializedView(stmt);
 
-            Database differentDb = currentState.getLocalMetastore().getDb("test_mv_different_db");
-            Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(differentDb.getFullName(), "test_mv_use_different_tbl");
+            Database differentDb = currentState.getMetastore().getDb("test_mv_different_db");
+            Table mv1 = GlobalStateMgr.getCurrentState().getMetastore().getTable(differentDb.getFullName(), "test_mv_use_different_tbl");
             Assert.assertTrue(mv1 instanceof MaterializedView);
 
             newStarRocksAssert.dropDatabase("test_mv_different_db");
@@ -3063,7 +3063,7 @@ public class CreateMaterializedViewTest {
             starRocksAssert.withMaterializedView(mv1);
             waitingRollupJobV2Finish();
 
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "case_when_t1");
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "case_when_t1");
             Assert.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
             Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
@@ -3155,8 +3155,8 @@ public class CreateMaterializedViewTest {
                             "refresh deferred manual distributed by hash(c_1_9) as" +
                             " select c_1_9, %s from t1", mvName, expr);
             starRocksAssert.withMaterializedView(createMvExpr);
-            Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
+            Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), mvName);
             List<String> columnNames = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
             Assert.assertTrue(columnNames.toString(), columnNames.contains(expr));
         } finally {
@@ -3174,8 +3174,8 @@ public class CreateMaterializedViewTest {
     }
 
     private Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }
@@ -3494,9 +3494,9 @@ public class CreateMaterializedViewTest {
                 "\t c_mktsegment segment\n" +
                 "from customer_nullable_3;");
 
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore().getDb("test");
 
-        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "customer_mv");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "customer_mv");
         Assert.assertTrue(mv.getColumn("total").getType().isDecimalOfAnyVersion());
         Assert.assertFalse(mv.getColumn("segment").isAllowNull());
     }
@@ -3880,11 +3880,11 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
 
-            currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
+            currentState.getStarRocksMetadata().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
             TableName mvName = createMaterializedViewStatement.getTableName();
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName.getTbl());
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), mvName.getTbl());
             Assert.assertNotNull(table);
             Assert.assertTrue(table instanceof MaterializedView);
             return (MaterializedView) table;
@@ -3902,13 +3902,13 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
 
-            currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
+            currentState.getStarRocksMetadata().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
             TableName mvTableName = createMaterializedViewStatement.getTableName();
             mvName = mvTableName.getTbl();
 
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), mvName);
             Assert.assertNotNull(table);
             Assert.assertTrue(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
@@ -4737,7 +4737,8 @@ public class CreateMaterializedViewTest {
         String result = starRocksAssert.showCreateTable("show create table mv_with_location");
         System.out.println(result);
         Assert.assertTrue(result.contains("rack:*"));
-        for (Tablet tablet : materializedView.getPartitions().iterator().next().getBaseIndex().getTablets()) {
+        for (Tablet tablet : materializedView.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets()) {
             Assert.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
         }
 
@@ -4746,7 +4747,7 @@ public class CreateMaterializedViewTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getImageWriter());
 
         // test replay
-        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState());
         localMetastoreFollower.load(new SRMetaBlockReaderV2(initialImage.getJsonReader()));
         CreateTableInfo info = (CreateTableInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
@@ -4758,7 +4759,7 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(mv.getLocation().containsKey("rack"));
 
         // test restart
-        LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState());
         localMetastoreLeader.load(new SRMetaBlockReaderV2(finalImage.getJsonReader()));
         mv = (MaterializedView) localMetastoreLeader.getDb("test")
                 .getTable("mv_with_location");

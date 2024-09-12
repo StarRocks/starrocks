@@ -267,10 +267,10 @@ public class TabletChecker extends FrontendDaemon {
         long lockTotalTime = 0;
         long waitTotalTime = 0;
         long lockStart;
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDbIdsIncludeRecycleBin();
         DATABASE:
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -289,7 +289,7 @@ public class TabletChecker extends FrontendDaemon {
                 List<Long> aliveBeIdsInCluster =
                         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
                 TABLE:
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
+                for (Table table : GlobalStateMgr.getCurrentState().getStarRocksMetadata().getTablesIncludeRecycleBin(db)) {
                     if (!table.needSchedule(false)) {
                         continue;
                     }
@@ -303,7 +303,7 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-                    for (Partition partition : GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    for (Partition partition : GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                             .getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
 
@@ -321,15 +321,15 @@ public class TabletChecker extends FrontendDaemon {
                             locker.lockDatabase(db.getId(), LockType.READ);
                             LOG.debug("checker get lock again");
                             lockStart = System.nanoTime();
-                            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
+                            if (GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDbIncludeRecycleBin(dbId) == null) {
                                 continue DATABASE;
                             }
-                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            if (GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                                     .getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
                                 continue TABLE;
                             }
                             if (GlobalStateMgr.getCurrentState()
-                                    .getLocalMetastore().getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
+                                    .getStarRocksMetadata().getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
                                 continue;
                             }
                         }
@@ -341,7 +341,7 @@ public class TabletChecker extends FrontendDaemon {
                         }
 
                         short replicaNum = GlobalStateMgr.getCurrentState()
-                                .getLocalMetastore()
+                                .getStarRocksMetadata()
                                 .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
                         if (replicaNum == (short) -1) {
                             continue;
@@ -507,7 +507,7 @@ public class TabletChecker extends FrontendDaemon {
         while (iter.hasNext()) {
             Map.Entry<Long, Map<Long, Set<PrioPart>>> dbEntry = iter.next();
             long dbId = dbEntry.getKey();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             if (db == null) {
                 iter.remove();
                 continue;
@@ -518,7 +518,7 @@ public class TabletChecker extends FrontendDaemon {
             try {
                 for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
                     long tblId = tblEntry.getKey();
-                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
+                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tblId);
                     if (tbl == null) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
                         continue;
@@ -609,7 +609,7 @@ public class TabletChecker extends FrontendDaemon {
     public static RepairTabletInfo getRepairTabletInfo(String dbName, String tblName, List<String> partitions)
             throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -620,7 +620,7 @@ public class TabletChecker extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }

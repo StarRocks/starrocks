@@ -125,11 +125,11 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = database;
                 sparkLoadJob.getHandle();
                 result = handle;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getId(), tableId);
                 result = table;
                 table.getPartitions();
                 result = partitions;
@@ -181,7 +181,7 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = null;
             }
         };
@@ -210,9 +210,9 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getId(), tableId);
                 result = null;
             }
         };
@@ -286,9 +286,9 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getId(), tableId);
                 result = table;
                 table.getPartitions();
                 result = partitions;

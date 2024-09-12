@@ -42,7 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
-import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -68,7 +67,6 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -293,7 +291,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected void runPendingJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
         LOG.info("begin to send create replica tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
@@ -314,7 +312,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
         createReplicaLatch = countDownLatch;
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -434,7 +432,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         // create all replicas success.
         // add all shadow indexes to globalStateMgr
-        tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -467,7 +465,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 Preconditions.checkState(shadowIndex.getState() == IndexState.SHADOW, shadowIndex.getState());
-                partition.createRollupIndex(shadowIndex);
+                GlobalStateMgr.getCurrentState().getMetastore().addMaterializedIndex(partition, shadowIndex);
             }
         }
 
@@ -510,11 +508,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -702,12 +700,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
@@ -846,13 +844,21 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getColumnId());
             }
         }
+
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
-            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
             // drop the origin index from partitions
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
                 long originIdxId = entry.getValue();
+
+                // Add to TabletInvertedIndex.
+                // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
+                // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
+                // should add the tablet to TabletInvertedIndex again on finish state.
+                invertedIndex.buildTabletInvertedIndex(dbId, tbl, Lists.newArrayList(tbl.getAllPhysicalPartitions()),
+                        shadowIdxId);
 
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
@@ -866,21 +872,16 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         droppedIdx = physicalPartition.getBaseIndex();
                     } else {
                         droppedIdx = physicalPartition.deleteRollupIndex(originIdxId);
+
+                        GlobalStateMgr.getCurrentState().getMetastore().dropMaterializedIndex(
+                                physicalPartition, originIdxId);
                     }
                     Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                    // Add to TabletInvertedIndex.
-                    // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
-                    // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
-                    // should add the tablet to TabletInvertedIndex again on finish state.
-                    TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, physicalPartition.getId(), shadowIdxId,
-                            indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
                     for (Tablet tablet : shadowIdx.getTablets()) {
-                        invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
                             replica.setState(ReplicaState.NORMAL);
-                            invertedIndex.addReplica(tablet.getId(), replica);
                         }
                     }
 
@@ -974,9 +975,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         // remove all shadow indexes, and set state to NORMAL
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db != null) {
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (tbl != null) {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
@@ -1019,18 +1020,20 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * These changes should be same as changes in SchemaChangeHandler.createJob()
      */
     private void replayPending(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (tbl == null) {
             // table may be dropped before replaying this log. just return
             return;
         }
 
+        //TODO: why add inverted index?
+        /*
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
@@ -1040,6 +1043,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 long shadowIndexId = cell.getColumnKey();
                 MaterializedIndex shadowIndex = cell.getValue();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
+
+                invertedIndex.buildTabletInvertedIndex(db.getId(), tbl, Lists.newArrayList(partition), shadowIndexId);
 
                 TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId,
@@ -1058,6 +1063,15 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
+         */
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        try {
+            // set table state
+            tbl.setState(OlapTableState.SCHEMA_CHANGE);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        }
 
         // to make sure that this job will run runPendingJob() again to create the shadow index replicas
         this.jobState = JobState.PENDING;
@@ -1070,12 +1084,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
         }
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (tbl == null) {
             // table may be dropped before replaying this log. just return
             return;
@@ -1100,10 +1114,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(SchemaChangeJobV2 replayedJob) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db != null) {
 
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (tbl != null) {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);

@@ -99,8 +99,6 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CheckConsistencyTask;
 import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.CloneTask;
-import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.DropAutoIncrementMapTask;
@@ -110,6 +108,7 @@ import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletTaskExecutor;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -280,7 +279,7 @@ public class LeaderImpl {
             switch (taskType) {
                 case CREATE:
                     Preconditions.checkState(request.isSetReport_version());
-                    finishCreateReplica(task, request);
+                    TabletTaskExecutor.finishCreateReplica(task, request);
                     break;
                 case REALTIME_PUSH:
                     checkHasTabletInfo(request);
@@ -376,56 +375,6 @@ public class LeaderImpl {
         }
     }
 
-    private void finishCreateReplica(AgentTask task, TFinishTaskRequest request) {
-        // if we get here, this task will be removed from AgentTaskQueue for certain.
-        // because in this function, the only problem that cause failure is meta missing.
-        // and if meta is missing, we no longer need to resend this task
-        try {
-            CreateReplicaTask createReplicaTask = (CreateReplicaTask) task;
-            if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
-                createReplicaTask.countDownToZero(
-                        task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
-            } else {
-                long tabletId = createReplicaTask.getTabletId();
-                if (request.isSetFinish_tablet_infos()) {
-                    Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
-                            .getReplica(tabletId, createReplicaTask.getBackendId());
-                    if (replica != null) {
-                        replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
-                        if (createReplicaTask.getRecoverySource() == RecoverySource.REPORT) {
-                            /*
-                             * This creates replica task is created by ReportHanlder,
-                             * (See comment of Config.recover_with_empty_tablet)
-                             * So we set replica back to normal state.
-                             */
-                            replica.setBad(false);
-                            LOG.info(
-                                    "finish recover create replica task. set replica to good. tablet {}, replica {}, backend {}",
-                                    tabletId, task.getBackendId(), replica.getId());
-                        }
-                    }
-                } else if (!RunMode.isSharedDataMode()) { // finish_tablet_infos will not be set in shared data mode
-                    LOG.warn("tablet_info is not set in finishTaskRequest");
-                }
-
-                // this should be called before 'countDownLatch()'
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
-
-                createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
-                        tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
-            }
-
-            if (createReplicaTask.getRecoverySource() == RecoverySource.SCHEDULER) {
-                GlobalStateMgr.getCurrentState().getTabletScheduler()
-                        .finishCreateReplicaTask(createReplicaTask, request);
-            }
-        } finally {
-            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
-        }
-    }
-
     private void finishUpdateTabletMeta(AgentTask task, TFinishTaskRequest request) {
         // if we get here, this task will be removed from AgentTaskQueue for certain.
         // because in this function, the only problem that cause failure is meta missing.
@@ -473,12 +422,12 @@ public class LeaderImpl {
             long tableId = task.getTableId();
             long indexId = task.getIndexId();
             long backendId = task.getBackendId();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db.getId(), LockType.READ);
                 try {
-                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                                 .getTable(db.getId(), tableId);
                     if (olapTable != null) {
                         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
@@ -505,7 +454,7 @@ public class LeaderImpl {
         long backendId = pushTask.getBackendId();
         long signature = task.getSignature();
         long transactionId = ((PushTask) task).getTransactionId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             return;
@@ -540,7 +489,7 @@ public class LeaderImpl {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (olapTable == null) {
                 throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
             }
@@ -772,7 +721,7 @@ public class LeaderImpl {
             }
 
             long dbId = tabletMeta.getDbId();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             if (db == null) {
                 LOG.warn("db does not exist. db id: {}", dbId);
                 return;
@@ -893,7 +842,7 @@ public class LeaderImpl {
         }
 
         // checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -905,7 +854,7 @@ public class LeaderImpl {
         try {
             locker.lockDatabase(db.getId(), LockType.READ);
 
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 TStatus status = new TStatus(TStatusCode.NOT_FOUND);
                 status.setError_msgs(Lists.newArrayList("table " + tableName + " not exist"));
@@ -951,13 +900,16 @@ public class LeaderImpl {
             TBasePartitionDesc basePartitionDesc = new TBasePartitionDesc();
             // fill partition meta info
             for (Partition partition : olapTable.getAllPartitions()) {
+
+                PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
                 TPartitionMeta partitionMeta = new TPartitionMeta();
                 partitionMeta.setPartition_id(partition.getId());
                 partitionMeta.setPartition_name(partition.getName());
                 partitionMeta.setState(partition.getState().name());
-                partitionMeta.setVisible_version(partition.getVisibleVersion());
-                partitionMeta.setVisible_time(partition.getVisibleVersionTime());
-                partitionMeta.setNext_version(partition.getNextVersion());
+                partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
+                partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
+                partitionMeta.setNext_version(physicalPartition.getNextVersion());
                 partitionMeta.setIs_temp(olapTable.getPartition(partition.getName(), true) != null);
                 tableMeta.addToPartitions(partitionMeta);
                 short replicaNum = partitionInfo.getReplicationNum(partition.getId());
@@ -1031,7 +983,8 @@ public class LeaderImpl {
             }
 
             for (Partition partition : olapTable.getAllPartitions()) {
-                List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+                List<MaterializedIndex> indexes =
+                        partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());
@@ -1215,7 +1168,7 @@ public class LeaderImpl {
             return response;
         }
 
-        Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb_id());
+        Database db = globalStateMgr.getMetastore().getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -1274,7 +1227,7 @@ public class LeaderImpl {
             return response;
         }
 
-        Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb_id());
+        Database db = globalStateMgr.getMetastore().getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
@@ -1340,7 +1293,7 @@ public class LeaderImpl {
             return response;
         }
 
-        Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb_id());
+        Database db = globalStateMgr.getMetastore().getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));

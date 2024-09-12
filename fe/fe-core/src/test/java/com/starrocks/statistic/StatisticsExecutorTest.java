@@ -71,9 +71,10 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
+        OlapTable t0 = (OlapTable) globalStateMgr.getMetastore().getDb("test").getTable("t0_stats");
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
-        partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
+        partition.getDefaultPhysicalPartition()
+                .updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
                 .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
     }
@@ -87,9 +88,9 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database database = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
         OlapTable table =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0_stats");
+                (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getFullName(), "t0_stats");
         List<Long> partitionIdList =
                 table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 

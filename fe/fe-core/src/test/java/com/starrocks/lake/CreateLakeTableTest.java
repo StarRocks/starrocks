@@ -54,7 +54,7 @@ public class CreateLakeTableTest {
         // create database
         String createDbStmtStr = "create database lake_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
     }
 
     @AfterClass
@@ -63,18 +63,18 @@ public class CreateLakeTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(createTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         Assert.assertTrue(table.isCloudNativeTable());
     }
 
     private LakeTable getLakeTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         Assert.assertTrue(table.isCloudNativeTable());
         return (LakeTable) table;
     }
@@ -120,7 +120,7 @@ public class CreateLakeTableTest {
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("lake_test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("lake_test");
         LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
         String defaultFullPath = getDefaultStorageVolumeFullPath();
         String defaultTableFullPath = String.format("%s/db%d/%d", defaultFullPath, db.getId(), table.getId());

@@ -507,7 +507,7 @@ public class FileScanNodeTest {
 
     @Test
     public void testIllegalColumnSeparator(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                     @Injectable Database db, @Injectable OlapTable table) {
+                                           @Injectable Database db, @Injectable OlapTable table) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -552,7 +552,7 @@ public class FileScanNodeTest {
     }
     @Test
     public void testIllegalRowDelimiter(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                           @Injectable Database db, @Injectable OlapTable table) {
+                                        @Injectable Database db, @Injectable OlapTable table) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();

@@ -47,7 +47,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -55,12 +54,9 @@ import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.leader.Checkpoint;
-import com.starrocks.load.DeleteInfo;
 import com.starrocks.load.ExportJob;
-import com.starrocks.load.LoadErrorHub;
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
@@ -70,11 +66,9 @@ import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
-import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.AutoIncrementInfo;
-import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.BatchDropInfo;
@@ -106,7 +100,6 @@ import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
-import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -127,7 +120,6 @@ import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
-import com.starrocks.persist.ShardInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.persist.TableInfo;
@@ -137,12 +129,10 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
-import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -212,9 +202,7 @@ public class JournalEntity implements Writable {
         switch (opCode) {
             case OperationType.OP_SAVE_NEXTID:
             case OperationType.OP_ERASE_DB:
-            case OperationType.OP_ERASE_TABLE:
             case OperationType.OP_ERASE_PARTITION:
-            case OperationType.OP_META_VERSION:
             case OperationType.OP_DROP_ALL_BROKER:
             case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
@@ -244,13 +232,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ALTER_DB:
-            case OperationType.OP_RENAME_DB: {
-                data = new DatabaseInfo();
-                ((DatabaseInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_ALTER_DB_V2:
             case OperationType.OP_RENAME_DB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DatabaseInfo.class);
@@ -259,13 +240,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CREATE_TABLE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CreateTableInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_DROP_TABLE:
-            case OperationType.OP_DROP_ROLLUP: {
-                data = new DropInfo();
-                ((DropInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -315,12 +289,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MODIFY_PARTITION: {
-                data = new ModifyPartitionInfo();
-                ((ModifyPartitionInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_MODIFY_PARTITION_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ModifyPartitionInfo.class);
                 isRead = true;
@@ -328,14 +296,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_BATCH_MODIFY_PARTITION: {
                 data = BatchModifyPartitionsInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_RECOVER_DB:
-            case OperationType.OP_RECOVER_TABLE:
-            case OperationType.OP_RECOVER_PARTITION: {
-                data = new RecoverInfo();
-                ((RecoverInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -348,14 +308,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_BATCH_DROP_ROLLUP: {
                 data = BatchDropInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_RENAME_TABLE:
-            case OperationType.OP_RENAME_ROLLUP:
-            case OperationType.OP_RENAME_PARTITION: {
-                data = new TableInfo();
-                ((TableInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -396,18 +348,8 @@ public class JournalEntity implements Writable {
                 data = AlterMaterializedViewBaseTableInfosLog.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_BACKUP_JOB: {
-                data = AbstractJob.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_BACKUP_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), AbstractJob.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_RESTORE_JOB: {
-                data = AbstractJob.read(in);
                 isRead = true;
                 break;
             }
@@ -427,32 +369,13 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_EXPORT_CREATE:
-                data = new ExportJob();
-                ((ExportJob) data).readFields(in);
-                isRead = true;
-                break;
             case OperationType.OP_EXPORT_CREATE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ExportJob.class);
                 isRead = true;
                 break;
             }
-            case OperationType.OP_EXPORT_UPDATE_STATE:
-                data = new ExportJob.StateTransfer();
-                ((ExportJob.StateTransfer) data).readFields(in);
-                isRead = true;
-                break;
-            case OperationType.OP_EXPORT_UPDATE_INFO:
-                data = ExportJob.ExportUpdateInfo.read(in);
-                isRead = true;
-                break;
             case OperationType.OP_EXPORT_UPDATE_INFO_V2:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ExportJob.ExportUpdateInfo.class);
-                isRead = true;
-                break;
-            case OperationType.OP_FINISH_DELETE:
-                data = new DeleteInfo();
-                ((DeleteInfo) data).readFields(in);
                 isRead = true;
                 break;
             case OperationType.OP_FINISH_MULTI_DELETE: {
@@ -460,10 +383,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_REPLICA:
-            case OperationType.OP_UPDATE_REPLICA:
-            case OperationType.OP_DELETE_REPLICA:
-            case OperationType.OP_CLEAR_ROLLUP_INFO: {
+            case OperationType.OP_ADD_REPLICA: {
                 data = ReplicaPersistInfo.read(in);
                 isRead = true;
                 break;
@@ -477,14 +397,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_UPDATE_REPLICA_V2:
             case OperationType.OP_DELETE_REPLICA_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ReplicaPersistInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_BACKEND:
-            case OperationType.OP_DROP_BACKEND:
-            case OperationType.OP_BACKEND_STATE_CHANGE: {
-                data = new Backend();
-                ((Backend) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -505,15 +417,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_FRONTEND:
-            case OperationType.OP_ADD_FIRST_FRONTEND:
-            case OperationType.OP_UPDATE_FRONTEND:
-            case OperationType.OP_REMOVE_FRONTEND: {
-                data = new Frontend();
-                ((Frontend) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_ADD_FRONTEND_V2:
             case OperationType.OP_ADD_FIRST_FRONTEND_V2:
             case OperationType.OP_UPDATE_FRONTEND_V2:
@@ -522,36 +425,8 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_SET_LOAD_ERROR_HUB: {
-                data = new LoadErrorHub.Param();
-                ((LoadErrorHub.Param) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_NEW_DROP_USER: {
-                data = UserIdentity.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_UPDATE_USER_PROPERTY: {
-                data = UserPropertyInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_LEADER_INFO_CHANGE: {
-                data = new LeaderInfo();
-                ((LeaderInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_LEADER_INFO_CHANGE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), LeaderInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_TIMESTAMP: {
-                data = new Timestamp();
-                ((Timestamp) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -565,33 +440,9 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_GLOBAL_VARIABLE: {
-                data = new SessionVariable();
-                ((SessionVariable) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CREATE_CLUSTER: {
-                data = Cluster.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_BROKER:
-            case OperationType.OP_DROP_BROKER: {
-                data = new BrokerMgr.ModifyBrokerInfo();
-                ((BrokerMgr.ModifyBrokerInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_ADD_BROKER_V2:
             case OperationType.OP_DROP_BROKER_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BrokerMgr.ModifyBrokerInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
-                data = new BackendIdsUpdateInfo();
-                ((BackendIdsUpdateInfo) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -605,28 +456,13 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_REPOSITORY: {
-                data = Repository.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_CREATE_REPOSITORY_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Repository.class);
                 isRead = true;
                 break;
             }
             case OperationType.OP_TRUNCATE_TABLE: {
-                data = TruncateTableInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_COLOCATE_ADD_TABLE:
-            case OperationType.OP_COLOCATE_REMOVE_TABLE:
-            case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ:
-            case OperationType.OP_COLOCATE_MARK_UNSTABLE:
-            case OperationType.OP_COLOCATE_MARK_STABLE: {
-                data = new ColocatePersistInfo();
-                ((ColocatePersistInfo) data).readFields(in);
+                data = GsonUtils.GSON.fromJson(Text.readString(in), TruncateTableInfo.class);
                 isRead = true;
                 break;
             }
@@ -638,29 +474,13 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MODIFY_TABLE_COLOCATE: {
-                data = new TablePropertyInfo();
-                ((TablePropertyInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TablePropertyInfo.class);
                 isRead = true;
                 break;
             }
-            case OperationType.OP_HEARTBEAT: {
-                data = HbPackage.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_HEARTBEAT_V2: {
-                data = HbPackage.readV2(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_FUNCTION: {
-                data = Function.read(in);
+                data = GsonUtils.GSON.fromJson(Text.readString(in), HbPackage.class);
                 isRead = true;
                 break;
             }
@@ -669,18 +489,8 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_DROP_FUNCTION: {
-                data = FunctionSearchDesc.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_DROP_FUNCTION_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), FunctionSearchDesc.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_BACKEND_TABLETS_INFO: {
-                data = BackendTabletsInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -689,19 +499,8 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
-                data = RoutineLoadJob.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), RoutineLoadJob.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB:
-            case OperationType.OP_REMOVE_ROUTINE_LOAD_JOB: {
-                data = RoutineLoadOperation.read(in);
                 isRead = true;
                 break;
             }
@@ -710,28 +509,13 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
-                data = StreamLoadTask.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_CREATE_STREAM_LOAD_TASK_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), StreamLoadTask.class);
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_LOAD_JOB: {
-                data = com.starrocks.load.loadv2.LoadJob.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_CREATE_LOAD_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), LoadJob.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_END_LOAD_JOB: {
-                data = LoadJobFinalOperation.read(in);
                 isRead = true;
                 break;
             }
@@ -741,7 +525,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_UPDATE_LOAD_JOB: {
-                data = LoadJobStateUpdateInfo.read(in);
+                data = LoadJob.LoadJobStateUpdateInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -782,18 +566,8 @@ public class JournalEntity implements Writable {
                 data = TaskRunPeriodStatusChange.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_DROP_TASK_RUNS:
-                data = DropTaskRunsLog.read(in);
-                isRead = true;
-                break;
             case OperationType.OP_ARCHIVE_TASK_RUNS: {
                 data = ArchiveTaskRunsLog.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CREATE_SMALL_FILE:
-            case OperationType.OP_DROP_SMALL_FILE: {
-                data = SmallFile.read(in);
                 isRead = true;
                 break;
             }
@@ -808,18 +582,8 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_BATCH_ADD_ROLLUP: {
-                data = BatchAlterJobPersistInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_BATCH_ADD_ROLLUP_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BatchAlterJobPersistInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_MODIFY_DISTRIBUTION_TYPE: {
-                data = TableInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -869,11 +633,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_ALTER_JOB_V2: {
                 data = RemoveAlterJobV2OperationLog.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
-                data = AlterRoutineLoadJobOperationLog.read(in);
                 isRead = true;
                 break;
             }
@@ -977,16 +736,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_GRANT_IMPERSONATE: {
-                data = ImpersonatePrivInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_REVOKE_IMPERSONATE: {
-                data = ImpersonatePrivInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_CREATE_CATALOG: {
                 data = Catalog.read(in);
                 isRead = true;
@@ -1012,16 +761,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_UNUSED_SHARD: { // Deprecated
-                data = ShardInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_DELETE_UNUSED_SHARD: { // Deprecated
-                data = ShardInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_STARMGR: {
                 data = StarMgrJournal.read(in);
                 isRead = true;
@@ -1037,18 +776,8 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_UPDATE_USER_PROP_V2: {
-                data = UserPropertyInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_UPDATE_USER_PROP_V3: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), UserPropertyInfo.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_DROP_USER_V2: {
-                data = UserIdentity.read(in);
                 isRead = true;
                 break;
             }

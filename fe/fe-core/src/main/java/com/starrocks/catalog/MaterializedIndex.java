@@ -48,9 +48,9 @@ import com.starrocks.thrift.TIndexState;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import javax.annotation.Nullable;
 
 public class MaterializedIndex extends MetaObject implements Writable, GsonPostProcessable {
@@ -136,7 +136,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
         this.id = id;
         this.state = state == null ? IndexState.NORMAL : state;
-        this.idToTablets = new HashMap<>();
+        this.idToTablets = new TreeMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
         this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
@@ -189,16 +189,15 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         tablets.clear();
     }
 
-    public void addTablet(Tablet tablet, TabletMeta tabletMeta) {
-        addTablet(tablet, tabletMeta, true);
-    }
-
-    public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean updateInvertedIndex) {
+    public void addTablet(Tablet tablet) {
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
-        if (updateInvertedIndex) {
-            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tablet.getId(), tabletMeta);
-        }
+    }
+
+    public void addTabletWithInvertedIndex(Tablet tablet, TabletMeta tabletMeta) {
+        idToTablets.put(tablet.getId(), tablet);
+        tablets.add(tablet);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tablet.getId(), tabletMeta);
     }
 
     public void setIdForRestore(long idxId) {
@@ -227,7 +226,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     public long getDataSize() {
         long dataSize = 0;
-        for (Tablet tablet : getTablets()) {
+        for (Tablet tablet : GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(this)) {
             dataSize += tablet.getDataSize(false);
         }
         return dataSize;
@@ -235,7 +234,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     public long getTabletMaxDataSize() {
         long maxDataSize = 0;
-        for (Tablet tablet : getTablets()) {
+        for (Tablet tablet : GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(this)) {
             maxDataSize = Math.max(maxDataSize, tablet.getDataSize(true));
         }
         return maxDataSize;

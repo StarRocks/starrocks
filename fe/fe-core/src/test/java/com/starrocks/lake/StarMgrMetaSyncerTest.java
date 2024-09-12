@@ -37,6 +37,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.proto.StatusPB;
@@ -94,7 +95,7 @@ public class StarMgrMetaSyncerTest {
     private ColocateTableIndex colocateTableIndex;
 
     @Mocked
-    private LocalMetastore localMetastore;
+    private MetaStore localMetastore;
 
     @Mocked
     private WarehouseManager warehouseManager;
@@ -123,7 +124,7 @@ public class StarMgrMetaSyncerTest {
                 minTimes = 0;
                 result = nodeMgr;
 
-                globalStateMgr.getLocalMetastore();
+                globalStateMgr.getMetastore();
                 minTimes = 0;
                 result = localMetastore;
 

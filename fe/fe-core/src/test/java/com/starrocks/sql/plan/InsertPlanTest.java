@@ -19,6 +19,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -41,7 +42,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.SortOrder;
-import org.apache.iceberg.Table;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -800,7 +800,7 @@ public class InsertPlanTest extends PlanTestBase {
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
         MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
 
-        Table nativeTable = new BaseTable(null, null);
+        org.apache.iceberg.Table nativeTable = new BaseTable(null, null);
 
         Column k1 = new Column("k1", Type.INT);
         Column k2 = new Column("k2", Type.INT);
@@ -869,7 +869,7 @@ public class InsertPlanTest extends PlanTestBase {
                 return new Database(12345566, "iceberg_db");
             }
             @Mock
-            public com.starrocks.catalog.Table getSessionAwareTable(
+            public Table getSessionAwareTable(
                     ConnectContext context, Database database, TableName tableName) {
                 return icebergTable;
             }

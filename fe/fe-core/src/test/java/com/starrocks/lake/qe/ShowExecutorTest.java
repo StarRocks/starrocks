@@ -81,11 +81,11 @@ public class ShowExecutorTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().getDb("testDb");
+                globalStateMgr.getMetastore().getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getDb("testDb1");
+                globalStateMgr.getMetastore().getDb("testDb1");
                 minTimes = 0;
                 result = db1;
             }

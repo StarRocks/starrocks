@@ -153,7 +153,7 @@ public class PaimonMetadataTest {
                 result = "hdfs://127.0.0.1:10000/paimon";
             }
         };
-        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
         Assert.assertEquals("db1", paimonTable.getDbName());
         Assert.assertEquals("tbl1", paimonTable.getTableName());

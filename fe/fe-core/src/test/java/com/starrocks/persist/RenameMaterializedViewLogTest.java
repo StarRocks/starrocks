@@ -14,10 +14,10 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -65,15 +65,15 @@ public class RenameMaterializedViewLogTest {
         in.close();
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 result = db;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), anyLong);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), anyLong);
                 result = table;
             }
         };
 
-        new AlterJobMgr(null, null, null)
+        new LocalMetastore(null)
                     .replayRenameMaterializedView(renameMaterializedViewLog);
     }
 

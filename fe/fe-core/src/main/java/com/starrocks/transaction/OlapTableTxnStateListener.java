@@ -180,7 +180,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partition.getParentId(), table.writeQuorum());
             for (MaterializedIndex index : allIndices) {
-                for (Tablet tablet : index.getTablets()) {
+                List<Tablet> tabletList = GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(index);
+
+                for (Tablet tablet : tabletList) {
                     long tabletId = tablet.getId();
                     Set<Long> commitBackends = tabletToBackends.get(tabletId);
 
@@ -292,7 +294,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                           List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(txnState.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
             locker.lockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);

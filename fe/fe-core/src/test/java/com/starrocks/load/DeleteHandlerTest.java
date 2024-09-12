@@ -141,19 +141,19 @@ public class DeleteHandlerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore().getDb(anyString);
+                globalStateMgr.getMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getTable("test_db", "test_tbl");
+                globalStateMgr.getMetastore().getTable("test_db", "test_tbl");
                 minTimes = 0;
                 result = db.getTable("test_tbl");
 
-                globalStateMgr.getLocalMetastore().getTable(CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID);
+                globalStateMgr.getMetastore().getTable(CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID);
                 minTimes = 0;
                 result = db.getTable("test_tbl");
 
@@ -557,11 +557,11 @@ public class DeleteHandlerTest {
     public void testRemoveOldOnReplay() throws Exception {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().getDb(1L);
+                globalStateMgr.getMetastore().getDb(1L);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                globalStateMgr.getMetastore().getTable(anyLong, anyLong);
                 minTimes = 0;
                 result = db.getTable("test_tbl");
             }

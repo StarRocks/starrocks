@@ -54,13 +54,13 @@ public class ConsistencyCheckerTest {
 
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 1111, medium);
         LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
-        materializedIndex.addTablet(tablet, tabletMeta, false);
+        materializedIndex.addTablet(tablet);
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
         partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
         Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
-        partition.setVisibleVersion(2L, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2L, System.currentTimeMillis());
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
@@ -73,15 +73,15 @@ public class ConsistencyCheckerTest {
                 result = globalStateMgr;
                 minTimes = 0;
 
-                globalStateMgr.getLocalMetastore().getDbIds();
+                globalStateMgr.getMetastore().getDbIds();
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = database;
                 minTimes = 0;
 
-                globalStateMgr.getLocalMetastore().getTables(dbId);
+                globalStateMgr.getMetastore().getTables(dbId);
                 result = database.getTables();
                 minTimes = 0;
             }

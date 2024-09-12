@@ -83,9 +83,9 @@ public class DbsProcDir implements ProcDirInterface {
 
         Database db;
         try {
-            db = globalStateMgr.getLocalMetastore().getDb(Long.parseLong(dbIdOrName));
+            db = globalStateMgr.getMetastore().getDb(Long.parseLong(dbIdOrName));
         } catch (NumberFormatException e) {
-            db = globalStateMgr.getLocalMetastore().getDb(dbIdOrName);
+            db = globalStateMgr.getMetastore().getDb(dbIdOrName);
         }
 
         if (db == null) {
@@ -101,7 +101,7 @@ public class DbsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+        List<String> dbNames = globalStateMgr.getMetastore().listDbNames();
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;
@@ -110,7 +110,7 @@ public class DbsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> dbInfos = new ArrayList<List<Comparable>>();
         for (String dbName : dbNames) {
-            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+            Database db = globalStateMgr.getMetastore().getDb(dbName);
             if (db == null) {
                 continue;
             }
@@ -118,7 +118,7 @@ public class DbsProcDir implements ProcDirInterface {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                int tableNum = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).size();
+                int tableNum = GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId()).size();
                 dbInfo.add(db.getId());
                 dbInfo.add(dbName);
                 dbInfo.add(tableNum);

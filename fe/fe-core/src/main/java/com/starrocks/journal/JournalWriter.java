@@ -19,12 +19,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * An independent thread to write journals by batch asynchronously.
@@ -48,7 +50,7 @@ public class JournalWriter {
     // store journal tasks of this batch
     protected List<JournalTask> currentBatchTasks = new ArrayList<>();
     // current journal task
-    private JournalTask currentJournal;
+    private JournalTask currentJournalTask;
     // batch start time
     private long startTimeNano;
     // batch size in bytes
@@ -86,7 +88,15 @@ public class JournalWriter {
             @Override
             protected void runOneCycle() {
                 try {
-                    writeOneBatch();
+                    if (!journalQueue.isEmpty()) {
+                        ReentrantLock journalLock = GlobalStateMgr.getCurrentState().getJournalLock();
+                        journalLock.lock();
+                        try {
+                            writeOneBatch();
+                        } finally {
+                            journalLock.unlock();
+                        }
+                    }
                 } catch (InterruptedException e) {
                     String msg = "got interrupted exception when trying to write one batch, will exit now.";
                     LOG.error(msg, e);
@@ -101,7 +111,7 @@ public class JournalWriter {
 
     protected void writeOneBatch() throws InterruptedException {
         // waiting if necessary until an element becomes available
-        currentJournal = journalQueue.take();
+        currentJournalTask = journalQueue.take();
         long nextJournalId = nextVisibleJournalId;
         initBatch();
 
@@ -109,20 +119,20 @@ public class JournalWriter {
             this.journal.batchWriteBegin();
 
             while (true) {
-                journal.batchWriteAppend(nextJournalId, currentJournal.getBuffer());
-                currentBatchTasks.add(currentJournal);
+                journal.batchWriteAppend(nextJournalId, currentJournalTask.getBuffer());
+                currentBatchTasks.add(currentJournalTask);
                 nextJournalId += 1;
 
                 if (shouldCommitNow()) {
                     break;
                 }
 
-                currentJournal = journalQueue.take();
+                currentJournalTask = journalQueue.take();
             }
         } catch (JournalException e) {
             // abort current task
-            LOG.warn("failed to write batch, will abort current journal {} and commit", currentJournal, e);
-            abortJournalTask(currentJournal, e.getMessage());
+            LOG.warn("failed to write batch, will abort current journal {} and commit", currentJournalTask, e);
+            abortJournalTask(currentJournalTask, e.getMessage());
         } finally {
             try {
                 // commit
@@ -180,15 +190,15 @@ public class JournalWriter {
 
     private boolean shouldCommitNow() {
         // 1. check if is an emergency journal
-        if (currentJournal.getBetterCommitBeforeTimeInNano() > 0) {
-            long delayNanos = System.nanoTime() - currentJournal.getBetterCommitBeforeTimeInNano();
+        if (currentJournalTask.getBetterCommitBeforeTimeInNano() > 0) {
+            long delayNanos = System.nanoTime() - currentJournalTask.getBetterCommitBeforeTimeInNano();
             if (delayNanos >= 0) {
                 long logTime = System.currentTimeMillis();
                 // avoid logging too many messages if triggered frequently
                 if (lastLogTimeForDelayTriggeredCommit + 500 < logTime) {
                     lastLogTimeForDelayTriggeredCommit = logTime;
                     LOG.warn("journal expect commit before {} is delayed {} nanos, will commit now",
-                            currentJournal.getBetterCommitBeforeTimeInNano(), delayNanos);
+                            currentJournalTask.getBetterCommitBeforeTimeInNano(), delayNanos);
                 }
                 return true;
             }
@@ -202,7 +212,7 @@ public class JournalWriter {
         }
 
         // 3. check uncommitted journals by size
-        uncommittedEstimatedBytes += currentJournal.estimatedSizeByte();
+        uncommittedEstimatedBytes += currentJournalTask.estimatedSizeByte();
         if (uncommittedEstimatedBytes >= (long) Config.metadata_journal_max_batch_size_mb * 1024 * 1024) {
             LOG.warn("uncommitted estimated bytes {} >= {}MB, will commit now",
                     uncommittedEstimatedBytes, Config.metadata_journal_max_batch_size_mb);
@@ -224,7 +234,7 @@ public class JournalWriter {
         if (durationMs > Config.edit_log_write_slow_log_threshold_ms &&
                 currentTimeNs - lastSlowEditLogTimeNs > DEFAULT_EDIT_LOG_SLOW_LOGGING_INTERVAL_NS) {
             LOG.warn("slow edit log write, batch size: {}, took: {}ms, current journal queue size: {}," +
-                    " please check the IO pressure of FE LEADER node or the latency between LEADER and FOLLOWER nodes",
+                            " please check the IO pressure of FE LEADER node or the latency between LEADER and FOLLOWER nodes",
                     currentBatchTasks.size(), durationMs, journalQueue.size());
             lastSlowEditLogTimeNs = currentTimeNs;
         }
@@ -280,5 +290,9 @@ public class JournalWriter {
             LOG.info("edit log rolled because {}", reason);
             rollJournalCounter = 0;
         }
+    }
+
+    public long getNextVisibleJournalId() {
+        return nextVisibleJournalId++;
     }
 }

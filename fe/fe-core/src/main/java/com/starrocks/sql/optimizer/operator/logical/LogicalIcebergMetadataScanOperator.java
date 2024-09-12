@@ -30,10 +30,10 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
     private boolean isTransformed;
 
     public LogicalIcebergMetadataScanOperator(Table table,
-                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-                                      long limit,
-                                      ScalarOperator predicate) {
+                                              Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                              Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                              long limit,
+                                              ScalarOperator predicate) {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
     }
 

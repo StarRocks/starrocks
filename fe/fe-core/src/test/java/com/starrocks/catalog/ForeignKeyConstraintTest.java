@@ -49,19 +49,19 @@ public class ForeignKeyConstraintTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getTable(anyLong, 1000L);
+                globalStateMgr.getMetastore().getTable(anyLong, 1000L);
                 minTimes = 0;
                 result = db.getTable(1000L);
 
-                globalStateMgr.getLocalMetastore().getTable(anyLong, 1001L);
+                globalStateMgr.getMetastore().getTable(anyLong, 1001L);
                 minTimes = 0;
                 result = db.getTable(1001L);
 
-                globalStateMgr.getLocalMetastore().getTable(anyLong, 1002L);
+                globalStateMgr.getMetastore().getTable(anyLong, 1002L);
                 minTimes = 0;
                 result = db.getTable(1002L);
             }

@@ -78,7 +78,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
             throw new DdlException("Parameter db is missing");
         }
 
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -87,7 +87,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            List<Table> tbls = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+            List<Table> tbls = GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId());
             for (Table tbl : tbls) {
                 if (tbl.getType() != TableType.OLAP) {
                     continue;

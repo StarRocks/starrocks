@@ -166,7 +166,7 @@ public class RoutineLoadSchedulerTest {
                 globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 systemInfoService.getBackendIds(true);

@@ -489,7 +489,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(params.db);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
@@ -503,7 +503,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() :
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+                        GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId());
                 OUTER:
                 for (Table table : tables) {
                     try {
@@ -536,7 +536,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
-                                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                Table tbl = GlobalStateMgr.getCurrentState().getMetastore()
                                             .getTable(db.getFullName(), tableName.getTbl());
                                 if (tbl != null) {
                                     try {
@@ -600,7 +600,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
         for (Pipe pipe : pipes.values()) {
-            String databaseName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getPipeId().getDbId())
+            String databaseName = GlobalStateMgr.getCurrentState().getStarRocksMetadata().mayGetDb(pipe.getPipeId().getDbId())
                     .map(Database::getOriginName)
                     .orElse(null);
 
@@ -648,7 +648,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             file.setPipe_id(record.pipeId);
             file.setDatabase_name(
                     mayPipe.flatMap(p ->
-                                    GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(p.getDbAndName().first)
+                                    GlobalStateMgr.getCurrentState().getStarRocksMetadata().mayGetDb(p.getDbAndName().first)
                                             .map(Database::getOriginName))
                             .orElse(""));
             file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
@@ -696,7 +696,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
         result.setMaterialized_views(tablesResult);
         String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("database not exists: {}", dbName);
             return result;
@@ -767,13 +767,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
                                                                    UserIdentity currentUser, TGetTablesParams params) {
         String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                 if (table.isMaterializedView()) {
                     filterAsynchronousMaterializedView(matcher, currentUser, dbName,
                             (MaterializedView) table, params, materializedViews);
@@ -937,7 +937,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // dbs and tables, when reach limit, we break;
     private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+        List<String> dbNames = globalStateMgr.getMetastore().listDbNames();
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
@@ -946,13 +946,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (AccessDeniedException e) {
                 continue;
             }
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(fullName);
             if (db != null) {
                 Locker locker = new Locker();
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     try {
                         locker.lockDatabase(db.getId(), LockType.READ);
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
                         if (table == null) {
                             continue;
                         }
@@ -1214,11 +1214,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // check database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), request.getTbl());
         if (table == null) {
             throw new UserException("unknown table \"" + request.getDb() + "." + request.getTbl() + "\"");
         }
@@ -1310,7 +1310,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
         }
@@ -1344,7 +1344,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return;
         }
         // collect table-level metrics
-        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+        Table tbl = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), request.getTbl());
         if (null == tbl) {
             return;
         }
@@ -1406,7 +1406,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("unknown database, database=" + dbName);
             result.setStatus(TTransactionStatus.UNKNOWN);
@@ -1469,7 +1469,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
         }
@@ -1529,7 +1529,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     request.getTbl(), request.getUser_ip());
         }
         String dbName = request.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbName + " does not exist");
         }
@@ -1615,12 +1615,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), request.getTbl());
         if (table == null) {
             throw new UserException("unknown table, table=" + request.getTbl());
         }
@@ -1900,7 +1900,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TImmutablePartitionResult result = new TImmutablePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             errorStatus.setError_msgs(
                     Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
@@ -1908,7 +1908,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
         Locker locker = new Locker();
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             errorStatus.setError_msgs(
                     Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
@@ -1965,7 +1965,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
             if (mutablePartitions.size() <= 0) {
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                         .addSubPartitions(db, olapTable, partition, 1, warehouseId);
             }
         }
@@ -2147,13 +2147,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
             result.setStatus(errorStatus);
             return result;
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
             result.setStatus(errorStatus);
@@ -2236,7 +2236,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
-                    state.getLocalMetastore().cancelAlter(
+                    state.getAlterJobMgr().cancelAlter(
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.ROLLUP,
                                     new TableName(db.getFullName(), olapTable.getName())),
@@ -2245,7 +2245,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
-                    state.getLocalMetastore().cancelAlter(
+                    state.getAlterJobMgr().cancelAlter(
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.COLUMN,
                                     new TableName(db.getFullName(), olapTable.getName())),
@@ -2265,7 +2265,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(ctx, addPartitionClause);
             }
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+            state.getStarRocksMetadata().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to cancel alter operation", e);
             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2331,7 +2331,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
@@ -2444,7 +2445,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
             tPartition.setNum_buckets(index.getTablets().size());
@@ -2536,7 +2538,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     loads.add(job.toThrift());
                 }
             } else if (request.isSetDb()) {
-                long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb()).getId();
+                long dbId = GlobalStateMgr.getCurrentState().getMetastore().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                                     dbId, request.getLabel(), true).stream()
@@ -2784,11 +2786,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetDictQueryParamResponse getDictQueryParam(TGetDictQueryParamRequest request) throws TException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb_name());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(request.getDb_name());
         if (db == null) {
             throw new SemanticException("Database %s is not found", request.getDb_name());
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTable_name());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), request.getTable_name());
         if (table == null) {
             throw new SemanticException("dict table %s is not found", request.getTable_name());
         }

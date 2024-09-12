@@ -56,14 +56,14 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), createTableStmt.getTableName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(createTableStmt.getDbName());
+        return GlobalStateMgr.getCurrentState().getStarRocksMetadata().getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void dropTable(ConnectContext connectContext, String sql) throws Exception {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(dropTableStmt);
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
@@ -73,12 +73,12 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void recoverDatabase(ConnectContext connectContext, String sql) throws Exception {
         RecoverDbStmt stmt = (RecoverDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverDatabase(stmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().recoverDatabase(stmt);
     }
 
     private static void recoverPartition(ConnectContext connectContext, String sql) throws Exception {
         RecoverPartitionStmt stmt = (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(stmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().recoverPartition(stmt);
     }
 
     private static Future<DropTableResponse> buildDropTableResponse(int errCode, String msg) {
@@ -97,7 +97,8 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void checkPartitionTablet(Partition partition, boolean expectExist) {
         TabletInvertedIndex tabletIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 TabletMeta meta = tabletIndex.getTabletMeta(tablet.getId());
                 if (expectExist) {
@@ -120,8 +121,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = "create database recycle_bin_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("recycle_bin_test");
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb("recycle_bin_test");
 
         Table table1 = createTable(connectContext, "create table recycle_bin_test.t0" +
                 "(key1 int," +
@@ -215,7 +216,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         // Recover table2
         Assert.assertTrue(recycleBin.recoverTable(db, "t0"));
-        Assert.assertSame(table2, GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0"));
+        Assert.assertSame(table2, GlobalStateMgr.getCurrentState().getStarRocksMetadata().getTable(db.getFullName(), "t0"));
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
         checkTableTablet(table2, true);
 
@@ -234,8 +235,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format("create table %s.t0" +
                 "(key1 int," +
@@ -259,8 +260,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format("create table %s.t1" +
                 "(key1 int," +
@@ -274,7 +275,7 @@ public class CatalogRecycleBinLakeTableTest {
                 ") distributed by hash(key1) buckets 3 " +
                 "properties('replication_num' = '1');", dbName));
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dbName, false);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropDb(dbName, false);
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
 
@@ -285,7 +286,7 @@ public class CatalogRecycleBinLakeTableTest {
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
 
         // Drop the database again.
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(dbName, false);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropDb(dbName, false);
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
 
@@ -321,8 +322,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -343,9 +344,12 @@ public class CatalogRecycleBinLakeTableTest {
         Partition p2 = table1.getPartition("p2");
         Partition p3 = table1.getPartition("p3");
         Assert.assertNotNull(p1);
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2, WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
 
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1", dbName));
@@ -440,7 +444,8 @@ public class CatalogRecycleBinLakeTableTest {
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         p1 = table2.getPartition("p1");
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t2 DROP PARTITION p1", dbName));
         Assert.assertNull(table2.getPartition("p1"));
@@ -472,8 +477,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +

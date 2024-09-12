@@ -121,7 +121,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         KeysType keysType = KeysType.DUP_KEYS;
         db = new Database(dbId, "db0");
 
-        Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
+        Database oldDb = GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().putIfAbsent(db.getId(), db);
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
@@ -136,7 +136,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {
             Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
-            index.addTablet(tablet, tabletMeta);
+            index.addTabletWithInvertedIndex(tablet, tabletMeta);
         }
         table.addPartition(partition);
 

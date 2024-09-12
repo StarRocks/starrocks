@@ -16,8 +16,8 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Strings;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 
@@ -27,9 +27,9 @@ import java.util.Optional;
 
 public class MockedMetadataMgr extends MetadataMgr {
     private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
-    private final LocalMetastore localMetastore;
+    private final StarRocksMetadata localMetastore;
 
-    public MockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+    public MockedMetadataMgr(StarRocksMetadata localMetastore, ConnectorMgr connectorMgr) {
         super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
     }

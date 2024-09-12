@@ -275,16 +275,16 @@ public class MaterializedViewTest {
                                 "refresh async\n" +
                                 "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
 
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
         Assert.assertNotNull(db);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv_to_rename");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv_to_rename");
         Assert.assertNotNull(table);
         // test partition related info
         MaterializedView oldMv = (MaterializedView) table;
         Assert.assertTrue(oldMv.getRefreshScheme().isAsync());
         Assert.assertTrue(oldMv.getRefreshScheme().toString().contains("MvRefreshScheme"));
         Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumns();
-        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Table table1 = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
         Assert.assertEquals(1, baseTableType.size());
@@ -300,8 +300,8 @@ public class MaterializedViewTest {
 
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), "mv_new_name"));
         Assert.assertNotNull(mv);
         Assert.assertEquals("mv_new_name", mv.getName());
@@ -317,7 +317,7 @@ public class MaterializedViewTest {
         statement = SqlParser.parseSingleStatement(alterSql2, connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         stmtExecutor2.execute();
-        MaterializedView mv2 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        MaterializedView mv2 = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), "mv_new_name2"));
         Assert.assertNotNull(mv2);
         Assert.assertEquals("mv_new_name2", mv2.getName());
@@ -357,9 +357,9 @@ public class MaterializedViewTest {
         connectContext.executeSql("insert into test.tbl1 values('2022-02-16', 3, 5)");
         connectContext.executeSql("refresh materialized view mv_replay with sync mode");
 
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
         Assert.assertNotNull(db);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv_replay");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv_replay");
         MaterializedView mv = (MaterializedView) table;
         AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(db.getId(), mv.getId(), null,
                     mv.getBaseTableInfos(), mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap());
@@ -388,8 +388,8 @@ public class MaterializedViewTest {
                                 "distributed by hash(k2) buckets 3\n" +
                                 "refresh async\n" +
                                 "as select k2, sum(v1) as total from tbl_drop group by k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), "mv_to_check"));
         String dropSql = "drop table tbl_drop;";
         StatementBase statement = SqlParser.parseSingleStatement(dropSql, connectContext.getSessionVariable().getSqlMode());
@@ -419,12 +419,12 @@ public class MaterializedViewTest {
                                 "distributed by hash(k2) buckets 3\n" +
                                 "refresh async\n" +
                                 "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         String alterSql = "alter table tbl_to_rename rename new_tbl_name;";
         StatementBase statement = SqlParser.parseSingleStatement(alterSql, connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
-        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), "mv_to_check"));
         Assert.assertNotNull(mv);
         Assert.assertFalse(mv.isActive());
@@ -452,8 +452,8 @@ public class MaterializedViewTest {
                                 "refresh async\n" +
                                 "as select /*+ SET_VAR(query_timeout = 500) */ k1, k2, sum(v1) " +
                                 "as total from tbl1 group by k1, k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), "mv_with_hint"));
         String mvTaskName = "mv-" + mv.getId();
         Task task = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName);
@@ -536,8 +536,8 @@ public class MaterializedViewTest {
                                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                                 "REFRESH manual\n" +
                                 "as select k1,k2,v1 from base_table;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView baseMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView baseMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), "base_mv"));
         baseMv.setInactiveAndReason("");
 
@@ -621,7 +621,7 @@ public class MaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "as select k2, sum(v1) as total from table1 group by k2;");
 
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
         Assert.assertNotNull(db);
         Table table = db.getTable("index_mv_to_check");
         Assert.assertNotNull(table);

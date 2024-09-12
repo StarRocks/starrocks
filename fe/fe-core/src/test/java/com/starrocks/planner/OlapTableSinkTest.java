@@ -39,7 +39,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.PhysicalPartitionImpl;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -280,7 +280,7 @@ public class OlapTableSinkTest {
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
-        index.addTablet(tablet, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet, tabletMeta);
 
         // Partition
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
@@ -358,7 +358,7 @@ public class OlapTableSinkTest {
 
             // Index
             TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
-            index.addTablet(tablet, tabletMeta);
+            index.addTabletWithInvertedIndex(tablet, tabletMeta);
         }
 
         // Partition info and distribution info
@@ -465,10 +465,10 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, "p1", index, distInfo);
 
-        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
+        physicalPartition = new PhysicalPartition(4, "", 2, 0, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 
@@ -505,10 +505,10 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, "p1", index, distInfo);
 
-        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
+        physicalPartition = new PhysicalPartition(4, "", 2, 0, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 

@@ -32,8 +32,8 @@ public abstract class ExternalTableFactory implements AbstractTableFactory {
             "Remote %s is null. Please add properties('%s'='xxx') when create table";
 
     protected static Table getTableFromResourceMappingCatalog(Map<String, String> properties,
-                                                           Table.TableType tableType,
-                                                           Resource.ResourceType resourceType) throws DdlException {
+                                                              Table.TableType tableType,
+                                                              Resource.ResourceType resourceType) throws DdlException {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
 
         if (properties == null) {

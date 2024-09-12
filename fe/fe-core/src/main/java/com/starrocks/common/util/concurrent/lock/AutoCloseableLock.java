@@ -22,6 +22,15 @@ public class AutoCloseableLock implements AutoCloseable {
     private final List<Long> tableList;
     private final LockType lockType;
 
+    public AutoCloseableLock(Locker locker, Long dbId, LockType lockType) {
+        this.locker = locker;
+        this.dbId = dbId;
+        this.tableList = new ArrayList<>();
+        this.lockType = lockType;
+
+        locker.lockTablesWithIntensiveDbLock(dbId, tableList, lockType);
+    }
+
     public AutoCloseableLock(Locker locker, Long dbId, List<Long> tableList, LockType lockType) {
         this.locker = locker;
         this.dbId = dbId;
@@ -30,6 +39,7 @@ public class AutoCloseableLock implements AutoCloseable {
 
         locker.lockTablesWithIntensiveDbLock(dbId, tableList, lockType);
     }
+
 
     @Override
     public void close() {

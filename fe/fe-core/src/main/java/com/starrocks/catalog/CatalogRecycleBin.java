@@ -43,7 +43,6 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -51,6 +50,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.gson.IForwardCompatibleObject;
@@ -60,7 +61,6 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -122,7 +122,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         enableEraseLater.remove(id);
     }
 
-    public synchronized void recycleDatabase(Database db, Set<String> tableNames) {
+    public synchronized void recycleDatabase(Database db, Set<String> tableNames, boolean isForce) {
+        if (isForce) {
+            onEraseDatabase(db.getId());
+            return;
+        }
         Preconditions.checkState(!idToDatabase.containsKey(db.getId()));
 
         // db should be empty. all tables are recycled before
@@ -136,6 +140,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToDatabase.put(db.getId(), databaseInfo);
         idToRecycleTime.put(db.getId(), System.currentTimeMillis());
         LOG.info("recycle db[{}-{}]", db.getId(), db.getOriginName());
+    }
+
+    public void onEraseDatabase(long dbId) {
+        // remove database transaction manager
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
+        // unbind db to storage volume
+        GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindDbToStorageVolume(dbId);
     }
 
     public synchronized Database getDatabase(long dbId) {
@@ -188,7 +199,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
     boolean isTableRecoverable(long dbId, long tableId) {
         RecycleTableInfo tableInfo = idToTableInfo.row(dbId).get(tableId);
-        return tableInfo != null  && tableInfo.isRecoverable();
+        return tableInfo != null && tableInfo.isRecoverable();
     }
 
     /**
@@ -299,7 +310,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
 
         // database is force dropped, the table can not be recovered, erase it.
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
+        if (GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
             return true;
         }
         return false;
@@ -311,13 +322,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
 
         // database is force dropped, the partition can not be recovered, erase it.
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(partitionInfo.getDbId());
+        Database database = GlobalStateMgr.getCurrentState().getStarRocksMetadata()
+                .getDbIncludeRecycleBin(partitionInfo.getDbId());
         if (database == null) {
             return true;
         }
 
         // table is force dropped, the partition can not be recovered, erase it.
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+        if (GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                 .getTableIncludeRecycleBin(database, partitionInfo.getTableId()) == null) {
             return true;
         }
@@ -358,7 +370,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
+                onEraseDatabase(db.getId());
                 GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getOriginName());
                 currentEraseOpCnt++;
@@ -379,7 +391,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 iterator.remove();
                 removeRecycleMarkers(entry.getKey());
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
+                onEraseDatabase(db.getId());
                 LOG.info("erase database[{}-{}], because db with the same name db is recycled", db.getId(), dbName);
             }
         }
@@ -389,7 +401,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToDatabase.remove(dbId);
         idToRecycleTime.remove(dbId);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(dbId);
+        onEraseDatabase(dbId);
         LOG.info("replay erase db[{}] finished", dbId);
     }
 
@@ -408,7 +420,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 } else {
                     l2.add(tableInfo);
                 }
-                if (l1.size()  + l2.size() >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
+                if (l1.size() + l2.size() >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break outerLoop;
                 }
             }
@@ -580,7 +592,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         Partition partition = partitionInfo.getPartition();
         if (!isCheckpointThread()) {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().onErasePartition(partition);
         }
 
         LOG.info("replay erase partition[{}-{}] finished", partitionId, partition.getName());
@@ -687,18 +699,28 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return true;
     }
 
-    public synchronized void replayRecoverTable(Database db, long tableId) {
-        // make sure to get db write lock
-        long dbId = db.getId();
-        Map<Long, RecycleTableInfo> idToTableInfoDbLevel = idToTableInfo.row(dbId);
-        RecycleTableInfo tableInfo = idToTableInfoDbLevel.get(tableId);
-        Preconditions.checkState(tableInfo.getDbId() == db.getId());
-        Table table = tableInfo.getTable();
-        db.registerTableUnlocked(table);
-        nameToTableInfo.row(dbId).remove(table.getName());
-        idToTableInfoDbLevel.remove(tableId);
-        idToRecycleTime.remove(tableInfo.getTable().getId());
-        LOG.info("replay recover table[{}-{}] finished", tableId, tableInfo.getTable().getName());
+    public synchronized void replayRecoverTable(RecoverInfo recoverInfo) {
+        long dbId = recoverInfo.getDbId();
+        long tableId = recoverInfo.getTableId();
+
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
+        Locker locker = new Locker();
+        locker.lockDatabase(dbId, LockType.WRITE);
+        try {
+            // make sure to get db write lock
+            Map<Long, RecycleTableInfo> idToTableInfoDbLevel = idToTableInfo.row(dbId);
+            RecycleTableInfo tableInfo = idToTableInfoDbLevel.get(tableId);
+            Preconditions.checkState(tableInfo.getDbId() == db.getId());
+            Table table = tableInfo.getTable();
+            db.registerTableUnlocked(table);
+            nameToTableInfo.row(dbId).remove(table.getName());
+            idToTableInfoDbLevel.remove(tableId);
+            idToRecycleTime.remove(tableInfo.getTable().getId());
+            LOG.info("replay recover table[{}-{}] finished", tableId, tableInfo.getTable().getName());
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+
     }
 
     public synchronized void recoverPartition(long dbId, OlapTable table, String partitionName) throws DdlException {
@@ -783,43 +805,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // no need to handle idToDatabase. Database is already empty before being put here
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
         // idToTable
         for (RecycleTableInfo tableInfo : idToTableInfo.values()) {
             Table table = tableInfo.getTable();
             if (!table.isNativeTableOrMaterializedView()) {
                 continue;
             }
-
-            long dbId = tableInfo.getDbId();
             OlapTable olapTable = (OlapTable) table;
-            long tableId = olapTable.getId();
-            for (Partition partition : olapTable.getAllPartitions()) {
-                long partitionId = partition.getId();
-                DataProperty dataProperty = olapTable.getPartitionInfo().getDataProperty(partitionId);
-                if (dataProperty == null) {
-                    LOG.warn("can not find data property for table: {}, partitionId: {} ", table.getName(), partitionId);
-                    continue;
-                }
-                TStorageMedium medium = dataProperty.getStorageMedium();
-                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    long physicalPartitionId = physicalPartition.getId();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
-                        long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, schemaHash, medium,
-                                table.isCloudNativeTable());
-                        for (Tablet tablet : index.getTablets()) {
-                            long tabletId = tablet.getId();
-                            invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (table.isOlapTableOrMaterializedView()) {
-                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                    invertedIndex.addReplica(tabletId, replica);
-                                }
-                            }
-                        }
-                    } // end for indices
-                }
-            } // end for partitions
+            invertedIndex.buildTabletInvertedIndex(tableInfo.getDbId(), olapTable, olapTable.getAllPhysicalPartitions());
         }
 
         // idToPartition
@@ -832,7 +826,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // we need to get olap table to get schema hash info
             // first find it in globalStateMgr. if not found, it should be in recycle bin
             OlapTable olapTable = null;
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             if (db == null) {
                 // just log. db should be in recycle bin
                 if (!idToDatabase.containsKey(dbId)) {
@@ -842,7 +836,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     continue;
                 }
             } else {
-                olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             }
 
             if (olapTable == null) {
@@ -856,27 +850,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 olapTable = (OlapTable) tableInfo.getTable();
             }
             Preconditions.checkNotNull(olapTable);
-            // storage medium should be got from RecyclePartitionInfo, not from olap table. because olap table
-            // does not have this partition any more
-            TStorageMedium medium = partitionInfo.getDataProperty().getStorageMedium();
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                long physicalPartitionId = physicalPartition.getId();
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
-                    long indexId = index.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, schemaHash, medium,
-                            olapTable.isCloudNativeTable());
-                    for (Tablet tablet : index.getTablets()) {
-                        long tabletId = tablet.getId();
-                        invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (olapTable.isOlapTableOrMaterializedView()) {
-                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                invertedIndex.addReplica(tabletId, replica);
-                            }
-                        }
-                    }
-                } // end for indices
-            } // end for partitions
+            invertedIndex.buildTabletInvertedIndex(dbId, olapTable, partition.getSubPartitions());
         }
     }
 

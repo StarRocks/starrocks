@@ -302,7 +302,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
             String dbName = statement.getDb();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
             MetaUtils.checkDbNullAndReport(db, dbName);
 
             List<MaterializedView> materializedViews = Lists.newArrayList();
@@ -316,7 +316,7 @@ public class ShowExecutor {
                             CaseSensibility.TABLE.getCaseSensibility());
                 }
 
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                     if (table.isMaterializedView()) {
                         MaterializedView mvTable = (MaterializedView) table;
                         if (matcher != null && !matcher.match(mvTable.getName())) {
@@ -451,7 +451,7 @@ public class ShowExecutor {
                     rows.add(Lists.newArrayList(dbName));
                 }
 
-                return new ShowResultSet(((ShowDbStmt) statement).getMetaData(), rows);
+                return new ShowResultSet(statement.getMetaData(), rows);
             } finally {
                 GlobalStateMgr.getCurrentState().unlock();
             }
@@ -571,7 +571,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDb());
+            Database db = context.getGlobalStateMgr().getMetastore().getDb(statement.getDb());
             ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
             if (db != null) {
                 Locker locker = new Locker();
@@ -582,7 +582,7 @@ public class ShowExecutor {
                         matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
                                 CaseSensibility.TABLE.getCaseSensibility());
                     }
-                    for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                    for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                         if (matcher != null && !matcher.match(table.getName())) {
                             continue;
                         }
@@ -665,7 +665,7 @@ public class ShowExecutor {
 
             Database db;
             if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
-                db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+                db = context.getGlobalStateMgr().getMetastore().getDb(dbName);
             } else {
                 db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             }
@@ -698,7 +698,7 @@ public class ShowExecutor {
         }
 
         private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt, ConnectContext connectContext) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(showStmt.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
             Locker locker = new Locker();
@@ -711,7 +711,7 @@ public class ShowExecutor {
                     } else {
                         // For Sync Materialized View, it is a mv index inside OLAP table,
                         // so we can not get it from database.
-                        for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                        for (Table tbl : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                             if (tbl.getType() == Table.TableType.OLAP) {
                                 OlapTable olapTable = (OlapTable) tbl;
                                 List<MaterializedIndexMeta> visibleMaterializedViews =
@@ -900,7 +900,7 @@ public class ShowExecutor {
             } else if (statement.getIsGlobal()) {
                 functions = context.getGlobalStateMgr().getGlobalFunctionMgr().getFunctions();
             } else {
-                Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+                Database db = context.getGlobalStateMgr().getMetastore().getDb(statement.getDbName());
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
                 functions = db.getFunctions();
             }
@@ -918,7 +918,7 @@ public class ShowExecutor {
                             continue;
                         }
                     } else if (!statement.getIsBuiltin()) {
-                        Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+                        Database db = context.getGlobalStateMgr().getMetastore().getDb(statement.getDbName());
                         try {
                             Authorizer.checkAnyActionOnFunction(context.getCurrentUserIdentity(),
                                     context.getCurrentRoleIds(), db.getFullName(), function);
@@ -1047,7 +1047,7 @@ public class ShowExecutor {
             if (statement.isAll()) {
                 dbId = -1;
             } else {
-                Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+                Database db = globalStateMgr.getMetastore().getDb(statement.getDbName());
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
                 dbId = db.getId();
             }
@@ -1301,7 +1301,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowDeleteStatement(ShowDeleteStmt statement, ConnectContext context) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+            Database db = globalStateMgr.getMetastore().getDb(statement.getDbName());
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             long dbId = db.getId();
 
@@ -1364,7 +1364,7 @@ public class ShowExecutor {
                     long totalReplicaCount = 0;
 
                     // sort by table name
-                    List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+                    List<Table> tables = GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId());
                     SortedSet<Table> sortedTables = new TreeSet<>(Comparator.comparing(Table::getName));
 
                     for (Table table : tables) {
@@ -1567,7 +1567,7 @@ public class ShowExecutor {
 
                 // check real meta
                 do {
-                    Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+                    Database db = globalStateMgr.getMetastore().getDb(dbId);
                     if (db == null) {
                         isSync = false;
                         break;
@@ -1577,7 +1577,7 @@ public class ShowExecutor {
                     Locker locker = new Locker();
                     locker.lockDatabase(db.getId(), LockType.READ);
                     try {
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
                         if (!(table instanceof OlapTable)) {
                             isSync = false;
                             break;
@@ -1617,7 +1617,7 @@ public class ShowExecutor {
                             break;
                         }
 
-                        List<Replica> replicas = tablet.getImmutableReplicas();
+                        List<Replica> replicas = GlobalStateMgr.getCurrentState().getMetastore().getAllReplicas(tablet);
                         for (Replica replica : replicas) {
                             Replica tmp = invertedIndex.getReplica(tabletId, replica.getBackendId());
                             if (tmp == null) {
@@ -1643,7 +1643,7 @@ public class ShowExecutor {
                         partitionId.toString(), indexId.toString(),
                         isSync.toString(), detailCmd));
             } else {
-                Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+                Database db = globalStateMgr.getMetastore().getDb(statement.getDbName());
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
 
                 Locker locker = new Locker();
@@ -1761,13 +1761,13 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBackupStatement(ShowBackupStmt statement, ConnectContext context) {
-            Database filterDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            Database filterDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(statement.getDbName());
             List<List<String>> infos = Lists.newArrayList();
             List<Database> dbs = Lists.newArrayList();
 
             if (filterDb == null) {
                 for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState()
-                        .getLocalMetastore().getIdToDb().entrySet()) {
+                        .getMetastore().getIdToDb().entrySet()) {
                     dbs.add(entry.getValue());
                 }
             } else {
@@ -1807,13 +1807,13 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowRestoreStatement(ShowRestoreStmt statement, ConnectContext context) {
-            Database filterDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            Database filterDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(statement.getDbName());
             List<List<String>> infos = Lists.newArrayList();
             List<Database> dbs = Lists.newArrayList();
 
             if (filterDb == null) {
                 for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState()
-                        .getLocalMetastore().getIdToDb().entrySet()) {
+                        .getMetastore().getIdToDb().entrySet()) {
                     dbs.add(entry.getValue());
                 }
             } else {
@@ -1853,7 +1853,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+            Database db = globalStateMgr.getMetastore().getDb(statement.getDbName());
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             long dbId = db.getId();
 
@@ -2083,12 +2083,12 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDb());
+            Database db = context.getGlobalStateMgr().getMetastore().getDb(statement.getDb());
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db.getId(), LockType.READ);
                 try {
-                    for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                    for (Table tbl : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                         if (!(tbl instanceof OlapTable)) {
                             continue;
                         }
@@ -2149,7 +2149,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+            Database db = context.getGlobalStateMgr().getMetastore().getDb(statement.getDbName());
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
             if (table == null) {
@@ -2181,7 +2181,7 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+            Database db = context.getGlobalStateMgr().getMetastore().getDb(statement.getDbName());
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
 
             long txnId = statement.getTxnId();
@@ -2503,7 +2503,7 @@ public class ShowExecutor {
         public ShowResultSet visitShowPipeStatement(ShowPipeStmt statement, ConnectContext context) {
             List<List<Comparable>> rows = Lists.newArrayList();
             String dbName = statement.getDbName();
-            long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbName)
+            long dbId = GlobalStateMgr.getCurrentState().getStarRocksMetadata().mayGetDb(dbName)
                     .map(Database::getId)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName));
             PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
@@ -2767,7 +2767,7 @@ public class ShowExecutor {
             // rows
             if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                 Partition partition = olapTable.getPartitions().iterator().next();
-                MaterializedIndex index = partition.getIndex(mvId);
+                MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
                 mvStatus.setRows(index.getRowCount());
             } else {
                 mvStatus.setRows(0L);

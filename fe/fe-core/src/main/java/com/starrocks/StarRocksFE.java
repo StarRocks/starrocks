@@ -229,6 +229,9 @@ public class StarRocksFE {
                 "Specify the meta version to decode log value, separated by ',', first is community meta" +
                         " version, second is StarRocks meta version");
 
+        options.addOption("ls", "ls", true, "");
+        options.addOption("cat", "cat", true, "");
+
         CommandLine cmd = null;
         try {
             cmd = commandLineParser.parse(options, args);
@@ -244,7 +247,7 @@ public class StarRocksFE {
         } else if (cmd.hasOption('b') || cmd.hasOption("bdb")) {
             if (cmd.hasOption('l') || cmd.hasOption("listdb")) {
                 // list bdb je databases
-                BDBToolOptions bdbOpts = new BDBToolOptions(true, "", false, "", "", 0, 0);
+                BDBToolOptions bdbOpts = new BDBToolOptions(true, "", false, "", "", 0, 0, "", "");
                 return new CommandLineOptions(false, bdbOpts);
             } else if (cmd.hasOption('d') || cmd.hasOption("db")) {
                 // specify a database
@@ -255,7 +258,7 @@ public class StarRocksFE {
                 }
 
                 if (cmd.hasOption('s') || cmd.hasOption("stat")) {
-                    BDBToolOptions bdbOpts = new BDBToolOptions(false, dbName, true, "", "", 0, 0);
+                    BDBToolOptions bdbOpts = new BDBToolOptions(false, dbName, true, "", "", 0, 0, "", "");
                     return new CommandLineOptions(false, bdbOpts);
                 } else {
                     String fromKey = "";
@@ -292,9 +295,19 @@ public class StarRocksFE {
                         }
                     }
 
-                    BDBToolOptions bdbOpts =
-                            new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion,
-                                    starrocksMetaVersion);
+                    String path = "";
+                    if (cmd.hasOption("ls")) {
+                        path = cmd.getOptionValue("ls");
+                    }
+
+                    String catKey = "";
+                    if (cmd.hasOption("cat")) {
+                        catKey = cmd.getOptionValue("cat");
+                    }
+
+                    BDBToolOptions bdbOpts = new BDBToolOptions(false, dbName, false,
+                            fromKey, endKey, metaVersion,
+                            starrocksMetaVersion, path, catKey);
                     return new CommandLineOptions(false, bdbOpts);
                 }
             } else {
@@ -325,7 +338,7 @@ public class StarRocksFE {
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
         } else if (cmdLineOpts.runBdbTools()) {
-            
+
             BDBTool bdbTool = new BDBTool(BDBEnvironment.getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
                 System.exit(0);

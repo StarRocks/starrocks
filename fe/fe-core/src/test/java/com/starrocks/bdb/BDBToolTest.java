@@ -145,7 +145,7 @@ public class BDBToolTest {
 
     @Test
     public void testList() {
-        BDBToolOptions options = new BDBToolOptions(true, "", false, "", "", 0, 0);
+        BDBToolOptions options = new BDBToolOptions(true, "", false, "", "", 0, 0, "", "");
         BDBTool tool = new BDBTool(path, options);
         Assert.assertTrue(tool.run());
     }
@@ -153,27 +153,27 @@ public class BDBToolTest {
     @Test
     public void testDbStat() {
         // wrong db name
-        BDBToolOptions options = new BDBToolOptions(false, "12346", true, "", "", 0, 0);
+        BDBToolOptions options = new BDBToolOptions(false, "12346", true, "", "", 0, 0, "", "");
         BDBTool tool = new BDBTool(path, options);
         Assert.assertFalse(tool.run());
 
         // right db name
-        options = new BDBToolOptions(false, "12345", true, "", "", 0, 0);
+        options = new BDBToolOptions(false, "12345", true, "", "", 0, 0, "", "");
         tool = new BDBTool(path, options);
         Assert.assertTrue(tool.run());
     }
 
     @Test
     public void testGetKey() {
-        BDBToolOptions options = new BDBToolOptions(false, "12345", false, "", "", 0, 0);
+        BDBToolOptions options = new BDBToolOptions(false, "12345", false, "", "", 0, 0, "", "");
         BDBTool tool = new BDBTool(path, options);
         Assert.assertTrue(tool.run());
 
-        options = new BDBToolOptions(false, "12345", false, "23456", "12345", 0, 0);
+        options = new BDBToolOptions(false, "12345", false, "23456", "12345", 0, 0, "", "");
         tool = new BDBTool(path, options);
         Assert.assertFalse(tool.run());
 
-        options = new BDBToolOptions(false, "12345", false, "23456", "", 0, 0);
+        options = new BDBToolOptions(false, "12345", false, "23456", "", 0, 0, "", "");
         tool = new BDBTool(path, options);
         Assert.assertTrue(tool.run());
     }

@@ -38,8 +38,8 @@ import com.starrocks.thrift.TDropTabletReq;
 import com.starrocks.thrift.TTaskType;
 
 public class DropReplicaTask extends AgentTask {
-    private int schemaHash; // set -1L as unknown
-    private boolean force;
+    private final int schemaHash; // set -1L as unknown
+    private final boolean force;
 
     public DropReplicaTask(long backendId, long tabletId, int schemaHash, boolean force) {
         super(null, backendId, TTaskType.DROP, -1L, -1L, -1L, -1L, tabletId);

@@ -65,7 +65,7 @@ public class AnalyzeUtilTest {
         sql = "create view basic as select v1 from test.t0;";
         CreateViewStmt createTableStmt =
                 (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, AnalyzeTestUtil.getConnectContext());
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createView(createTableStmt);
         sql = "select v1 from basic";
         statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
         final ConnectContext session = AnalyzeTestUtil.getConnectContext();

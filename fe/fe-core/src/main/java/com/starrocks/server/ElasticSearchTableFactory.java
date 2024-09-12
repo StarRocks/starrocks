@@ -22,6 +22,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.PartitionDesc;
 
@@ -40,7 +41,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
 
     @Override
     @NotNull
-    public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
+    public Table createTable(MetaStore metastore, Database database, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
 
         // create columns
@@ -55,7 +56,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
                 .collect(Collectors.toList());
         // metastore is null when external table
         if (null != metastore) {
-            metastore.validateColumns(baseSchema);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().validateColumns(baseSchema);
         }
 
         // create partition info
@@ -65,7 +66,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else if (null != metastore) {
-            long partitionId = metastore.getNextId();
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
             // use table name as single partition name
             partitionNameToId.put(tableName, partitionId);
             partitionInfo = new SinglePartitionInfo();

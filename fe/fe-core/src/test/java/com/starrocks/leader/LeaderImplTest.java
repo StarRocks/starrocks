@@ -71,7 +71,7 @@ public class LeaderImplTest {
         // olap table
         new Expectations() {
             {
-                partition.getIndex(indexId);
+                partition.getDefaultPhysicalPartition().getIndex(indexId);
                 result = index;
                 index.getTablet(tabletId);
                 result = new LocalTablet(tabletId);
@@ -90,7 +90,7 @@ public class LeaderImplTest {
 
         new Expectations() {
             {
-                partition.getIndex(indexId);
+                partition.getDefaultPhysicalPartition().getIndex(indexId);
                 result = index;
                 index.getTablet(tabletId);
                 result = new LakeTablet(tabletId);

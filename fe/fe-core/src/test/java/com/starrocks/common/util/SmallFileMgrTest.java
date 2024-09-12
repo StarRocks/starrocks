@@ -81,7 +81,7 @@ public class SmallFileMgrTest {
                 db.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getLocalMetastore().getDb(anyString);
+                globalStateMgr.getMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
                 stmt1.getDbName();

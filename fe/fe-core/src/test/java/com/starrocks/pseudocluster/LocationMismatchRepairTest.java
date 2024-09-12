@@ -107,7 +107,7 @@ public class LocationMismatchRepairTest {
 
     private void printTabletReplicaInfo(OlapTable table) {
         table.getPartitions().forEach(partition -> {
-            partition.getBaseIndex().getTablets().forEach(tablet -> {
+            partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().forEach(tablet -> {
                 StringBuffer stringBuffer = new StringBuffer();
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {
@@ -148,8 +148,8 @@ public class LocationMismatchRepairTest {
                     ");";
         cluster.runSql("test", sql);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "test_table_backend_no_loc");
         Assert.assertNotNull(table.getLocation());
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
@@ -262,8 +262,8 @@ public class LocationMismatchRepairTest {
 
         // sleep to wait for redundant replicas cleaned
         Thread.sleep(5000);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "test_table_backend_no_loc");
         printTabletReplicaInfo(table);
         Set<Long> stayedBackendIds = getBackendIdsWithLocProp("rack", "r0");
@@ -317,9 +317,9 @@ public class LocationMismatchRepairTest {
                     "AS SELECT test_base_table.k1 FROM test_base_table;";
         cluster.runSql("test", sql);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         OlapTable table =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_mv01");
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "test_mv01");
         Assert.assertNotNull(table.getLocation());
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
 

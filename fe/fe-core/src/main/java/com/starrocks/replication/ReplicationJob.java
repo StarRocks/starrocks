@@ -623,7 +623,7 @@ public class ReplicationJob implements GsonPostProcessable {
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.database_id);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(request.database_id);
         if (db == null) {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
@@ -631,7 +631,7 @@ public class ReplicationJob implements GsonPostProcessable {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), request.table_id);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), request.table_id);
             if (table == null) {
                 throw new MetaNotFoundException(
                         "Table " + request.table_id + " in database " + db.getFullName() + " not found");
@@ -881,9 +881,9 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
-            Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseId);
+            Database db = GlobalStateMgr.getServingState().getMetastore().getDb(databaseId);
             if (db == null
-                    || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) == null) {
+                    || GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId) == null) {
                 abortTransaction("Table is deleted");
                 return true;
             }

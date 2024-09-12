@@ -77,7 +77,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -414,7 +413,7 @@ public class RestoreJob extends AbstractJob {
             return;
         }
 
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " has been dropped");
             return;
@@ -424,7 +423,7 @@ public class RestoreJob extends AbstractJob {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (IdChain idChain : fileMapping.getMapping().keySet()) {
-                OlapTable tbl = (OlapTable) globalStateMgr.getLocalMetastore()
+                OlapTable tbl = (OlapTable) globalStateMgr.getMetastore()
                             .getTable(db.getId(), idChain.getTblId());
                 if (tbl == null) {
                     status = new Status(ErrCode.NOT_FOUND, "table " + idChain.getTblId() + " has been dropped");
@@ -469,7 +468,7 @@ public class RestoreJob extends AbstractJob {
      */
     private void checkAndPrepareMeta() {
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
             return;
@@ -489,7 +488,7 @@ public class RestoreJob extends AbstractJob {
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
-                Table tbl = globalStateMgr.getLocalMetastore()
+                Table tbl = globalStateMgr.getMetastore()
                         .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (tbl == null) {
                     continue;
@@ -525,7 +524,7 @@ public class RestoreJob extends AbstractJob {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
                 Preconditions.checkNotNull(remoteTbl);
-                Table localTbl = globalStateMgr.getLocalMetastore()
+                Table localTbl = globalStateMgr.getMetastore()
                             .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
@@ -734,7 +733,7 @@ public class RestoreJob extends AbstractJob {
 
             // generate create replica tasks for all restored partitions
             for (Pair<String, Partition> entry : restoredPartitions) {
-                OlapTable localTbl = (OlapTable) globalStateMgr.getLocalMetastore()
+                OlapTable localTbl = (OlapTable) globalStateMgr.getMetastore()
                             .getTable(db.getFullName(), entry.first);
                 Preconditions.checkNotNull(localTbl, localTbl.getName());
                 Partition restorePart = entry.second;
@@ -866,21 +865,24 @@ public class RestoreJob extends AbstractJob {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             for (IdChain idChain : fileMapping.getMapping().keySet()) {
-                OlapTable tbl = (OlapTable) globalStateMgr.getLocalMetastore()
+                OlapTable tbl = (OlapTable) globalStateMgr.getMetastore()
                             .getTable(db.getId(), idChain.getTblId());
                 PhysicalPartition part = tbl.getPhysicalPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
-                LocalTablet tablet = (LocalTablet) index.getTablet(idChain.getTabletId());
-                Replica replica = tablet.getReplicaById(idChain.getReplicaId());
+
+                Tablet tablet = GlobalStateMgr.getCurrentState().getMetastore().getTablet(index, idChain.getTabletId());
+                Replica replica = GlobalStateMgr.getCurrentState().getMetastore().getReplica(
+                        (LocalTablet) tablet, idChain.getReplicaId());
+
                 long signature = globalStateMgr.getNextId();
                 SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), signature,
                         jobId, db.getId(),
-                        tbl.getId(), part.getId(), index.getId(), tablet.getId(),
+                        tbl.getId(), part.getId(), index.getId(), idChain.getTabletId(),
                         part.getVisibleVersion(),
                         tbl.getSchemaHashByIndexId(index.getId()), timeoutMs,
                         true /* is restore task*/);
                 batchTask.addTask(task);
-                unfinishedSignatureToId.put(signature, tablet.getId());
+                unfinishedSignatureToId.put(signature, idChain.getTabletId());
                 bePathsMap.put(replica.getBackendId(), replica.getPathHash());
             }
         } finally {
@@ -929,8 +931,6 @@ public class RestoreJob extends AbstractJob {
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
             for (MaterializedIndex restoredIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
-                TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), physicalPartition.getId(),
-                        restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
                 TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                         .setId(indexMeta.getSchemaId())
                         .setKeysType(indexMeta.getKeysType())
@@ -945,10 +945,7 @@ public class RestoreJob extends AbstractJob {
                         .setIndexes(localTbl.getCopiedIndexes())
                         .build().toTabletSchema();
                 for (Tablet restoreTablet : restoredIdx.getTablets()) {
-                    globalStateMgr.getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                     for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
-                        globalStateMgr.getTabletInvertedIndex()
-                                .addReplica(restoreTablet.getId(), restoreReplica);
                         LOG.info("tablet {} physical partition {} index {} replica {}",
                                 restoreTablet.getId(), physicalPartition.getId(), restoredIdx.getId(),
                                 restoreReplica.getId());
@@ -974,6 +971,9 @@ public class RestoreJob extends AbstractJob {
                 }
             }
         }
+
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().buildTabletInvertedIndex(
+                dbId, localTbl, restorePart.getSubPartitions());
     }
 
     // reset remote partition.
@@ -995,13 +995,13 @@ public class RestoreJob extends AbstractJob {
         for (String localIdxName : localIdxNameToId.keySet()) {
             // set ids of indexes in remote partition to the local index ids
             long remoteIdxId = remoteTbl.getIndexIdByName(localIdxName);
-            MaterializedIndex remoteIdx = remotePart.getIndex(remoteIdxId);
+            MaterializedIndex remoteIdx = remotePart.getDefaultPhysicalPartition().getIndex(remoteIdxId);
             long localIdxId = localIdxNameToId.get(localIdxName);
             remoteIdx.setIdForRestore(localIdxId);
             if (localIdxId != localTbl.getBaseIndexId()) {
                 // not base table, reset
-                remotePart.deleteRollupIndex(remoteIdxId);
-                remotePart.createRollupIndex(remoteIdx);
+                remotePart.getDefaultPhysicalPartition().deleteRollupIndex(remoteIdxId);
+                remotePart.getDefaultPhysicalPartition().createRollupIndex(remoteIdx);
             }
         }
 
@@ -1046,7 +1046,8 @@ public class RestoreJob extends AbstractJob {
 
     protected void genFileMappingWithPartition(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                                BackupPartitionInfo backupPartInfo, boolean overwrite) {
-        for (MaterializedIndex localIdx : localPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.VISIBLE)) {
             BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {
@@ -1092,13 +1093,13 @@ public class RestoreJob extends AbstractJob {
     }
 
     private void replayCheckAndPrepareMeta() {
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getMetastore().getDb(dbId);
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             // replay set all existing tables's state to RESTORE
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
-                Table tbl = globalStateMgr.getLocalMetastore()
+                Table tbl = globalStateMgr.getMetastore()
                             .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (tbl == null) {
                     continue;
@@ -1113,10 +1114,9 @@ public class RestoreJob extends AbstractJob {
             // restored tables
             for (Table restoreTbl : restoredTbls) {
                 db.registerTableUnlocked(restoreTbl);
-                // modify tablet inverted index
-                for (Partition restorePart : restoreTbl.getPartitions()) {
-                    modifyInvertedIndex((OlapTable) restoreTbl, restorePart);
-                }
+
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().buildTabletInvertedIndex(
+                        db.getId(), (OlapTable) restoreTbl, ((OlapTable) restoreTbl).getAllPhysicalPartitions());
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
@@ -1127,7 +1127,7 @@ public class RestoreJob extends AbstractJob {
 
     protected void addRestoredPartitions(Database db, boolean modify) {
         for (Pair<String, Partition> entry : restoredPartitions) {
-            OlapTable localTbl = (OlapTable) globalStateMgr.getLocalMetastore()
+            OlapTable localTbl = (OlapTable) globalStateMgr.getMetastore()
                         .getTable(db.getFullName(), entry.first);
             Partition restorePart = entry.second;
             OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
@@ -1144,22 +1144,8 @@ public class RestoreJob extends AbstractJob {
             localTbl.addPartition(restorePart);
             if (modify) {
                 // modify tablet inverted index
-                modifyInvertedIndex(localTbl, restorePart);
-            }
-        }
-    }
-
-    protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
-        for (MaterializedIndex restoreIdx : restorePart.getMaterializedIndices(IndexExtState.VISIBLE)) {
-            int schemaHash = restoreTbl.getSchemaHashByIndexId(restoreIdx.getId());
-            TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
-                    restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
-            for (Tablet restoreTablet : restoreIdx.getTablets()) {
-                globalStateMgr.getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
-                    globalStateMgr.getTabletInvertedIndex()
-                            .addReplica(restoreTablet.getId(), restoreReplica);
-                }
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().buildTabletInvertedIndex(
+                        db.getId(), localTbl, restorePart.getSubPartitions());
             }
         }
     }
@@ -1198,7 +1184,7 @@ public class RestoreJob extends AbstractJob {
         for (long dbId : dbToSnapshotInfos.keySet()) {
             List<SnapshotInfo> infos = dbToSnapshotInfos.get(dbId);
 
-            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+            Database db = globalStateMgr.getMetastore().getDb(dbId);
             if (db == null) {
                 status = new Status(ErrCode.NOT_FOUND, "db " + dbId + " does not exist");
                 return;
@@ -1287,7 +1273,7 @@ public class RestoreJob extends AbstractJob {
             int currentBatchTaskNum = (batch == batchNum - 1) ? totalNum - index : taskNumPerBatch;
             for (int j = 0; j < currentBatchTaskNum; j++) {
                 SnapshotInfo info = beSnapshotInfos.get(index++);
-                Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getId(), info.getTblId());
+                Table tbl = globalStateMgr.getMetastore().getTable(db.getId(), info.getTblId());
                 if (tbl == null) {
                     status = new Status(ErrCode.NOT_FOUND, "restored table "
                             + info.getTabletId() + " does not exist");
@@ -1423,7 +1409,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     private Status allTabletCommitted(boolean isReplay) {
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getMetastore().getDb(dbId);
         if (db == null) {
             return new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
         }
@@ -1436,7 +1422,7 @@ public class RestoreJob extends AbstractJob {
             setTableStateToNormal(db);
 
             for (long tblId : restoredVersionInfo.rowKeySet()) {
-                Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getId(), tblId);
+                Table tbl = globalStateMgr.getMetastore().getTable(db.getId(), tblId);
                 if (tbl == null) {
                     continue;
                 }
@@ -1482,7 +1468,7 @@ public class RestoreJob extends AbstractJob {
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
-                    Table tbl = globalStateMgr.getLocalMetastore()
+                    Table tbl = globalStateMgr.getMetastore()
                                 .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                     // skip to restore table ids
                     if (skipRestoreRemoteTableIds.contains(tblInfo.id)) {
@@ -1651,7 +1637,7 @@ public class RestoreJob extends AbstractJob {
         }
 
         // clean restored objs
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.WRITE);
@@ -1663,7 +1649,8 @@ public class RestoreJob extends AbstractJob {
                 for (Table restoreTbl : restoredTbls) {
                     LOG.info("remove restored table when cancelled: {}", restoreTbl.getName());
                     for (Partition part : restoreTbl.getPartitions()) {
-                        for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        for (MaterializedIndex idx : part.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(IndexExtState.VISIBLE)) {
                             for (Tablet tablet : idx.getTablets()) {
                                 globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
                             }
@@ -1674,7 +1661,7 @@ public class RestoreJob extends AbstractJob {
 
                 // remove restored partitions
                 for (Pair<String, Partition> entry : restoredPartitions) {
-                    OlapTable restoreTbl = (OlapTable) globalStateMgr.getLocalMetastore()
+                    OlapTable restoreTbl = (OlapTable) globalStateMgr.getMetastore()
                                 .getTable(db.getFullName(), entry.first);
                     if (restoreTbl == null) {
                         continue;
@@ -1724,7 +1711,7 @@ public class RestoreJob extends AbstractJob {
             if (skipRestoreRemoteTableIds.contains(tblInfo.id)) {
                 continue;
             }
-            Table tbl = globalStateMgr.getLocalMetastore()
+            Table tbl = globalStateMgr.getMetastore()
                         .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
             if (tbl == null) {
                 continue;

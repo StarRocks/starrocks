@@ -126,7 +126,7 @@ public class Load {
      * @throws UserException
      */
     public static void checkMergeCondition(String mergeCondition, OlapTable table, List<Column> columns,
-            boolean missAutoIncrementColumn) throws DdlException {
+                                           boolean missAutoIncrementColumn) throws DdlException {
         if (mergeCondition == null || mergeCondition.isEmpty()) {
             return;
         }
@@ -461,10 +461,10 @@ public class Load {
         }
 
         String dbName = "";
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
+        if (GlobalStateMgr.getCurrentState().getMetastore().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().entrySet()) {
                 Database db = entry.getValue();
-                if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tbl.getId()) != null) {
+                if (GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tbl.getId()) != null) {
                     dbName = db.getFullName();
                 }
             }
@@ -676,7 +676,7 @@ public class Load {
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-             List<Boolean> missAutoIncrementColumn) throws UserException {
+                                                      List<Boolean> missAutoIncrementColumn) throws UserException {
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {

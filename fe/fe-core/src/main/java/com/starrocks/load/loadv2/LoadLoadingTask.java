@@ -296,12 +296,12 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     private void checkMeta() throws LoadException {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId());
+        Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(db.getId());
         if (database == null) {
             throw new LoadException(String.format("db: %s-%d has been dropped", db.getFullName(), db.getId()));
         }
 
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), table.getId()) == null) {
+        if (GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getId(), table.getId()) == null) {
             throw new LoadException(String.format("table: %s-%d has been dropped from db: %s-%d",
                     table.getName(), table.getId(), db.getFullName(), db.getId()));
         }

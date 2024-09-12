@@ -334,7 +334,7 @@ public class Database extends MetaObject implements Writable {
             }
             unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+            GlobalStateMgr.getCurrentState().getMetastore().dropTable(info);
         } finally {
             locker.unLockDatabase(id, LockType.WRITE);
         }
@@ -346,27 +346,6 @@ public class Database extends MetaObject implements Writable {
         LOG.info("Finished log drop table '{}' from database '{}'. tableId: {} tableType: {} force: {}",
                 tableName, fullQualifiedName, table.getId(), table.getType(), isForce);
     }
-
-    public void dropTemporaryTable(long tableId, String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
-        Table table;
-        Locker locker = new Locker();
-        locker.lockDatabase(id, LockType.WRITE);
-        try {
-            table = idToTable.get(tableId);
-            if (table == null) {
-                if (isSetIfExists) {
-                    return;
-                }
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-            }
-            unprotectDropTemporaryTable(tableId, isForce, false);
-            DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
-        } finally {
-            locker.unLockDatabase(id, LockType.WRITE);
-        }
-    }
-
 
     /**
      * Drop a table from this database.
@@ -614,7 +593,7 @@ public class Database extends MetaObject implements Writable {
 
     public static void replayCreateFunctionLog(Function function) {
         String dbName = function.getFunctionName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
@@ -661,7 +640,7 @@ public class Database extends MetaObject implements Writable {
 
     public static void replayDropFunctionLog(FunctionSearchDesc functionSearchDesc) {
         String dbName = functionSearchDesc.getName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }

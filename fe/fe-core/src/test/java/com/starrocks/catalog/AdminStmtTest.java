@@ -69,7 +69,7 @@ public class AdminStmtTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
 
         String sql = "CREATE TABLE test.tbl1 (\n" +
                 "  `id` int(11) NULL COMMENT \"\",\n" +
@@ -86,14 +86,15 @@ public class AdminStmtTest {
 
     @Test
     public void testAdminSetReplicaStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl1");
         Assert.assertNotNull(tbl);
         // tablet id, backend id
         List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();
         for (Partition partition : tbl.getPartitions()) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         tabletToBackendList.add(Pair.create(tablet.getId(), replica.getBackendId()));
@@ -112,7 +113,7 @@ public class AdminStmtTest {
                 + backendId + "', 'status' = 'bad');";
         AdminSetReplicaStatusStmt stmt =
                 (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertTrue(replica.isBad());
 
@@ -120,7 +121,7 @@ public class AdminStmtTest {
         adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
                 + backendId + "', 'status' = 'ok');";
         stmt = (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertFalse(replica.isBad());
     }

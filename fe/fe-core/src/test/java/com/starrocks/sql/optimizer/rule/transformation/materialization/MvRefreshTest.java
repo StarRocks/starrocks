@@ -72,9 +72,9 @@ public class MvRefreshTest extends MVRefreshTestBase {
                                 " as\n" +
                                 " select t1a, id_date, sum(t1c) as sum1 from table_with_partition group by t1a, id_date",
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
                         MaterializedView materializedView =
-                                    ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                 .getTable(testDb.getFullName(), "test_mv2"));
                         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -121,9 +121,9 @@ public class MvRefreshTest extends MVRefreshTestBase {
                                 " as\n" +
                                 " select t1a, id_date, sum(t1c) as sum1 from table_with_partition group by t1a, id_date",
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
                         MaterializedView materializedView =
-                                    ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                 .getTable(testDb.getFullName(), "test_mv2"));
                         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -161,9 +161,9 @@ public class MvRefreshTest extends MVRefreshTestBase {
                                 " as\n" +
                                 " select t1a, id_date, sum(t1c) as sum1 from table_with_partition group by t1a, id_date",
                     () -> {
-                        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
                         MaterializedView materializedView =
-                                    ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                 .getTable(testDb.getFullName(), "test_mv2"));
                         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();

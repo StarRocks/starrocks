@@ -177,7 +177,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
-            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -190,12 +190,12 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public StreamLoadTask createLoadTaskWithoutLock(Database db, String tableName, String label, String user, String clientIp,
-                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId)
+                                                    long timeoutMillis, boolean isRoutineLoad, long warehouseId)
             throws UserException {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db,
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName),
                 label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
         return streamLoadTask;
     }
@@ -208,7 +208,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
-            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -226,7 +226,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
         }
@@ -251,7 +251,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public Database checkDbName(String dbName) throws UserException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new UserException("Database[" + dbName + "] does not exist");
@@ -505,7 +505,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 }
 
                 long dbId = 0L;
-                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+                Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }

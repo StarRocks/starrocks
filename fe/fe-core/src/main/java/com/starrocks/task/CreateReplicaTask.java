@@ -36,6 +36,7 @@ package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.thrift.TBinlogConfig;
@@ -84,6 +85,9 @@ public class CreateReplicaTask extends AgentTask {
     private boolean createSchemaFile = true;
     private boolean enableTabletCreationOptimization = false;
     private final TTabletSchema tabletSchema;
+
+    private TabletInvertedIndex tabletInvertedIndex;
+
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),

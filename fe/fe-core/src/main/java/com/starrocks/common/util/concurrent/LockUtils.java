@@ -15,6 +15,7 @@
 package com.starrocks.common.util.concurrent;
 
 import com.google.gson.JsonObject;
+import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -22,7 +23,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Extract some functions from {@link com.starrocks.catalog.Database},
+ * Extract some functions from {@link Database},
  * because we want to monitor the stats of lock/unlock action, these static
  * methods can apply locks of other objects, like tables.
  */

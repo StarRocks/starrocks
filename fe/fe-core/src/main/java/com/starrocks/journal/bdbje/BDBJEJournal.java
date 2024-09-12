@@ -492,4 +492,8 @@ public class BDBJEJournal implements Journal {
     private String getFullDatabaseName(long dbId) {
         return prefix + dbId;
     }
+
+    public CloseSafeDatabase getCurrentJournalDB() {
+        return currentJournalDB;
+    }
 }

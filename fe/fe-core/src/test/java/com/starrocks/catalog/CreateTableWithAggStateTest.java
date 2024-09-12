@@ -43,7 +43,7 @@ public class CreateTableWithAggStateTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
         starRocksAssert.useDatabase("test");
         UtFrameUtils.setUpForPersistTest();
     }
@@ -65,7 +65,7 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                             .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
@@ -101,7 +101,7 @@ public class CreateTableWithAggStateTest {
                 "PARTITION BY (k1) \n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                             .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
@@ -133,7 +133,7 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (dt) \n" +
                         "DISTRIBUTED BY HASH(dt) BUCKETS 4;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                             .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
@@ -165,7 +165,7 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                             .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
@@ -202,7 +202,7 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                             .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
@@ -239,7 +239,7 @@ public class CreateTableWithAggStateTest {
                         "PARTITION BY (k1) \n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 3;",
                 () -> {
-                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                    final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                             .getDb(connectContext.getDatabase())
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
@@ -269,7 +269,7 @@ public class CreateTableWithAggStateTest {
                     "AGGREGATE KEY(k1)\n" +
                     "PARTITION BY (k1) \n" +
                     "DISTRIBUTED BY HASH(k1) BUCKETS 3;");
-            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                     .getDb(connectContext.getDatabase())
                     .getTable("test_agg_tbl1");
             Assert.assertEquals(null, table);
@@ -291,7 +291,7 @@ public class CreateTableWithAggStateTest {
                     "AGGREGATE KEY(k1)\n" +
                     "PARTITION BY (k1) \n" +
                     "DISTRIBUTED BY HASH(k1) BUCKETS 3;");
-            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+            final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getMetastore()
                     .getDb(connectContext.getDatabase())
                     .getTable("test_agg_tbl1");
             Assert.assertEquals(null, table);

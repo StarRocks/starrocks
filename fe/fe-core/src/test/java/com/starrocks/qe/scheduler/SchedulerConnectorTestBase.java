@@ -29,7 +29,7 @@ public class SchedulerConnectorTestBase extends SchedulerTestBase {
         SchedulerTestBase.beforeClass();
 
         GlobalStateMgr gsmMgr = connectContext.getGlobalStateMgr();
-        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getStarRocksMetadata(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
 
         mockHiveCatalogImpl(metadataMgr);

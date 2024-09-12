@@ -379,7 +379,7 @@ public class TempPartitionTest {
                         "distributed by hash(k2) buckets 1\n" +
                         "properties('replication_num' = '1');");
 
-        Database db2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
+        Database db2 = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb("db2");
         OlapTable tbl2 = (OlapTable) db2.getTable("tbl2");
 
         Map<String, Long> originPartitionTabletIds = Maps.newHashMap();
@@ -458,7 +458,7 @@ public class TempPartitionTest {
 
         String recoverStr = "recover partition p1 from db2.tbl2;";
         RecoverPartitionStmt recoverStmt = (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().recoverPartition(recoverStmt);
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
@@ -501,7 +501,7 @@ public class TempPartitionTest {
 
         String truncateStr = "truncate table db2.tbl2 partition (p3);";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().truncateTable(truncateTableStmt, ctx);
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkPartitionExist(tbl2, "tp1", false, true);
@@ -585,7 +585,7 @@ public class TempPartitionTest {
 
         truncateStr = "truncate table db2.tbl2";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().truncateTable(truncateTableStmt, ctx);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
 
@@ -608,7 +608,7 @@ public class TempPartitionTest {
         }
 
         OlapTable olapTable =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getTable("tbl2");
+                (OlapTable) GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb("db2").getTable("tbl2");
 
         // waiting table state to normal
         int retryTimes = 5;
@@ -675,7 +675,7 @@ public class TempPartitionTest {
                 "distributed by hash(k2) buckets 1\n" +
                 "properties('replication_num' = '1');");
 
-        Database db3 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
+        Database db3 = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb("db3");
         OlapTable tbl3 = (OlapTable) db3.getTable("tbl3");
 
         // base range is [min, 10), [10, 20), [20, 30)
@@ -693,7 +693,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 15), [15, 25), [25, 30) -> p1,tp1,tp2,tp3
         stmtStr = "truncate table db3.tbl3";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().truncateTable(truncateTableStmt, ctx);
         // 2. add temp ranges: [10, 31), and replace the [10, 15), [15, 25), [25, 30)
         stmtStr = "alter table db3.tbl3 add temporary partition tp4 values [('10'), ('31'))";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -710,7 +710,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 30) -> p1,tp4
         stmtStr = "truncate table db3.tbl3";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().truncateTable(truncateTableStmt, ctx);
         // 3. add temp partition tp5 [50, 60) and replace partition tp4
         stmtStr = "alter table db3.tbl3 add temporary partition tp5 values [('50'), ('60'))";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -780,6 +780,7 @@ public class TempPartitionTest {
         TempPartitions readTempPartition = TempPartitions.read(in);
         List<Partition> partitions = readTempPartition.getAllPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(2, partitions.get(0).getMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assert.assertEquals(2, partitions.get(0).getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.VISIBLE).size());
     }
 }

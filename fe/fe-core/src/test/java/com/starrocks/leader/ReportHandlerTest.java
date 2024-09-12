@@ -100,7 +100,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
@@ -124,9 +124,9 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetPrimaryIndexCacheExpireSec() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
@@ -150,10 +150,10 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleUpdateTableSchema() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         long dbId = db.getId();
         OlapTable olapTable =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "update_schema");
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "update_schema");
 
         String stmt = "alter table update_schema add column add_v int default '1'";
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -186,9 +186,9 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletBinlogConfig() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "binlog_report_handler_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
@@ -378,7 +378,7 @@ public class ReportHandlerTest {
         for (int i = 0; i < tabletMetaList.size(); i++) {
             long tabletId = tabletIds.get(i);
             TabletMeta tabletMeta = tabletMetaList.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
             if (db == null) {
                 continue;
             }
@@ -386,14 +386,14 @@ public class ReportHandlerTest {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                             .getTable(db.getId(), tabletMeta.getTableId());
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             Partition partition = table.getPartition(tabletMeta.getPartitionId());
-            MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex idx = partition.getDefaultPhysicalPartition().getIndex(tabletMeta.getIndexId());
             LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
 
             for (Replica replica : tablet.getImmutableReplicas()) {
@@ -417,11 +417,11 @@ public class ReportHandlerTest {
         };
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
-                    .getLocalMetastore().getDb("test").getTable("binlog_report_handler_test");
+                    .getMetastore().getDb("test").getTable("binlog_report_handler_test");
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                .getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
                 allTablets.add(tablet.getId());

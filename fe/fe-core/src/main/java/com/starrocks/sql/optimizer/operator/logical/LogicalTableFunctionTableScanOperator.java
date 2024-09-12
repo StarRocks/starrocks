@@ -30,10 +30,10 @@ import java.util.Map;
 public class LogicalTableFunctionTableScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     public LogicalTableFunctionTableScanOperator(Table table,
-                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                           Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-                                           long limit,
-                                           ScalarOperator predicate) {
+                                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                 Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                                 long limit,
+                                                 ScalarOperator predicate) {
         super(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN,
                 table,
                 colRefToColumnMetaMap,

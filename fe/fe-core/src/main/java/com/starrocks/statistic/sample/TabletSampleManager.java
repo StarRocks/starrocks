@@ -14,7 +14,9 @@
 
 package com.starrocks.statistic.sample;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
@@ -83,23 +85,27 @@ public class TabletSampleManager {
     }
 
     private void classifyTablet(Table table) {
-        for (Partition p : table.getPartitions()) {
-            if (!p.hasData()) {
-                continue;
-            }
-            long partitionId = p.getId();
-            for (Tablet tablet : p.getBaseIndex().getTablets()) {
-                long tabletId = tablet.getId();
-                long rowCount = tablet.getFuzzyRowCount();
-                TabletStats tabletStats = new TabletStats(tabletId, partitionId, rowCount);
-                if (rowCount >= HIGH_WEIGHT_ROWS_THRESHOLD) {
-                    highWeight.addTabletStats(tabletStats);
-                } else if (rowCount >= MEDIUM_HIGH_WEIGHT_ROWS_THRESHOLD) {
-                    mediumHighWeight.addTabletStats(tabletStats);
-                } else if (rowCount >= MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD) {
-                    mediumLowWeight.addTabletStats(tabletStats);
-                } else {
-                    lowWeight.addTabletStats(tabletStats);
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            for (Partition logicalPartition : olapTable.getPartitions()) {
+                if (!logicalPartition.hasData()) {
+                    continue;
+                }
+                for (PhysicalPartition physicalPartition : logicalPartition.getSubPartitions()) {
+                    for (Tablet tablet : physicalPartition.getBaseIndex().getTablets()) {
+                        long tabletId = tablet.getId();
+                        long rowCount = tablet.getFuzzyRowCount();
+                        TabletStats tabletStats = new TabletStats(tabletId, physicalPartition.getId(), rowCount);
+                        if (rowCount >= HIGH_WEIGHT_ROWS_THRESHOLD) {
+                            highWeight.addTabletStats(tabletStats);
+                        } else if (rowCount >= MEDIUM_HIGH_WEIGHT_ROWS_THRESHOLD) {
+                            mediumHighWeight.addTabletStats(tabletStats);
+                        } else if (rowCount >= MEDIUM_LOW_WEIGHT_ROWS_THRESHOLD) {
+                            mediumLowWeight.addTabletStats(tabletStats);
+                        } else {
+                            lowWeight.addTabletStats(tabletStats);
+                        }
+                    }
                 }
             }
         }

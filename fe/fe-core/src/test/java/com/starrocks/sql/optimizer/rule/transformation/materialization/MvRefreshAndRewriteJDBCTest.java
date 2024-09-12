@@ -60,8 +60,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -133,8 +133,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -173,8 +173,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -246,8 +246,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                     " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -291,7 +291,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     ") " +
                     " as select a, b, d, cnt" +
                     " from jdbc_table_view");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " with sync mode");
 
         {

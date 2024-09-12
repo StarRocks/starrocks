@@ -41,6 +41,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -96,7 +97,7 @@ public class MigrationAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name");
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -106,7 +107,7 @@ public class MigrationAction extends RestBaseAction {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             if (!Strings.isNullOrEmpty(tableName)) {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
                     throw new DdlException("Table[" + tableName + "] does not exist");
                 }
@@ -118,34 +119,9 @@ public class MigrationAction extends RestBaseAction {
                 OlapTable olapTable = (OlapTable) table;
 
                 for (Partition partition : olapTable.getPartitions()) {
-                    String partitionName = partition.getName();
-                    MaterializedIndex baseIndex = partition.getBaseIndex();
-                    for (Tablet tablet : baseIndex.getTablets()) {
-                        List<Comparable> row = Lists.newArrayList();
-                        row.add(tableName);
-                        row.add(partitionName);
-                        row.add(tablet.getId());
-                        row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                        if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
-                            Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
-                            row.add(replica.getBackendId());
-                        }
-                        rows.add(row);
-                    }
-                }
-            } else {
-                // get all olap table
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                    if (table.getType() != TableType.OLAP) {
-                        continue;
-                    }
-
-                    OlapTable olapTable = (OlapTable) table;
-                    tableName = table.getName();
-
-                    for (Partition partition : olapTable.getPartitions()) {
-                        String partitionName = partition.getName();
-                        MaterializedIndex baseIndex = partition.getBaseIndex();
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        String partitionName = physicalPartition.getName();
+                        MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
                         for (Tablet tablet : baseIndex.getTablets()) {
                             List<Comparable> row = Lists.newArrayList();
                             row.add(tableName);
@@ -157,6 +133,35 @@ public class MigrationAction extends RestBaseAction {
                                 row.add(replica.getBackendId());
                             }
                             rows.add(row);
+                        }
+                    }
+                }
+            } else {
+                // get all olap table
+                for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
+                    if (table.getType() != TableType.OLAP) {
+                        continue;
+                    }
+
+                    OlapTable olapTable = (OlapTable) table;
+                    tableName = table.getName();
+
+                    for (Partition partition : olapTable.getPartitions()) {
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            String partitionName = physicalPartition.getName();
+                            MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
+                            for (Tablet tablet : baseIndex.getTablets()) {
+                                List<Comparable> row = Lists.newArrayList();
+                                row.add(tableName);
+                                row.add(partitionName);
+                                row.add(tablet.getId());
+                                row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
+                                if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
+                                    Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
+                                    row.add(replica.getBackendId());
+                                }
+                                rows.add(row);
+                            }
                         }
                     }
                 }

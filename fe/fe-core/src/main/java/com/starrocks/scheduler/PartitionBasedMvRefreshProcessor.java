@@ -784,7 +784,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         LOG.info("start to update meta for mv:{}", materializedView.getName());
 
         // check
-        Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
+        Table mv = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), materializedView.getId());
         if (mv == null) {
             throw new DmlException(
                     "update meta failed. materialized view:" + materializedView.getName() + " not exist");
@@ -841,12 +841,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> properties = context.getProperties();
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(context.ctx.getDatabase());
+        db = GlobalStateMgr.getCurrentState().getMetastore().getDb(context.ctx.getDatabase());
         if (db == null) {
             LOG.warn("database {} do not exist when refreshing materialized view:{}", context.ctx.getDatabase(), mvId);
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), mvId);
         if (table == null) {
             LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                     context.ctx.getDatabase());
@@ -1347,7 +1347,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     continue;
                 }
                 MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
-                        partition.getId(), partition.getVisibleVersion(), partition.getVisibleVersionTime());
+                        partition.getId(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersionTime());
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
             LOG.info("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);

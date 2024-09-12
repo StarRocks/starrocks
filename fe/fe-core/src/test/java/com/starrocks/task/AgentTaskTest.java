@@ -46,6 +46,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.PartitionValue;
@@ -313,8 +314,7 @@ public class AgentTaskTest {
 
     @Test
     public void testBackendNoAlive() {
-        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
-                null, null);
+        MetaStore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState());
         List<CreateReplicaTask> tasks = new ArrayList<>();
         tasks.add((CreateReplicaTask) createReplicaTask);
 
@@ -337,8 +337,7 @@ public class AgentTaskTest {
             }
         };
 
-        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
-                null, null);
+        MetaStore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState());
         List<CreateReplicaTask> tasks = new ArrayList<>();
         tasks.add((CreateReplicaTask) createReplicaTask);
 

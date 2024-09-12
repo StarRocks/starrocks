@@ -169,7 +169,7 @@ public abstract class TestWithFeService {
     }
 
     public void createDatabase(String db) throws Exception {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(db);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(db);
     }
 
     public void useDatabase(String dbName) {
@@ -189,7 +189,7 @@ public abstract class TestWithFeService {
     public void dropTable(String table, boolean force) throws Exception {
         DropTableStmt dropTableStmt = (DropTableStmt) parseAndAnalyzeStmt(
                 "drop table " + table + (force ? " force" : "") + ";", connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(dropTableStmt);
     }
 
     public void createTables(String... sqls) throws Exception {

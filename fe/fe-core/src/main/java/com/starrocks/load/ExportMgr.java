@@ -135,7 +135,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public ExportJob getExportJob(String dbName, UUID queryId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();
         ExportJob matchedJob = null;
@@ -235,7 +235,7 @@ public class ExportMgr implements MemoryTrackable {
                 TableName tableName = job.getTableName();
                 if (tableName == null || tableName.getTbl().equals("DUMMY")) {
                     // forward compatibility, no table name is saved before
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                    Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
                     if (db == null) {
                         continue;
                     }

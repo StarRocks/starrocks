@@ -42,6 +42,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
@@ -53,7 +54,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.ConsistencyCheckInfo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -128,13 +128,13 @@ public class CheckConsistencyJob {
             return false;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.debug("db[{}] does not exist", tabletMeta.getDbId());
             return false;
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tabletMeta.getTableId());
         if (table == null) {
             LOG.debug("table[{}] does not exist", tabletMeta.getTableId());
             return false;
@@ -160,19 +160,21 @@ public class CheckConsistencyJob {
                 return false;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            PhysicalPartition physicalPartition = partition.getSubPartition(tabletMeta.getPhysicalPartitionId());
+
+            MaterializedIndex index = physicalPartition.getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 LOG.debug("index[{}] does not exist", tabletMeta.getIndexId());
                 return false;
             }
 
-            tablet = (LocalTablet) index.getTablet(tabletId);
+            tablet = (LocalTablet) GlobalStateMgr.getCurrentState().getMetastore().getTablet(index, tabletId);
             if (tablet == null) {
                 LOG.debug("tablet[{}] does not exist", tabletId);
                 return false;
             }
 
-            checkedVersion = partition.getVisibleVersion();
+            checkedVersion = physicalPartition.getVisibleVersion();
             checkedSchemaHash = olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId());
 
             int sentTaskReplicaNum = 0;
@@ -254,13 +256,13 @@ public class CheckConsistencyJob {
             return -1;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.warn("db[{}] does not exist", tabletMeta.getDbId());
             return -1;
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tabletMeta.getTableId());
         if (table == null) {
             LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
             return -1;
@@ -278,7 +280,9 @@ public class CheckConsistencyJob {
                 return -1;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            PhysicalPartition physicalPartition = partition.getSubPartition(tabletMeta.getPhysicalPartitionId());
+
+            MaterializedIndex index = physicalPartition.getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 LOG.warn("index[{}] does not exist", tabletMeta.getIndexId());
                 return -1;
@@ -368,11 +372,10 @@ public class CheckConsistencyJob {
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), partition.getId(),
                         index.getId(), tabletId, lastCheckTime,
                         checkedVersion, isConsistent);
-            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
+
+            GlobalStateMgr.getCurrentState().getMetastore().finishConsistencyCheck(info);
         }
 
-        // Wait for edit log write finish out of db lock.
-        EditLog.waitInfinity(journalTask);
         return 1;
     }
 

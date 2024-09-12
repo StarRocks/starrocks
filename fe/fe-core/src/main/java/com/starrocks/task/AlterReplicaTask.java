@@ -301,12 +301,12 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
 
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), getTableId());
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
         }
@@ -322,7 +322,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (index == null) {
                 throw new MetaNotFoundException("index " + getIndexId() + " does not exist");
             }
-            Tablet tablet = index.getTablet(getTabletId());
+            Tablet tablet = GlobalStateMgr.getCurrentState().getMetastore().getTablet(index, getTabletId());
             Preconditions.checkNotNull(tablet, getTabletId());
             if (!tbl.isCloudNativeTableOrMaterializedView()) {
                 Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
@@ -347,7 +347,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                             replica.getDataSize(), replica.getRowCount(),
                             replica.getLastFailedVersion(),
                             replica.getLastSuccessVersion(), 0);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                    GlobalStateMgr.getCurrentState().getMetastore().updateReplica(info);
                 }
 
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);

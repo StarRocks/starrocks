@@ -119,7 +119,7 @@ public class TabletSchedCtxTest {
         MaterializedIndex baseIndex = new MaterializedIndex(TB_ID, MaterializedIndex.IndexState.NORMAL);
         DistributionInfo distributionInfo = new RandomDistributionInfo(32);
         Partition partition = new Partition(PART_ID, TB_NAME, baseIndex, distributionInfo);
-        baseIndex.addTablet(tablet, tabletMeta);
+        baseIndex.addTabletWithInvertedIndex(tablet, tabletMeta);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PART_ID, (short) 3);
         partitionInfo.setIsInMemory(PART_ID, false);
@@ -133,7 +133,7 @@ public class TabletSchedCtxTest {
         olapTable.addPartition(partition);
         Database db = new Database(DB_ID, "");
         db.registerTableUnlocked(olapTable);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(DB_ID, db);
+        GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().put(DB_ID, db);
 
         // prepare clusterLoadStatistic
         clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),

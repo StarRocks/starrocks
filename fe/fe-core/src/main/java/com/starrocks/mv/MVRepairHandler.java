@@ -82,13 +82,13 @@ public interface MVRepairHandler {
             return;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(transactionState.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(transactionState.getDbId());
         if (db == null) {
             return;
         }
 
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
             if (table == null || !(table instanceof OlapTable) || table.getRelatedMaterializedViews().isEmpty()) {
                 continue;
             }

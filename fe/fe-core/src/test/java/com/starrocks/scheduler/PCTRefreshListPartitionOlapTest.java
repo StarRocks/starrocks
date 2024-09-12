@@ -194,7 +194,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshNonPartitionedMV() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T2, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "distributed by random \n" +
@@ -203,7 +203,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -248,7 +248,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshSingleColumnMVWithSingleValues() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T2, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -259,7 +259,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -304,7 +304,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshSingleColumnWithMultiValues() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T1, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -315,7 +315,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -360,7 +360,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshMultiColumnsMV1() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T3, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -371,7 +371,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -436,7 +436,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshMultiColumnsMV2() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T3, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by dt \n" +
@@ -447,7 +447,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -512,7 +512,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshSingleColumnMVWithPartitionExpr() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T4, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -523,7 +523,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -569,7 +569,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshMultiColumnsMVWithPartitionExpr() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T5, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -580,7 +580,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -649,7 +649,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshMultiBaseTablesWithSingleColumn() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTables(ImmutableList.of(T2, T4), () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -663,7 +663,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -724,7 +724,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshMultiBaseTablesWithMultiColumns() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTables(ImmutableList.of(T1, T5), () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -737,7 +737,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -810,7 +810,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshJoinWithMultiColumns1() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTables(ImmutableList.of(T1, T5), () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -822,7 +822,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -894,7 +894,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @Test
     public void testRefreshMVWithMultiNulllalbeColumns() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         starRocksAssert.withTable(T6, () -> {
             starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                                     "partition by province \n" +
@@ -905,7 +905,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         (obj) -> {
                             String mvName = (String) obj;
                             MaterializedView materializedView =
-                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                                                     .getTable(testDb.getFullName(), mvName));
                             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();

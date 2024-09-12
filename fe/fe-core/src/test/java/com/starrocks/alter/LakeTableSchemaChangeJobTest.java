@@ -75,15 +75,15 @@ public class LakeTableSchemaChangeJobTest {
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
-        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getDb(createTableStmt.getDbName());
+        return (LakeTable) GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                     .getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().alterTable(connectContext, stmt);
     }
 
     private LakeTableSchemaChangeJob getAlterJob(Table table) {
@@ -100,9 +100,9 @@ public class LakeTableSchemaChangeJobTest {
     public void before() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
-        db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(DB_NAME);
+        db = GlobalStateMgr.getServingState().getStarRocksMetadata().getDb(DB_NAME);
         table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
                     + NUM_BUCKETS);
         Config.enable_fast_schema_evolution_in_share_data_mode = false;
@@ -113,7 +113,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @After
     public void after() throws Exception {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropDb(DB_NAME, true);
     }
 
     @Test
@@ -196,7 +196,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
+        GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().remove(db.getId());
         exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runPendingJob();
         });
@@ -241,7 +241,8 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition().
+                getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -265,7 +266,8 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -292,7 +294,8 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -308,14 +311,14 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("Table does not exist."));
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
+        GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().remove(db.getId());
         exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runWaitingTxnJob();
         });
         Assert.assertTrue(exception.getMessage().contains("Database does not exist"));
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
+        GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().put(db.getId(), db);
         db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -323,7 +326,8 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -341,14 +345,14 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         db.registerTableUnlocked(table);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
+        GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().remove(db.getId());
 
         exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runRunningJob();
         });
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
+        GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().put(db.getId(), db);
         db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -356,7 +360,8 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -387,7 +392,8 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -412,9 +418,9 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assert.assertNotNull(partition);
-        Assert.assertEquals(3, partition.getNextVersion());
+        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -460,16 +466,16 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assert.assertNotNull(partition);
 
-        Assert.assertEquals(1, partition.getVisibleVersion());
-        Assert.assertEquals(2, partition.getNextVersion());
+        Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, partition.getDefaultPhysicalPartition().getNextVersion());
         // Disable send publish version
-        partition.setNextVersion(3);
+        partition.getDefaultPhysicalPartition().setNextVersion(3);
 
         schemaChangeJob.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         List<MaterializedIndex> shadowIndexes =
-                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
@@ -477,7 +483,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Reset partition's next version
-        partition.setVisibleVersion(2, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
 
         // Drop table
         db.dropTable(table.getName());
@@ -514,14 +520,14 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals("c1", table.getBaseSchema().get(1).getName());
 
         Assert.assertSame(partition, table.getPartitions().stream().findFirst().get());
-        Assert.assertEquals(3, partition.getVisibleVersion());
-        Assert.assertEquals(4, partition.getNextVersion());
+        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getNextVersion());
 
-        shadowIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        shadowIndexes = partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(0, shadowIndexes.size());
 
         List<MaterializedIndex> normalIndexes =
-                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Assert.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
 

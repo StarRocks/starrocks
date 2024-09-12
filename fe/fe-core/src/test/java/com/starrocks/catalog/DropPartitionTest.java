@@ -71,7 +71,7 @@ public class DropPartitionTest {
 
     private static void createDb(String sql) throws Exception {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
     }
     @Before
     public void createTable() throws Exception {
@@ -97,10 +97,10 @@ public class DropPartitionTest {
 
     @Test
     public void testNormalDropPartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210201");
-        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+        long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210201;";
         dropPartition(dropPartitionSql);
         List<Replica> replicaList =
@@ -111,7 +111,7 @@ public class DropPartitionTest {
         String recoverPartitionSql = "recover partition p20210201 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().recoverPartition(recoverPartitionStmt);
         partition = table.getPartition("p20210201");
         Assert.assertNotNull(partition);
         Assert.assertEquals("p20210201", partition.getName());
@@ -119,10 +119,10 @@ public class DropPartitionTest {
 
     @Test
     public void testForceDropPartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210202");
-        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+        long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210202 force;";
         dropPartition(dropPartitionSql);
         List<Replica> replicaList;
@@ -135,7 +135,7 @@ public class DropPartitionTest {
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "No partition named 'p20210202' in recycle bin that belongs to table 'tbl1'",
-                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
+                () -> GlobalStateMgr.getCurrentState().getStarRocksMetadata().recoverPartition(recoverPartitionStmt));
 
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
         replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
@@ -144,10 +144,10 @@ public class DropPartitionTest {
 
     @Test
     public void testDropPartitionAndReserveTablets() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210203");
-        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+        long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
         table.dropPartitionAndReserveTablet("p20210203");
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
@@ -196,7 +196,7 @@ public class DropPartitionTest {
         for (String partitionName : partitionNames) {
             Table table = getTable(dbName, tableName);
             Partition partition = table.getPartition(partitionName);
-            long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
             tabletIds.add(tabletId);
         }
         dropPartition(String.format(dropPartitionSql, dbName, tableName));
@@ -218,7 +218,7 @@ public class DropPartitionTest {
         for (String partitionName : partitionNames) {
             Table table = getTable(dbName, tableName);
             Partition partition = table.getPartition(partitionName);
-            long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
             tabletIds.add(tabletId);
         }
         dropPartition(dropPartitionSql);
@@ -237,7 +237,7 @@ public class DropPartitionTest {
                             partitionName), connectContext);
             ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                     String.format("No partition named '%s' in recycle bin that belongs to table '%s'", partitionName, "tbl1"),
-                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
+                    () -> GlobalStateMgr.getCurrentState().getStarRocksMetadata().recoverPartition(recoverPartitionStmt));
         }
         //该方法会立马删除partition
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
@@ -249,8 +249,8 @@ public class DropPartitionTest {
     }
 
     private void checkBeforeDrop(String dbName, String tableName, String partitionName, long tabletId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Partition partition = table.getPartition(partitionName);
@@ -268,12 +268,12 @@ public class DropPartitionTest {
         String recoverPartitionSql = String.format("recover partition %s from %s.%s", partitionName, db, table);
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().recoverPartition(recoverPartitionStmt);
         return getTable(db, table).getPartition(partitionName);
     }
 
     private Table getTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
+        return (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
     }
 }

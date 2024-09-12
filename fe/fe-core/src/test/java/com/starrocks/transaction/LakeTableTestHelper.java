@@ -45,7 +45,7 @@ public class LakeTableTestHelper {
         for (long id : tabletId) {
             TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
-            index.addTablet(new LakeTablet(id), tabletMeta);
+            index.addTabletWithInvertedIndex(new LakeTablet(id), tabletMeta);
         }
         Partition partition = new Partition(partitionId, "p0", index, null);
         LakeTable table = new LakeTable(

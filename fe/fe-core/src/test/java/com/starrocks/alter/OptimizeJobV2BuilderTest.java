@@ -14,10 +14,6 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.alter.AlterJobV2;
-import com.starrocks.alter.OnlineOptimizeJobV2;
-import com.starrocks.alter.OptimizeJobV2;
-import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.KeysDesc;

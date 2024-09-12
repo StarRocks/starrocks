@@ -85,13 +85,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         // send task to be
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<Partition> partitions = Lists.newArrayList();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getMetastore().getDb(dbId);
 
         if (db == null) {
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new AlterCancelException("table does not exist, tableName:" + tableName);
         }
@@ -135,13 +135,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     @Override
     protected void runRunningJob() throws AlterCancelException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             // database has been dropped
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             // table has been dropped
             throw new AlterCancelException("table does not exist, tableId:" + tableId);
@@ -187,14 +187,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             return;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             // database has been dropped
             LOG.warn("database does not exist, dbId:" + dbId);
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             // table has been dropped
             LOG.warn("table does not exist, tableId:" + tableId);
@@ -221,12 +221,12 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     }
 
     boolean readyToPublishVersion() throws AlterCancelException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             // database has been dropped
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             // table has been dropped
             throw new AlterCancelException("table does not exist, tableId:" + tableId);
@@ -263,7 +263,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                    List<Tablet> tabletList = GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(index);
+                    Utils.publishVersion(tabletList, txnInfo, commitVersion - 1, commitVersion,
                             warehouseId);
                 }
             }
@@ -305,7 +306,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
         for (MaterializedIndex index : indexList) {
-            updateIndexTabletMeta(db, table, partition, index);
+            updateIndexTabletMeta(db, table, partition.getDefaultPhysicalPartition(), index);
         }
     }
 
@@ -319,7 +320,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            tablets = new ArrayList<>(index.getTablets());
+            tablets = GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(index);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
@@ -422,9 +423,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             return false;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db != null) {
-            LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (table != null) {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -480,14 +481,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             restoreState(other);
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             // database has been dropped
             LOG.warn("database does not exist, dbId:" + dbId);
             return;
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return;
         }

@@ -43,12 +43,12 @@ public class BDBToolOptionsTest {
 
     @Test
     public void test() {
-        BDBToolOptions options = new BDBToolOptions(true, "", false, "", "", 0, 0);
+        BDBToolOptions options = new BDBToolOptions(true, "", false, "", "", 0, 0, "", "");
         Assert.assertFalse(options.hasFromKey());
         Assert.assertFalse(options.hasEndKey());
         Assert.assertEquals(FeConstants.META_VERSION, options.getMetaVersion());
 
-        options = new BDBToolOptions(false, "12345", false, "12345", "12456", 35, 0);
+        options = new BDBToolOptions(false, "12345", false, "12345", "12456", 35, 0, "", "");
         Assert.assertTrue(options.hasFromKey());
         Assert.assertTrue(options.hasEndKey());
         Assert.assertNotSame(FeConstants.META_VERSION, options.getMetaVersion());

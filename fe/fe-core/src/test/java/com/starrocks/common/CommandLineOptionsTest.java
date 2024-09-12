@@ -46,7 +46,7 @@ public class CommandLineOptionsTest {
         Assert.assertTrue(options.isVersion());
         Assert.assertFalse(options.runBdbTools());
 
-        options = new CommandLineOptions(false, new BDBToolOptions(true, "", false, "", "", 0, 0));
+        options = new CommandLineOptions(false, new BDBToolOptions(true, "", false, "", "", 0, 0, "", ""));
         Assert.assertFalse(options.isVersion());
         Assert.assertTrue(options.runBdbTools());
     }

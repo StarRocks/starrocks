@@ -42,6 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -77,7 +78,7 @@ public class SystemInfoServiceTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
-    private LocalMetastore localMetastore;
+    private MetaStore localMetastore;
     private NodeMgr nodeMgr;
     private SystemInfoService systemInfoService;
     private TabletInvertedIndex invertedIndex;
@@ -112,7 +113,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -123,8 +124,8 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                localMetastore = new LocalMetastore(globalStateMgr, null, null);
-                globalStateMgr.getLocalMetastore();
+                localMetastore = new LocalMetastore(globalStateMgr);
+                globalStateMgr.getMetastore();
                 minTimes = 0;
                 result = localMetastore;
 

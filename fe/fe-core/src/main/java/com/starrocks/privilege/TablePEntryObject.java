@@ -181,11 +181,11 @@ public class TablePEntryObject implements PEntryObject {
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            Database db = globalStateMgr.getStarRocksMetadata().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return false;
             }
-            return globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
+            return globalStateMgr.getStarRocksMetadata().getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
         }
         // do not validate privilege of external table
         return true;
@@ -275,7 +275,7 @@ public class TablePEntryObject implements PEntryObject {
             } else {
                 String tblName = null;
                 if (CatalogMgr.isInternalCatalog(catalogId)) {
-                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    Table table = GlobalStateMgr.getCurrentState().getMetastore()
                             .getTable(Long.parseLong(getDatabaseUUID()), Long.parseLong(getTableUUID()));
                     if (table == null) {
                         throw new MetaNotFoundException("Cannot find table : " + tableUUID);

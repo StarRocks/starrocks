@@ -72,9 +72,6 @@ public class VariableMgrTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-
-                editLog.logGlobalVariable((SessionVariable) any);
-                minTimes = 0;
             }
         };
 

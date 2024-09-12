@@ -239,12 +239,12 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalOlapTableScan() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
+        OlapTable table = (OlapTable) globalStateMgr.getMetastore().getDb("statistics_test").getTable("test_all_type");
         Collection<Partition> partitions = table.getPartitions();
         List<Long> partitionIds =
                     partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         List<Column> columns = table.getColumns();
@@ -341,7 +341,7 @@ public class StatisticsCalculatorTest {
     public void testLogicalOlapTableEmptyPartition(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
+        Table table = globalStateMgr.getMetastore().getDb("statistics_test").getTable("test_all_type");
 
         List<Partition> partitions = new ArrayList<>(((OlapTable) table).getPartitions());
 
@@ -349,9 +349,9 @@ public class StatisticsCalculatorTest {
         Partition partition2 = partitions.get(1);
         Partition partition3 = partitions.get(2);
         // mock one empty partition
-        partition1.setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
-        partition2.setVisibleVersion(2, System.currentTimeMillis());
-        partition3.setVisibleVersion(2, System.currentTimeMillis());
+        partition1.getDefaultPhysicalPartition().setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+        partition2.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        partition3.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
         List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
@@ -401,7 +401,7 @@ public class StatisticsCalculatorTest {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
+        Table table = globalStateMgr.getMetastore().getDb("statistics_test").getTable("test_all_type");
 
         new Expectations() {
             {
@@ -422,7 +422,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
@@ -497,7 +497,7 @@ public class StatisticsCalculatorTest {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+        OlapTable table = (OlapTable) globalStateMgr.getMetastore().getDb("statistics_test")
                     .getTable("test_all_type_day_partition");
 
         new Expectations() {
@@ -519,7 +519,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p2")).
                     mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =

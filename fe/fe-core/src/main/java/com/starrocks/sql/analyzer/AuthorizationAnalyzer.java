@@ -228,7 +228,7 @@ public class AuthorizationAnalyzer {
                         funcPrivTokenList.add(new Pair<>(PrivilegeBuiltinConstants.ALL_DATABASE_ID,
                                 PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
                     } else {
-                        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(tokens.get(0));
+                        Database database = GlobalStateMgr.getServingState().getMetastore().getDb(tokens.get(0));
                         if (database == null) {
                             throw new SemanticException("Database %s is not found", tokens.get(0));
                         }
@@ -261,7 +261,7 @@ public class AuthorizationAnalyzer {
                         FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
                                 argsDef.getArgTypes(), argsDef.isVariadic());
 
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+                        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(functionName.getDb());
                         long databaseID = db.getId();
                         Function function = db.getFunction(searchDesc);
 

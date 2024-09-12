@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.sql.ast.CreateTableStmt;
 
 import java.util.List;
@@ -35,7 +36,7 @@ public class FileTableFactory implements AbstractTableFactory {
 
     @Override
     @NotNull
-    public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
+    public Table createTable(MetaStore metastore, Database database, CreateTableStmt stmt) throws DdlException {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();

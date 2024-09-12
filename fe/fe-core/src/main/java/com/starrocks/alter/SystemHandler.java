@@ -50,9 +50,9 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
@@ -231,7 +231,7 @@ public class SystemHandler extends AlterHandler {
                                 .filter(beId -> !decommissionIds.contains(beId))
                                 .count();
                         short maxReplicationNum = 0;
-                        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+                        MetaStore localMetastore = GlobalStateMgr.getCurrentState().getMetastore();
                         for (long dbId : localMetastore.getDbIds()) {
                             Database db = localMetastore.getDb(dbId);
                             if (db == null) {
@@ -240,7 +240,7 @@ public class SystemHandler extends AlterHandler {
                             Locker locker = new Locker();
                             locker.lockDatabase(db.getId(), LockType.READ);
                             try {
-                                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                                for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                                     if (table instanceof OlapTable) {
                                         OlapTable olapTable = (OlapTable) table;
                                         PartitionInfo partitionInfo = olapTable.getPartitionInfo();

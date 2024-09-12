@@ -90,11 +90,11 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -195,7 +195,7 @@ public class OlapTable extends Table {
          * or ROLLUP).
          * The query plan which is generate during this state is invalid because the meta
          * during the creation of the logical plan and the physical plan might be inconsistent.
-        */
+         */
         UPDATING_META
     }
 
@@ -313,19 +313,19 @@ public class OlapTable extends Table {
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo) {
+                        PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     TableIndexes indexes) {
+                        PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                        TableIndexes indexes) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     TableIndexes indexes, TableType tableType) {
+                        PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                        TableIndexes indexes, TableType tableType) {
         super(id, tableName, tableType, baseSchema);
 
         this.state = OlapTableState.NORMAL;
@@ -552,11 +552,11 @@ public class OlapTable extends Table {
         return this.sessionId != null;
     }
 
-    public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
+    public void checkAndSetName(String newName, boolean onlyCheck) {
         // check if rollup has same name
         for (String idxName : getIndexNameToId().keySet()) {
             if (idxName.equals(newName)) {
-                throw new DdlException("New name conflicts with rollup index name: " + idxName);
+                throw new SemanticException("New name conflicts with rollup index name: " + idxName);
             }
         }
         if (!onlyCheck) {
@@ -680,10 +680,11 @@ public class OlapTable extends Table {
 
     public boolean hasMaterializedView() {
         Optional<Partition> partition = idToPartition.values().stream().findFirst();
-        if (!partition.isPresent()) {
+        if (partition.isEmpty()) {
             return false;
         } else {
-            return partition.get().hasMaterializedView();
+            PhysicalPartition physicalPartition = partition.get().getDefaultPhysicalPartition();
+            return physicalPartition.hasMaterializedView();
         }
     }
 
@@ -944,11 +945,11 @@ public class OlapTable extends Table {
         if (isColocate) {
             try {
                 isColocate = GlobalStateMgr.getCurrentState().getColocateTableIndex()
-                                            .addTableToGroup(db, this, this.colocateGroup, false);
+                        .addTableToGroup(db, this, this.colocateGroup, false);
             } catch (Exception e) {
                 return new Status(ErrCode.COMMON_ERROR,
-                    "check colocate restore failed, errmsg: " + e.getMessage() +
-                    ", you can disable colocate restore by turn off Config.enable_colocate_restore");
+                        "check colocate restore failed, errmsg: " + e.getMessage() +
+                                ", you can disable colocate restore by turn off Config.enable_colocate_restore");
             }
         }
 
@@ -965,15 +966,14 @@ public class OlapTable extends Table {
             for (int i = 0; i < tabletNum; ++i) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
-                index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
-
+                index.addTablet(newTablet);
                 // replicas
                 List<Long> beIds;
                 if (chooseBackendsArbitrary) {
                     // This is the first colocate table in the group, or just a normal table,
                     // randomly choose backends
                     beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
-                        .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
+                            .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
                     backendsPerBucketSeq.add(beIds);
                 } else {
                     // get backends from existing backend sequence
@@ -992,7 +992,7 @@ public class OlapTable extends Table {
                     newTablet.addReplica(replica, false/* update inverted index */);
                 }
                 Preconditions.checkState(beIds.size() == replicationNum,
-                                         beIds.size() + " vs. " + replicationNum);
+                        beIds.size() + " vs. " + replicationNum);
             }
 
             // first colocate table in CG
@@ -1003,7 +1003,7 @@ public class OlapTable extends Table {
             for (int i = 0; i < tabletNum; i++) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
-                index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+                index.addTablet(newTablet);
 
                 // replicas
                 List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
@@ -1040,11 +1040,11 @@ public class OlapTable extends Table {
             if (localMvId == null) {
                 continue;
             }
-            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(localMvId.getDbId());
+            Database mvDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(localMvId.getDbId());
             if (mvDb == null) {
                 continue;
             }
-            Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvDb.getId(), localMvId.getId());
+            Table mvTable = GlobalStateMgr.getCurrentState().getMetastore().getTable(mvDb.getId(), localMvId.getId());
             if (mvTable == null) {
                 continue;
             }
@@ -1236,8 +1236,8 @@ public class OlapTable extends Table {
     /**
      * @return : table's partition name to list partition names.
      * eg:
-     *  partition columns   : (a, b, c)
-     *  values              : [[1, 2, 3], [4, 5, 6]]
+     * partition columns   : (a, b, c)
+     * values              : [[1, 2, 3], [4, 5, 6]]
      */
     public Map<String, PListCell> getListPartitionItems() {
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
@@ -1623,7 +1623,8 @@ public class OlapTable extends Table {
         Collections.sort(partitions, new Comparator<Partition>() {
             @Override
             public int compare(Partition h1, Partition h2) {
-                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+                return (int) (h2.getDefaultPhysicalPartition().getVisibleVersion()
+                        - h1.getDefaultPhysicalPartition().getVisibleVersion());
             }
         });
         return partitions.subList(0, recentPartitionNum);
@@ -1835,7 +1836,9 @@ public class OlapTable extends Table {
     public long getRowCount() {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
-            rowCount += entry.getValue().getBaseIndex().getRowCount();
+            for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
+                rowCount += partition.getBaseIndex().getRowCount();
+            }
         }
         return rowCount;
     }
@@ -2070,8 +2073,8 @@ public class OlapTable extends Table {
     }
 
     protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions,
-                                              boolean resetState,
-                                              IndexExtState extState) {
+                                                 boolean resetState,
+                                                 IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex = copied.getPhysicalPartitions().stream().findFirst()
@@ -2251,7 +2254,7 @@ public class OlapTable extends Table {
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
         Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
         if (optionalPartition.isPresent()) {
-            Partition partition = optionalPartition.get();
+            PhysicalPartition partition = optionalPartition.get().getDefaultPhysicalPartition();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = partition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
@@ -2906,7 +2909,7 @@ public class OlapTable extends Table {
         Collection<Partition> partitions = getPartitions();
         for (Partition partition : partitions) {
             result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
-                    String.valueOf(partition.getVisibleVersion()));
+                    String.valueOf(partition.getDefaultPhysicalPartition().getVisibleVersion()));
         }
         return result;
     }
@@ -3152,7 +3155,8 @@ public class OlapTable extends Table {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     invertedIndex.deleteTablet(tablet.getId());
                 }
@@ -3167,7 +3171,7 @@ public class OlapTable extends Table {
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+        StarRocksMetadata.inactiveRelatedMaterializedView(db, this,
                 MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
@@ -3546,5 +3550,9 @@ public class OlapTable extends Table {
 
     public void updateLastCollectProfileTime() {
         this.lastCollectProfileTime = System.currentTimeMillis();
+    }
+
+    public void clearHierarchy() {
+        //idToPartition = null;
     }
 }

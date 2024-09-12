@@ -1113,8 +1113,8 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Database db = globalStateMgr.getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "join2");
+        Database db = globalStateMgr.getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "join2");
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1137,7 +1137,7 @@ public class JoinTest extends PlanTestBase {
     public void testJoinReorderWithWithClause() throws Exception {
         connectContext.setDatabase("test");
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
+        Table table = globalStateMgr.getMetastore().getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1640,7 +1640,7 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
+        Table table = globalStateMgr.getMetastore().getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);

@@ -136,9 +136,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                  LogicalOlapScanOperator olapScanOperator,
                                                  OptExpression input) {
         // Fetch mv from catalog again since table from olap scan operator is copied.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvId.getDbId());
         Preconditions.checkState(db != null, "Database not found: %s", mvId.getDbId());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), mvId.getId());
         Preconditions.checkState(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);

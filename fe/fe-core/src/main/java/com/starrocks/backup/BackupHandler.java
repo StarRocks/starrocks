@@ -263,7 +263,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
         // check if db exist
         String dbName = stmt.getDbName();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -320,7 +320,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
                 String tblName = tblRef.getName().getTbl();
-                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+                Table tbl = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
@@ -520,7 +520,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }

@@ -46,7 +46,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -54,13 +53,11 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
-import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.task.CheckConsistencyTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -162,7 +159,7 @@ public class ConsistencyChecker extends FrontendDaemon {
      * tablet and number of tablet in recycle bin for each backend.
      */
     private void checkTabletMetaConsistency(Map<Long, Integer> creatingTableIds) {
-        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        MetaStore localMetastore = GlobalStateMgr.getCurrentState().getMetastore();
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
@@ -264,7 +261,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                     if (!table.isCloudNativeTableOrMaterializedView()) {
                         // validate tablet
-                        Tablet tablet = index.getTablet(tabletId);
+                        Tablet tablet = GlobalStateMgr.getCurrentState().getMetastore().getTablet(index, tabletId);
                         if (tablet == null) {
                             deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                     "tablet " + dbId + "." + tableId + "." +
@@ -448,7 +445,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         List<Long> chosenTablets = Lists.newArrayList();
 
         // sort dbs
-        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
+        List<Long> dbIds = globalStateMgr.getMetastore().getDbIds();
         if (dbIds.isEmpty()) {
             return chosenTablets;
         }
@@ -458,7 +455,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                 // skip 'information_schema' database
                 continue;
             }
-            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+            Database db = globalStateMgr.getMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -475,7 +472,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                 long startTime = System.currentTimeMillis();
                 try {
                     // sort tables
-                    List<Table> tables = globalStateMgr.getLocalMetastore().getTables(db.getId());
+                    List<Table> tables = globalStateMgr.getMetastore().getTables(db.getId());
                     Queue<MetaObject> tableQueue = new PriorityQueue<>(Math.max(tables.size(), 1), COMPARATOR);
                     for (Table table : tables) {
                         // Only check the OLAP table who is in NORMAL state.
@@ -507,11 +504,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                                             Partition.PARTITION_INIT_VERSION);
                                 continue;
                             }
-                            if (partition instanceof Partition) {
-                                partitionQueue.add((Partition) partition);
-                            } else if (partition instanceof PhysicalPartitionImpl) {
-                                partitionQueue.add((PhysicalPartitionImpl) partition);
-                            }
+                            partitionQueue.add(partition);
                         }
 
                         while ((chosenOne = partitionQueue.poll()) != null) {
@@ -589,48 +582,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         job.handleFinishedReplica(backendId, checksum);
     }
 
-    public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
-        if (db == null) {
-            LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
-            return;
-        }
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), info.getTableId());
-        if (table == null) {
-            LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
-            return;
-        }
 
-        try (AutoCloseableLock ignore
-                    = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
-            Partition partition = table.getPartition(info.getPartitionId());
-            if (partition == null) {
-                LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);
-                return;
-            }
-            MaterializedIndex index = partition.getIndex(info.getIndexId());
-            if (index == null) {
-                LOG.warn("replay finish consistency check failed, index is null, info: {}", info);
-                return;
-            }
-            LocalTablet tablet = (LocalTablet) index.getTablet(info.getTabletId());
-            if (tablet == null) {
-                LOG.warn("replay finish consistency check failed, tablet is null, info: {}", info);
-                return;
-            }
-
-            long lastCheckTime = info.getLastCheckTime();
-            db.setLastCheckTime(lastCheckTime);
-            table.setLastCheckTime(lastCheckTime);
-            partition.setLastCheckTime(lastCheckTime);
-            index.setLastCheckTime(lastCheckTime);
-            tablet.setLastCheckTime(lastCheckTime);
-            tablet.setCheckedVersion(info.getCheckedVersion());
-
-            tablet.setIsConsistent(info.isConsistent());
-        }
-    }
 
     // manually adding tablets to check
     public void addTabletsToCheck(List<Long> tabletIds) {

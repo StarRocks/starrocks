@@ -201,7 +201,7 @@ public class OlapTableSink extends DataSink {
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db != null) {
             tSink.setDb_name(db.getFullName());
         }
@@ -390,7 +390,7 @@ public class OlapTableSink extends DataSink {
             indexSchema.setColumn_to_expr_value(columnToExprValue);
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
                 if (db == null) {
                     throw new SemanticException("Database %s is not found", dbId);
                 }

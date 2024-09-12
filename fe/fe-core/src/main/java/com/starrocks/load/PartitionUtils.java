@@ -56,7 +56,7 @@ public class PartitionUtils {
                                                           List<Long> tmpPartitionIds,
                                                           DistributionDesc distributionDesc,
                                                           long warehouseId) throws DdlException {
-        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getLocalMetastore()
+        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
                         tmpPartitionIds, distributionDesc, warehouseId);
         Locker locker = new Locker();
@@ -66,7 +66,7 @@ public class PartitionUtils {
         boolean success = false;
         try {
             // should check whether targetTable exists
-            Table tmpTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), targetTable.getId());
+            Table tmpTable = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), targetTable.getId());
             if (tmpTable == null) {
                 throw new DdlException("create partition failed because target table does not exist");
             }
@@ -135,7 +135,7 @@ public class PartitionUtils {
             }
 
             AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
-            GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
+            GlobalStateMgr.getCurrentState().getMetastore().addPartition(infos);
 
             success = true;
         } finally {
@@ -153,7 +153,8 @@ public class PartitionUtils {
     public static void clearTabletsFromInvertedIndex(List<Partition> partitions) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Partition partition : partitions) {
-            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex materializedIndex : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : materializedIndex.getTablets()) {
                     invertedIndex.deleteTablet(tablet.getId());
                 }

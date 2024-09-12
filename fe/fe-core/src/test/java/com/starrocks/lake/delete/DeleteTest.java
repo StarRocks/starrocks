@@ -121,8 +121,8 @@ public class DeleteTest {
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
-        index.addTablet(tablet1, tabletMeta);
-        index.addTablet(tablet2, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet1, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet2, tabletMeta);
 
         // Partition
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
@@ -149,10 +149,10 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore().getDb(anyString);
+                globalStateMgr.getMetastore().getDb(anyString);
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                globalStateMgr.getMetastore().getTable(anyString, anyString);
                 result = db.getTable(tableId);
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
@@ -327,10 +327,10 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore().getDb(anyString);
+                globalStateMgr.getMetastore().getDb(anyString);
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                globalStateMgr.getMetastore().getTable(anyString, anyString);
                 result = db.getTable(tableId);
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();

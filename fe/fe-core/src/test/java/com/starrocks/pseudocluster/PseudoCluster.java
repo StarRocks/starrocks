@@ -284,14 +284,14 @@ public class PseudoCluster {
     }
 
     public List<Long> listTablets(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             return null;
         }
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 return null;
             }

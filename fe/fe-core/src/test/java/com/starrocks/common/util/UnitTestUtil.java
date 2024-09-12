@@ -92,8 +92,8 @@ public class UnitTestUtil {
     }
 
     public static Database createDbByName(long dbId, long tableId, long partitionId, long indexId,
-                                    long tabletId, long backendId, long version, KeysType type, String dbName,
-                                    String tableName) {
+                                          long tabletId, long backendId, long version, KeysType type, String dbName,
+                                          String tableName) {
         // GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         // table
@@ -107,8 +107,8 @@ public class UnitTestUtil {
     }
 
     public static OlapTable createOlapTableByName(long dbId, long tableId, long partitionId, long indexId,
-                                            long tabletId, long backendId, long version, KeysType type,
-                                            Table.TableType tableType, String tableName) {
+                                                     long tabletId, long backendId, long version, KeysType type,
+                                                     Table.TableType tableType, String tableName) {
         // replica
         long replicaId = 0;
         Replica replica1 = new Replica(replicaId, backendId, ReplicaState.NORMAL, version, 0);
@@ -121,7 +121,7 @@ public class UnitTestUtil {
         // index
         MaterializedIndex index = new MaterializedIndex(indexId, IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD);
-        index.addTablet(tablet, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);
@@ -176,16 +176,16 @@ public class UnitTestUtil {
     }
 
     public static OlapTable createOlapTable(long dbId, long tableId, long partitionId, long indexId,
-                                            long tabletId, long backendId, long version, KeysType type,
-                                            Table.TableType tableType) {
+                                               long tabletId, long backendId, long version, KeysType type,
+                                               Table.TableType tableType) {
         return createOlapTableWithName(TABLE_NAME, dbId, tableId, partitionId, indexId,
                 tabletId, backendId, version, type,
                 tableType);
     }
 
     public static OlapTable createOlapTableWithName(String tableName, long dbId, long tableId, long partitionId,
-                                                    long indexId, long tabletId, long backendId, long version,
-                                                    KeysType type, Table.TableType tableType) {
+                                                       long indexId, long tabletId, long backendId, long version,
+                                                       KeysType type, Table.TableType tableType) {
         // replica
         long replicaId = 0;
         Replica replica1 = new Replica(replicaId, backendId, ReplicaState.NORMAL, version, 0);
@@ -198,7 +198,7 @@ public class UnitTestUtil {
         // index
         MaterializedIndex index = new MaterializedIndex(indexId, IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD);
-        index.addTablet(tablet, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);

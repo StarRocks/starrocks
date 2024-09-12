@@ -78,7 +78,7 @@ public class TriggerAction extends RestBaseAction {
             return;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             response.appendContent("Database[" + dbName + "] does not exist");
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -94,7 +94,7 @@ public class TriggerAction extends RestBaseAction {
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 if (!Strings.isNullOrEmpty(tableName)) {
-                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
                 }
 
                 if (table == null) {

@@ -39,13 +39,14 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.TxnMeta;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class DropDbInfo implements Writable {
+public class DropDbInfo extends TxnMeta implements Writable {
     @SerializedName(value = "dbName")
     private String dbName;
     @SerializedName(value = "forceDrop")

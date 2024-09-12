@@ -99,7 +99,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                     long shadowTabletId = globalStateMgr.getNextId();
 
                     LocalTablet shadowTablet = new LocalTablet(shadowTabletId);
-                    shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
+                    shadowIndex.addTablet(shadowTablet);
                     addedTablets.add(shadowTablet);
 
                     schemaChangeJob.addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTabletId, originTabletId);

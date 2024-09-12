@@ -17,9 +17,9 @@ package com.starrocks.system;
 import com.google.api.client.util.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
@@ -178,7 +178,7 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
 
-        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        StarRocksMetadata starRocksMetadata = new StarRocksMetadata();
 
         new Expectations() {
             {
@@ -186,9 +186,9 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = be;
 
-                globalStateMgr.getLocalMetastore();
+                globalStateMgr.getStarRocksMetadata();
                 minTimes = 0;
-                result = localMetastore;
+                result = starRocksMetadata;
             }
         };
 
@@ -211,16 +211,16 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(1001);
 
-        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        StarRocksMetadata starRocksMetadata = new StarRocksMetadata();
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
                 minTimes = 0;
                 result = be;
 
-                globalStateMgr.getLocalMetastore();
+                globalStateMgr.getStarRocksMetadata();
                 minTimes = 0;
-                result = localMetastore;
+                result = starRocksMetadata;
             }
         };
 

@@ -352,6 +352,10 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 Range<PartitionKey> checkDropPartitionKey = idToRange.getValue();
                 RangeUtils.checkRangeIntersect(reservePartitionKeyRange, checkDropPartitionKey);
                 if (checkDropPartitionKey.upperEndpoint().compareTo(reservePartitionKeyRange.lowerEndpoint()) <= 0) {
+
+                    Partition partition = GlobalStateMgr.getCurrentState().getStarRocksMetadata().getPartition(
+                            db, olapTable, checkDropPartitionId);
+
                     String dropPartitionName = olapTable.getPartition(checkDropPartitionId).getName();
                     dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, true));
                 }
@@ -376,7 +380,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
             return true;
@@ -387,7 +391,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         String tableName;
         boolean skipAddPartition = false;
         OlapTable olapTable;
-        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (olapTable == null) {
             LOG.warn("Automatically removes the schedule because table does not exist, " +
                         "tableId: {}", tableId);
@@ -456,7 +460,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(ctx, dropPartitionClause);
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
+                GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
             } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -471,7 +475,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     AlterTableClauseAnalyzer alterTableClauseVisitor = new AlterTableClauseAnalyzer(olapTable);
                     alterTableClauseVisitor.analyze(ctx, addPartitionClause);
 
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(ctx,
+                    GlobalStateMgr.getCurrentState().getStarRocksMetadata().addPartitions(ctx,
                                 db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
                 } catch (DdlException e) {
@@ -488,13 +492,13 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             Pair<Long, Long> tableInfo = iterator.next();
             Long dbId = tableInfo.first;
             Long tableId = tableInfo.second;
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             if (db == null) {
                 iterator.remove();
                 LOG.warn("Could not get database={} info. remove it from scheduler", dbId);
                 continue;
             }
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             OlapTable olapTable;
             if (table instanceof OlapTable) {
                 olapTable = (OlapTable) table;
@@ -551,7 +555,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                             new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
                     AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                     analyzer.analyze(new ConnectContext(), dropPartitionClause);
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
+                    GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {
                     recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -685,8 +689,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         Map<String, List<String>> dynamicPartitionTables = new HashMap<>();
         Map<String, List<String>> ttlPartitionTables = new HashMap<>();
         long start = System.currentTimeMillis();
-        for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        for (Long dbId : GlobalStateMgr.getCurrentState().getMetastore().getDbIds()) {
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -697,7 +701,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(dbId)) {
+                for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(dbId)) {
                     if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
                         registerDynamicPartitionTable(db.getId(), table.getId());
                         dynamicPartitionTables.computeIfAbsent(db.getFullName(), k -> new ArrayList<>())

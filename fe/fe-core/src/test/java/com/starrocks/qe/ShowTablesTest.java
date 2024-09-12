@@ -39,7 +39,7 @@ public class ShowTablesTest {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         ShowTableMockMeta metadataMgr =
-                new ShowTableMockMeta(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
+                new ShowTableMockMeta(globalStateMgr.getStarRocksMetadata(), globalStateMgr.getConnectorMgr());
         metadataMgr.init();
         globalStateMgr.setMetadataMgr(metadataMgr);
 

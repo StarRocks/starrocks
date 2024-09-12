@@ -104,10 +104,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDb(mvId.getDbId());
+        Database db = globalStateMgr.getMetastore().getDb(mvId.getDbId());
         if (db != null) {
             dbNameOpt = Optional.of(db.getFullName());
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), mvId.getId());
             if (table != null) {
                 mvNameOpt = Optional.of(table.getName());
                 return true;
@@ -159,8 +159,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
         // histogram metrics
         try {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvId.getDbId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                         .getTable(db.getId(), mvId.getId());
             histRefreshJobDuration = metricRegistry.histogram(MetricRegistry.name("mv_refresh_duration",
                         db.getFullName(), mv.getName()));
@@ -215,11 +215,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's row count") {
             @Override
             public Long getValue() {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0L;
                 }
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+                Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), mvId.getId());
                 if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
@@ -239,11 +239,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's storage size") {
             @Override
             public Long getValue() {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0L;
                 }
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+                Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), mvId.getId());
                 if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
@@ -263,11 +263,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's inactive or not, 0: active, 1: inactive") {
             @Override
             public Integer getValue() {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0;
                 }
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+                Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), mvId.getId());
                 if (table == null || !table.isMaterializedView()) {
                     return 0;
                 }
@@ -285,11 +285,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's partition count, 0 if the materialized view is not partitioned") {
             @Override
             public Integer getValue() {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0;
                 }
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+                Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), mvId.getId());
                 if (table == null || !table.isMaterializedView()) {
                     return 0;
                 }

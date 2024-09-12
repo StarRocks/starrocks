@@ -44,7 +44,7 @@ public class ShowDeleteTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), anyString);
                 minTimes = 0;
             }
         };

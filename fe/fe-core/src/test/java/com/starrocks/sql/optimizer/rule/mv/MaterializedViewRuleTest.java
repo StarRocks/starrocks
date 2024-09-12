@@ -63,8 +63,8 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database database = globalStateMgr.getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(database.getFullName(), "lineorder_flat_for_mv");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
@@ -74,8 +74,8 @@ public class MaterializedViewRuleTest extends PlanTestBase {
     @Test
     public void testKeyColumnsMatch() throws Exception {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database database = globalStateMgr.getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(database.getFullName(), "lineorder_flat_for_mv");
         OlapTable baseTable = (OlapTable) table;
 

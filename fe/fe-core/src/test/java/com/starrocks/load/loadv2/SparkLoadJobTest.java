@@ -157,11 +157,11 @@ public class SparkLoadJobTest {
 
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(dbName);
+                globalStateMgr.getMetastore().getDb(dbName);
                 result = db;
                 globalStateMgr.getResourceMgr();
                 result = resourceMgr;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
                 result = olapTable;
                 db.getId();
                 result = dbId;
@@ -372,9 +372,9 @@ public class SparkLoadJobTest {
                 result = status;
                 handler.getEtlFilePaths(etlOutputPath, (BrokerDesc) any);
                 result = filePathToSize;
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = db;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
                 result = table;
                 table.getPartition(partitionId);
                 result = partition;
@@ -382,7 +382,7 @@ public class SparkLoadJobTest {
                 result = partitionInfo;
                 table.getSchemaByIndexId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 index.getId();
                 result = indexId;
@@ -470,9 +470,9 @@ public class SparkLoadJobTest {
                 result = status;
                 handler.getEtlFilePaths(etlOutputPath, (BrokerDesc) any);
                 result = filePathToSize;
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = db;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
                 result = table;
                 table.getPartition(partitionId);
                 result = partition;
@@ -480,7 +480,7 @@ public class SparkLoadJobTest {
                 result = partitionInfo;
                 table.getSchemaByIndexId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 index.getId();
                 result = indexId;
@@ -528,7 +528,7 @@ public class SparkLoadJobTest {
                                                  @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = db;
             }
         };
@@ -619,7 +619,7 @@ public class SparkLoadJobTest {
                                              @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(dbId);
+                globalStateMgr.getMetastore().getDb(dbId);
                 result = db;
             }
         };

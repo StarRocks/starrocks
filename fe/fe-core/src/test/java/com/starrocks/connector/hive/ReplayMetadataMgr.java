@@ -30,8 +30,8 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -54,7 +54,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
     private Map<String, Map<String, Map<String, HiveTableInfo>>> replayTableMap;
     private long idGen = 0;
 
-    public ReplayMetadataMgr(LocalMetastore localMetastore,
+    public ReplayMetadataMgr(StarRocksMetadata localMetastore,
                              ConnectorMgr connectorMgr,
                              ResourceMgr resourceMgr,
                              Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> externalTableInfoMap,

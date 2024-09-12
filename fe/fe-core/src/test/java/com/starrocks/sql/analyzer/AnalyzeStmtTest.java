@@ -208,8 +208,8 @@ public class AnalyzeStmtTest {
     public void testShow() throws MetaNotFoundException {
         String sql = "show analyze";
         ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "t0");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "t0");
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
                 Lists.newArrayList(),
@@ -271,8 +271,8 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testStatisticsSqlBuilder() throws Exception {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
+        Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getFullName(), "t0");
         System.out.println(table.getPartitions());
         Partition partition = (new ArrayList<>(table.getPartitions())).get(0);
 
@@ -321,9 +321,9 @@ public class AnalyzeStmtTest {
     @Test
     public void testHistogramSampleRatio() {
         OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
-                .getLocalMetastore().getDb("db").getTable("tbl");
+                .getMetastore().getDb("db").getTable("tbl");
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
         }
 
         String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -332,7 +332,7 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(400000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(400000);
         }
 
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -341,7 +341,7 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(20000000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(20000000);
         }
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
                 "properties(\"histogram_sample_ratio\"=\"0.9\")";
@@ -387,8 +387,8 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testAnalyzeStatus() throws MetaNotFoundException {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "t0");
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(testDb.getFullName(), "t0");
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
@@ -417,9 +417,9 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testObjectColumns() {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb("db");
         OlapTable table =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tb2");
+                (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getFullName(), "tb2");
 
         Column kk1 = table.getColumn("kk1");
         Column kk2 = table.getColumn("kk2");

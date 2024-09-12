@@ -124,8 +124,8 @@ public class LocalTabletsProcDirTest {
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
-        index.addTablet(tablet1, tabletMeta);
-        index.addTablet(tablet2, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet1, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet2, tabletMeta);
 
         // Partition
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);

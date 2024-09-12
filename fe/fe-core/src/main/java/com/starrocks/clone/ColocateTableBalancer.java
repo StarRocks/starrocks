@@ -328,7 +328,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         Set<GroupId> toIgnoreGroupIds = new HashSet<>();
         boolean isAnyGroupChanged = false;
         for (GroupId groupId : groupIds) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+            Database db = globalStateMgr.getStarRocksMetadata().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 continue;
             }
@@ -726,7 +726,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         long lockTotalTime = 0;
         long waitTotalTimeMs = 0;
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+        Database db = globalStateMgr.getStarRocksMetadata().getDbIncludeRecycleBin(groupId.dbId);
         if (db == null) {
             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
         }
@@ -746,7 +746,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         try {
             TABLE:
             for (Long tableId : tableIds) {
-                OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+                OlapTable olapTable = (OlapTable) globalStateMgr.getStarRocksMetadata().getTableIncludeRecycleBin(db, tableId);
                 if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
                     continue;
                 }
@@ -755,7 +755,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     continue;
                 }
 
-                for (Partition partition : globalStateMgr.getLocalMetastore().getPartitionsIncludeRecycleBin(olapTable)) {
+                for (Partition partition : globalStateMgr.getStarRocksMetadata().getPartitionsIncludeRecycleBin(olapTable)) {
                     partitionChecked++;
 
                     boolean isPartitionUrgent =
@@ -771,28 +771,29 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         locker.unLockDatabase(db.getId(), LockType.READ);
                         locker.lockDatabase(db.getId(), LockType.READ);
                         lockStart = System.nanoTime();
-                        if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
+                        if (globalStateMgr.getStarRocksMetadata().getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
                         }
-                        if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
+                        if (globalStateMgr.getStarRocksMetadata().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
                         }
-                        if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partition.getId()) ==
+                        if (globalStateMgr.getStarRocksMetadata().getPartitionIncludeRecycleBin(olapTable, partition.getId()) ==
                                 null) {
                             continue;
                         }
                     }
                     short replicationNum =
-                            globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
-                                    partition.getId());
+                            globalStateMgr.getStarRocksMetadata()
+                                    .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
                     if (replicationNum == (short) -1) {
                         continue;
                     }
 
-                    long visibleVersion = partition.getVisibleVersion();
+                    long visibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
                     // Here we only get VISIBLE indexes. All other indexes are not queryable.
                     // So it does not matter if tablets of other indexes are not matched.
-                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(IndexExtState.VISIBLE)) {
                         Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
                                 backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
                         int idx = 0;

@@ -21,7 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
-import com.starrocks.server.LocalMetastore;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 
@@ -32,12 +32,12 @@ import java.util.Map;
 import java.util.Optional;
 
 public class RBACMockedMetadataMgr extends MetadataMgr {
-    private final LocalMetastore localMetastore;
+    private final StarRocksMetadata localMetastore;
     private final IdGenerator idGenerator;
     private final Map<String, Database> databaseSet;
     private final Map<String, Table> tableMap;
 
-    public RBACMockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+    public RBACMockedMetadataMgr(StarRocksMetadata localMetastore, ConnectorMgr connectorMgr) {
         super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
         idGenerator = new IdGenerator();

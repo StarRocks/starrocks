@@ -69,8 +69,8 @@ public class CompactionHandlerTest {
                     "DISTRIBUTED BY HASH(v1) BUCKETS 3\n" +
                     "PROPERTIES('replication_num' = '1');");
 
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
-        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        db = GlobalStateMgr.getCurrentState().getMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
     }
 

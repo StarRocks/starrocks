@@ -68,7 +68,7 @@ public class HudiTableTest {
         hiveClient = new HiveMetastoreTest.MockedHiveMetaClient();
     }
 
-    com.starrocks.catalog.Table createTable(CreateTableStmt stmt) throws DdlException {
+    Table createTable(CreateTableStmt stmt) throws DdlException {
         return TableFactoryProvider.getFactory(EngineType.HUDI.name()).createTable(null, null, stmt);
     }
 
@@ -123,7 +123,7 @@ public class HudiTableTest {
         String createTableSql = "create external table if not exists db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"hudi0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -132,7 +132,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"hudi0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -141,7 +141,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"hudi0\", \"database\"=\"db0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -150,7 +150,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -159,7 +159,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"not_exist\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 

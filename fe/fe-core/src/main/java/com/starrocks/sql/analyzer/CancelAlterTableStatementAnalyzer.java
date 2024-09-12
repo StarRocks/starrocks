@@ -25,7 +25,7 @@ public class CancelAlterTableStatementAnalyzer {
     public static void analyze(CancelAlterTableStmt statement, ConnectContext context) {
         statement.getDbTableName().normalization(context);
         // Check db.
-        if (context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName()) == null) {
+        if (context.getGlobalStateMgr().getMetastore().getDb(statement.getDbName()) == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }
     }

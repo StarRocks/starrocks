@@ -41,7 +41,7 @@ public class LakeTableHelperTest {
         // create database
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(createDbStmt.getFullDbName());
     }
 
     @AfterClass
@@ -50,13 +50,13 @@ public class LakeTableHelperTest {
 
     private static LakeTable createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(createTableStmt);
         Table table = testDb().getTable(createTableStmt.getTableName());
         return (LakeTable) table;
     }
 
     private static Database testDb() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        return GlobalStateMgr.getCurrentState().getMetastore().getDb(DB_NAME);
     }
 
     @Test

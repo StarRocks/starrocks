@@ -495,8 +495,8 @@ public final class MetricRepo {
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
         List<Database> dbs = Lists.newArrayList();
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
+        if (GlobalStateMgr.getCurrentState().getMetastore().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getMetastore().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
 
@@ -825,15 +825,15 @@ public final class MetricRepo {
     // collect table-level metrics
     private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+        List<String> dbNames = globalStateMgr.getMetastore().listDbNames();
         for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
             if (null == db) {
                 continue;
             }
 
             // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                 long tableId = table.getId();
                 String tableName = table.getName();
 
@@ -870,12 +870,12 @@ public final class MetricRepo {
 
     private static void collectDatabaseMetrics(MetricVisitor visitor) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
+        List<String> dbNames = globalStateMgr.getMetastore().listDbNames();
         GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
         int dbNum = 0;
         for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
             if (null == db) {
                 continue;
             }

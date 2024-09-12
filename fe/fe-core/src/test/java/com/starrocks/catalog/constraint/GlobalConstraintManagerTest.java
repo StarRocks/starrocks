@@ -80,7 +80,7 @@ public class GlobalConstraintManagerTest {
                 "DUPLICATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY RANDOM \n" +
                 "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
 
         // test global constraint manager
         GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
@@ -167,7 +167,7 @@ public class GlobalConstraintManagerTest {
                 "DUPLICATE KEY(k1, k2)\n" +
                 "DISTRIBUTED BY RANDOM \n" +
                 "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
 
         // test global constraint manager
         GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();

@@ -34,6 +34,7 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
@@ -48,6 +49,8 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.meta.MetadataHandler;
+import com.starrocks.meta.kv.ByteCoder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -56,6 +59,7 @@ import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -110,6 +114,18 @@ public class BDBTool {
                         System.out.println(jsonObject);
                         return true;
                     } else {
+                        String path = options.getPath();
+                        if (!path.isEmpty()) {
+                            getPrefix(db, path);
+                            return true;
+                        }
+
+                        String cat = options.getCat();
+                        if (!cat.isEmpty()) {
+                            getValue(db, cat);
+                            return true;
+                        }
+
                         // set from key
                         long fromKey;
                         String fromKeyStr = options.hasFromKey() ? options.getFromKey() : dbName;
@@ -152,6 +168,7 @@ public class BDBTool {
             String msg = "Failed to run bdb tools";
             LOG.warn(msg, e);
             System.err.println(msg);
+            e.printStackTrace();
             return false;
         }
         return true;
@@ -184,5 +201,62 @@ public class BDBTool {
             System.out.println("key: " + key);
             System.out.println("value: NOT FOUND");
         }
+    }
+
+
+    private void getPrefix(Database db, String prefix) {
+        MetadataHandler metadataHandler = new MetadataHandler(db);
+
+        List<List<Object>> values;
+        if (prefix.equals("/")) {
+            values = metadataHandler.getAllKeys(null);
+        } else {
+            if (prefix.startsWith("/")) {
+                prefix = prefix.substring(1);
+            } else {
+                return;
+            }
+
+            String[] split = prefix.split("/");
+            List<Object> objects = new ArrayList<>();
+            for (String s : split) {
+                try {
+                    Long l = Long.parseLong(s);
+                    objects.add(l);
+                } catch (NumberFormatException e) {
+                    objects.add(s);
+                }
+            }
+
+            values = metadataHandler.getPrefixNoReturnValue(null, ByteCoder.encode(objects));
+        }
+
+        for (List<Object> value : values) {
+            System.out.println("/" + Joiner.on("/").join(value));
+        }
+    }
+
+    private void getValue(Database db, String key) {
+        MetadataHandler metadataHandler = new MetadataHandler(db);
+
+        if (key.startsWith("/")) {
+            key = key.substring(1);
+        } else {
+            return;
+        }
+
+        String[] split = key.split("/");
+
+        List<Object> objects = new ArrayList<>();
+        for (String s : split) {
+            try {
+                Long l = Long.parseLong(s);
+                objects.add(l);
+            } catch (NumberFormatException e) {
+                objects.add(s);
+            }
+        }
+
+        System.out.println(metadataHandler.get(null, ByteCoder.encode(objects)));
     }
 }

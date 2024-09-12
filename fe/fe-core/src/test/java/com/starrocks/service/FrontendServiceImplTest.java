@@ -292,9 +292,9 @@ public class FrontendServiceImplTest {
         String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(dropTableStmt);
             DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt2);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(dropTableStmt2);
         } catch (Exception ex) {
 
         }
@@ -302,14 +302,14 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testImmutablePartitionException() throws TException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "site_access_exception");
         List<Long> partitionIds = Lists.newArrayList();
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
-        Table t = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "v");
+        Table t = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "v");
 
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
 
@@ -343,8 +343,8 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testImmutablePartitionApi() throws TException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "site_access_auto");
         List<Long> partitionIds = table.getPhysicalPartitions().stream()
                     .map(PhysicalPartition::getId).collect(Collectors.toList());
@@ -379,8 +379,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -410,8 +410,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_day");
         ((OlapTable) table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -439,8 +439,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_day");
         ((OlapTable) table).setState(OlapTable.OlapTableState.ROLLUP);
 
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -461,8 +461,8 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionExceedLimit() throws TException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -511,8 +511,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_slice");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_slice");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -542,8 +542,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -579,8 +579,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_month");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -622,8 +622,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_border");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_border");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("NULL");
@@ -654,8 +654,8 @@ public class FrontendServiceImplTest {
     @Test
     public void testAutomaticPartitionLimitExceed() throws TException {
         Config.max_partition_number_per_table = 1;
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_slice");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_slice");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1991-04-24");
@@ -685,8 +685,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_month");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1999-04-29");
@@ -782,8 +782,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_hour");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_hour");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24 12:34:56");
@@ -806,8 +806,8 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreateEmptyPartition() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_empty");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_empty");
         Collection<Partition> partitions = table.getPartitions();
         Assert.assertEquals(1, partitions.size());
         String name = partitions.iterator().next().getName();
@@ -1074,8 +1074,8 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testGetLoadTxnStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_day");
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
@@ -1227,8 +1227,8 @@ public class FrontendServiceImplTest {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_list");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "site_access_list");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -1244,8 +1244,8 @@ public class FrontendServiceImplTest {
         TCreatePartitionResult partition = impl.createPartition(request);
 
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        Database testDb = currentState.getLocalMetastore().getDb("test");
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = currentState.getMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), "site_access_list");
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();

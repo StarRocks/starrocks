@@ -124,14 +124,14 @@ public class LoadStmtAnalyzer {
                 if (etlJobType == EtlJobType.SPARK && database != null) {
                     for (DataDescription dataDescription : dataDescriptions) {
                         String tableName = dataDescription.getTableName();
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(database);
+                        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(database);
                         if (db == null) {
                             continue;
                         }
                         Locker locker = new Locker();
                         locker.lockDatabase(db.getId(), LockType.READ);
                         try {
-                            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            Table table = GlobalStateMgr.getCurrentState().getMetastore()
                                         .getTable(db.getFullName(), tableName);
                             if (table == null) {
                                 continue;

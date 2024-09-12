@@ -358,7 +358,7 @@ public class ShowStmtAnalyzer {
         }
 
         private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(node.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(node.getDb());
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
             }
@@ -374,7 +374,7 @@ public class ShowStmtAnalyzer {
                 }
                 //if getTable not find table, may be is statement "desc materialized-view-name"
                 if (table == null) {
-                    for (Table tb : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                    for (Table tb : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                         if (tb.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tb;
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
@@ -561,7 +561,7 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }

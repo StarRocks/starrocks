@@ -173,7 +173,7 @@ public class StatisticUtils {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 if (physicalPartition != null) {
                     Partition partition = table.getPartition(physicalPartition.getParentId());
-                    if (partition != null && partition.isFirstLoad()) {
+                    if (partition != null && partition.getDefaultPhysicalPartition().isFirstLoad()) {
                         collectPartitionIds.add(partition.getId());
                     }
                 }
@@ -248,8 +248,8 @@ public class StatisticUtils {
         }
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
+            if (null != db && null != GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -261,7 +261,7 @@ public class StatisticUtils {
         if (FeConstants.runningUnitTest) {
             return true;
         }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
@@ -273,7 +273,7 @@ public class StatisticUtils {
 
         for (String tableName : tableNameList) {
             // check table
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 return false;
             }
@@ -283,7 +283,7 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                     return false;
                 }
@@ -295,7 +295,7 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
+            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else if (table.isHiveTable()) {
@@ -319,14 +319,14 @@ public class StatisticUtils {
             IcebergTable icebergTable = (IcebergTable) table;
             Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
             return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
-                            plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
+                    plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
         } else {
             return null;
         }
     }
 
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
-        long time = partition.getVisibleVersionTime();
+        long time = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
     }
 
@@ -593,7 +593,7 @@ public class StatisticUtils {
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);
         if (base == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
         }
 
         Type baseColumnType = base.getType();

@@ -15,13 +15,16 @@
 package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -34,11 +37,13 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.UserException;
@@ -48,13 +53,16 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.TableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -99,11 +107,13 @@ import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import static com.starrocks.meta.StarRocksMetadata.inactiveRelatedMaterializedView;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
@@ -135,8 +145,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         TableName tableName = statement.getTbl();
         this.tableName = tableName;
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(tableName.getDb());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -192,8 +202,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
         TableName tableName = statement.getTableName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(tableName.getDb());
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -213,7 +223,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
         // check db
         final TableName mvName = stmt.getMvName();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvName.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", mvName.getCatalogAndDb());
         }
@@ -224,7 +234,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         }
 
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvName.getDb(), mvName.getTbl());
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(mvName.getDb(), mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", mvName);
             }
@@ -270,7 +280,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             ErrorReport.wrapWithRuntimeException(() ->
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().renameTable(db, table, clause));
+                    GlobalStateMgr.getCurrentState().getStarRocksMetadata().renameTable(db, table, clause));
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
@@ -282,7 +292,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
-            ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+            ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                     .alterTableComment(db, table, clause));
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -295,43 +305,38 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         // must hold db write lock
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        OlapTable origTable = (OlapTable) table;
+        String origTblName = origTable.getName();
+        String newTblName = clause.getTblName();
+        Table newTbl = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), newTblName);
+        if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
+            throw new AlterJobException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
+        }
+        OlapTable olapNewTbl = (OlapTable) newTbl;
+
+        // First, we need to check whether the table to be operated on can be renamed
         try {
-            OlapTable origTable = (OlapTable) table;
-            String origTblName = origTable.getName();
-            String newTblName = clause.getTblName();
-            Table newTbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newTblName);
-            if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
-                throw new AlterJobException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
-            }
-            OlapTable olapNewTbl = (OlapTable) newTbl;
+            olapNewTbl.checkAndSetName(origTblName, true);
+            origTable.checkAndSetName(newTblName, true);
 
-            // First, we need to check whether the table to be operated on can be renamed
-            try {
-                olapNewTbl.checkAndSetName(origTblName, true);
-                origTable.checkAndSetName(newTblName, true);
-
-                if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
-                    if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
-                        throw new AlterJobException("Materialized view can only SWAP WITH materialized view");
-                    }
+            if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
+                if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
+                    throw new AlterJobException("Materialized view can only SWAP WITH materialized view");
                 }
-
-                // inactive the related MVs
-                LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
-                LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
-
-                SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
-                GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log);
-
-                LOG.info("finish swap table {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
-                        newTblName);
-                return null;
-            } catch (DdlException e) {
-                throw new AlterJobException(e.getMessage(), e);
             }
+
+            // inactive the related MVs
+            inactiveRelatedMaterializedView(db, origTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
+            inactiveRelatedMaterializedView(db, olapNewTbl,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
+
+            SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
+            GlobalStateMgr.getCurrentState().getMetastore().swapTable(log);
+
+            LOG.info("finish swap table {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
+                    newTblName);
+            return null;
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
@@ -342,12 +347,13 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         try {
             Map<String, String> properties = clause.getProperties();
             SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            MetaStore localMetastore = GlobalStateMgr.getServingState().getMetastore();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.WRITE_QUORUM);
+                localMetastore.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.WRITE_QUORUM);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.INMEMORY);
+                localMetastore.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.INMEMORY);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                localMetastore.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 if (table.isCloudNativeTable()) {
@@ -361,20 +367,20 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
                     isSynchronous = false;
                 } else {
-                    schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                    localMetastore.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                localMetastore.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.REPLICATED_STORAGE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                localMetastore.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.BUCKET_SIZE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                localMetastore.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.MUTABLE_BUCKET_NUM);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                localMetastore.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.ENABLE_LOAD_PROFILE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
@@ -401,7 +407,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         GlobalStateMgr.getCurrentState().getColocateTableIndex()
                                 .modifyTableColocate(db, olapTable, colocateGroup, false, null);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().convertDistributionType(db, olapTable);
+                        //GlobalStateMgr.getCurrentState().getLocalMetastore().convertDistributionType(db, olapTable);
                     } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                         if (!olapTable.dynamicPartitionExists()) {
                             try {
@@ -420,24 +426,22 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                                         "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
                             }
                         }
-                        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .modifyTableDynamicPartition(db, olapTable, properties);
+                        modifyTableDynamicPartition(db, olapTable, properties);
                     } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                         Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
-                        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .modifyTableDefaultReplicationNum(db, olapTable, properties);
+                        modifyTableDefaultReplicationNum(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableReplicationNum(db, olapTable, properties);
+                        modifyTableReplicationNum(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                        alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                        alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                        alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                        alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                        alterTableProperties(db, olapTable, properties);
                     } else {
                         schemaChangeHandler.process(Lists.newArrayList(clause), db, olapTable);
                     }
@@ -451,6 +455,236 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             throw new AlterJobException(e.getMessage(), e);
         }
         return null;
+    }
+
+    public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        Map<String, String> logProperties = new HashMap<>(properties);
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
+        } else {
+            Map<String, String> analyzedDynamicPartition = DynamicPartitionUtil.analyzeDynamicPartition(properties);
+            tableProperty.modifyTableProperties(analyzedDynamicPartition);
+            tableProperty.buildDynamicProperty();
+        }
+
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), table);
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
+        GlobalStateMgr.getCurrentState().getEditLog().logDynamicPartition(info);
+    }
+
+    /**
+     * Set replication number for unpartitioned table.
+     * ATTN: only for unpartitioned table now.
+     *
+     * @param db
+     * @param table
+     * @param properties
+     * @throws DdlException
+     */
+    // The caller need to hold the db write lock
+    public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())) {
+            throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
+        }
+
+        String defaultReplicationNumName = "default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        if (partitionInfo.isRangePartition()) {
+            throw new DdlException(
+                    "This is a range partitioned table, you should specify partitions with MODIFY PARTITION clause." +
+                            " If you want to set default replication number, please use '" + defaultReplicationNumName +
+                            "' instead of '" + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM + "' to escape misleading.");
+        }
+
+        // unpartitioned table
+        // update partition replication num
+        String partitionName = table.getName();
+        Partition partition = table.getPartition(partitionName);
+        if (partition == null) {
+            throw new DdlException("Partition does not exist. name: " + partitionName);
+        }
+
+        short replicationNum = Short.parseShort(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+        boolean isInMemory = partitionInfo.getIsInMemory(partition.getId());
+        DataProperty newDataProperty = partitionInfo.getDataProperty(partition.getId());
+        partitionInfo.setReplicationNum(partition.getId(), replicationNum);
+
+        // update table default replication num
+        table.setReplicationNum(replicationNum);
+
+        // log
+        ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
+                newDataProperty, replicationNum, isInMemory);
+        GlobalStateMgr.getCurrentState().getMetastore().modifyPartition(info);
+        LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getOriginName(), table.getName(),
+                partition.getName(), replicationNum);
+    }
+
+    /**
+     * Set default replication number for a specified table.
+     * You can see the default replication number by Show Create Table stmt.
+     *
+     * @param db
+     * @param table
+     * @param properties
+     */
+    // The caller need to hold the db write lock
+    public void modifyTableDefaultReplicationNum(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())) {
+            throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
+        }
+
+        // check unpartitioned table
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        Partition partition = null;
+        boolean isUnpartitionedTable = false;
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+            isUnpartitionedTable = true;
+            String partitionName = table.getName();
+            partition = table.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException("Partition does not exist. name: " + partitionName);
+            }
+        }
+
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildReplicationNum();
+
+        // update partition replication num if this table is unpartitioned table
+        if (isUnpartitionedTable) {
+            Preconditions.checkNotNull(partition);
+            partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
+        }
+
+        // log
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyReplicationNum(info);
+        LOG.info("modify table[{}] replication num to {}", table.getName(),
+                properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+    }
+
+    public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        Map<String, String> propertiesToPersist = new HashMap<>(properties);
+        Map<String, Object> results = validateToBeModifiedProps(properties, table);
+
+        TableProperty tableProperty = table.getTableProperty();
+        for (String key : results.keySet()) {
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                int partitionLiveNumber = (int) results.get(key);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
+                        String.valueOf(partitionLiveNumber));
+                if (partitionLiveNumber == TableProperty.INVALID) {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
+                            table.getId());
+                } else {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().registerTtlPartitionTable(db.getId(),
+                            table.getId());
+                }
+                tableProperty.setPartitionTTLNumber(partitionLiveNumber);
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                DataProperty dataProperty = (DataProperty) results.get(key);
+                TStorageMedium storageMedium = dataProperty.getStorageMedium();
+                table.setStorageMedium(storageMedium);
+                tableProperty.getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
+                                String.valueOf(dataProperty.getCooldownTimeMs()));
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+                String storageCoolDownTTL = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
+                tableProperty.buildStorageCoolDownTTL();
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                String partitionDuration = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, partitionDuration);
+                tableProperty.buildDataCachePartitionDuration();
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+                String location = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+                table.setLocation(location);
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
+        }
+    }
+
+    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties, OlapTable table) throws DdlException {
+        Map<String, Object> results = Maps.newHashMap();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            try {
+                DataProperty dataProperty = DataProperty.getInferredDefaultDataProperty();
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, dataProperty, false);
+                results.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, dataProperty);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            try {
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, true);
+                results.put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, null);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            try {
+                PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                results.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, null);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (table.getColocateGroup() != null) {
+                throw new DdlException("Cannot set location for colocate table");
+            }
+            String locations = PropertyAnalyzer.analyzeLocation(properties, true);
+            results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+        if (!properties.isEmpty()) {
+            throw new DdlException("Modify failed because unknown properties: " + properties);
+        }
+        return results;
     }
 
     @Override
@@ -493,11 +727,41 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             modifiedColumns.add(clause.getColName());
             ErrorReport.wrapWithRuntimeException(() ->
                     schemaChangeHandler.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
-            GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
+            renameColumn(db, table, clause);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
         return null;
+    }
+
+    public void renameColumn(Database db, Table table, ColumnRenameClause renameClause) {
+        if (!(table instanceof OlapTable)) {
+            throw ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
+        }
+        if (db.isSystemDatabase() || db.isStatisticsDatabase()) {
+            throw ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB, db.getFullName());
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE, olapTable.getState());
+        }
+
+        String colName = renameClause.getColName();
+        String newColName = renameClause.getNewColName();
+
+        Column column = olapTable.getColumn(colName);
+        if (column == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_BAD_FIELD_ERROR, colName, table.getName());
+        }
+        Column currentColumn = olapTable.getColumn(newColName);
+        if (currentColumn != null) {
+            throw ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
+        }
+        olapTable.renameColumn(colName, newColName);
+
+        ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(db.getId(), table.getId(), colName, newColName);
+        GlobalStateMgr.getCurrentState().getMetastore().renameColumn(columnRenameInfo);
+        LOG.info("rename column {} to {}", colName, newColName);
     }
 
     @Override
@@ -523,12 +787,47 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().renameRollup(db, (OlapTable) table, clause));
+            ErrorReport.wrapWithRuntimeException(() -> renameRollup(db, (OlapTable) table, clause));
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
         return null;
+    }
+
+    public void renameRollup(Database db, OlapTable table, RollupRenameClause renameClause) throws DdlException {
+        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw new DdlException("Table[" + table.getName() + "] is under " + table.getState());
+        }
+
+        String rollupName = renameClause.getRollupName();
+        // check if it is base table name
+        if (rollupName.equals(table.getName())) {
+            throw new DdlException("Using ALTER TABLE RENAME to change table name");
+        }
+
+        String newRollupName = renameClause.getNewRollupName();
+        if (rollupName.equals(newRollupName)) {
+            throw new DdlException("Same rollup name");
+        }
+
+        Map<String, Long> indexNameToIdMap = table.getIndexNameToId();
+        if (indexNameToIdMap.get(rollupName) == null) {
+            throw new DdlException("Rollup index[" + rollupName + "] does not exists");
+        }
+
+        // check if name is already used
+        if (indexNameToIdMap.get(newRollupName) != null) {
+            throw new DdlException("Rollup name[" + newRollupName + "] is already used");
+        }
+
+        long indexId = indexNameToIdMap.remove(rollupName);
+        indexNameToIdMap.put(newRollupName, indexId);
+
+        // log
+        TableInfo tableInfo = TableInfo.createForRollupRename(db.getId(), table.getId(), indexId, newRollupName);
+        GlobalStateMgr.getCurrentState().getMetastore().renameRollup(tableInfo);
+
+        LOG.info("rename rollup[{}] to {}", rollupName, newRollupName);
     }
 
     @Override
@@ -564,7 +863,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             DynamicPartitionUtil.checkAlterAllowed((OlapTable) table);
         }
         ErrorReport.wrapWithRuntimeException(() ->
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(context, db, table.getName(), clause));
+                GlobalStateMgr.getCurrentState().getStarRocksMetadata().addPartitions(context, db, table.getName(), clause));
         return null;
     }
 
@@ -581,7 +880,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         }
 
         ErrorReport.wrapWithRuntimeException(() ->
-                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, clause));
+                GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropPartition(db, table, clause));
         return null;
     }
 
@@ -595,14 +894,14 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
         ErrorReport.wrapWithRuntimeException(() ->
-                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt, ctx));
+                GlobalStateMgr.getCurrentState().getStarRocksMetadata().truncateTable(tStmt, ctx));
         return null;
     }
 
     @Override
     public Void visitReplacePartitionClause(ReplacePartitionClause clause, ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() ->
-                GlobalStateMgr.getCurrentState().getLocalMetastore().replaceTempPartition(db, table.getName(), clause));
+                GlobalStateMgr.getCurrentState().getStarRocksMetadata().replaceTempPartition(db, table.getName(), clause));
         return null;
     }
 
@@ -616,7 +915,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             }
 
             ErrorReport.wrapWithRuntimeException(() ->
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, clause));
+                    GlobalStateMgr.getCurrentState().getStarRocksMetadata().renamePartition(db, table, clause));
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
@@ -777,9 +1076,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 alterViewClause.getInlineViewDef(),
                 alterViewClause.getColumns(),
                 ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
-
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+        GlobalStateMgr.getCurrentState().getMetastore().modifyViewDef(alterViewInfo);
         return null;
     }
 }

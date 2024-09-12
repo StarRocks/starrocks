@@ -106,11 +106,11 @@ public class AccessTestUtil {
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
-                partition.getBaseIndex();
+                partition.getDefaultPhysicalPartition().getBaseIndex();
                 minTimes = 0;
                 result = index;
 
-                partition.getIndex(30000L);
+                partition.getDefaultPhysicalPartition().getIndex(30000L);
                 minTimes = 0;
                 result = index;
             }
@@ -237,11 +237,11 @@ public class AccessTestUtil {
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
-                partition.getBaseIndex();
+                partition.getDefaultPhysicalPartition().getBaseIndex();
                 minTimes = 0;
                 result = index;
 
-                partition.getIndex(30000L);
+                partition.getDefaultPhysicalPartition().getIndex(30000L);
                 minTimes = 0;
                 result = index;
             }

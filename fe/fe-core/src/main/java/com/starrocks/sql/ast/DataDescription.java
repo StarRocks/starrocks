@@ -673,7 +673,7 @@ public class DataDescription implements ParseNode {
     }
 
     public void analyzeTable(String fullDbName) throws AnalysisException {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(fullDbName, tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(fullDbName, tableName);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
         }

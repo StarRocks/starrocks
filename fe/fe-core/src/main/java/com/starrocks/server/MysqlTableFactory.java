@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.sql.ast.CreateTableStmt;
 
 import java.util.List;
@@ -33,7 +34,7 @@ public class MysqlTableFactory implements AbstractTableFactory {
 
     @Override
     @NotNull
-    public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
+    public Table createTable(MetaStore metastore, Database database, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
 
         List<Column> columns = stmt.getColumns();

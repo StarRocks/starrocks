@@ -57,7 +57,6 @@ import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
-import org.apache.hadoop.hive.metastore.api.Table;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -88,7 +87,7 @@ public class HiveTableTest {
         hiveClient = new HiveMetastoreTest.MockedHiveMetaClient();
     }
 
-    com.starrocks.catalog.Table createTable(CreateTableStmt stmt) throws DdlException {
+    Table createTable(CreateTableStmt stmt) throws DdlException {
         return TableFactoryProvider.getFactory(EngineType.HIVE.name()).createTable(null, null, stmt);
     }
 
@@ -101,7 +100,7 @@ public class HiveTableTest {
         sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
-        Table msTable = new Table();
+        org.apache.hadoop.hive.metastore.api.Table msTable = new org.apache.hadoop.hive.metastore.api.Table();
         msTable.setPartitionKeys(partKeys);
         msTable.setSd(sd);
         msTable.setTableType("MANAGED_TABLE");
@@ -129,7 +128,7 @@ public class HiveTableTest {
                         "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
 
         Assert.assertTrue(table instanceof HiveTable);
         HiveTable hiveTable = (HiveTable) table;
@@ -150,7 +149,7 @@ public class HiveTableTest {
                 "(\"resource\"=\"hive0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -160,7 +159,7 @@ public class HiveTableTest {
                 "(\"resource\"=\"hive0\")";
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -170,7 +169,7 @@ public class HiveTableTest {
                 "(\"resource\"=\"not_exist_reousrce\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -180,13 +179,13 @@ public class HiveTableTest {
                 "(\"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
     @Test(expected = DdlException.class)
     public void testHiveColumnConvert(@Mocked MetadataMgr metadataMgr) throws Exception {
-        Table msTable = hiveClient.getTable("hive_db", "hive_table");
+        org.apache.hadoop.hive.metastore.api.Table msTable = hiveClient.getTable("hive_db", "hive_table");
         HiveTable oTable =
                 HiveMetastoreApiConverter.toHiveTable(msTable, getResourceMappingCatalogName("hive0", "hive"));
         new Expectations() {
@@ -205,13 +204,13 @@ public class HiveTableTest {
                 "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
     @Test
     public void testHasBoolPartitionColumn() {
-        Table msTable = hiveClient.getTable("hive_db", "hive_table");
+        org.apache.hadoop.hive.metastore.api.Table msTable = hiveClient.getTable("hive_db", "hive_table");
         HiveTable oTable = HiveMetastoreApiConverter.toHiveTable(msTable, getResourceMappingCatalogName("hive0", "hive"));
         Assert.assertFalse(oTable.hasBooleanTypePartitionColumn());
     }
@@ -235,7 +234,7 @@ public class HiveTableTest {
 
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
-        Table msTable = new Table();
+        org.apache.hadoop.hive.metastore.api.Table msTable = new org.apache.hadoop.hive.metastore.api.Table();
         msTable.setPartitionKeys(partKeys);
         msTable.setSd(sd);
         msTable.setTableType("MANAGED_TABLE");
@@ -282,7 +281,7 @@ public class HiveTableTest {
                             "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            Table table = createTable(createTableStmt);
 
             Assert.assertTrue(table instanceof HiveTable);
             HiveTable hiveTable = (HiveTable) table;

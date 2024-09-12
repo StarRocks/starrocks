@@ -94,13 +94,13 @@ public class LoadJobMVListener implements LoadJobListener {
     private void triggerToRefreshRelatedMVs(TransactionState transactionState, boolean isTriggerIfBaseTableIsMV) {
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("failed to get Database when pending refresh, DBId: {}", dbId);
             return;
         }
         for (long tableId : transactionState.getTableIdList()) {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
@@ -140,8 +140,8 @@ public class LoadJobMVListener implements LoadJobListener {
         Iterator<MvId> mvIdIterator = relatedMvs.iterator();
         while (mvIdIterator.hasNext()) {
             MvId mvId = mvIdIterator.next();
-            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-            MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+            Database mvDb = GlobalStateMgr.getCurrentState().getMetastore().getDb(mvId.getDbId());
+            MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(mvId.getDbId(), mvId.getId());
             if (materializedView == null) {
                 LOG.warn("materialized view {} does not exists.", mvId.getId());
@@ -153,7 +153,7 @@ public class LoadJobMVListener implements LoadJobListener {
                 LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
                                 "db:{}, mv:{}", table.getName(), mvDb.getFullName(),
                         materializedView.getName());
-                GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+                GlobalStateMgr.getCurrentState().getStarRocksMetadata().refreshMaterializedView(
                         mvDb.getFullName(), materializedView.getName(), false, null,
                         Constants.TaskRunPriority.NORMAL.value(), true, false);
             }

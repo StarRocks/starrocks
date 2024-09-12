@@ -1569,9 +1569,9 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
         if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(statement.getDbName());
             if (db != null) {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                Table table = GlobalStateMgr.getCurrentState().getMetastore()
                             .getTable(db.getFullName(), statement.getTableName());
                 if (table == null || !table.isMaterializedView()) {
                     // ignore privilege check for old mv
@@ -2156,7 +2156,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             }
         } else {
             // going to restore some tables in database or some partitions in table
-            Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+            Database db = globalStateMgr.getMetastore().getDb(statement.getDbName());
             Locker locker = new Locker();
             if (db != null) {
                 try {
@@ -2173,7 +2173,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     }
                     // check insert on specified table
                     for (TableRef tableRef : tableRefs) {
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        Table table = GlobalStateMgr.getCurrentState().getMetastore()
                                     .getTable(db.getFullName(), tableRef.getName().getTbl());
                         if (table != null) {
                             try {
@@ -2341,7 +2341,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         }
 
         // db function.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(functionName.getDb());
         if (db != null) {
             Locker locker = new Locker();
             try {
@@ -2540,7 +2540,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     private void checkOperateLoadPrivilege(ConnectContext context, String dbName, String label) {
         GlobalStateMgr globalStateMgr = context.getGlobalStateMgr();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_DB_NOT_FOUND, dbName);
         }

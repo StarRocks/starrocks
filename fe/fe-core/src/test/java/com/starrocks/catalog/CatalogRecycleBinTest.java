@@ -44,9 +44,9 @@ public class CatalogRecycleBinTest {
     public void testGetDb() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Database database = new Database(1, "db");
-        bin.recycleDatabase(database, Sets.newHashSet());
+        bin.recycleDatabase(database, Sets.newHashSet(), false);
         Database database2 = new Database(2, "db");
-        bin.recycleDatabase(database2, Sets.newHashSet());
+        bin.recycleDatabase(database2, Sets.newHashSet(), false);
 
         Database recycledDb = bin.getDatabase(1);
         Assert.assertNull(recycledDb);
@@ -117,7 +117,7 @@ public class CatalogRecycleBinTest {
 
         PhysicalPartition recycledPart = bin.getPhysicalPartition(1L);
         Assert.assertNotNull(recycledPart);
-        recycledPart = bin.getPartition(2L);
+        recycledPart = bin.getPartition(2L).getDefaultPhysicalPartition();
         Assert.assertEquals(2L, recycledPart.getId());
     }
 
@@ -210,7 +210,7 @@ public class CatalogRecycleBinTest {
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
-        index.addTablet(tablet, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet, tabletMeta);
 
         // Partition
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
@@ -283,7 +283,7 @@ public class CatalogRecycleBinTest {
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
-        index.addTablet(tablet, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet, tabletMeta);
 
         // Partition
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
@@ -312,7 +312,7 @@ public class CatalogRecycleBinTest {
         Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         Database db = new Database(111, "uno");
-        recycleBin.recycleDatabase(db, new HashSet<>());
+        recycleBin.recycleDatabase(db, new HashSet<>(), false);
 
         // no need to set enable erase later if there are a lot of time left
         long now = System.currentTimeMillis();
@@ -342,9 +342,9 @@ public class CatalogRecycleBinTest {
 
         // 1. recycle 2 dbs
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(db1, new HashSet<>());
-        recycleBin.recycleDatabase(db2SameName, new HashSet<>());  // will remove same name
-        recycleBin.recycleDatabase(db2, new HashSet<>());
+        recycleBin.recycleDatabase(db1, new HashSet<>(), false);
+        recycleBin.recycleDatabase(db2SameName, new HashSet<>(), false);  // will remove same name
+        recycleBin.recycleDatabase(db2, new HashSet<>(), false);
 
         Assert.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
         Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
@@ -367,7 +367,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().onEraseDatabase(anyLong);
+                globalStateMgr.getRecycleBin().onEraseDatabase(anyLong);
                 minTimes = 0;
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -540,7 +540,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
+                globalStateMgr.getStarRocksMetadata().onErasePartition((Partition) any);
                 minTimes = 0;
 
                 globalStateMgr.getEditLog();

@@ -20,7 +20,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -80,21 +79,21 @@ public class StatisticExecutor {
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
             Table table = null;
             if (dbId == null) {
-                List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+                List<Long> dbIds = GlobalStateMgr.getCurrentState().getMetastore().getDbIds();
                 for (Long id : dbIds) {
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+                    Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(id);
                     if (db == null) {
                         continue;
                     }
-                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                    table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
                     if (table == null) {
                         continue;
                     }
                     break;
                 }
             } else {
-                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+                Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
+                table = GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getId(), tableId);
             }
 
             if (table == null) {
@@ -187,12 +186,12 @@ public class StatisticExecutor {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new SemanticException("Database %s is not found", dbId);
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableId);
         }
@@ -203,7 +202,7 @@ public class StatisticExecutor {
         }
 
         OlapTable olapTable = (OlapTable) table;
-        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
+        long version = olapTable.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                 .max(Long::compareTo).orElse(0L);
         String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;

@@ -215,7 +215,7 @@ public class InsertOverwriteJobRunner {
         }
         job.setTmpPartitionIds(tmpPartitionIds);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -292,12 +292,12 @@ public class InsertOverwriteJobRunner {
         }
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         String targetDb = insertStmt.getTableName().getDb();
-        Database db = state.getLocalMetastore().getDb(targetDb);
+        Database db = state.getMetastore().getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
             analyzer.analyze(context, addPartitionClause);
-            state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
+            state.getStarRocksMetadata().addPartitions(context, db, olapTable.getName(), addPartitionClause);
         } catch (Exception ex) {
             LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
@@ -344,7 +344,7 @@ public class InsertOverwriteJobRunner {
 
     private void createTempPartitions() throws DdlException {
         long createPartitionStartTimestamp = System.currentTimeMillis();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -366,7 +366,7 @@ public class InsertOverwriteJobRunner {
     private void gc(boolean isReplay) {
         LOG.info("start to garbage collect");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -376,7 +376,7 @@ public class InsertOverwriteJobRunner {
         }
 
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
             }
@@ -389,7 +389,8 @@ public class InsertOverwriteJobRunner {
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition().
+                                getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             // hash set is able to deduplicate the elements
                             sourceTablets.addAll(index.getTablets());
                         }
@@ -416,7 +417,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private void doCommit(boolean isReplay) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -438,7 +439,8 @@ public class InsertOverwriteJobRunner {
             Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
             });
@@ -487,7 +489,7 @@ public class InsertOverwriteJobRunner {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -522,7 +524,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private OlapTable checkAndGetTable(Database db, long tableId) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
         }

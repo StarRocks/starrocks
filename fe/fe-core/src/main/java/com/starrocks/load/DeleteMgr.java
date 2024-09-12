@@ -177,12 +177,12 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException("Table does not exist. name: " + tableName);
         }
@@ -627,7 +627,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         // only need check the first partition because each partition has same materialized view
         Map<Long, List<Column>> indexIdToSchema = table.getIndexIdToSchema();
         Partition partition = partitions.get(0);
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             if (table.getBaseIndexId() == index.getId()) {
                 continue;
             }
@@ -723,7 +724,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // show delete stmt
     public List<List<Comparable>> getDeleteInfosByDb(long dbId) {
         LinkedList<List<Comparable>> infos = new LinkedList<List<Comparable>>();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             return infos;
         }
@@ -817,11 +818,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void updateTableDeleteInfo(GlobalStateMgr globalStateMgr, long dbId, long tableId) {
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        Database db = globalStateMgr.getMetastore().getDb(dbId);
         if (db == null) {
             return;
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return;
         }

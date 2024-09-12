@@ -18,16 +18,6 @@ import com.google.common.collect.Range;
 import com.staros.client.StarClientException;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
@@ -85,7 +75,7 @@ public class ReplaceLakePartitionTest {
         for (long id : tabletId) {
             TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
-            index.addTablet(new LakeTablet(id), tabletMeta);
+            index.addTabletWithInvertedIndex(new LakeTablet(id), tabletMeta);
         }
         Partition partition = new Partition(partitionId, partitionName, index, null);
         Partition tempPartition = new Partition(tempPartitionId, tempPartitionName, index, null);
@@ -124,7 +114,7 @@ public class ReplaceLakePartitionTest {
         for (long id : newTabletId) {
             TabletMeta tabletMeta = new TabletMeta(dbId, tableId, newPartitionId, 0, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
-            index.addTablet(new LakeTablet(id), tabletMeta);
+            index.addTabletWithInvertedIndex(new LakeTablet(id), tabletMeta);
         }
 
         return new Partition(newPartitionId, partitionName, index, null);

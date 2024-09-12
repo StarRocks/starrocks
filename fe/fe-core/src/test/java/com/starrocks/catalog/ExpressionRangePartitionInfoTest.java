@@ -498,8 +498,8 @@ public class ExpressionRangePartitionInfoTest {
                     ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "table_hitcount");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "table_hitcount");
         // serialize
         String json = GsonUtils.GSON.toJson(table);
         // deserialize
@@ -541,8 +541,8 @@ public class ExpressionRangePartitionInfoTest {
                     "\"replication_num\" = \"1\"\n" +
                     ") as select dt, queryId, count(1) from test_table group by dt, queryId"
         );
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_mv1");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "test_mv1");
         // serialize
         String json = GsonUtils.GSON.toJson(table);
         // deserialize
@@ -578,9 +578,9 @@ public class ExpressionRangePartitionInfoTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
         OlapTable olapTable =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "game_log2");
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "game_log2");
         ExpressionRangePartitionInfoV2 expressionRangePartitionInfo =
                     (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo();
         expressionRangePartitionInfo.setPartitionExprs(Lists.newArrayList(

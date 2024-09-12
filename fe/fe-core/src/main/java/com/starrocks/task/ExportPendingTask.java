@@ -80,7 +80,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
         }
 
         long dbId = job.getDbId();
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "database does not exist");
             return;

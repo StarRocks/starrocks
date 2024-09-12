@@ -82,7 +82,7 @@ public class LakeBackupJob extends BackupJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;

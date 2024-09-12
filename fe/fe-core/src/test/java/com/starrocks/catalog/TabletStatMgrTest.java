@@ -194,15 +194,15 @@ public class TabletStatMgrTest {
         // Index
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, 0, TStorageMedium.HDD, true);
-        index.addTablet(tablet1, tabletMeta);
-        index.addTablet(tablet2, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet1, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet2, tabletMeta);
 
         // Partition
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
         Partition partition = new Partition(PARTITION_ID, "p1", index, distributionInfo);
-        partition.setVisibleVersion(2L, visibleVersionTime);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2L, visibleVersionTime);
 
         // Lake table
         LakeTable table = new LakeTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -219,8 +219,10 @@ public class TabletStatMgrTest {
 
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1).getId();
+        long tablet1Id = table.getPartition(PARTITION_ID)
+                .getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+        long tablet2Id = table.getPartition(PARTITION_ID)
+                .getDefaultPhysicalPartition().getBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -316,8 +318,10 @@ public class TabletStatMgrTest {
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
         long t2 = System.currentTimeMillis();
 
-        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0);
-        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1);
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID)
+                .getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID)
+                .getDefaultPhysicalPartition().getBaseIndex().getTablets().get(1);
 
         Assert.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
         Assert.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
@@ -332,8 +336,10 @@ public class TabletStatMgrTest {
                                           @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1).getId();
+        long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0).getId();
+        long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -365,8 +371,10 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
-        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0);
-        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1);
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID)
+                .getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID)
+                .getDefaultPhysicalPartition().getBaseIndex().getTablets().get(1);
 
         Assert.assertEquals(0, tablet1.getRowCount(-1));
         Assert.assertEquals(0, tablet1.getDataSize(true));
@@ -381,8 +389,10 @@ public class TabletStatMgrTest {
                                           @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1).getId();
+        long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0).getId();
+        long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -457,8 +467,10 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
-        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0);
-        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1);
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1);
 
         Assert.assertEquals(0, tablet1.getRowCount(-1));
         Assert.assertEquals(0, tablet1.getDataSize(true));

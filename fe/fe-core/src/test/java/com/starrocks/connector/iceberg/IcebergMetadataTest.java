@@ -55,10 +55,10 @@ import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
+import com.starrocks.meta.StarRocksMetadata;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -1260,7 +1260,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testGetMetaSpec(@Mocked LocalMetastore localMetastore, @Mocked TemporaryTableMgr temporaryTableMgr) {
+    public void testGetMetaSpec(@Mocked StarRocksMetadata localMetastore, @Mocked TemporaryTableMgr temporaryTableMgr) {
         mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
@@ -1295,7 +1295,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testGetMetaSpecWithDeleteFile(@Mocked LocalMetastore localMetastore,
+    public void testGetMetaSpecWithDeleteFile(@Mocked StarRocksMetadata localMetastore,
                                               @Mocked TemporaryTableMgr temporaryTableMgr) {
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         // FILE_A_DELETES = positionalDelete / FILE_A2_DELETES = equalityDelete

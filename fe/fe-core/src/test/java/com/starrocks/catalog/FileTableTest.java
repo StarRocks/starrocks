@@ -62,7 +62,7 @@ public class FileTableTest {
                         "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"orc\")";
         CreateTableStmt
                 createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
 
         Assert.assertTrue(table instanceof FileTable);
         FileTable fileTable = (FileTable) table;
@@ -78,7 +78,7 @@ public class FileTableTest {
         CreateTableStmt
                 createTableStmt2 =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql2, connectContext);
-        com.starrocks.catalog.Table table2 = createTable(createTableStmt2);
+        Table table2 = createTable(createTableStmt2);
 
         Assert.assertTrue(table2 instanceof FileTable);
         FileTable fileTable2 = (FileTable) table2;
@@ -126,7 +126,7 @@ public class FileTableTest {
             CreateTableStmt
                     createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            Table table = createTable(createTableStmt);
 
             Assert.assertTrue(table instanceof FileTable);
             FileTable fileTable = (FileTable) table;
@@ -183,7 +183,7 @@ public class FileTableTest {
                         "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"avro\")";
         CreateTableStmt
                 createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = createTable(createTableStmt);
+        Table table = createTable(createTableStmt);
 
         Assert.assertTrue(table instanceof FileTable);
         FileTable fileTable = (FileTable) table;

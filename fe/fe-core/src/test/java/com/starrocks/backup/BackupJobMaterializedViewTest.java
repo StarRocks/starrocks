@@ -160,7 +160,7 @@ public class BackupJobMaterializedViewTest {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -172,11 +172,11 @@ public class BackupJobMaterializedViewTest {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_mv");
+                globalStateMgr.getMetastore().getTable("testDb", "unknown_mv");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
+                globalStateMgr.getMetastore().getTable("testDb", "unknown_tbl");
                 minTimes = 0;
                 result = null;
             }
@@ -247,7 +247,7 @@ public class BackupJobMaterializedViewTest {
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assert.assertNotNull(backupTbl);
                 Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            ((OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                                         .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
                                         true));
             }
@@ -256,7 +256,7 @@ public class BackupJobMaterializedViewTest {
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assert.assertNotNull(backupTbl);
                 Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            ((OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                                         .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
                                         true));
             }
@@ -366,7 +366,7 @@ public class BackupJobMaterializedViewTest {
                 Assert.assertNotNull(olapTable);
                 Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
                 List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
-                Assert.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                Assert.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                                         .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
                             olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
             }
@@ -375,7 +375,7 @@ public class BackupJobMaterializedViewTest {
                 Assert.assertNotNull(mv);
                 Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME));
                 List<String> names = Lists.newArrayList(mv.getPartitionNames());
-                Assert.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                Assert.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                             .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, names,
                             true), mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
             }

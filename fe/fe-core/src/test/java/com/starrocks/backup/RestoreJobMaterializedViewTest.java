@@ -183,7 +183,7 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -191,7 +191,7 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = sqlParser;
 
-                globalStateMgr.getLocalMetastore().getTable(UnitTestUtil.DB_NAME, MATERIALIZED_VIEW_NAME);
+                globalStateMgr.getMetastore().getTable(UnitTestUtil.DB_NAME, MATERIALIZED_VIEW_NAME);
                 minTimes = 0;
                 result = db.getTable(MATERIALIZED_VIEW_NAME);
 
@@ -203,7 +203,7 @@ public class RestoreJobMaterializedViewTest {
                 //minTimes = 0;
                 //result = systemInfoService;
 
-                globalStateMgr.getLocalMetastore().mayGetDb(anyLong);
+                globalStateMgr.getStarRocksMetadata().mayGetDb(anyLong);
                 minTimes = 0;
                 result = Optional.of(db);
 
@@ -331,7 +331,8 @@ public class RestoreJobMaterializedViewTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = olapTable.getIndexNameById(index.getId());
@@ -522,7 +523,7 @@ public class RestoreJobMaterializedViewTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
-                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+                return GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
             }
         };
         // gen BackupJobInfo
@@ -541,7 +542,7 @@ public class RestoreJobMaterializedViewTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
-                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+                return GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
             }
         };
         // gen BackupJobInfo
@@ -556,7 +557,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     private void assertMVActiveEquals(String mvName, boolean expect) {
-        Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+        Table mvTable = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), mvName);
         Assert.assertTrue(mvTable != null);
         Assert.assertTrue(mvTable.isMaterializedView());
         MaterializedView mv = (MaterializedView) mvTable;

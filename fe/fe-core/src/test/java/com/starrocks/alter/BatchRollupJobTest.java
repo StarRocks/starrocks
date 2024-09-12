@@ -92,9 +92,9 @@ public class BatchRollupJobTest {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl1");
         Assert.assertNotNull(tbl);
 
         // 3 rollup jobs may be finished in the loop, so only check the final state at last.
@@ -119,7 +119,7 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
-            Assert.assertEquals(4, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+            Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
     }
 
@@ -138,23 +138,23 @@ public class BatchRollupJobTest {
         Assert.assertEquals(3, alterJobs.size());
         List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "tbl2");
         Assert.assertNotNull(tbl);
         Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
 
         // cancel rollup jobs
         stmtStr = "cancel alter table rollup from db1.tbl2 (" + Joiner.on(",").join(jobIds) + ")";
         CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().cancelAlter(cancelStmt, "");
 
         for (AlterJobV2 alterJob : alterJobs.values()) {
             Assert.assertEquals(AlterJobV2.JobState.CANCELLED, alterJob.getJobState());
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
-            Assert.assertEquals(1, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+            Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
     }
 }

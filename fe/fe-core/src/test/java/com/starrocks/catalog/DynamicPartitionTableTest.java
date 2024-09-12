@@ -102,8 +102,8 @@ public class DynamicPartitionTableTest {
                     "\"dynamic_partition.prefix\" = \"p\",\n" +
                     "\"dynamic_partition.buckets\" = \"1\"\n" +
                     ");");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "dynamic_partition_normal");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(),
                     DynamicPartitionProperty.NOT_SET_REPLICATION_NUM);
@@ -223,8 +223,8 @@ public class DynamicPartitionTableTest {
                     "\"dynamic_partition.time_unit\" = \"day\",\n" +
                     "\"dynamic_partition.prefix\" = \"p\"\n" +
                     ");");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(db.getFullName(), "dynamic_partition_buckets");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getBuckets(), 0);
     }
@@ -405,8 +405,8 @@ public class DynamicPartitionTableTest {
                     "\"dynamic_partition.buckets\" = \"1\",\n" +
                     "\"dynamic_partition.replication_num\" = \"2\"\n" +
                     ");");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(), 2);
     }
 

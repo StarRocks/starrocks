@@ -38,7 +38,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -90,7 +89,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -338,7 +336,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIndexMap.size();
             } else {
-                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                numTablets = physicalPartitionIndexMap.values().stream()
+                        .map(materializedIndex -> GlobalStateMgr.getCurrentState().getMetastore()
+                                .getAllTablets(materializedIndex))
                         .mapToLong(List::size).sum();
             }
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
@@ -373,7 +373,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             .build().toTabletSchema();
 
                     boolean createSchemaFile = true;
-                    for (Tablet shadowTablet : shadowIdx.getTablets()) {
+                    for (Tablet shadowTablet : GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(shadowIdx)) {
                         long shadowTabletId = shadowTablet.getId();
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                                 .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
@@ -418,7 +418,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
 
         sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
-                             waitingCreatingReplica, isCancelling);
+                waitingCreatingReplica, isCancelling);
 
         // Add shadow indexes to table.
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
@@ -483,7 +483,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
-                    for (Tablet shadowTablet : shadowIdx.getTablets()) {
+                    for (Tablet shadowTablet : GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(shadowIdx)) {
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                                 .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
                         if (computeNode == null) {
@@ -610,7 +610,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         // Delete tablet and shards
         for (MaterializedIndex droppedIndex : droppedIndexes) {
-            List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
+            List<Long> shards = GlobalStateMgr.getCurrentState().getMetastore().getAllTabletIDs(droppedIndex);
             // TODO: what if unusedShards deletion is partially successful?
             StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentState().getStarOSAgent());
         }
@@ -668,7 +668,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
+                    Utils.publishVersion(
+                            GlobalStateMgr.getCurrentState().getMetastore().getAllTablets(shadowIndex),
+                            txnInfo, 1, commitVersion, warehouseId);
                 }
             }
             return true;
@@ -697,10 +699,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (modifiedColumns.isEmpty()) {
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
+                    .getTable(db.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -790,7 +792,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
 
             if (jobState == JobState.PENDING) {
-                addTabletToTabletInvertedIndex(table);
+                //addTabletToTabletInvertedIndex(table);
                 table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             } else if (jobState == JobState.WAITING_TXN) {
                 addShadowIndexToCatalog(table, watershedTxnId);
@@ -807,6 +809,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
+    /*
     void addTabletToTabletInvertedIndex(@NotNull OlapTable table) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Table.Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
@@ -824,6 +827,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
         }
     }
+
+     */
 
     void removeShadowIndex(@NotNull OlapTable table) {
         for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -892,13 +897,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 }
                 Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                // Add Tablet to TabletInvertedIndex.
-                TabletMeta shadowTabletMeta =
-                        new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, 0, medium, true);
-                for (Tablet tablet : shadowIdx.getTablets()) {
-                    invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
-                }
-
+                invertedIndex.buildTabletInvertedIndex(dbId, table, table.getAllPhysicalPartitions(), shadowIdxId);
                 partition.visualiseShadowIndex(shadowIdxId, originIdxId == partition.getBaseIndex().getId());
 
                 // the origin tablet created by old schema can be deleted from FE metadata
@@ -909,6 +908,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 droppedIndexes.add(droppedIdx);
             }
         }
+
+
 
         // update index schema info of each index
         for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
@@ -1056,13 +1057,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @Nullable
     ReadLockedDatabase getReadLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         return db != null ? new ReadLockedDatabase(db) : null;
     }
 
     @Nullable
     WriteLockedDatabase getWriteLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         return db != null ? new WriteLockedDatabase(db) : null;
     }
 
@@ -1089,7 +1090,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         @Nullable
         OlapTable getTable(long tableId) {
-            return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            return (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
         }
 
         @Override

@@ -101,7 +101,7 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsertOverwriteWhenSchemaChange() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getDb("test").getTable("t0");
+                .getMetastore().getDb("test").getTable("t0");
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         analyzeFail("insert overwrite t0 select * from t0;",
                 "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");

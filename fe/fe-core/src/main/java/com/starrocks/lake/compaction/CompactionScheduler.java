@@ -256,7 +256,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     private CompactionJob startCompaction(PartitionIdentifier partitionIdentifier) {
-        Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
+        Database db = stateMgr.getMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
             return null;
@@ -273,7 +273,7 @@ public class CompactionScheduler extends Daemon {
 
         try {
             // lake table or lake materialized view
-            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                         .getTable(db.getId(), partitionIdentifier.getTableId());
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
@@ -402,7 +402,7 @@ public class CompactionScheduler extends Daemon {
             throws UserException {
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
-        Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
+        Database db = stateMgr.getMetastore().getDb(partition.getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }

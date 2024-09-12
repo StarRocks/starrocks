@@ -32,9 +32,11 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentTaskRequest;
+import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -167,7 +169,7 @@ public class TabletTaskExecutor {
     }
 
     private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<PhysicalPartition> partitions,
-                                                                  long warehouseId, boolean enableTabletCreationOptimization)
+                                                                   long warehouseId, boolean enableTabletCreationOptimization)
             throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (PhysicalPartition partition : partitions) {
@@ -178,7 +180,7 @@ public class TabletTaskExecutor {
     }
 
     private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
-                                                                  long warehouseId, boolean enableTabletCreationOptimization)
+                                                                   long warehouseId, boolean enableTabletCreationOptimization)
             throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.storageReplicaCount());
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
@@ -188,8 +190,8 @@ public class TabletTaskExecutor {
     }
 
     private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
-                                                                  MaterializedIndex index, long warehouseId,
-                                                                  boolean enableTabletCreationOptimization) throws DdlException {
+                                                                   MaterializedIndex index, long warehouseId,
+                                                                   boolean enableTabletCreationOptimization) throws DdlException {
         LOG.info("build create replica tasks for index {} db {} table {} partition {}",
                 index, dbId, table.getId(), partition);
         boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
@@ -268,7 +270,7 @@ public class TabletTaskExecutor {
     }
 
     private static void sendCreateReplicaTasks(List<CreateReplicaTask> tasks,
-                                              MarkedCountDownLatch<Long, Long> countDownLatch) {
+                                               MarkedCountDownLatch<Long, Long> countDownLatch) {
         HashMap<Long, List<AgentTask>> backendToBatchTask = new HashMap<>();
 
         for (CreateReplicaTask task : tasks) {
@@ -294,6 +296,26 @@ public class TabletTaskExecutor {
         } catch (ExecutionException | InterruptedException e) {
             countDownLatch.countDownToZero(Status.internalError(e.getMessage()));
             throw new RuntimeException(e);
+        }
+    }
+
+    public static void sendTask(AgentTask agentTask) {
+        AgentBatchTask batchTask = new AgentBatchTask();
+        batchTask.addTask(agentTask);
+        AgentTaskExecutor.submit(batchTask);
+        LOG.info("Send agent task : {" + agentTask.toString() + "}");
+    }
+
+    public static void sendTask(List<AgentTask> agentTaskList) {
+        HashMap<Long, List<AgentTask>> backendToBatchTask = new HashMap<>();
+
+        for (AgentTask task : agentTaskList) {
+            List<AgentTask> batchTask = backendToBatchTask.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+            batchTask.add(task);
+        }
+
+        for (Map.Entry<Long, List<AgentTask>> entry : backendToBatchTask.entrySet()) {
+            sendTask(entry.getKey(), entry.getValue());
         }
     }
 
@@ -378,7 +400,6 @@ public class TabletTaskExecutor {
 
     public static void deleteAllReplicas(OlapTable olapTable) {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
-
         // drop all replicas
         for (Partition partition : olapTable.getAllPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -387,10 +408,12 @@ public class TabletTaskExecutor {
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    for (Tablet tablet : materializedIndex.getTablets()) {
+                    List<Tablet> tabletList = GlobalStateMgr.getCurrentState().getMetastore()
+                            .getAllTablets(materializedIndex);
+                    for (Tablet tablet : tabletList) {
                         long tabletId = tablet.getId();
-                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                        for (Replica replica : replicas) {
+                        List<Replica> replicaList = GlobalStateMgr.getCurrentState().getMetastore().getAllReplicas(tablet);
+                        for (Replica replica : replicaList) {
                             long backendId = replica.getBackendId();
                             DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
                             AgentBatchTask batchTask = batchTaskMap.get(backendId);
@@ -402,7 +425,7 @@ public class TabletTaskExecutor {
                             LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
                                     tabletId, backendId, olapTable.getId(), olapTable.getName());
                         } // end for replicas
-                    } // end for tablets
+                    }
                 }
             } // end for indices
         } // end for partitions
@@ -431,4 +454,55 @@ public class TabletTaskExecutor {
             }
         }
     }
+
+    public static void finishCreateReplica(AgentTask task, TFinishTaskRequest request) {
+        // if we get here, this task will be removed from AgentTaskQueue for certain.
+        // because in this function, the only problem that cause failure is meta missing.
+        // and if meta is missing, we no longer need to resend this task
+        try {
+            CreateReplicaTask createReplicaTask = (CreateReplicaTask) task;
+            if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
+                createReplicaTask.countDownToZero(
+                        task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
+            } else {
+                long tabletId = createReplicaTask.getTabletId();
+                if (request.isSetFinish_tablet_infos()) {
+                    Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                            .getReplica(tabletId, createReplicaTask.getBackendId());
+                    if (replica != null) {
+                        replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
+                        if (createReplicaTask.getRecoverySource() == CreateReplicaTask.RecoverySource.REPORT) {
+                            /*
+                             * This creates replica task is created by ReportHanlder,
+                             * (See comment of Config.recover_with_empty_tablet)
+                             * So we set replica back to normal state.
+                             */
+                            replica.setBad(false);
+                            LOG.info(
+                                    "finish recover create replica task. set replica to good. tablet {}, replica {}, backend {}",
+                                    tabletId, task.getBackendId(), replica.getId());
+                        }
+                    }
+                } else if (!RunMode.isSharedDataMode()) { // finish_tablet_infos will not be set in shared data mode
+                    LOG.warn("tablet_info is not set in finishTaskRequest");
+                }
+
+                // this should be called before 'countDownLatch()'
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
+
+                createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
+                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
+                        tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
+            }
+
+            if (createReplicaTask.getRecoverySource() == CreateReplicaTask.RecoverySource.SCHEDULER) {
+                GlobalStateMgr.getCurrentState().getTabletScheduler()
+                        .finishCreateReplicaTask(createReplicaTask, request);
+            }
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
+        }
+    }
+
 }

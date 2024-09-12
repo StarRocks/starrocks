@@ -75,7 +75,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 long partitionId = partition.getParentId();
                 long physicalPartitionId = partition.getId();
                 long shardGroupId = partition.getShardGroupId();
-                List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
+
+                MaterializedIndex materializedIndex = partition.getIndex(originIndexId);
+                List<Tablet> originTablets = GlobalStateMgr.getCurrentState().getMetastore()
+                        .getAllTablets(materializedIndex);
+
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
                 List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
@@ -97,7 +101,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
-                    shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
+                    shadowIndex.addTablet(shadowTablet);
                     schemaChangeJob
                             .addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
                 }

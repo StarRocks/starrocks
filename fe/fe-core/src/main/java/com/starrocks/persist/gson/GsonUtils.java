@@ -474,6 +474,54 @@ public class GsonUtils {
     // this instance is thread-safe.
     public static final Gson GSON = GSON_BUILDER.create();
 
+    // the builder of GSON instance.
+    // Add any other adapters if necessary.
+    private static final GsonBuilder GSON_BUILDER_V2 = new GsonBuilder()
+            .addSerializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
+            .addDeserializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
+            .enableComplexMapKeySerialization()
+            .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
+            .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
+            .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
+            .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactoryV2())
+            // For call constructor with selectedFields
+            .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
+            .registerTypeAdapter(StructType.class, new StructType.StructTypeDeserializer())
+            .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ALTER_JOB_V2_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(LOAD_JOB_STATE_UPDATE_INFO_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(TABLET_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(HEARTBEAT_RESPONSE_ADAPTER_FACTOR)
+            .registerTypeAdapterFactory(PARTITION_INFO_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(PARTITION_PERSIST_INFO_V_2_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
+            .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
+            .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
+            .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
+            .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
+            .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
+            .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
+            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
+
+    // this instance is thread-safe.
+    public static final Gson GSON_V2 = GSON_BUILDER_V2.create();
+
     /*
      * The exclusion strategy of GSON serialization.
      * Any fields without "@SerializedName" annotation with be ignored with
@@ -713,6 +761,41 @@ public class GsonUtils {
                     T obj = delegate.read(reader);
                     if (obj instanceof GsonPostProcessable) {
                         ((GsonPostProcessable) obj).gsonPostProcess();
+                    }
+                    return obj;
+                }
+            };
+        }
+    }
+
+    public static class ProcessHookTypeAdapterFactoryV2 implements TypeAdapterFactory {
+
+        public ProcessHookTypeAdapterFactoryV2() {
+        }
+
+        @Override
+        public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
+            TypeAdapter<T> delegate = gson.getDelegateAdapter(this, type);
+
+            return new TypeAdapter<T>() {
+                public void write(JsonWriter out, T obj) throws IOException {
+                    // Use Object lock to protect its properties from changed by other serialize thread.
+                    // But this will only take effect when all threads uses GSONUtils to serialize object,
+                    // because other methods of changing properties do not necessarily require the acquisition of the object lock
+                    if (obj instanceof GsonPreProcessableV2) {
+                        synchronized (obj) {
+                            ((GsonPreProcessableV2) obj).gsonPreProcessV2();
+                            delegate.write(out, obj);
+                        }
+                    } else {
+                        delegate.write(out, obj);
+                    }
+                }
+
+                public T read(JsonReader reader) throws IOException {
+                    T obj = delegate.read(reader);
+                    if (obj instanceof GsonPostProcessableV2) {
+                        ((GsonPostProcessableV2) obj).gsonPostProcessV2();
                     }
                     return obj;
                 }

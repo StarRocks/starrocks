@@ -142,8 +142,8 @@ public class LakeMaterializedViewTest {
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(dbId, mvId, partitionId, indexId, 0, TStorageMedium.HDD, true);
-        index.addTablet(tablet1, tabletMeta);
-        index.addTablet(tablet2, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet1, tabletMeta);
+        index.addTabletWithInvertedIndex(tablet2, tabletMeta);
 
         // Partition
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
@@ -211,9 +211,9 @@ public class LakeMaterializedViewTest {
                     "refresh async\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(DB);
         MaterializedView mv =
-                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv1");
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
@@ -244,7 +244,7 @@ public class LakeMaterializedViewTest {
         Assert.assertNotNull(task);
 
         starRocksAssert.dropMaterializedView("mv1");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1"));
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv1"));
     }
 
     @Test
@@ -260,19 +260,19 @@ public class LakeMaterializedViewTest {
                     "refresh async\n" +
                     "as select k1, k2, sum(k3) as total from base_table, base_table2 where k1 = k4 group by k1, k2;");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(DB);
         MaterializedView mv =
-                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2");
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv2");
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
         // drop base table and inactive mv
         starRocksAssert.dropTable("base_table2");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table2"));
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "base_table2"));
         Assert.assertFalse(mv.isActive());
 
         starRocksAssert.dropMaterializedView("mv2");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2"));
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv2"));
     }
 
     @Test
@@ -283,9 +283,9 @@ public class LakeMaterializedViewTest {
                     "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
                     "as select k1,k2 from base_table;");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(DB);
         MaterializedView mv =
-                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3");
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv3");
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
 
         MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
@@ -302,7 +302,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals(2, asyncRefreshContext.getStep());
 
         starRocksAssert.dropMaterializedView("mv3");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3"));
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv3"));
     }
 
     @Test
@@ -319,9 +319,9 @@ public class LakeMaterializedViewTest {
                         "refresh async\n" +
                         "as select k1, k5, sum(k3) as total from base_table, base_table4 where k1 = k4 group by k1, k5;");
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(DB);
             MaterializedView mv =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4");
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv4");
             Assert.assertTrue(mv.isCloudNativeMaterializedView());
             Assert.assertTrue(mv.isActive());
 
@@ -336,9 +336,9 @@ public class LakeMaterializedViewTest {
             Assert.assertFalse(mv.isActive());
 
             starRocksAssert.dropMaterializedView("mv4");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4"));
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv4"));
             starRocksAssert.dropTable("base_table4");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "base_table4"));
         } catch (Exception e) {
             System.out.println(e);
             Assert.fail();
@@ -359,18 +359,18 @@ public class LakeMaterializedViewTest {
                         "refresh async\n" +
                         "as select k1, k5, sum(k3) as total from base_table, base_table5 where k1 = k4 group by k1, k5;");
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(DB);
             MaterializedView mv =
-                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5");
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv5");
             Assert.assertTrue(mv.isCloudNativeMaterializedView());
 
             Partition p = mv.getPartition("mv5");
             Assert.assertTrue(mv.isEnableFillDataCache(p));
 
             starRocksAssert.dropMaterializedView("mv5");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5"));
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "mv5"));
             starRocksAssert.dropTable("base_table5");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table5"));
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "base_table5"));
         } catch (Exception e) {
             System.out.println(e);
             Assert.fail();
@@ -416,7 +416,7 @@ public class LakeMaterializedViewTest {
         MaterializedIndex index1 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta1 = new TabletMeta(dbId, mvId, partition1Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet1 = new LakeTablet(tablet1Id);
-        index1.addTablet(tablet1, tabletMeta1);
+        index1.addTabletWithInvertedIndex(tablet1, tabletMeta1);
         Partition partition1 = new Partition(partition1Id, "p1", index1, distributionInfo);
 
         LocalDate upper1 = LocalDate.now().minus(duration);
@@ -429,7 +429,7 @@ public class LakeMaterializedViewTest {
         MaterializedIndex index2 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta2 = new TabletMeta(dbId, mvId, partition2Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet2 = new LakeTablet(tablet2Id);
-        index2.addTablet(tablet2, tabletMeta2);
+        index2.addTabletWithInvertedIndex(tablet2, tabletMeta2);
         Partition partition2 = new Partition(partition2Id, "p2", index1, distributionInfo);
 
         LocalDate upper2 = LocalDate.now();

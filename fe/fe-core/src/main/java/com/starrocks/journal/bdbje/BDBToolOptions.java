@@ -47,9 +47,12 @@ public class BDBToolOptions {
     private final String endKey;
     private final int metaVersion;
     private final int starrocksMetaVersion;
+    private final String path;
+    private final String cat;
 
     public BDBToolOptions(boolean isListDbs, String dbName, boolean isDbStat,
-                          String fromKey, String endKey, int metaVersion, int starrocksMetaVersion) {
+                          String fromKey, String endKey, int metaVersion, int starrocksMetaVersion,
+                          String path, String cat) {
         this.isListDbs = isListDbs;
         this.dbName = dbName;
         this.isDbStat = isDbStat;
@@ -60,6 +63,9 @@ public class BDBToolOptions {
         this.metaVersion = metaVersion == 0 ? FeConstants.META_VERSION : metaVersion;
         this.starrocksMetaVersion =
                 starrocksMetaVersion == 0 ? FeConstants.STARROCKS_META_VERSION : starrocksMetaVersion;
+
+        this.path = path;
+        this.cat = cat;
     }
 
     public boolean isListDbs() {
@@ -96,6 +102,14 @@ public class BDBToolOptions {
 
     public int getStarRocksMetaVersion() {
         return starrocksMetaVersion;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public String getCat() {
+        return cat;
     }
 
     @Override

@@ -73,7 +73,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String newMvName = clause.getNewTableName();
         String oldMvName = table.getName();
 
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newMvName) != null) {
+        if (GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), newMvName) != null) {
             throw new SemanticException("Materialized view [" + newMvName + "] is already used");
         }
         table.setName(newMvName);
@@ -82,7 +82,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(table.getId(), db.getId(), newMvName);
         updateTaskDefinition((MaterializedView) table);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog);
+        GlobalStateMgr.getCurrentState().getMetastore().renameMaterializedView(renameMaterializedViewLog);
         LOG.info("rename materialized view[{}] to {}, id: {}", oldMvName, newMvName, table.getId());
         return null;
     }
@@ -307,7 +307,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (isChanged) {
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
                     materializedView.getId(), propClone);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
+            GlobalStateMgr.getCurrentState().getMetastore().alterMaterializedViewProperties(log);
         }
         LOG.info("alter materialized view properties {}, id: {}", propClone, materializedView.getId());
         return null;
@@ -349,7 +349,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
             try {
                 // check
-                Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
+                Table mv = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), materializedView.getId());
                 if (mv == null) {
                     throw new DmlException(
                             "update meta failed. materialized view:" + materializedView.getName() + " not exist");
@@ -378,7 +378,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-                GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
+                GlobalStateMgr.getCurrentState().getMetastore().changeMaterializedRefreshScheme(log);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
@@ -403,11 +403,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     return null;
                 }
 
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, false);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .alterMaterializedViewStatus(materializedView, status, false);
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    GlobalStateMgr.getCurrentState().getStarRocksMetadata()
                             .refreshMaterializedView(dbName, materializedView.getName(), true, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
@@ -418,14 +418,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.warn("Setting the materialized view {}({}) to inactive because " +
                                 "user use alter materialized view set status to inactive",
                         materializedView.getName(), materializedView.getId());
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, false);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .alterMaterializedViewStatus(materializedView, status, false);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                     materializedView.getId(), status);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+            GlobalStateMgr.getCurrentState().getMetastore().alterMvStatus(log);
             return null;
         } catch (DdlException | MetaNotFoundException e) {
             throw new AlterJobException(e.getMessage(), e);

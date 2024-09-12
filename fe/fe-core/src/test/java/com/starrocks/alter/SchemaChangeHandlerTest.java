@@ -127,8 +127,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             LOG.info("alter job {} is done. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
-            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(alterJobV2.getDbId());
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                         .getTable(db.getId(), alterJobV2.getTableId());
             while (tbl.getState() != OlapTable.OlapTableState.NORMAL) {
                 Thread.sleep(1000);
@@ -138,10 +138,10 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     @Test
     public void testAggAddOrDropColumn() throws Exception {
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_agg");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "sc_agg");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -245,10 +245,10 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     @Test
     public void testUniqAddOrDropColumn() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_uniq");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "sc_uniq");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -303,10 +303,10 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     @Test
     public void testDupAddOrDropColumn() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_dup");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "sc_dup");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -361,8 +361,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     @Test
     public void testModifyTableAddOrDropColumns() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_dup2");
+        Database db = globalStateMgr.getMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "sc_dup2");
         Map<Long, AlterJobV2> alterJobs = globalStateMgr.getSchemaChangeHandler().getAlterJobsV2();
 
         // origin columns
@@ -400,10 +400,10 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     @Test
     public void testSetPrimaryIndexCacheExpireSec() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getMetastore().listDbNames());
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_pk");
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "sc_pk");
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {

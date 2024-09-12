@@ -19,8 +19,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -65,7 +65,7 @@ public class LoadJobStatsListener implements LoadJobListener {
         }
 
         long dbId = transactionState.getDbId();
-        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        MetaStore localMetastore = GlobalStateMgr.getCurrentState().getMetastore();
         if (localMetastore == null) {
             LOG.warn("local metastore is null when transaction finish.");
             return;
@@ -80,7 +80,7 @@ public class LoadJobStatsListener implements LoadJobListener {
             List<Table> tables = transactionState.getIdToTableCommitInfos().values().stream()
                     .map(x -> x.getTableId())
                     .distinct()
-                    .map(tableId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId))
+                    .map(tableId -> GlobalStateMgr.getCurrentState().getMetastore().getTable(dbId, tableId))
                     .filter(Objects::nonNull)
                     .filter(t -> !t.isMaterializedView()) // skip mvs since its stats will be triggered after refresh
                     .collect(Collectors.toList());

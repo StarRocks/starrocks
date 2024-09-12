@@ -96,9 +96,9 @@ public class TablesProcDir implements ProcDirInterface {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             try {
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
+                table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), Long.parseLong(tableIdOrName));
             } catch (NumberFormatException e) {
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableIdOrName);
+                table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableIdOrName);
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
@@ -120,7 +120,7 @@ public class TablesProcDir implements ProcDirInterface {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                 List<Comparable> tableInfo = new ArrayList<Comparable>();
                 TableType tableType = table.getType();
                 tableInfo.add(table.getId());

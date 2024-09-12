@@ -702,7 +702,7 @@ public class UtFrameUtils {
         // mock replay external table info
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
-                        GlobalStateMgr.getCurrentState().getLocalMetastore(),
+                        GlobalStateMgr.getCurrentState().getStarRocksMetadata(),
                         GlobalStateMgr.getCurrentState().getConnectorMgr(),
                         GlobalStateMgr.getCurrentState().getResourceMgr(),
                         replayDumpInfo.getHmsTableMap(),
@@ -794,7 +794,7 @@ public class UtFrameUtils {
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getDb("" + dbName)
                         .getTable(entry.getKey().split("\\.")[1]);
 
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
@@ -805,7 +805,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                     .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+            Table replayTable = GlobalStateMgr.getCurrentState().getMetastore().getDb("" + dbName)
                         .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentState().getStatisticStorage()
@@ -1229,8 +1229,8 @@ public class UtFrameUtils {
     }
 
     public static void setPartitionVersion(Partition partition, long version) {
-        partition.setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getBaseIndex();
+        partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -1338,20 +1338,20 @@ public class UtFrameUtils {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                                 .getTable(testDb.getFullName(), tableName.getTbl()));
                     if (tbl != null) {
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
                         }
                     }
                 } else if (stmt instanceof DeleteStmt) {
                     DeleteStmt delete = (DeleteStmt) stmt;
                     TableName tableName = delete.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                                 .getTable(testDb.getFullName(), tableName.getTbl()));
                     tbl.setHasDelete();
                 }

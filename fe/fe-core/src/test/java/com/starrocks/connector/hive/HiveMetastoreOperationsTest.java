@@ -25,6 +25,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -110,7 +111,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testGetTable() {
-        com.starrocks.catalog.Table table = hmsOps.getTable("db1", "tbl1");
+        Table table = hmsOps.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("db1", hiveTable.getDbName());
         Assert.assertEquals("tbl1", hiveTable.getTableName());
@@ -145,7 +146,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testGetPartitionByNames() throws AnalysisException {
-        com.starrocks.catalog.Table table = hmsOps.getTable("db1", "table1");
+        Table table = hmsOps.getTable("db1", "table1");
         HiveTable hiveTable = (HiveTable) table;
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
@@ -179,7 +180,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testGetPartitionStatistics() {
-        com.starrocks.catalog.Table hiveTable = hmsOps.getTable("db1", "table1");
+        Table hiveTable = hmsOps.getTable("db1", "table1");
         Map<String, HivePartitionStats> statistics = hmsOps.getPartitionStatistics(
                 hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         Assert.assertEquals(0, statistics.size());

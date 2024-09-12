@@ -259,7 +259,7 @@ public abstract class MVPCTRefreshPartitioner {
         }
         try {
             // check
-            Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
+            Table mv = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), materializedView.getId());
             if (mv == null) {
                 throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
             }
@@ -272,7 +272,7 @@ public abstract class MVPCTRefreshPartitioner {
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
             analyzer.analyze(new ConnectContext(), dropPartitionClause);
 
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, materializedView, dropPartitionClause);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropPartition(db, materializedView, dropPartitionClause);
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     db.getFullName(), materializedView.getName());

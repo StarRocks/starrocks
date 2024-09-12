@@ -89,9 +89,9 @@ public class DeletePruneTest {
     @Test
     public void testDeletePrune() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Database db = ctx.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database db = ctx.getGlobalStateMgr().getMetastore().getDb("test");
         OlapTable tbl =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_delete");
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "test_delete");
 
         String deleteSQL = "delete from test_delete where k1 = '2020-01-01'";
         DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
@@ -155,9 +155,9 @@ public class DeletePruneTest {
     @Test
     public void testDeletePruneMultiPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Database db = ctx.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Database db = ctx.getGlobalStateMgr().getMetastore().getDb("test");
         OlapTable tbl =
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_delete2");
+                    (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "test_delete2");
 
         String deleteSQL = "delete from test_delete2 where date in ('2020-02-02') and id = 1000";
         DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);

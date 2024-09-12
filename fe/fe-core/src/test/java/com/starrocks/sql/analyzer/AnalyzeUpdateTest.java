@@ -126,7 +126,7 @@ public class AnalyzeUpdateTest {
                 MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
                 TabletMeta tabletMeta =
                         new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
-                index.addTablet(tablet, tabletMeta);
+                index.addTabletWithInvertedIndex(tablet, tabletMeta);
 
                 // Partition
                 DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));

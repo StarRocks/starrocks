@@ -87,7 +87,7 @@ public class CachedStatisticStorageTest {
     public static void createStatisticsTable() throws Exception {
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -127,8 +127,8 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetColumnStatistic(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "t0");
 
         new Expectations() {
             {
@@ -160,8 +160,8 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "t0");
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
@@ -367,8 +367,8 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testLoadCacheLoadEmpty(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "t0");
 
         new Expectations() {
             {
@@ -388,8 +388,8 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testConvert2ColumnStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        Database db = connectContext.getGlobalStateMgr().getMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), "t0");
         ColumnBasicStatsCacheLoader cachedStatisticStorage =
                 Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
 

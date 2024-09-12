@@ -123,8 +123,8 @@ public class BasicStatsMeta implements Writable {
     }
 
     public double getHealthy() {
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+        Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getId(), tableId);
         long totalPartitionCount = table.getPartitions().size();
 
         long tableRowCount = 1L;

@@ -17,11 +17,12 @@ package com.starrocks.server;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.sql.ast.CreateTableStmt;
 
 import javax.validation.constraints.NotNull;
 
 public interface AbstractTableFactory {
     @NotNull
-    Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException;
+    Table createTable(MetaStore metastore, Database database, CreateTableStmt stmt) throws DdlException;
 }

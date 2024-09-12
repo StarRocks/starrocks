@@ -92,11 +92,11 @@ public class RowCountAction extends RestBaseAction {
 
         Map<String, Long> indexRowCountMap = Maps.newHashMap();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException("Table[" + tableName + "] does not exist");
         }
@@ -107,7 +107,8 @@ public class RowCountAction extends RestBaseAction {
         try (AutoCloseableLock ignore
                     = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) table;
-            for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+            for (PhysicalPartition partition :
+                    GlobalStateMgr.getCurrentState().getMetastore().getAllPhysicalPartition(olapTable)) {
                 long version = partition.getVisibleVersion();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     long indexRowCount = 0L;

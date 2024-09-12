@@ -91,7 +91,7 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     }
 
     public boolean delete() {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().onErasePartition(partition);
         return true;
     }
 

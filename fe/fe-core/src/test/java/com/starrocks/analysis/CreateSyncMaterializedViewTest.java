@@ -198,12 +198,12 @@ public class CreateSyncMaterializedViewTest {
                 .useDatabase("test");
         starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
         currentState = GlobalStateMgr.getCurrentState();
-        testDb = currentState.getLocalMetastore().getDb("test");
+        testDb = currentState.getMetastore().getDb("test");
     }
 
     private Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }
@@ -221,7 +221,7 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
         sql = "select * from sync_mv1 [_SYNC_MV_];";
@@ -241,7 +241,7 @@ public class CreateSyncMaterializedViewTest {
                 parseStmtWithNewParser(sql, connectContext);
         try {
             // aggregate_table_with_null already existed in the db
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
@@ -254,7 +254,7 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
@@ -266,7 +266,7 @@ public class CreateSyncMaterializedViewTest {
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Throwable e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
@@ -281,7 +281,7 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
@@ -292,7 +292,7 @@ public class CreateSyncMaterializedViewTest {
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
             Assert.fail();
         } catch (Throwable e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists " +
@@ -307,7 +307,7 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
         {
@@ -343,7 +343,7 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
 
         waitingRollupJobV2Finish();
         {
@@ -382,7 +382,7 @@ public class CreateSyncMaterializedViewTest {
         // Change table type to cloud native table
         Deencapsulation.setField(table, "type", Table.TableType.CLOUD_NATIVE);
         DdlException e = Assert.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
         });
         Assert.assertTrue(e.getMessage().contains("Creating synchronous materialized view(rollup) is not supported in " +
                 "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
@@ -399,7 +399,7 @@ public class CreateSyncMaterializedViewTest {
         // Change table type to materialized view
         Deencapsulation.setField(table, "type", Table.TableType.MATERIALIZED_VIEW);
         DdlException e = Assert.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createMaterializedView(createTableStmt);
         });
         Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
     }

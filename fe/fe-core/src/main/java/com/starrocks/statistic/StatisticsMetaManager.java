@@ -23,6 +23,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -61,14 +62,14 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkDatabaseExist() {
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
+        return GlobalStateMgr.getCurrentState().getMetastore().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
     }
 
     private boolean createDatabase() {
         LOG.info("create statistics db start");
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createDb(dbStmt.getFullDbName());
         } catch (UserException e) {
             LOG.warn("Failed to create database ", e);
             return false;
@@ -78,9 +79,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkTableExist(String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
-        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName) != null;
+        return GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName) != null;
     }
 
     private boolean checkReplicateNormal(String tableName) {
@@ -92,9 +93,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return true;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tableName);
         Preconditions.checkState(table != null);
         if (table.isCloudNativeTableOrMaterializedView()) {
             return true;
@@ -103,10 +104,12 @@ public class StatisticsMetaManager extends FrontendDaemon {
         boolean check = true;
         for (Partition partition : table.getPartitions()) {
             // check replicate miss
-            if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                check = false;
-                break;
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getBaseIndex().getTablets().stream()
+                        .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                    check = false;
+                    break;
+                }
             }
         }
 
@@ -160,7 +163,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create sample statistics, ", e);
             return false;
@@ -192,7 +195,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create full statistics table", e);
             return false;
@@ -223,7 +226,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create histogram statistics table", e);
             return false;
@@ -261,7 +264,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create full statistics table", e);
             return false;
@@ -291,7 +294,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create external histogram statistics table", e);
             return false;
@@ -330,7 +333,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 new TableName(StatsConstants.STATISTICS_DB_NAME, tableName), true);
 
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(stmt);
+            GlobalStateMgr.getCurrentState().getStarRocksMetadata().dropTable(stmt);
         } catch (DdlException e) {
             LOG.warn("Failed to drop table", e);
             return false;

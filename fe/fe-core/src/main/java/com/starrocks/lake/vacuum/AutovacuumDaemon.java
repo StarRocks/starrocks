@@ -68,15 +68,15 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
 
             List<Table> tables = new ArrayList<>();
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                 if (table.isCloudNativeTableOrMaterializedView()) {
                     tables.add(table);
                 }

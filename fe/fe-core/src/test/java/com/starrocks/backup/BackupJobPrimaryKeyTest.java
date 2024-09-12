@@ -176,7 +176,7 @@ public class BackupJobPrimaryKeyTest {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -188,11 +188,11 @@ public class BackupJobPrimaryKeyTest {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getLocalMetastore().getTable(testDbName, testTableName);
+                globalStateMgr.getMetastore().getTable(testDbName, testTableName);
                 minTimes = 0;
                 result = db.getTable(tblId);
 
-                globalStateMgr.getLocalMetastore().getTable(testDbName, "unknown_tbl");
+                globalStateMgr.getMetastore().getTable(testDbName, "unknown_tbl");
                 minTimes = 0;
                 result = null;
             }

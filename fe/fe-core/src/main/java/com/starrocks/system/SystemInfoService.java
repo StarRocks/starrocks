@@ -419,13 +419,13 @@ public class SystemInfoService implements GsonPostProcessable {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<Long> tabletIds =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
-        List<Long> dbs = globalStateMgr.getLocalMetastore().getDbIds();
+        List<Long> dbs = globalStateMgr.getMetastore().getDbIds();
 
-        dbs.stream().map(dbId -> globalStateMgr.getLocalMetastore().getDb(dbId)).forEach(db -> {
+        dbs.stream().map(dbId -> globalStateMgr.getMetastore().getDb(dbId)).forEach(db -> {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
+                GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId()).stream()
                         .filter(Table::isOlapTableOrMaterializedView)
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
@@ -953,7 +953,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (node instanceof Backend) {
             AtomicLong atomicLong;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);

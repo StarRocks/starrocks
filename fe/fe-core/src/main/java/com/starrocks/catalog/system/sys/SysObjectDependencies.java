@@ -79,13 +79,13 @@ public class SysObjectDependencies {
 
         // list dependencies of mv
         Locker locker = new Locker();
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getMetastore().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             String catalog = Optional.ofNullable(db.getCatalogName())
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                     // If it is not a materialized view, we do not need to verify permissions
                     if (!table.isMaterializedView()) {
                         continue;

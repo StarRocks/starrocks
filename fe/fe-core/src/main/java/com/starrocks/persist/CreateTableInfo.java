@@ -40,13 +40,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.TxnMeta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class CreateTableInfo implements Writable {
+public class CreateTableInfo extends TxnMeta implements Writable {
     public static final Logger LOG = LoggerFactory.getLogger(CreateTableInfo.class);
 
     @SerializedName(value = "d")

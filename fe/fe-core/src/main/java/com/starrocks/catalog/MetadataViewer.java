@@ -44,6 +44,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -72,8 +73,9 @@ public class MetadataViewer {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MetaStore localMetastore = GlobalStateMgr.getCurrentState().getMetastore();
 
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
@@ -81,7 +83,7 @@ public class MetadataViewer {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
@@ -109,7 +111,7 @@ public class MetadataViewer {
 
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                        for (Tablet tablet : index.getTablets()) {
+                        for (Tablet tablet : localMetastore.getAllTablets(index)) {
                             long tabletId = tablet.getId();
                             int count = replicationNum;
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -202,7 +204,7 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        Database db = globalStateMgr.getMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
@@ -210,7 +212,7 @@ public class MetadataViewer {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
                 throw new DdlException("Table does not exist or is not native table: " + tblName);
             }

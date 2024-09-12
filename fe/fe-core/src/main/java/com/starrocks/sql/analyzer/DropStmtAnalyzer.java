@@ -166,7 +166,7 @@ public class DropStmtAnalyzer {
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), dbName);
             } else if (dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(SysDb.DATABASE_NAME.toLowerCase());
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(SysDb.DATABASE_NAME.toLowerCase());
                 if (db.getId() == SystemId.SYS_DB_ID) {
                     AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(),
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -197,7 +197,7 @@ public class DropStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                 }
             } else {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(functionName.getDb());
                 if (db != null) {
                     func = db.getFunction(statement.getFunctionSearchDesc());
                     if (func == null) {

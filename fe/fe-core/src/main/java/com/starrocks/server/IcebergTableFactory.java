@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.meta.MetaStore;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.iceberg.types.Types;
 
@@ -52,7 +53,7 @@ public class IcebergTableFactory extends ExternalTableFactory {
 
     @Override
     @NotNull
-    public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
+    public Table createTable(MetaStore metastore, Database database, CreateTableStmt stmt) throws DdlException {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();

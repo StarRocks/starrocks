@@ -84,8 +84,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     }
 
     private void testSingleTableWithMVRewrite(String mvName) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -207,8 +207,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -278,8 +278,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -346,8 +346,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                     " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -417,8 +417,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                     " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -509,8 +509,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -651,8 +651,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -821,8 +821,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.d, t2.b, t3.c;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -914,8 +914,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.d, t2.b, t3.c;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1029,8 +1029,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.d, t2.b, t3.c;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1110,8 +1110,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.d, t2.b, t3.c;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1204,8 +1204,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.a, t2.b, t1.d;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1361,8 +1361,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.a, t2.b, t1.d;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1517,8 +1517,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.a, t2.b, t1.d;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1690,8 +1690,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.d, t2.b, t3.c;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1799,8 +1799,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " group by t1.d, t2.b, t3.c;");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1909,8 +1909,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "'replication_num' = '1'" +
                     ") " +
                     "as select * from view1");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create
@@ -1967,8 +1967,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "'replication_num' = '1'" +
                     ") " +
                     "as select * from view1");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Database testDb = GlobalStateMgr.getCurrentState().getMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getMetastore()
                     .getTable(testDb.getFullName(), mvName));
 
         // initial create

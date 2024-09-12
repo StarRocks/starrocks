@@ -198,7 +198,7 @@ public class BackupHandlerTest {
                     }
                 };
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
             }
@@ -218,13 +218,14 @@ public class BackupHandlerTest {
 
             @Mock
             public Status getSnapshotInfoFile(String label, String backupTimestamp, List<BackupJobInfo> infos) {
-                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                             .getTable(db.getFullName(), CatalogMocker.TEST_TBL_NAME);
                 List<Table> tbls = Lists.newArrayList();
                 tbls.add(tbl);
                 Map<Long, SnapshotInfo> snapshotInfos = Maps.newHashMap();
                 for (Partition part : tbl.getPartitions()) {
-                    for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex idx : part.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : idx.getTablets()) {
                             List<String> files = Lists.newArrayList();
                             SnapshotInfo sinfo = new SnapshotInfo(db.getId(), tbl.getId(), part.getId(), idx.getId(),

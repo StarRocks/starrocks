@@ -492,14 +492,14 @@ public class ColocateTableIndex implements Writable {
 
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(groupId.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(groupId.dbId);
         int numOfTablets = 0;
         if (db != null && !allTableIds.isEmpty()) {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 for (long tableId : allTableIds) {
-                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore()
                                 .getTable(db.getId(), tableId);
                     if (tbl != null) {
                         numOfTablets += tbl.getNumberOfPartitions();
@@ -609,9 +609,9 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
-        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId());
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), info.getTableId());
         Preconditions.checkNotNull(tbl);
 
         writeLock();
@@ -662,11 +662,11 @@ public class ColocateTableIndex implements Writable {
 
     protected Optional<String> getTableName(long dbId, long tableId) {
 
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (database == null) {
             return Optional.empty();
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+        Table table = GlobalStateMgr.getCurrentState().getMetastore().getTable(database.getId(), tableId);
 
         if (table == null) {
             return Optional.empty();
@@ -987,10 +987,10 @@ public class ColocateTableIndex implements Writable {
         long tableId = info.getTableId();
         Map<String, String> properties = info.getPropertyMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(info.getGroupId().dbId);
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tableId), LockType.WRITE)) {
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetastore().getTable(db.getId(), tableId);
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
                     info.getGroupId());
         } catch (DdlException e) {
@@ -1008,12 +1008,12 @@ public class ColocateTableIndex implements Writable {
         for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
-            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database database = globalStateMgr.getStarRocksMetadata().getDbIncludeRecycleBin(dbId);
             if (database == null) {
                 LOG.warn("cannot find db {}, will remove invalid table {} from group {}",
                         dbId, tableId, entry.getValue());
             } else {
-                Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
+                Table table = globalStateMgr.getStarRocksMetadata().getTableIncludeRecycleBin(database, tableId);
                 if (table != null) {
                     // this is a valid table/database, do nothing
                     continue;
@@ -1064,8 +1064,8 @@ public class ColocateTableIndex implements Writable {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
             // database and table should be valid if reach here
-            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
-            Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
+            Database database = globalStateMgr.getStarRocksMetadata().getDbIncludeRecycleBin(dbId);
+            Table table = globalStateMgr.getStarRocksMetadata().getTableIncludeRecycleBin(database, tableId);
             if (table.isCloudNativeTable()) {
                 lakeGroups.add(entry.getValue());
             }

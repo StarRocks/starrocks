@@ -17,6 +17,7 @@ package com.starrocks.connector.paimon;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -109,7 +110,7 @@ public class PaimonConnectorTest {
 
         ConnectorMetadata metadata = connector.getMetadata();
         Assert.assertTrue(metadata instanceof PaimonMetadata);
-        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
         Assert.assertEquals("db1", paimonTable.getDbName());
         Assert.assertEquals("tbl1", paimonTable.getTableName());

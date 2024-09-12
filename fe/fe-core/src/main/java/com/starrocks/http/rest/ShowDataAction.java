@@ -69,7 +69,7 @@ public class ShowDataAction extends RestBaseAction {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             // sort by table name
-            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+            List<Table> tables = GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId());
             for (Table table : tables) {
                 if (!table.isNativeTableOrMaterializedView()) {
                     continue;
@@ -86,7 +86,7 @@ public class ShowDataAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String dbName = request.getSingleParameter("db");
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getMetastore().getFullNameToDb();
         long totalSize = 0;
         if (dbName != null) {
             Database db = fullNameToDb.get(dbName);

@@ -17,9 +17,9 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -113,7 +113,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
 
     @Override
     public String getDbName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
@@ -122,11 +122,11 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
 
     @Override
     public String getTableName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        BasicTable table = GlobalStateMgr.getCurrentState().getMetastore().getTable(dbId, tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -204,7 +204,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         if (dbId == StatsConstants.DEFAULT_ALL_ID) {
             dbName = "*";
         } else {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
             dbName = db.getOriginName();
         }
         String tableName;
@@ -212,7 +212,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
             tableName = "*";
         } else {
             try {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+                BasicTable table = GlobalStateMgr.getCurrentState().getMetastore().getTable(dbId, tableId);
                 if (table == null) {
                     throw new SemanticException("Table %s is not found", tableId);
                 }

@@ -435,6 +435,5 @@ public class HeartbeatMgr extends FrontendDaemon {
             handleHbResponse(hbResult, true);
         }
     }
-
 }
 

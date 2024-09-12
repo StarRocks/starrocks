@@ -56,36 +56,36 @@ public class StatisticsCollectJobFactory {
         List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
         if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getDbId()) {
             // all database
-            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getMetastore().getDbIds();
 
             for (Long dbId : dbIds) {
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(dbId);
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
 
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                     createJob(statsJobs, nativeAnalyzeJob, db, table, null, null);
                 }
             }
         } else if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getTableId()
                 && StatsConstants.DEFAULT_ALL_ID != nativeAnalyzeJob.getDbId()) {
             // all table
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeJob.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(nativeAnalyzeJob.getDbId());
             if (null == db) {
                 return Collections.emptyList();
             }
 
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            for (Table table : GlobalStateMgr.getCurrentState().getMetastore().getTables(db.getId())) {
                 createJob(statsJobs, nativeAnalyzeJob, db, table, null, null);
             }
         } else {
             // database or table is null mean database/table has been dropped
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeJob.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getMetastore().getDb(nativeAnalyzeJob.getDbId());
             if (db == null) {
                 return Collections.emptyList();
             }
-            createJob(statsJobs, nativeAnalyzeJob, db, GlobalStateMgr.getCurrentState().getLocalMetastore()
+            createJob(statsJobs, nativeAnalyzeJob, db, GlobalStateMgr.getCurrentState().getMetastore()
                                     .getTable(db.getId(), nativeAnalyzeJob.getTableId()),
                     nativeAnalyzeJob.getColumns(), nativeAnalyzeJob.getColumnTypes());
         }

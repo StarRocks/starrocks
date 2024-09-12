@@ -136,14 +136,14 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.getLocalMetastore().alterMaterializedView(stmt);
+            currentState.getStarRocksMetadata().alterMaterializedView(stmt);
         }
         {
             String alterMvSql = "alter materialized view mv1 set (\"session.not_exists\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Exception e = Assert.assertThrows(SemanticException.class,
-                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+                    () -> currentState.getStarRocksMetadata().alterMaterializedView(stmt));
             Assert.assertEquals("Getting analyzing error. Detail message: " +
                     "Unknown system variable 'not_exists', the most similar variables are " +
                     "{'init_connect', 'connector_max_split_size', 'tx_isolation'}.", e.getMessage());
@@ -153,7 +153,7 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getStarRocksMetadata().alterMaterializedView(stmt));
         }
     }
 
@@ -163,7 +163,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
         AlterMaterializedViewStmt stmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+        Assert.assertThrows(SemanticException.class, () -> currentState.getStarRocksMetadata().alterMaterializedView(stmt));
     }
 
     @Test
@@ -172,14 +172,14 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.getLocalMetastore().alterMaterializedView(stmt);
+            currentState.getStarRocksMetadata().alterMaterializedView(stmt);
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getStarRocksMetadata().alterMaterializedView(stmt));
         }
     }
 

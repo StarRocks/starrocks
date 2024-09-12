@@ -88,7 +88,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
     public static void mockAllCatalogs(ConnectContext ctx, String warehouse) throws Exception {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
-        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getStarRocksMetadata(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
         mockJDBCCatalogImpl(metadataMgr);
@@ -104,7 +104,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
     public static void mockCatalog(ConnectContext ctx, String catalogName, String warehouse) throws Exception {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
-        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getStarRocksMetadata(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
         switch (catalogName) {
             case MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME:
@@ -150,7 +150,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
-        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getStarRocksMetadata(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
     }
