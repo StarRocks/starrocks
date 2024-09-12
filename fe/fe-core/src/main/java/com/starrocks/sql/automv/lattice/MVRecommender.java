@@ -111,7 +111,7 @@ public class MVRecommender {
                 .collect(Collectors.toList());
 
         Collection<List<PlanPiece>> pieceGroups = normalizedPieces.stream()
-                .collect(Collectors.groupingBy(PlanPiece::getNormHash))
+                .collect(Collectors.groupingBy(PlanPiece::getFlatTableNormHash))
                 .values();
 
         List<List<PlanPiece>> newPieceGroups = pieceGroups.stream()
@@ -173,8 +173,8 @@ public class MVRecommender {
 
     private Optional<List<List<PlanPiece>>> splitConjunctsOfRollupAbleAggPieces(List<PlanPiece> pieces,
                                                                                 int minPartialRollup) {
-        String normHash = pieces.get(0).getNormHash();
-        Preconditions.checkArgument(pieces.stream().map(PlanPiece::getNormHash).allMatch(normHash::equals));
+        String normHash = pieces.get(0).getFlatTableNormHash();
+        Preconditions.checkArgument(pieces.stream().map(PlanPiece::getFlatTableNormHash).allMatch(normHash::equals));
 
         if (pieces.size() < minPartialRollup) {
             return Optional.empty();
@@ -296,7 +296,7 @@ public class MVRecommender {
     }
 
     private List<QueryGenerateResult> recommendMVBasedLattice(List<PlanPiece> pieces) {
-        Lattice lattice = Lattice.createLattice(pieces);
+        Lattice lattice = Lattice.createLattice(pieces, false);
         lattice.consolidateFully(options.isPruneRollupAbleWithConjuncts());
         return lattice.getAllPieces().stream()
                 .map(this::recommendOneMv)
@@ -307,7 +307,8 @@ public class MVRecommender {
 
     private TieredList<MVRecommendation> pickupRecommendations(List<PlanPiece> pieces,
                                                                CardEstimationPolicy cardEstimationPolicy) {
-        Lattice lattice = Lattice.createLattice(pieces);
+
+        Lattice lattice = Lattice.createLattice(pieces, options.isDecayAcceleratedQueries());
         TieredList<MVRecommendation> recommendations = cardEstimationPolicy.estimate(lattice);
         if (GlobalVariable.getAutoMVPerLatticeMVLimit() <= 0 &&
                 GlobalVariable.getAutoMVPerLatticeMVSelectivityRatio() <= 0) {

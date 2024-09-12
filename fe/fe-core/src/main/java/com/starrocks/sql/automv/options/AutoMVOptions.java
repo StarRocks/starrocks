@@ -37,6 +37,7 @@ public class AutoMVOptions {
     private final boolean enableComplexDerivedMetrics;
     private final boolean enableComplexDerivedDimensions;
     private final String defaultPartitionByTimeGranule;
+    private final boolean decayAcceleratedQueries;
 
     private AutoMVOptions(
             int partialRollupMinAggregatePieces,
@@ -56,7 +57,8 @@ public class AutoMVOptions {
             double cardRowCountRatioLWM, double cardRowCountRatioHWM, int maxCalculateSteps,
             boolean enableComplexDerivedMetrics,
             boolean enableComplexDerivedDimensions,
-            String defaultPartitionByTimeGranule
+            String defaultPartitionByTimeGranule,
+            boolean decayAcceleratedQueries
     ) {
         this.partialRollupMinAggPieces = partialRollupMinAggregatePieces;
         this.useCardinalityEstimation = useCardinalityEstimation;
@@ -78,6 +80,7 @@ public class AutoMVOptions {
         this.enableComplexDerivedMetrics = enableComplexDerivedMetrics;
         this.enableComplexDerivedDimensions = enableComplexDerivedDimensions;
         this.defaultPartitionByTimeGranule = defaultPartitionByTimeGranule;
+        this.decayAcceleratedQueries = decayAcceleratedQueries;
     }
 
     public static AutoMVOptions of(SessionVariable sv) {
@@ -101,7 +104,12 @@ public class AutoMVOptions {
                 sv.getAutoMVMaxCalculateSteps(),
                 sv.isAutoMVEnableComplexDerivedMetrics(),
                 sv.isAutoMVEnableComplexDerivedDimensions(),
-                sv.getAutoMVDefaultPartitionByTimeGranule());
+                sv.getAutoMVDefaultPartitionByTimeGranule(),
+                sv.isAutoMVDecayAcceleratedQueries());
+    }
+
+    public boolean isDecayAcceleratedQueries() {
+        return decayAcceleratedQueries;
     }
 
     public String getDefaultPartitionByTimeGranule() {

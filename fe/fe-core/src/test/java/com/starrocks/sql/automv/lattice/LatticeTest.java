@@ -79,7 +79,7 @@ public class LatticeTest {
         pieces.forEach(p -> p.second.assignPieceIds());
         Map<String, List<Pair<String, PlanPiece>>> pieceGroups = pieces.stream()
                 .map(p -> Pair.create(p.first, PlanPieceNormalizer.normalize(p.second)))
-                .collect(Collectors.groupingBy(p -> p.second.getNormHash()));
+                .collect(Collectors.groupingBy(p -> p.second.getFlatTableNormHash()));
 
         AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
         Assert.assertEquals(pieceGroups.size(), 1);
@@ -87,7 +87,7 @@ public class LatticeTest {
         List<PlanPiece> pieceList =
                 pieceGroups.values().iterator().next().stream().map(p -> p.second).collect(Collectors.toList());
         Assert.assertEquals(pieceList.size(), queryList.size());
-        Lattice lattice = Lattice.createLattice(pieceList);
+        Lattice lattice = Lattice.createLattice(pieceList, false);
         return new CardEstimator(options, lattice);
     }
 
@@ -227,14 +227,14 @@ public class LatticeTest {
         pieces.forEach(p -> p.second.assignPieceIds());
         Map<String, List<Pair<String, PlanPiece>>> pieceGroups = pieces.stream()
                 .map(p -> Pair.create(p.first, PlanPieceNormalizer.normalize(p.second)))
-                .collect(Collectors.groupingBy(p -> p.second.getNormHash()));
+                .collect(Collectors.groupingBy(p -> p.second.getFlatTableNormHash()));
 
         AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
         Assert.assertEquals(pieceGroups.size(), 1);
         List<PlanPiece> pieceList =
                 pieceGroups.values().iterator().next().stream().map(p -> p.second).collect(Collectors.toList());
         Assert.assertEquals(pieceList.size(), 3);
-        Lattice lattice = Lattice.createLattice(pieceList);
+        Lattice lattice = Lattice.createLattice(pieceList, false);
 
         CardEstimator estimator = new CardEstimator(options, lattice);
         String commonSnippet = "    coalesce(murmur_hash3_32(_ta0002.d_weeknuminyear), 1) AS c0\n" +

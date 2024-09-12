@@ -808,6 +808,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE = "automv_default_partition_by_time_granule";
 
+    public static final String AUTOMV_DECAY_ACCELERATED_QUERIES = "automv_decay_accelerated_queries";
+
     // A group of like predicates with the same column and concatenated by OR, can be consolidated into
     // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
     // would be consolidated, since when the number of like predicates is too small, its corresponding
@@ -2231,6 +2233,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE)
     private String autoMVDefaultPartitionByTimeGranule = TimeGranule.Unit.DAY.name().toLowerCase();
+
+    @VarAttr(name = AUTOMV_DECAY_ACCELERATED_QUERIES, flag = VariableMgr.INVISIBLE)
+    private boolean autoMVDecayAcceleratedQueries = false;
     public void setChooseExecuteInstancesMode(String mode) {
         SessionVariableConstants.ChooseInstancesMode result =
                 Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
@@ -4354,6 +4359,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setAutoMVDefaultPartitionByTimeGranule(String granule) {
         TimeGranule.validate(granule);
         autoMVDefaultPartitionByTimeGranule = granule.toLowerCase();
+    }
+
+    public void setAutoMVDecayAcceleratedQueries(boolean flag) {
+        autoMVDecayAcceleratedQueries = flag;
+    }
+
+    public boolean isAutoMVDecayAcceleratedQueries() {
+        return autoMVDecayAcceleratedQueries;
     }
 
     public String getAutoMVDefaultPartitionByTimeGranule() {

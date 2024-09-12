@@ -75,7 +75,7 @@ public class LatticeNode {
         addPiece(aggPiece);
     }
 
-    public static List<AggregatePiece> consolidate(List<AggregatePiece> pieces) {
+    public static List<AggregatePiece> consolidate(List<AggregatePiece> pieces, boolean decayAcceleratedQueries) {
         if (pieces.size() < 2) {
             return pieces;
         }
@@ -90,10 +90,14 @@ public class LatticeNode {
         TieredMap<Integer, GenericColumn> metrics = mergeMetrics(idConverter, normToOpMap, pieces);
         TieredList<Op> hoistConjuncts = mergeHoistConjuncts(normToOpMap, pieces);
         TieredList<Op> nonHoistConjuncts = mergeNonHoistConjuncts(normToOpMap, pieces);
-        Set<String> mergedCoveredQueries = pieces.stream()
-                .flatMap(piece -> piece.getCommonState().getCoveredQueries().stream())
-                .collect(ImmutableSet.toImmutableSet());
-
+        Set<String> mergedCoveredQueries;
+        if (decayAcceleratedQueries) {
+            mergedCoveredQueries = Collections.emptySet();
+        } else {
+            mergedCoveredQueries = pieces.stream()
+                    .flatMap(piece -> piece.getCommonState().getCoveredQueries().stream())
+                    .collect(ImmutableSet.toImmutableSet());
+        }
         PieceCommonState newCommonState = new PieceCommonState(
                 firstAggPiece.getCommonState().getIdConverter(),
                 mergedCoveredQueries,
@@ -327,7 +331,7 @@ public class LatticeNode {
 
             newAggPiece.assignPieceIds();
             PlanPieceNormalizer.normalize(newAggPiece);
-            Preconditions.checkArgument(newAggPiece.getNormHash().equals(piece.getNormHash()));
+            Preconditions.checkArgument(newAggPiece.getFlatTableNormHash().equals(piece.getFlatTableNormHash()));
             newAggPieces.add(newAggPiece);
         }
         return newAggPieces;
@@ -400,6 +404,10 @@ public class LatticeNode {
         };
     }
 
+    public boolean isRoot() {
+        return false;
+    }
+
     public TieredList<LatticeNode> split() {
         Preconditions.checkState(this.coverablePieces.isEmpty());
         Preconditions.checkState(this.uncoverableIPieces.size() <= 1);
@@ -429,20 +437,14 @@ public class LatticeNode {
         switch (Category.getCategory(aggPiece)) {
             case COVERABLE: {
                 coverablePieces = coverablePieces.concatOne(aggPiece);
-                lattice.updateNodeIds(id, Category.COVERABLE, null);
                 break;
             }
             case UNCOVERABLE_I: {
                 uncoverableIPieces = uncoverableIPieces.concatOne(aggPiece);
-                Preconditions.checkState(aggPiece.getFlatTable().getStiffConjuncts().isEmpty());
-                lattice.updateNodeIds(id, Category.UNCOVERABLE_I, null);
                 break;
             }
             case UNCOVERABLE_II: {
                 uncoverableIIPieces = uncoverableIIPieces.concatOne(aggPiece);
-                Preconditions.checkState(!aggPiece.getFlatTable().getStiffConjuncts().isEmpty());
-                String conjunctsNorm = aggPiece.getFlatTable().getFlexibleConjunctsNormHash();
-                lattice.updateNodeIds(id, Category.UNCOVERABLE_II, conjunctsNorm);
                 break;
             }
         }
@@ -465,11 +467,11 @@ public class LatticeNode {
     }
 
     public void consolidateCoverable() {
-        setCoverablePieces(consolidate(getCoverablePieces()));
+        setCoverablePieces(consolidate(getCoverablePieces(), lattice.isDecayAcceleratedQueries()));
     }
 
     public void consolidateConsolidatable() {
-        setUncoverableIPieces(consolidate(getUncoverableIPieces()));
+        setUncoverableIPieces(consolidate(getUncoverableIPieces(), lattice.isDecayAcceleratedQueries()));
     }
 
     public void consolidateUnconsolidatable() {
@@ -479,13 +481,13 @@ public class LatticeNode {
                         aggPiece.getFlatTable().getFlexibleConjunctsNorm().getResult())).values();
         List<AggregatePiece> pieces = Lists.newArrayListWithCapacity(pieceGroups.size());
         for (List<AggregatePiece> group : pieceGroups) {
-            pieces.addAll(consolidate(group));
+            pieces.addAll(consolidate(group, lattice.isDecayAcceleratedQueries()));
         }
         setUncoverableIIPieces(pieces);
     }
 
     public void consolidateCoverable(List<AggregatePiece> aggPieces) {
-        setCoverablePieces(consolidate(aggPieces));
+        setCoverablePieces(consolidate(aggPieces, lattice.isDecayAcceleratedQueries()));
     }
 
     public void consolidateFully(boolean pruneRollupUnableWithConjuncts) {
@@ -494,7 +496,7 @@ public class LatticeNode {
                 .concat(getUncoverableIPieces());
 
         setCoverablePieces(Collections.emptyList());
-        setUncoverableIPieces(consolidate(pieces));
+        setUncoverableIPieces(consolidate(pieces, lattice.isDecayAcceleratedQueries()));
         if (pruneRollupUnableWithConjuncts) {
             setUncoverableIIPieces(TieredList.<AggregatePiece>genesis());
         }

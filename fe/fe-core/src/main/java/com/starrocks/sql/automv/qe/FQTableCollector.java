@@ -44,7 +44,8 @@ public final class FQTableCollector implements AopAstHandler {
         }
         TableName tableName = tableRel.getName();
         Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(tableName.getCatalog());
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        Database database =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
         if (database == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }

@@ -86,14 +86,15 @@ public class Lattice {
     private final AggregatePiece.FlatTable flatTable;
     private final Map<String, Op> flatTableNormToOpMap;
 
-    private final List<LatticeNodeId> coverableNodeIds = Lists.newArrayList();
-    private final List<LatticeNodeId> uncoverableINodeIds = Lists.newArrayList();
-    private final Map<LatticeNodeId, List<String>> uncoverableIINodeIds = Maps.newHashMap();
+    private final Map<String, Integer> normToWeight;
+    private final boolean decayAcceleratedQueries;
+    private final List<Pair<LatticeNodeId, String>> coverableNodeIds = Lists.newArrayList();
+    private final List<Pair<LatticeNodeId, String>> uncoverableINodeIds = Lists.newArrayList();
+    private final Map<LatticeNodeId, List<Pair<String, String>>> uncoverableIINodeIds = Maps.newHashMap();
     private final TieredMap<Integer, GenericColumn> flatTableNorms;
     private final LatticeNode root;
     private final List<LatticeNode> nodes = Lists.newArrayList();
     private transient BiMap<Box<LatticeNode>, Integer> nodeOrdinal;
-
     private Map<LatticeNodeId, Long> coverableNumAcceleratedQueries = null;
     private Map<LatticeNodeId, Long> accCoverableNumAcceleratedQueries = null;
     private Map<LatticeNodeId, Long> uncoverableINumAcceleratedQueries = null;
@@ -106,7 +107,9 @@ public class Lattice {
                    List<String> columnNorms,
                    AggregatePiece.FlatTable flatTable,
                    LatticeNodeId rootId,
-                   AggregatePiece rootAggPiece) {
+                   AggregatePiece rootAggPiece,
+                   Map<String, Integer> normToWeight,
+                   boolean decayAcceleratedQueries) {
         this.columnToOrdinalMap = Objects.requireNonNull(columnToOrdinalMap);
         this.columnIds = Objects.requireNonNull(columnIds);
         this.dimensionColumnIds = Objects.requireNonNull(dimensionColumnIds);
@@ -120,6 +123,8 @@ public class Lattice {
         this.flatTableNorms = flatTable.getPiece().getColumns().entrySet().stream()
                 .collect(TieredMap.toMap(Map.Entry::getKey, e -> e.getValue().getNorm()));
         this.root = new LatticeNode(this, rootId, rootAggPiece);
+        this.normToWeight = normToWeight;
+        this.decayAcceleratedQueries = decayAcceleratedQueries;
     }
 
     private static AggregatePiece createRootPiece(AggregatePiece.FlatTable flatTable) {
@@ -136,7 +141,22 @@ public class Lattice {
                 .build().cast();
     }
 
-    public static Lattice createLattice(List<PlanPiece> pieces) {
+    public static Lattice createLattice(List<PlanPiece> pieces, boolean decayAcceleratedQueries) {
+
+        Map<String, Integer> normToWeight;
+        if (decayAcceleratedQueries) {
+            Map<String, List<PlanPiece>> normToRepetitions = pieces.stream()
+                    .collect(Collectors.groupingBy(PlanPiece::getNormHash));
+
+            pieces = normToRepetitions.values()
+                    .stream().map(reps -> reps.get(0)).collect(Collectors.toList());
+
+            normToWeight = normToRepetitions.entrySet()
+                    .stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size()));
+        } else {
+            normToWeight = Maps.newHashMap();
+            pieces.stream().map(PlanPiece::getNormHash).forEach(norm -> normToWeight.put(norm, 1));
+        }
         AggregatePiece firstAggPiece = pieces.get(0).cast();
         Set<String> dimensionNorms = pieces.stream()
                 .map(piece -> piece.mustCast(AggregatePiece.class))
@@ -145,12 +165,13 @@ public class Lattice {
                 .map(GenericColumn::toString)
                 .collect(Collectors.toSet());
 
-        Lattice lattice = Lattice.createLattice(firstAggPiece, dimensionNorms);
-        pieces.forEach(piece -> lattice.insert(piece.cast()));
+        Lattice lattice = Lattice.createLattice(firstAggPiece, dimensionNorms, normToWeight, decayAcceleratedQueries);
+        lattice.insertOriginalPieces(pieces);
         return lattice;
     }
 
-    private static Lattice createLattice(PlanPiece seed, Set<String> dimensionNorms) {
+    private static Lattice createLattice(PlanPiece seed, Set<String> dimensionNorms,
+                                         Map<String, Integer> normToWeight, boolean decayAcceleratedQueries) {
         AggregatePiece aggPiece = seed.mustCast(AggregatePiece.class);
         AggregatePiece.FlatTable flatTable = aggPiece.getFlatTable();
         PlanPiece flatTablePiece = flatTable.getPiece();
@@ -189,22 +210,28 @@ public class Lattice {
 
         AggregatePiece rootPiece = createRootPiece(flatTable);
         LatticeNodeId rootId = LatticeNodeId.calcRootId(columnNorms.size());
+        //PlanPieceNormalizer.normalize(rootPiece);
         return new Lattice(columnToOrdinalMap, columnIds, dimensionColumnIds, columnNorms, rootPiece.getFlatTable(),
-                rootId, rootPiece);
+                rootId, rootPiece, normToWeight, decayAcceleratedQueries);
     }
 
-    public void updateNodeIds(LatticeNodeId id, LatticeNode.Category category, String conjunctsNorm) {
+    public boolean isDecayAcceleratedQueries() {
+        return decayAcceleratedQueries;
+    }
+
+    public void updateNodeId(LatticeNodeId id, LatticeNode.Category category, String norm, String conjunctsNorm) {
         switch (category) {
             case COVERABLE: {
-                coverableNodeIds.add(id);
+                coverableNodeIds.add(Pair.create(id, norm));
                 break;
             }
             case UNCOVERABLE_I: {
-                uncoverableINodeIds.add(id);
+                uncoverableINodeIds.add(Pair.create(id, norm));
                 break;
             }
             case UNCOVERABLE_II: {
-                uncoverableIINodeIds.computeIfAbsent(id, key -> Lists.newArrayList()).add(conjunctsNorm);
+                uncoverableIINodeIds.computeIfAbsent(id, key -> Lists.newArrayList())
+                        .add(Pair.create(conjunctsNorm, norm));
             }
         }
     }
@@ -350,6 +377,17 @@ public class Lattice {
         insertWithId(aggPiece, id);
     }
 
+    public void insertOriginalPieces(List<PlanPiece> pieces) {
+        for (PlanPiece piece : pieces) {
+            AggregatePiece aggPiece = piece.cast();
+            Preconditions.checkArgument(aggPiece.getFlatTable().getPiece().getAuxState().getNormHash()
+                    .equals(flatTable.getPiece().getAuxState().getNormHash()));
+            LatticeNodeId id = LatticeNodeId.calcId(aggPiece.getDimensions().values(), columnToOrdinalMap);
+            insertWithId(aggPiece, id);
+            updateNodeId(id, aggPiece);
+        }
+    }
+
     public List<LatticeNode> bfs() {
         LinkedList<LatticeNode> nodes = bfsIncludingRoot();
         Preconditions.checkArgument(nodes.get(0) == root);
@@ -440,6 +478,27 @@ public class Lattice {
         Set<LatticeNode> parents =
                 ancestorPathList.stream().map(path -> path.get(-1)).collect(Collectors.toSet());
         addNode(parents, node);
+    }
+
+    public void updateNodeId(LatticeNodeId id, AggregatePiece aggPiece) {
+        String norm = aggPiece.getNormHash();
+        switch (LatticeNode.Category.getCategory(aggPiece)) {
+            case COVERABLE: {
+                updateNodeId(id, LatticeNode.Category.COVERABLE, norm, null);
+                break;
+            }
+            case UNCOVERABLE_I: {
+                Preconditions.checkState(aggPiece.getFlatTable().getStiffConjuncts().isEmpty());
+                updateNodeId(id, LatticeNode.Category.UNCOVERABLE_I, norm, null);
+                break;
+            }
+            case UNCOVERABLE_II: {
+                Preconditions.checkState(!aggPiece.getFlatTable().getStiffConjuncts().isEmpty());
+                String conjunctsNorm = aggPiece.getFlatTable().getFlexibleConjunctsNormHash();
+                updateNodeId(id, LatticeNode.Category.UNCOVERABLE_II, norm, conjunctsNorm);
+                break;
+            }
+        }
     }
 
     private void insertWithId(AggregatePiece aggPiece, LatticeNodeId id) {
@@ -737,7 +796,7 @@ public class Lattice {
         Preconditions.checkState(coverableNumAcceleratedQueries == null);
         coverableNumAcceleratedQueries = coverableNodeIds
                 .stream()
-                .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+                .collect(Collectors.groupingBy(p -> p.first, Collectors.summingLong(p -> normToWeight.get(p.second))));
 
         Function<LatticeNode, Long> accNumAccelerated = node ->
                 Stream.concat(Stream.of(node.getId()), node.getOffsprings().keySet().stream())
@@ -755,7 +814,7 @@ public class Lattice {
         Preconditions.checkState(uncoverableINumAcceleratedQueries == null);
         this.uncoverableINumAcceleratedQueries = uncoverableINodeIds
                 .stream()
-                .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+                .collect(Collectors.groupingBy(p -> p.first, Collectors.summingLong(p -> normToWeight.get(p.second))));
     }
 
     private void computeUncoverableIINumAcceleratedQueries() {
@@ -766,7 +825,8 @@ public class Lattice {
                         Map.Entry::getKey,
                         e -> e.getValue()
                                 .stream()
-                                .collect(Collectors.groupingBy(norm -> norm, Collectors.counting()))));
+                                .collect(Collectors.groupingBy(p -> p.first,
+                                        Collectors.summingLong(p -> normToWeight.get(p.second))))));
     }
 
     private long getNumAcceleratedQueriesForCoverableAndUncoverableI(LatticeNode node) {

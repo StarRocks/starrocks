@@ -66,6 +66,7 @@ public class MVLifecycleAutoKeeper extends FrontendDaemon {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setSessionVariable(VariableMgr.newSessionVariable());
+        ctx.getSessionVariable().setAutoMVDecayAcceleratedQueries(true);
         ctx.setThreadLocalInfo();
 
         try {

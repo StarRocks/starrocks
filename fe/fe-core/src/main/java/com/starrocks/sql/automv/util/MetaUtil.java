@@ -133,10 +133,15 @@ public class MetaUtil {
                         .unwrap().orElse(false));
     }
 
+    public static boolean exists(TableName tableName) {
+        return checkTable(tableName, false, (db, tbl) -> true);
+    }
+
     public static <T> T checkTable(TableName tableName, T defaultValue, BiFunction<Database, Table, T> checker) {
         return MetaUtil.getDatabase(tableName)
                 .unwrap()
-                .map(db -> GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(db.getFullName(), tableName.getTbl())
+                .map(db -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .mayGetTable(db.getFullName(), tableName.getTbl())
                         .map(tbl -> checker.apply(db, tbl))
                         .orElse(defaultValue))
                 .orElse(defaultValue);

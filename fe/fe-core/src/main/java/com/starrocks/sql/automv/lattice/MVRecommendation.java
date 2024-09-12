@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.lattice;
 
+import com.google.api.client.util.Lists;
 import com.starrocks.sql.automv.estimation.CardEstimateState;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
 import com.starrocks.sql.automv.util.PrettyPrinter;
@@ -141,21 +142,33 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
         rowBuilder.add(mvResult.getMvName());
         rowBuilder.add(mvResult.getSubquery().getResult());
 
-        List<PrettyPrinter> orderedCoveredQueries = mvResult.getCoveredQueries()
-                .stream()
-                .sorted()
-                .map(PrettyPrinter::escapedDoubleQuoted)
-                .collect(Collectors.toList());
+        List<PrettyPrinter> orderedCoveredQueries = Lists.newArrayList();
 
-        String coveredQueries = new PrettyPrinter()
+        List<String> coveredQueries = mvResult.getCoveredQueries()
+                .stream()
+                .sorted().collect(Collectors.toList());
+        // AcceleratedQueries may be long, so truncate it to avoid not exceeding 256 chars
+        int n = 0;
+        boolean exhausted = true;
+        for (String cq : coveredQueries) {
+            n += cq.length() + 4; // 2 double-quotes, 1 comma, 1 space
+            if (n > 256) {
+                exhausted = false;
+                break;
+            }
+            orderedCoveredQueries.add(PrettyPrinter.escapedDoubleQuoted(cq));
+        }
+
+        String csvCoveredQueries = new PrettyPrinter()
                 .add("[").addSuperSteps(", ", orderedCoveredQueries)
+                .add(exhausted ? "" : "...")
                 .add("]")
                 .getResult();
 
         return rowBuilder.build()
                 .concat(cardEstimateList)
                 .concat(nodeInfoList)
-                .concatOne(coveredQueries);
+                .concatOne(csvCoveredQueries);
     }
 
     @Override

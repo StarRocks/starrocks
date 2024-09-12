@@ -197,10 +197,12 @@ public abstract class PlanPiece {
 
     public abstract PlanPiece replaceInputPieces(List<PlanPiece> pieces);
 
+    public String getFlatTableNormHash() {
+        return this.mustCast(AggregatePiece.class).getFlatTable().getNormHash();
+    }
+
     public String getNormHash() {
-        return this.cast(AggregatePiece.class)
-                .map(aggPiece -> aggPiece.getFlatTable().getNormHash())
-                .orElseGet(() -> this.getAuxState().getNormHash());
+        return this.getAuxState().getNormHash();
     }
 
     public PieceCommonState getCommonState() {

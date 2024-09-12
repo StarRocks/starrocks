@@ -92,8 +92,7 @@ public class TunespaceIngester {
     }
 
     public void ingest(MVLifecycleManager mgr) {
-
-        boolean brandNewTs = !MetaUtil.hasData(tuneSpace.getFqTableName());
+        boolean brandNewTs = !MetaUtil.exists(tuneSpace.getFqTableName());
         Optional<Long> optSinceTs = brandNewTs ? Optional.empty() : mgr.getAuditLatestTimestamp();
 
         String sinceCondition = optSinceTs
