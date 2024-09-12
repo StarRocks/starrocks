@@ -210,6 +210,9 @@ public class Counter {
         }
 
         public void finalized(Counter minCounter, Counter maxCounter, Counter mergedCounter) {
+            if (cnt == 0) {
+                return;
+            }
             long mergedValue = Counter.isAvg(strategy) ? sum / cnt : sum;
             minCounter.setValue(min);
             maxCounter.setValue(max);

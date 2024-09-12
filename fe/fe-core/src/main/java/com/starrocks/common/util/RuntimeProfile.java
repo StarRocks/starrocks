@@ -313,20 +313,26 @@ public class RuntimeProfile {
                     .collect(Collectors.toMap(TCounter::getName, t -> t));
             Queue<String> nameQueue = Lists.newLinkedList();
             nameQueue.offer(ROOT_COUNTER);
+            LOG.debug("skip counter {}", skippedCounters);
+
             while (!nameQueue.isEmpty()) {
                 String topName = nameQueue.poll();
 
                 if (!Objects.equals(ROOT_COUNTER, topName)) {
                     Pair<Counter.SummerizationCounter, String> pair = fragmentCounterMap.get(topName);
-                    Counter.SummerizationCounter summerizationCounter = pair.first;
                     TCounter tcounter = tCounterMap.get(topName);
                     String parentName = child2ParentMap.get(topName);
 
-                    if (summerizationCounter == null && tcounter != null && parentName != null) {
+                    Counter.SummerizationCounter summerizationCounter;
+                    LOG.debug("merge counter {}", tcounter);
+                    if (pair == null && tcounter != null && parentName != null) {
                         summerizationCounter =
                                 addSummarizationCounter(topName, tcounter.type, tcounter.strategy, parentName);
+                    } else if (pair != null && tcounter != null) {
+                        summerizationCounter = pair.first;
+                    } else {
+                        continue;
                     }
-
                     summerizationCounter.merge(tcounter);
                     tCounterMap.remove(topName);
                 }
@@ -342,20 +348,19 @@ public class RuntimeProfile {
             }
             // Second, processing the remaining counters, set ROOT_COUNTER as it's parent
             for (TCounter tcounter : tCounterMap.values()) {
-                Pair<Counter, String> pair = counterMap.get(tcounter.name);
+                Pair<Counter.SummerizationCounter, String> pair = fragmentCounterMap.get(tcounter.name);
                 if (pair == null) {
-                    Counter counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
-                    counter.setValue(tcounter.value);
-                    counter.setStrategy(tcounter.strategy);
+                    Counter.SummerizationCounter counter =
+                            addSummarizationCounter(tcounter.name, tcounter.type, tcounter.strategy, ROOT_COUNTER);
                 } else {
-                    if (pair.first.getType() != tcounter.type) {
-                        LOG.error("Cannot update counters with the same name but different types"
-                                + " type=" + tcounter.type);
-                    } else {
-                        pair.first.setValue(tcounter.value);
-                    }
+                    Preconditions.checkArgument(pair.first.unit == tcounter.type);
+                    pair.first.merge(tcounter);
                 }
             }
+
+            node.counters =
+                    node.counters.stream().filter(x -> skippedCounters.contains(x.getName()))
+                            .collect(Collectors.toList());
         }
 
         if (!isNodeOld && node.info_strings_display_order != null) {
@@ -365,6 +370,9 @@ public class RuntimeProfile {
                 Preconditions.checkState(value != null);
                 addInfoString(key, value);
             }
+            LOG.debug("clear {} info strings in {}", node.info_strings_display_order.size(), node.getName());
+            node.info_strings.clear();
+            node.info_strings_display_order.clear();
         }
 
         idx.setRef(idx.getRef() + 1);
@@ -377,7 +385,7 @@ public class RuntimeProfile {
                 childProfile = new RuntimeProfile(childName);
                 addChild(childProfile);
             }
-            childProfile.update(nodes, idx, isNodeOld);
+            childProfile.merge(nodes, idx, isNodeOld);
         }
     }
 
@@ -401,10 +409,11 @@ public class RuntimeProfile {
                 counterMap.put(MERGED_INFO_PREFIX_MAX + name, Pair.create(sumCounter, parentName));
             }
         }
+        LOG.debug("finalize merge {} counters of {}", fragmentCounterMap.size(), name);
+        fragmentCounterMap.clear();
 
         for (RuntimeProfile child : childMap.values()) {
             child.finalizeMerge();
-            ;
         }
     }
 

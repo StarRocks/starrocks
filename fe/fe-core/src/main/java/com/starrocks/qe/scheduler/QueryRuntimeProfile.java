@@ -158,10 +158,14 @@ public class QueryRuntimeProfile {
 
     public void initFragmentProfiles(int numFragments) {
         this.fragmentProfiles = new ArrayList<>(numFragments);
+        this.mergedFragmentProfiles = new ArrayList<>(numFragments);
         for (int i = 0; i < numFragments; i++) {
             RuntimeProfile profile = new RuntimeProfile("Fragment " + i);
             fragmentProfiles.add(profile);
             queryProfile.addChild(profile);
+
+            RuntimeProfile mergeProfile = new RuntimeProfile("Fragment " + i);
+            mergedFragmentProfiles.add(mergeProfile);
         }
     }
 
@@ -340,9 +344,11 @@ public class QueryRuntimeProfile {
         }
 
         // Update fragment profile
-        int fragmentIndex = execState.getFragmentIndex();
-        RuntimeProfile fragmentProfile = mergedFragmentProfiles.get(fragmentIndex);
-        fragmentProfile.merge(params.profile);
+        if (params.isSetProfile()) {
+            int fragmentIndex = execState.getFragmentIndex();
+            RuntimeProfile fragmentProfile = mergedFragmentProfiles.get(fragmentIndex);
+            fragmentProfile.merge(params.profile);
+        }
     }
 
     public synchronized void saveRunningProfile(ProfilingExecPlan profilingPlan, RuntimeProfile profile) {
