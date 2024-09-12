@@ -41,6 +41,20 @@ public class DistinctAggTest extends PlanTestBase {
     }
 
     @Test
+    void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
+        String sql = "select count(distinct v3) from (select *, 'b' as b from tarray) t group by b";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 5:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(3: v3)\n" +
+                "  |  group by: 5: b\n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 3: v3, 5: b\n" +
+                "  |  \n" +
+                "  3:EXCHANGE");
+    }
+    @Test
     void testDistinctConstant() throws Exception {
         String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
                 "t1 group by b1";

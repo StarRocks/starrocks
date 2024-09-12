@@ -320,26 +320,6 @@ public class SelectStmtTest {
     }
 
     @Test
-    void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
-        FeConstants.runningUnitTest = true;
-        // array is not supported now
-        String sql =
-                "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
-        String s = starRocksAssert.query(sql).explainQuery();
-        Assert.assertTrue(s, s.contains("2:AGGREGATE (update finalize)\n" +
-                "  |  output: any_value(CAST(split('a,b,c', ',') IS NOT NULL AS BIGINT))\n" +
-                "  |  group by: 4: b1\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 4> : 'aaa'\n" +
-                "  |  \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL"));
-        FeConstants.runningUnitTest = false;
-    }
-
-    @Test
     void testGroupByMultiColumnCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
