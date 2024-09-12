@@ -22,7 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.Counter;
+import com.starrocks.common.profile.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -100,6 +100,9 @@ public class QueryRuntimeProfile {
 
     private RuntimeProfile queryProfile;
     private List<RuntimeProfile> fragmentProfiles;
+    // Merged fragment-file from instance-profile, if that instance already finished
+    // It's used to reduce memory usage of running profile, which needs to be kept in memory all the time
+    private List<RuntimeProfile> mergedFragmentProfiles;
 
     // The load channel profile is only present if loading to OlapTables.
     // The hierarchy is LoadChannel -> Channel(BE) -> Index
@@ -159,10 +162,16 @@ public class QueryRuntimeProfile {
 
     public void initFragmentProfiles(int numFragments) {
         this.fragmentProfiles = new ArrayList<>(numFragments);
+        this.mergedFragmentProfiles = new ArrayList<>(numFragments);
         for (int i = 0; i < numFragments; i++) {
             RuntimeProfile profile = new RuntimeProfile("Fragment " + i);
             fragmentProfiles.add(profile);
             queryProfile.addChild(profile);
+
+            if (Config.enable_profile_jit_merge) {
+                RuntimeProfile mergeProfile = new RuntimeProfile("Fragment " + i);
+                mergedFragmentProfiles.add(mergeProfile);
+            }
         }
     }
 
@@ -310,6 +319,21 @@ public class QueryRuntimeProfile {
         }
     }
 
+    /**
+     * Merge it into fragment-profile only if this instance finish
+     */
+    public boolean mergeFragmentProfile(FragmentInstanceExecState execState, TReportExecStatusParams params) {
+        if (CollectionUtils.isNotEmpty(mergedFragmentProfiles) && params.isSetProfile() && params.isDone()) {
+            int fragmentIndex = execState.getFragmentIndex();
+            RuntimeProfile fragmentProfile = mergedFragmentProfiles.get(fragmentIndex);
+            synchronized (fragmentProfile) {
+                fragmentProfile.merge(params.profile);
+            }
+            return true;
+        }
+        return false;
+    }
+
     public void updateProfile(FragmentInstanceExecState execState, TReportExecStatusParams params) {
         if (params.isSetProfile()) {
             profileAlreadyReported = true;
@@ -420,11 +444,18 @@ public class QueryRuntimeProfile {
         long maxQueryExecutionWallTime = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
-        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+        for (int i = 0; i < fragmentProfiles.size(); i++) {
+            RuntimeProfile fragmentProfile = fragmentProfiles.get(i);
             RuntimeProfile newFragmentProfile = new RuntimeProfile(fragmentProfile.getName());
             newFragmentProfiles.add(newFragmentProfile);
             newFragmentProfile.copyAllInfoStringsFrom(fragmentProfile, null);
             newFragmentProfile.copyAllCountersFrom(fragmentProfile);
+
+            if (CollectionUtils.isNotEmpty(mergedFragmentProfiles)) {
+                RuntimeProfile mergedFragmentProfile = mergedFragmentProfiles.get(i);
+                mergedFragmentProfile.finalizeMerge();
+                newFragmentProfile.copyAllCountersRecursiveFrom(mergedFragmentProfile);
+            }
 
             if (fragmentProfile.getChildList().isEmpty()) {
                 continue;
