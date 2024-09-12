@@ -538,7 +538,6 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        LOG(INFO) << "lead-lag:reset" << std::endl;
         this->data(state).value = {};
         this->data(state).is_null = false;
 
@@ -572,10 +571,6 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        LOG(INFO) << "lead-lag:update_batch_single_state_with_frame, peer_group_start: " << peer_group_start
-                  << ", peer_group_end: " << peer_group_end << ", frame_start: " << frame_start
-                  << ", frame_end: " << frame_end << std::endl;
-
         // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
         // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
         if constexpr (ignoreNulls) {
@@ -706,7 +701,6 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
-        LOG(INFO) << "lead-lag:get_values" << std::endl;
         this->get_values_helper(state, dst, start, end);
     }
 
