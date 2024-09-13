@@ -79,7 +79,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         ListPartitionDiffResult result;
         try {
-            result = ListPartitionDiffer.computeListPartitionDiff(mv);
+            result = ListPartitionDiffer.computeListPartitionDiff(mv, false);
             if (result == null) {
                 LOG.warn("compute list partition diff failed: mv: {}", mv.getName());
                 return false;
@@ -127,6 +127,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
             mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
             mvContext.setRefBaseTableListPartitionMap(refBaseTablePartitionMap);
+            mvContext.setExternalRefBaseTableMVPartitionMap(result.getRefBaseTableMVPartitionMap());
         }
         return true;
     }
