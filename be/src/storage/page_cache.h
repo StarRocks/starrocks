@@ -102,7 +102,7 @@ public:
     // This function is thread-safe, and when two clients insert two same key
     // concurrently, this function can assure that only one page is cached.
     // The in_memory page will have higher priority.
-    void insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory = false);
+    Status insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory = false);
 
     size_t memory_usage() const { return _cache->usage(); }
 

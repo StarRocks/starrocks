@@ -36,17 +36,15 @@ Status StarCacheModule::init() {
 Status StarCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
                                 ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
                                 ObjectCacheWriteOptions* options) {
-    // TODO: Support pass object `size` and `charge` to starcache
     starcache::ObjectHandle *obj_hdl = new starcache::ObjectHandle;
     auto obj_deleter = [deleter, key, value] {
         // For temporary compatibility with old deleters. 
         CacheKey cache_key(key);
         deleter(cache_key, value);
-        LOG(INFO) << "[Gavin] delete key: " << key;
     };
     Status st;
     if (!options) {
-        st = to_status(_cache->set_object(key, value, size, obj_deleter, obj_hdl, nullptr));
+        st = to_status(_cache->set_object(key, value, size, charge, obj_deleter, obj_hdl, nullptr));
     } else {
         starcache::WriteOptions opts;
         opts.priority = options->priority;
@@ -59,7 +57,7 @@ Status StarCacheModule::insert(const std::string& key, void* value, size_t size,
             // It is safe because we limit the flying memory in starcache, also, this behavior
             // doesn't affect the process memory tracker.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            auto st = to_status(_cache->set_object(key, value, size, charge, obj_deleter, obj_hdl, &opts));
+            st = to_status(_cache->set_object(key, value, size, charge, obj_deleter, obj_hdl, &opts));
         }
     }
     if (!st.ok()) {
@@ -92,7 +90,6 @@ Status StarCacheModule::remove(const std::string& key)  {
 void StarCacheModule::release(ObjectCacheHandlePtr handle) {
     auto obj_hdl = reinterpret_cast<starcache::ObjectHandle*>(handle);
     obj_hdl->release();
-    LOG(INFO) << "[Gavin] delete obj_handle";
     delete obj_hdl;
 }
 

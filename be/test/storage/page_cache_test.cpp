@@ -45,7 +45,7 @@ namespace starrocks {
 
 class StoragePageCacheTest : public testing::TestWithParam<bool> {
 public:
-    StoragePageCacheTest() { _mem_tracker = std::make_unique<MemTracker>(); FLAGS_v = 88;}
+    StoragePageCacheTest() { _mem_tracker = std::make_unique<MemTracker>(); }
     ~StoragePageCacheTest() override = default;
 
     std::shared_ptr<ObjectCache> create_obj_cache(size_t capacity) {
@@ -78,19 +78,6 @@ TEST_P(StoragePageCacheTest, normal) {
     StoragePageCache::CacheKey key("abc", 0);
     StoragePageCache::CacheKey memory_key("mem", 0);
 
-    /*
-    // put too many page to eliminate first page
-    for (int i = 0; i < 10 * kNumShards; ++i) {
-        StoragePageCache::CacheKey key("bcd", i);
-        PageCacheHandle handle;
-        Slice data(new char[1024], 1024);
-        cache.insert(key, data, &handle, false);
-    }
-
-    obj_cache->shutdown();
-    return;
-    */
-
     {
         // insert normal page
         char* buf = new char[1024];
@@ -120,15 +107,16 @@ TEST_P(StoragePageCacheTest, normal) {
 
     // put too many page to eliminate first page
     for (int i = 0; i < 10 * kNumShards; ++i) {
-    //for (int i = 0; i < 1; ++i) {
         StoragePageCache::CacheKey key("bcd", i);
         PageCacheHandle handle;
         Slice data(new char[1024], 1024);
-        cache.insert(key, data, &handle, false);
+        Status st = cache.insert(key, data, &handle, false);
+        if (!st.ok()) {
+            // Some items may be inserted failed in starcache module because the shard distribution.
+            LOG(INFO) << "free data when inserting failed";
+            delete[] data.data;
+        }
     }
-
-    obj_cache->shutdown();
-    return;
 
     // cache miss
     {

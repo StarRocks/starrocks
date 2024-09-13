@@ -33,14 +33,6 @@ Status LRUCacheModule::init() {
 Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
                                ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
                                ObjectCacheWriteOptions* options) {
-    /*
-    auto lru_deleter = [deleter](const starrocks::CacheKey& k, void* v) { 
-        deleter(k.to_string(), v);
-    };
-    auto lru_deleter = [](const starrocks::CacheKey& k, void* v) { 
-        //deleter(k.to_string(), v);
-    };
-    */
     if (!_check_write(charge, options)) {
         return Status::InternalError("cache insertion is rejected");
     }
