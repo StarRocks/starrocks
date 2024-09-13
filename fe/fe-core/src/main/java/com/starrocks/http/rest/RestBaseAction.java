@@ -67,12 +67,10 @@ public class RestBaseAction extends BaseAction {
     protected static final String DB_KEY = "db";
     protected static final String TABLE_KEY = "table";
     protected static final String LABEL_KEY = "label";
-    protected static final String WAREHOUSE_KEY = "warehouse";
-<<<<<<< HEAD
-    private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
-=======
+    protected static final String WAREHOUSE_KEY = "warehouse";    
     protected static final String USER_KEY = "user";
->>>>>>> cfe6031ff0 ([Feature] Unify load observation interface through information_schema.loads & _statistics_.loads_history (#46773))
+
+    private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
 
     protected static ObjectMapper mapper = new ObjectMapper();
 
