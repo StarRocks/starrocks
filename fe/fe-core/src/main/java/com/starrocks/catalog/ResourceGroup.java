@@ -264,7 +264,7 @@ public class ResourceGroup {
         return twg;
     }
 
-    public Integer getCpuWeight() {
+    public Integer getRawCpuWeight() {
         return cpuWeight;
     }
 
@@ -279,10 +279,12 @@ public class ResourceGroup {
         return cpuWeight;
     }
 
+    /**
+     * The old version considers cpu_weight as a positive integer, but now it can be non-positive.
+     * To be compatible with the old version, if cpu_weight is non-positive, it is stored as 1.
+     * And use geNormalizedCpuWeight() to get the normalized value when using cpu_weight.
+     */
     public void normalizeCpuWeight() {
-        // The old version considers cpu_weight as a positive integer, but now it can be non-positive.
-        // To be compatible with the old version, if cpu_weight is non-positive, it is stored as 1.
-        // And use geNormalizedCpuWeight() to get the normalized value when using cpu_weight.
         if (cpuWeight == null || cpuWeight <= 0) {
             cpuWeight = 1;
         }
