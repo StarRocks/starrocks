@@ -28,6 +28,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -47,7 +48,7 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CompactionHandler  {
+public class CompactionHandler {
     private static final Logger LOG = LogManager.getLogger(CompactionHandler.class);
 
     // add synchronized to avoid process 2 or more stmts at same time
@@ -82,11 +83,16 @@ public class CompactionHandler  {
             locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
+
+                TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
                 for (Partition partition : allPartitions) {
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
-                                MaterializedIndex.IndexExtState.VISIBLE)) {
-                            for (Tablet tablet : index.getTablets()) {
+                    List<PhysicalPartition> physicalPartitionList = tabletMetastore.getAllPhysicalPartition(partition);
+                    for (PhysicalPartition physicalPartition : physicalPartitionList) {
+                        List<MaterializedIndex> materializedIndices = tabletMetastore
+                                .getMaterializedIndices(physicalPartition, MaterializedIndex.IndexExtState.VISIBLE);
+                        for (MaterializedIndex materializedIndex : materializedIndices) {
+                            List<Tablet> tabletList = tabletMetastore.getAllTablets(materializedIndex);
+                            for (Tablet tablet : tabletList) {
                                 for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {
                                     backendToTablets.put(backendId, tablet.getId());
                                 }

@@ -63,9 +63,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     private List<Long> getAllPartitionShardGroupId() {
         List<Long> groupIds = new ArrayList<>();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getStarRocksMeta().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getStarRocksMeta().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -76,9 +76,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
+                for (Table table : GlobalStateMgr.getCurrentState().getStarRocksMeta().getTablesIncludeRecycleBin(db)) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        GlobalStateMgr.getCurrentState().getStarRocksMeta()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
                                 .map(Partition::getSubPartitions)
@@ -296,7 +296,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
                 return false; // table might be dropped
             }
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
+            GlobalStateMgr.getCurrentState().getStarRocksMeta()
                     .getAllPartitionsIncludeRecycleBin(table)
                     .stream()
                     .map(Partition::getSubPartitions)

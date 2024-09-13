@@ -325,10 +325,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<List<Long>> bindings = new ArrayList<>();
         List<Long> tableBindings = new ArrayList<>();
         List<Long> dbBindings = new ArrayList<>();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin().stream()
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getStarRocksMeta().getDbIdsIncludeRecycleBin().stream()
                 .filter(dbid -> dbid > NEXT_ID_INIT_VALUE).collect(Collectors.toList());
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getStarRocksMeta().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
@@ -336,7 +336,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             }
             dbBindings.add(dbId);
             try {
-                List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db);
+                List<Table> tables = GlobalStateMgr.getCurrentState().getStarRocksMeta().getTablesIncludeRecycleBin(db);
                 for (Table table : tables) {
                     Long tableId = table.getId();
                     if (!tableToStorageVolume.containsKey(tableId) && table.isCloudNativeTableOrMaterializedView()) {

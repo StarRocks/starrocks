@@ -37,6 +37,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
@@ -706,7 +707,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     private OlapTable getOlapTableById(long dbId, long tblId) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return null;
         }
@@ -714,7 +715,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db.getId(), LockType.READ);
-            return (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+            return (OlapTable) globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, tblId);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -1005,7 +1006,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private int getPartitionTabletNumOnBePath(long dbId, long tableId, long partitionId, long indexId, long beId,
                                               long pathHash) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return 0;
         }
@@ -1013,12 +1014,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+            OlapTable table = (OlapTable) globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return 0;
             }
 
-            Partition partition = globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(table, partitionId);
+            Partition partition = globalStateMgr.getStarRocksMeta().getPartitionIncludeRecycleBin(table, partitionId);
             if (partition == null) {
                 return 0;
             }
@@ -1341,7 +1342,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                                   long partitionId,
                                                   long tabletId) {
         short replicationFactor =
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                GlobalStateMgr.getCurrentState().getStarRocksMeta()
                         .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
         if (replicationFactor == (short) -1) {
             return true;
@@ -1451,14 +1452,14 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         List<Pair<Long, Set<Long>>> result = Lists.newArrayList();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return result;
         }
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db.getId(), LockType.READ);
-            OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+            OlapTable table = (OlapTable) globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return result;
             }
@@ -1467,7 +1468,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return result;
             }
 
-            Partition partition = globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(table, partitionId);
+            Partition partition = globalStateMgr.getStarRocksMeta().getPartitionIncludeRecycleBin(table, partitionId);
             if (partition == null) {
                 return result;
             }
@@ -1538,15 +1539,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private boolean isTabletUnhealthy(long dbId, OlapTable olapTable, Long tabletId,
                                       TabletMeta tabletMeta, List<Long> aliveBeIds) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
-        if (db == null) {
-            return false;
-        }
-
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db.getId(), LockType.READ);
-            Partition partition = globalStateMgr.getLocalMetastore()
+        try (AutoCloseableLock ignore =
+                     new AutoCloseableLock(new Locker(), dbId, Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+            Partition partition = globalStateMgr.getStarRocksMeta()
                     .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId());
             if (partition == null) {
                 return true;
@@ -1557,12 +1552,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return true;
             }
 
-            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+            LocalTablet tablet = (LocalTablet) GlobalStateMgr.getCurrentState().getTabletMetastore().getTablet(index, tabletId);
             if (tablet == null) {
                 return true;
             }
 
-            short replicaNum = globalStateMgr.getLocalMetastore()
+            short replicaNum = globalStateMgr.getStarRocksMeta()
                     .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
             if (replicaNum == (short) -1) {
                 return true;
@@ -1579,8 +1574,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             return statusPair.first != LocalTablet.TabletHealthStatus.LOCATION_MISMATCH &&
                     statusPair.first != LocalTablet.TabletHealthStatus.HEALTHY;
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -1607,10 +1600,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         long start = System.nanoTime();
         long lockTotalTime = 0;
         long lockStart;
-        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = globalStateMgr.getStarRocksMeta().getDbIdsIncludeRecycleBin();
         DATABASE:
         for (Long dbId : dbIds) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -1627,7 +1620,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             lockStart = System.nanoTime();
             try {
                 TABLE:
-                for (Table table : globalStateMgr.getLocalMetastore().getTablesIncludeRecycleBin(db)) {
+                for (Table table : globalStateMgr.getStarRocksMeta().getTablesIncludeRecycleBin(db)) {
                     // check table is olap table or colocate table
                     if (!table.needSchedule(isLocalBalance)) {
                         continue;
@@ -1644,7 +1637,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         continue;
                     }
 
-                    for (Partition partition : globalStateMgr.getLocalMetastore().getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                    for (Partition partition : globalStateMgr.getStarRocksMeta()
+                            .getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
                         if (partitionChecked % partitionBatchNum == 0) {
                             lockTotalTime += System.nanoTime() - lockStart;
@@ -1654,14 +1648,14 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             locker.lockDatabase(db.getId(), LockType.READ);
                             LOG.debug("balancer get lock again");
                             lockStart = System.nanoTime();
-                            if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
+                            if (globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId) == null) {
                                 continue DATABASE;
                             }
-                            if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
+                            if (globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
                                 continue TABLE;
                             }
-                            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTbl, partition.getId()) ==
-                                    null) {
+                            if (globalStateMgr.getStarRocksMeta()
+                                    .getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
                                 continue;
                             }
                         }
@@ -1671,7 +1665,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             continue;
                         }
 
-                        DataProperty dataProperty = globalStateMgr.getLocalMetastore()
+                        DataProperty dataProperty = globalStateMgr.getStarRocksMeta()
                                 .getDataPropertyIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
                         if (dataProperty == null) {
                             continue;
@@ -1681,7 +1675,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             continue;
                         }
 
-                        int replicationFactor = globalStateMgr.getLocalMetastore()
+                        int replicationFactor = globalStateMgr.getStarRocksMeta()
                                 .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
                         int replicaNum = partition.getDistributionInfo().getBucketNum() * replicationFactor;
                         // replicaNum may be negative, cause getReplicationNumIncludeRecycleBin can return -1
@@ -1773,9 +1767,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private Map<Long, Integer> getPartitionReplicaCnt() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Map<Long, Integer> partitionReplicaCnt = new HashMap<>();
-        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = globalStateMgr.getStarRocksMeta().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -1787,7 +1781,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                for (Table table : globalStateMgr.getLocalMetastore().getTablesIncludeRecycleBin(db)) {
+                for (Table table : globalStateMgr.getStarRocksMeta().getTablesIncludeRecycleBin(db)) {
                     // check table is olap table or colocate table
                     if (!table.needSchedule(false)) {
                         continue;
@@ -1798,11 +1792,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-                    for (Partition partition : globalStateMgr.getLocalMetastore().getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                    for (Partition partition : globalStateMgr.getStarRocksMeta()
+                            .getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         int replicaTotalCnt = partition.getDistributionInfo().getBucketNum()
                                 *
-                                globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
-                                        partition.getId());
+                                globalStateMgr.getStarRocksMeta()
+                                        .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
                         partitionReplicaCnt.put(partition.getId(), replicaTotalCnt);
                     }
                 }

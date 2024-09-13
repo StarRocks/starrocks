@@ -203,7 +203,7 @@ public class RestoreJobMaterializedViewTest {
                 //minTimes = 0;
                 //result = systemInfoService;
 
-                globalStateMgr.getLocalMetastore().mayGetDb(anyLong);
+                globalStateMgr.getStarRocksMeta().mayGetDb(anyLong);
                 minTimes = 0;
                 result = Optional.of(db);
 

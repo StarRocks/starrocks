@@ -1617,7 +1617,7 @@ public class ShowExecutor {
                             break;
                         }
 
-                        List<Replica> replicas = tablet.getImmutableReplicas();
+                        List<Replica> replicas = GlobalStateMgr.getCurrentState().getTabletMetastore().getAllReplicas(tablet);
                         for (Replica replica : replicas) {
                             Replica tmp = invertedIndex.getReplica(tabletId, replica.getBackendId());
                             if (tmp == null) {
@@ -2503,7 +2503,7 @@ public class ShowExecutor {
         public ShowResultSet visitShowPipeStatement(ShowPipeStmt statement, ConnectContext context) {
             List<List<Comparable>> rows = Lists.newArrayList();
             String dbName = statement.getDbName();
-            long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbName)
+            long dbId = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(dbName)
                     .map(Database::getId)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName));
             PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();

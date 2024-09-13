@@ -53,6 +53,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterJobType;
@@ -301,6 +302,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws Exception {
+        TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
+
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
@@ -322,7 +325,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (index == null) {
                 throw new MetaNotFoundException("index " + getIndexId() + " does not exist");
             }
-            Tablet tablet = index.getTablet(getTabletId());
+            Tablet tablet = tabletMetastore.getTablet(index, getTabletId());
             Preconditions.checkNotNull(tablet, getTabletId());
             if (!tbl.isCloudNativeTableOrMaterializedView()) {
                 Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());

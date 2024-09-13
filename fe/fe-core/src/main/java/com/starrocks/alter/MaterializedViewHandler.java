@@ -285,7 +285,7 @@ public class MaterializedViewHandler extends AlterHandler {
             TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             for (RollupJobV2 rollupJobV2 : rollupNameJobMap.values()) {
                 for (MaterializedIndex index : rollupJobV2.getPartitionIdToRollupIndex().values()) {
-                    for (Tablet tablet : index.getTablets()) {
+                    for (Tablet tablet : GlobalStateMgr.getCurrentState().getTabletMetastore().getAllTablets(index)) {
                         tabletInvertedIndex.deleteTablet(tablet.getId());
                     }
                 }
@@ -459,7 +459,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
             // check if mv index already exists in db
 
-            if (GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(db.getFullName(), mvName).isPresent()) {
+            if (GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetTable(db.getFullName(), mvName).isPresent()) {
                 throw new DdlException("Table [" + mvName + "] already exists in the db " + db.getFullName());
             }
 

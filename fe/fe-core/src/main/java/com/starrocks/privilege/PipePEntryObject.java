@@ -111,7 +111,7 @@ public class PipePEntryObject implements PEntryObject {
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.dbUUID));
+        Database db = globalStateMgr.getStarRocksMeta().getDbIncludeRecycleBin(Long.parseLong(this.dbUUID));
         if (db == null) {
             return false;
         }
@@ -129,7 +129,7 @@ public class PipePEntryObject implements PEntryObject {
                     .map(Pipe::getDbAndName)
                     .collect(Collectors.toList());
             for (Pair<Long, String> dbAndName : ListUtils.emptyIfNull(dbAndNames)) {
-                Optional<Database> db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbAndName.first);
+                Optional<Database> db = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(dbAndName.first);
                 db.ifPresent(database -> objects.add(
                         Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 database.getFullName(), dbAndName.second)));
@@ -206,7 +206,7 @@ public class PipePEntryObject implements PEntryObject {
                 return Optional.empty();
             }
             long dbId = Long.parseLong(getDbUUID());
-            return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbId);
+            return GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(dbId);
         } catch (NumberFormatException e) {
             return Optional.empty();
         }

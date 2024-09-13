@@ -55,7 +55,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
                 .collect(Collectors.toList());
         // metastore is null when external table
         if (null != metastore) {
-            metastore.validateColumns(baseSchema);
+            GlobalStateMgr.getCurrentState().getStarRocksMeta().validateColumns(baseSchema);
         }
 
         // create partition info
@@ -65,7 +65,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else if (null != metastore) {
-            long partitionId = metastore.getNextId();
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
             // use table name as single partition name
             partitionNameToId.put(tableName, partitionId);
             partitionInfo = new SinglePartitionInfo();

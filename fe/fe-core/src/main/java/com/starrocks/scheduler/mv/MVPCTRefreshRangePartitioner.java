@@ -465,7 +465,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
             analyzer.analyze(mvContext.getCtx(), alterPartition);
             try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
+                GlobalStateMgr.getCurrentState().getStarRocksMeta().addPartitions(mvContext.getCtx(),
                         database, materializedView.getName(), alterPartition);
             } catch (Exception e) {
                 throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),

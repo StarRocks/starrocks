@@ -80,14 +80,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -101,6 +102,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.meta.StarRocksMeta.inactiveRelatedMaterializedView;
 
 public class AlterJobMgr {
     private static final Logger LOG = LogManager.getLogger(AlterJobMgr.class);
@@ -231,7 +234,7 @@ public class AlterJobMgr {
                                                  String createMvSql) {
         // If we could parse the MV sql successfully, and the schema of mv does not change,
         // we could reuse the existing MV
-        Optional<Database> mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(materializedView.getDbId());
+        Optional<Database> mayDb = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(materializedView.getDbId());
 
         // check database existing
         String dbName = mayDb.orElseThrow(() ->
@@ -498,7 +501,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view,
+            inactiveRelatedMaterializedView(db, view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
@@ -532,6 +535,23 @@ public class AlterJobMgr {
             partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        }
+    }
+
+    /*
+     * used for handling CancelAlterStmt (for client is the CANCEL ALTER
+     * command). including SchemaChangeHandler and RollupHandler
+     */
+    public void cancelAlter(CancelAlterTableStmt stmt, String reason) throws DdlException {
+        if (stmt.getAlterType() == ShowAlterStmt.AlterType.ROLLUP) {
+            materializedViewHandler.cancel(stmt, reason);
+        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN
+                || stmt.getAlterType() == ShowAlterStmt.AlterType.OPTIMIZE) {
+            schemaChangeHandler.cancel(stmt, reason);
+        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
+            materializedViewHandler.cancelMV(stmt);
+        } else {
+            throw new DdlException("Cancel " + stmt.getAlterType() + " does not implement yet");
         }
     }
 

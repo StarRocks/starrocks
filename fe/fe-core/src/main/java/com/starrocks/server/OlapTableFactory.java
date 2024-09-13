@@ -94,8 +94,7 @@ public class OlapTableFactory implements AbstractTableFactory {
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database db, CreateTableStmt stmt) throws DdlException {
-        GlobalStateMgr stateMgr = metastore.getStateMgr();
-        ColocateTableIndex colocateTableIndex = metastore.getColocateTableIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         String tableName = stmt.getTableName();
 
         if (stmt instanceof CreateTemporaryTableStmt) {
@@ -107,7 +106,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
         // create columns
         List<Column> baseSchema = stmt.getColumns();
-        metastore.validateColumns(baseSchema);
+        GlobalStateMgr.getCurrentState().getStarRocksMeta().validateColumns(baseSchema);
 
         // create partition info
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
@@ -118,18 +117,18 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (partitionDesc instanceof RangePartitionDesc) {
                 RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
                 for (SingleRangePartitionDesc desc : rangePartitionDesc.getSingleRangePartitionDescs()) {
-                    long partitionId = metastore.getNextId();
+                    long partitionId = GlobalStateMgr.getCurrentState().getNextId();
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
             } else if (partitionDesc instanceof ListPartitionDesc) {
                 ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
-                listPartitionDesc.findAllPartitionNames()
-                        .forEach(partitionName -> partitionNameToId.put(partitionName, metastore.getNextId()));
+                listPartitionDesc.findAllPartitionNames().forEach(
+                        partitionName -> partitionNameToId.put(partitionName, GlobalStateMgr.getCurrentState().getNextId()));
             } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                 ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                 for (SingleRangePartitionDesc desc : expressionPartitionDesc.getRangePartitionDesc()
                         .getSingleRangePartitionDescs()) {
-                    long partitionId = metastore.getNextId();
+                    long partitionId = GlobalStateMgr.getCurrentState().getNextId();
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
 
@@ -143,7 +142,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
             if (partitionInfo.isAutomaticPartition()) {
-                long partitionId = metastore.getNextId();
+                long partitionId = GlobalStateMgr.getCurrentState().getNextId();
                 String replicateNum = String.valueOf(RunMode.defaultReplicationNum());
                 if (stmt.getProperties() != null) {
                     replicateNum = stmt.getProperties().getOrDefault("replication_num",
@@ -157,7 +156,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(stmt.getProperties())) {
                 throw new DdlException("Only support dynamic partition properties on range partition table");
             }
-            long partitionId = metastore.getNextId();
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
             // use table name as single partition name
             partitionNameToId.put(tableName, partitionId);
             partitionInfo = new SinglePartitionInfo();
@@ -232,7 +231,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException(String.format("Storage volume %s not exists", volume));
                 }
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
-                metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
+                GlobalStateMgr.getCurrentState().getStarRocksMeta()
+                        .setLakeStorageInfo(db, table, storageVolumeId, properties);
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -251,7 +251,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setComment(stmt.getComment());
 
             // set base index id
-            long baseIndexId = metastore.getNextId();
+            long baseIndexId = GlobalStateMgr.getCurrentState().getNextId();
             table.setBaseIndexId(baseIndexId);
 
             // get use light schema change
@@ -581,12 +581,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 Preconditions.checkNotNull(rollupIndexStorageType);
                 // set rollup index meta to olap table
-                List<Column> rollupColumns = stateMgr.getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
-                        table, baseRollupIndex);
+                List<Column> rollupColumns = GlobalStateMgr.getCurrentState()
+                        .getRollupHandler().checkAndPrepareMaterializedView(addRollupClause, table, baseRollupIndex);
                 short rollupShortKeyColumnCount =
                         GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, addRollupClause.getProperties());
                 int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
-                long rollupIndexId = metastore.getNextId();
+                long rollupIndexId = GlobalStateMgr.getCurrentState().getNextId();
                 table.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
                         rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
             }
@@ -655,9 +655,12 @@ public class OlapTableFactory implements AbstractTableFactory {
 
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
-                    Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet,
-                            warehouseId);
-                    metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()),
+                    Partition partition = GlobalStateMgr.getCurrentState().getStarRocksMeta()
+                            .createPartition(db, table, partitionId, tableName, version, tabletIdSet, warehouseId);
+                    GlobalStateMgr.getCurrentState().getStarRocksMeta().buildPartitions(
+                            db,
+                            table,
+                            partition.getSubPartitions().stream().collect(Collectors.toList()),
                             warehouseId);
                     table.addPartition(partition);
                 } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
@@ -693,12 +696,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                     // this is a 2-level partitioned tables
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
-                        Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
+                        Partition partition = GlobalStateMgr.getCurrentState().getStarRocksMeta()
+                                .createPartition(db, table, entry.getValue(), entry.getKey(), version,
                                 tabletIdSet, warehouseId);
                         partitions.add(partition);
                     }
                     // It's ok if partitions is empty.
-                    metastore.buildPartitions(db, table, partitions.stream().map(Partition::getSubPartitions)
+                    GlobalStateMgr.getCurrentState().getStarRocksMeta()
+                            .buildPartitions(db, table, partitions.stream().map(Partition::getSubPartitions)
                             .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
                     for (Partition partition : partitions) {
                         table.addPartition(partition);

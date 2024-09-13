@@ -117,7 +117,6 @@ import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
@@ -220,6 +219,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+import static com.starrocks.meta.StarRocksMeta.buildPartitionInfo;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColumnEqualConstant;
@@ -265,7 +265,7 @@ public class PlanFragmentBuilder {
         Collections.reverse(execPlan.getFragments());
 
         // Create a fake table sink here, replaced it after created the MV
-        PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
+        PartitionInfo partitionInfo = buildPartitionInfo(createStmt);
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createStmt.getTableName().getDb()).getId();
         MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
@@ -870,8 +870,13 @@ public class PlanFragmentBuilder {
                             tabletId2BucketSeq.put(allTabletIds.get(i), i);
                         }
                         scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
-                        List<Tablet> tablets =
-                                selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
+
+                        List<Tablet> tablets = new ArrayList<>();
+                        for (Long selectTabletId : selectTabletIds) {
+                            Tablet tablet = GlobalStateMgr.getCurrentState().getTabletMetastore().getTablet(
+                                    selectedTable, selectTabletId);
+                            tablets.add(tablet);
+                        }
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
                     }
                 }

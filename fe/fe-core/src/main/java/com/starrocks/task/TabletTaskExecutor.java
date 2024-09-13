@@ -378,7 +378,6 @@ public class TabletTaskExecutor {
 
     public static void deleteAllReplicas(OlapTable olapTable) {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
-
         // drop all replicas
         for (Partition partition : olapTable.getAllPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -387,10 +386,12 @@ public class TabletTaskExecutor {
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    for (Tablet tablet : materializedIndex.getTablets()) {
+                    List<Tablet> tabletList = GlobalStateMgr.getCurrentState().getTabletMetastore()
+                            .getAllTablets(materializedIndex);
+                    for (Tablet tablet : tabletList) {
                         long tabletId = tablet.getId();
-                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                        for (Replica replica : replicas) {
+                        List<Replica> replicaList = GlobalStateMgr.getCurrentState().getTabletMetastore().getAllReplicas(tablet);
+                        for (Replica replica : replicaList) {
                             long backendId = replica.getBackendId();
                             DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
                             AgentBatchTask batchTask = batchTaskMap.get(backendId);
@@ -402,7 +403,7 @@ public class TabletTaskExecutor {
                             LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
                                     tabletId, backendId, olapTable.getId(), olapTable.getName());
                         } // end for replicas
-                    } // end for tablets
+                    }
                 }
             } // end for indices
         } // end for partitions

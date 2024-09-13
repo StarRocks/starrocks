@@ -41,6 +41,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -118,19 +119,21 @@ public class MigrationAction extends RestBaseAction {
                 OlapTable olapTable = (OlapTable) table;
 
                 for (Partition partition : olapTable.getPartitions()) {
-                    String partitionName = partition.getName();
-                    MaterializedIndex baseIndex = partition.getBaseIndex();
-                    for (Tablet tablet : baseIndex.getTablets()) {
-                        List<Comparable> row = Lists.newArrayList();
-                        row.add(tableName);
-                        row.add(partitionName);
-                        row.add(tablet.getId());
-                        row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                        if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
-                            Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
-                            row.add(replica.getBackendId());
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        String partitionName = physicalPartition.getName();
+                        MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
+                        for (Tablet tablet : baseIndex.getTablets()) {
+                            List<Comparable> row = Lists.newArrayList();
+                            row.add(tableName);
+                            row.add(partitionName);
+                            row.add(tablet.getId());
+                            row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
+                            if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
+                                Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
+                                row.add(replica.getBackendId());
+                            }
+                            rows.add(row);
                         }
-                        rows.add(row);
                     }
                 }
             } else {
@@ -144,19 +147,21 @@ public class MigrationAction extends RestBaseAction {
                     tableName = table.getName();
 
                     for (Partition partition : olapTable.getPartitions()) {
-                        String partitionName = partition.getName();
-                        MaterializedIndex baseIndex = partition.getBaseIndex();
-                        for (Tablet tablet : baseIndex.getTablets()) {
-                            List<Comparable> row = Lists.newArrayList();
-                            row.add(tableName);
-                            row.add(partitionName);
-                            row.add(tablet.getId());
-                            row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                            if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
-                                Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
-                                row.add(replica.getBackendId());
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            String partitionName = physicalPartition.getName();
+                            MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
+                            for (Tablet tablet : baseIndex.getTablets()) {
+                                List<Comparable> row = Lists.newArrayList();
+                                row.add(tableName);
+                                row.add(partitionName);
+                                row.add(tablet.getId());
+                                row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
+                                if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
+                                    Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
+                                    row.add(replica.getBackendId());
+                                }
+                                rows.add(row);
                             }
-                            rows.add(row);
                         }
                     }
                 }

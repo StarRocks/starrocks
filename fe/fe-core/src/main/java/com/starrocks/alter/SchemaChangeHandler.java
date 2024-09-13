@@ -88,6 +88,9 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.meta.TabletMetastore;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -2124,10 +2127,187 @@ public class SchemaChangeHandler extends AlterHandler {
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, olapTable, properties, metaType);
+            modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
+    }
+
+    public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
+                                TTabletMetaType metaType) {
+        if (metaType == TTabletMetaType.INMEMORY) {
+            modifyTableInMemoryMeta(db, table, properties);
+        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            modifyTableEnablePersistentIndexMeta(db, table, properties);
+        } else if (metaType == TTabletMetaType.WRITE_QUORUM) {
+            modifyTableWriteQuorum(db, table, properties);
+        } else if (metaType == TTabletMetaType.REPLICATED_STORAGE) {
+            modifyTableReplicatedStorage(db, table, properties);
+        } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
+            modifyTableAutomaticBucketSize(db, table, properties);
+        } else if (metaType == TTabletMetaType.MUTABLE_BUCKET_NUM) {
+            modifyTableMutableBucketNum(db, table, properties);
+        } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
+            modifyTablePrimaryIndexCacheExpireSec(db, table, properties);
+        } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
+            modifyTableEnableLoadProfile(db, table, properties);
+        }
+    }
+
+    // The caller need to hold the db write lock
+    private void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildInMemory();
+
+        // need to update partition info meta
+        for (Partition partition : table.getPartitions()) {
+            table.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+        }
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableProperty(
+                db, table, properties, OperationType.OP_MODIFY_IN_MEMORY);
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyInMemory(info);
+    }
+
+    private void modifyTableEnablePersistentIndexMeta(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildEnablePersistentIndex();
+
+        if (table.isCloudNativeTable()) {
+            // now default to LOCAL
+            tableProperty.buildPersistentIndexType();
+        }
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyEnablePersistentIndex(info);
+
+    }
+
+    // The caller need to hold the db write lock
+    private void modifyTableWriteQuorum(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildWriteQuorum();
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableProperty(db, table, properties);
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyWriteQuorum(info);
+    }
+
+    // The caller need to hold the db write lock
+    private void modifyTableReplicatedStorage(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildReplicatedStorage();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyReplicatedStorage(info);
+    }
+
+    // The caller need to hold the db write lock
+    private void modifyTableAutomaticBucketSize(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildBucketSize();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyBucketSize(info);
+    }
+
+    private void modifyTableMutableBucketNum(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildMutableBucketNum();
+
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyMutableBucketNum(info);
+    }
+
+    private void modifyTableEnableLoadProfile(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildEnableLoadProfile();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyEnableLoadProfile(info);
+    }
+
+    private void modifyTablePrimaryIndexCacheExpireSec(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildPrimaryIndexCacheExpireSec();
+
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyPrimaryIndexCacheExpireSec(info);
     }
 
     // return true means that the modification of FEMeta is successful,
@@ -2203,7 +2383,7 @@ public class SchemaChangeHandler extends AlterHandler {
             newBinlogConfig.incVersion();
 
             BinlogConfig oldBinlogConfig = olapTable.getCurBinlogConfig();
-            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyBinlogMeta(db, olapTable, newBinlogConfig);
+            modifyBinlogMeta(db, olapTable, newBinlogConfig);
             if (oldBinlogConfig != null) {
                 LOG.info("update binlog config of table {} successfully, the binlog config after modified is : {}, " +
                                 "previous is {}",
@@ -2237,6 +2417,22 @@ public class SchemaChangeHandler extends AlterHandler {
 
         }
         return isModifiedSuccess;
+    }
+
+    public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
+                db.getId(),
+                table.getId(),
+                binlogConfig.toProperties());
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyBinlogConfig(log);
+
+        if (!binlogConfig.getBinlogEnable()) {
+            table.clearBinlogAvailableVersion();
+            table.setBinlogTxnId(BinlogConfig.INVALID);
+        }
+        table.setCurBinlogConfig(binlogConfig);
     }
 
     /**
@@ -2293,6 +2489,7 @@ public class SchemaChangeHandler extends AlterHandler {
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), tableName);
 
+        TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
@@ -2302,10 +2499,12 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
             }
 
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
-                for (Tablet tablet : baseIndex.getTablets()) {
-                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+            for (PhysicalPartition physicalPartition : tabletMetastore.getAllPhysicalPartition(partition)) {
+                MaterializedIndex baseIndex = tabletMetastore.getMaterializedIndex(physicalPartition,
+                        physicalPartition.getBaseIndex().getId());
+
+                for (Tablet tablet : tabletMetastore.getAllTablets(baseIndex)) {
+                    for (Replica replica : tabletMetastore.getAllReplicas(tablet)) {
                         Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
                         tabletSet.add(tablet.getId());
                     }
@@ -2524,10 +2723,34 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);
+            modifyTableConstraint(db, tableName, properties);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
+    }
+
+    // The caller need to hold the db write lock
+    public void modifyTableConstraint(Database db, String tableName, Map<String, String> properties)
+            throws DdlException {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new DdlException(String.format("table:%s does not exist", tableName));
+        }
+        OlapTable olapTable = (OlapTable) table;
+        TableProperty tableProperty = olapTable.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            olapTable.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildConstraint();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), olapTable.getId(), properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyConstraint(info);
     }
 
     @Override

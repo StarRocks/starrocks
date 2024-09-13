@@ -262,7 +262,7 @@ public class ColocateMetaService {
                 isJoin = false;
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
+            Database db = GlobalStateMgr.getCurrentState().getStarRocksMeta().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 response.appendContent("Non-exist db");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -271,7 +271,7 @@ public class ColocateMetaService {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
-                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+                OlapTable table = (OlapTable) globalStateMgr.getStarRocksMeta().getTableIncludeRecycleBin(db, tableId);
                 if (table == null) {
                     response.appendContent("Non-exist table");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);

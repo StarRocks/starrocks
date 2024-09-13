@@ -334,7 +334,7 @@ public class Database extends MetaObject implements Writable {
             }
             unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(info);
         } finally {
             locker.unLockDatabase(id, LockType.WRITE);
         }

@@ -30,6 +30,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -135,7 +136,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Tablet tablet = index.getTablet(tabletId);
+            Tablet tablet = GlobalStateMgr.getCurrentState().getTabletMetastore().getTablet(index, tabletId);
             if (tablet == null) {
                 throw new AnalysisException("Can't find tablet id: " + tabletIdStr);
             }

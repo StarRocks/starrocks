@@ -283,9 +283,11 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getBaseIndex().getTablets().stream()
-                        .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                    return false;
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    if (physicalPartition.getBaseIndex().getTablets().stream()
+                            .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                        return false;
+                    }
                 }
             }
         }

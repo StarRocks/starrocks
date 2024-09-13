@@ -200,7 +200,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                                 "set (\"mv_rewrite_staleness_second\" = \"%s\")", MV_STALENESS);
                         AlterMaterializedViewStmt stmt =
                                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
+                        GlobalStateMgr.getCurrentState().getStarRocksMeta().alterMaterializedView(stmt);
                     }
                     // no refresh partitions if mv_rewrite_staleness is set.
                     executeInsertSql(connectContext, "insert into tbl_staleness1 values(\"2022-02-20\", 1, 10)");
@@ -431,7 +431,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                                 AlterMaterializedViewStmt stmt =
                                         (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql,
                                                 connectContext);
-                                GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
+                                GlobalStateMgr.getCurrentState().getStarRocksMeta().alterMaterializedView(stmt);
                             }
 
                             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");

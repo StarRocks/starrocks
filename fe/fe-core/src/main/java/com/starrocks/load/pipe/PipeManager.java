@@ -184,7 +184,7 @@ public class PipeManager {
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
-        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(name.getDbName())
+        long dbId = GlobalStateMgr.getCurrentState().getStarRocksMeta().mayGetDb(name.getDbName())
                 .map(Database::getId)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_NO_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());

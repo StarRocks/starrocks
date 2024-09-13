@@ -41,6 +41,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.leader.ReportHandler;
+import com.starrocks.meta.StarRocksMeta;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
@@ -96,12 +98,12 @@ public class LocalMetaStoreTest {
         Partition sourcePartition = olapTable.getPartition("t1");
         List<Long> sourcePartitionIds = Lists.newArrayList(sourcePartition.getId());
         List<Long> tmpPartitionIds = Lists.newArrayList(connectContext.getGlobalStateMgr().getNextId());
-        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        StarRocksMeta starRocksMeta = connectContext.getGlobalStateMgr().getStarRocksMeta();
         Map<Long, String> origPartitions = Maps.newHashMap();
-        OlapTable copiedTable = localMetastore.getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
+        OlapTable copiedTable = starRocksMeta.getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
-        List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
+        List<Partition> newPartitions = starRocksMeta.getNewPartitionsFromPartitions(db,
                     olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
                     null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
@@ -149,7 +151,7 @@ public class LocalMetaStoreTest {
         };
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
-        localMetastore.getPartitionIdToStorageMediumMap();
+        ReportHandler.getPartitionIdToStorageMediumMap();
         // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
         starRocksAssert.dropMaterializedView("test.mv1");
     }

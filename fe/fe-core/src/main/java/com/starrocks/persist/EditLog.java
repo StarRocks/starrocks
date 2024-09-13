@@ -120,6 +120,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -194,7 +195,7 @@ public class EditLog {
                 }
                 case OperationType.OP_ERASE_DB: {
                     Text dbId = (Text) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayEraseDatabase(Long.parseLong(dbId.toString()));
+                    globalStateMgr.getRecycleBin().replayEraseDatabase(Long.parseLong(dbId.toString()));
                     break;
                 }
                 case OperationType.OP_RECOVER_DB:
@@ -290,33 +291,34 @@ public class EditLog {
                 }
                 case OperationType.OP_ERASE_TABLE: {
                     Text tableId = (Text) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayEraseTable(Long.parseLong(tableId.toString()));
+                    globalStateMgr.getRecycleBin().replayEraseTable(
+                            Collections.singletonList(Long.parseLong(tableId.toString())));
                     break;
                 }
                 case OperationType.OP_ERASE_MULTI_TABLES: {
                     MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayEraseMultiTables(multiEraseTableInfo);
+                    globalStateMgr.getRecycleBin().replayEraseTable(multiEraseTableInfo.getTableIds());
                     break;
                 }
                 case OperationType.OP_DISABLE_TABLE_RECOVERY: {
                     DisableTableRecoveryInfo disableTableRecoveryInfo = (DisableTableRecoveryInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayDisableTableRecovery(disableTableRecoveryInfo);
+                    globalStateMgr.getRecycleBin().replayDisableTableRecovery(disableTableRecoveryInfo.getTableIds());
                     break;
                 }
                 case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
                     DisablePartitionRecoveryInfo disableRecoveryInfo = (DisablePartitionRecoveryInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayDisablePartitionRecovery(disableRecoveryInfo);
+                    globalStateMgr.getRecycleBin().replayDisablePartitionRecovery(disableRecoveryInfo.getPartitionId());
                     break;
                 }
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayErasePartition(Long.parseLong(partitionId.toString()));
+                    globalStateMgr.getRecycleBin().replayErasePartition(Long.parseLong(partitionId.toString()));
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE:
                 case OperationType.OP_RECOVER_TABLE_V2: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayRecoverTable(info);
+                    globalStateMgr.getRecycleBin().replayRecoverTable(info);
                     break;
                 }
                 case OperationType.OP_RECOVER_PARTITION:
@@ -452,24 +454,24 @@ public class EditLog {
                 case OperationType.OP_ADD_REPLICA:
                 case OperationType.OP_ADD_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayAddReplica(info);
+                    globalStateMgr.getTabletManager().replayAddReplica(info);
                     break;
                 }
                 case OperationType.OP_UPDATE_REPLICA:
                 case OperationType.OP_UPDATE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayUpdateReplica(info);
+                    globalStateMgr.getTabletManager().replayUpdateReplica(info);
                     break;
                 }
                 case OperationType.OP_DELETE_REPLICA:
                 case OperationType.OP_DELETE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayDeleteReplica(info);
+                    globalStateMgr.getTabletManager().replayDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_BATCH_DELETE_REPLICA: {
                     BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayBatchDeleteReplica(info);
+                    globalStateMgr.getTabletManager().replayBatchDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
@@ -576,11 +578,6 @@ public class EditLog {
                     globalStateMgr.getLoadInstance().setLoadErrorHubInfo(param);
                     break;
                 }
-                case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
-                    final BackendIdsUpdateInfo info = (BackendIdsUpdateInfo) journal.getData();
-                    globalStateMgr.replayUpdateClusterAndBackends(info);
-                    break;
-                }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionState(state);
@@ -673,7 +670,7 @@ public class EditLog {
                 case OperationType.OP_BACKEND_TABLETS_INFO:
                 case OperationType.OP_BACKEND_TABLETS_INFO_V2: {
                     BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().replayBackendTabletsInfo(backendTabletsInfo);
+                    GlobalStateMgr.getCurrentState().getTabletManager().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2:
@@ -809,12 +806,6 @@ public class EditLog {
                     }
                     break;
                 }
-                case OperationType.OP_MODIFY_DISTRIBUTION_TYPE:
-                case OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2: {
-                    TableInfo tableInfo = (TableInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayConvertDistributionType(tableInfo);
-                    break;
-                }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
@@ -862,7 +853,7 @@ public class EditLog {
                 }
                 case OperationType.OP_SET_REPLICA_STATUS: {
                     SetReplicaStatusOperationLog log = (SetReplicaStatusOperationLog) journal.getData();
-                    globalStateMgr.getLocalMetastore().replaySetReplicaStatus(log);
+                    globalStateMgr.getTabletManager().replaySetReplicaStatus(log);
                     break;
                 }
                 case OperationType.OP_REMOVE_ALTER_JOB_V2: {
@@ -1691,10 +1682,6 @@ public class EditLog {
         logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
     }
 
-    public void logModifyDistributionType(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, tableInfo);
-    }
-
     public void logDynamicPartition(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_DYNAMIC_PARTITION, info);
     }
@@ -1971,7 +1958,7 @@ public class EditLog {
         logEdit(OperationType.OP_PIPE, opEntry);
     }
 
-    private void logJsonObject(short op, Object obj) {
+    public void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
 

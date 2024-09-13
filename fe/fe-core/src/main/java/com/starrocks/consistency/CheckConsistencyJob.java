@@ -52,6 +52,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -122,6 +123,7 @@ public class CheckConsistencyJob {
      */
     public boolean sendTasks() {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.debug("tablet[{}] has been removed", tabletId);
@@ -166,7 +168,7 @@ public class CheckConsistencyJob {
                 return false;
             }
 
-            tablet = (LocalTablet) index.getTablet(tabletId);
+            tablet = (LocalTablet) tabletMetastore.getTablet(index, tabletId);
             if (tablet == null) {
                 LOG.debug("tablet[{}] does not exist", tabletId);
                 return false;

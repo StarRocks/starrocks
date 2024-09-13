@@ -90,11 +90,12 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.meta.StarRocksMeta;
+import com.starrocks.meta.TabletMetastore;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -195,7 +196,7 @@ public class OlapTable extends Table {
          * or ROLLUP).
          * The query plan which is generate during this state is invalid because the meta
          * during the creation of the logical plan and the physical plan might be inconsistent.
-        */
+         */
         UPDATING_META
     }
 
@@ -944,11 +945,11 @@ public class OlapTable extends Table {
         if (isColocate) {
             try {
                 isColocate = GlobalStateMgr.getCurrentState().getColocateTableIndex()
-                                            .addTableToGroup(db, this, this.colocateGroup, false);
+                        .addTableToGroup(db, this, this.colocateGroup, false);
             } catch (Exception e) {
                 return new Status(ErrCode.COMMON_ERROR,
-                    "check colocate restore failed, errmsg: " + e.getMessage() +
-                    ", you can disable colocate restore by turn off Config.enable_colocate_restore");
+                        "check colocate restore failed, errmsg: " + e.getMessage() +
+                                ", you can disable colocate restore by turn off Config.enable_colocate_restore");
             }
         }
 
@@ -966,14 +967,13 @@ public class OlapTable extends Table {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
-
                 // replicas
                 List<Long> beIds;
                 if (chooseBackendsArbitrary) {
                     // This is the first colocate table in the group, or just a normal table,
                     // randomly choose backends
                     beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
-                        .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
+                            .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
                     backendsPerBucketSeq.add(beIds);
                 } else {
                     // get backends from existing backend sequence
@@ -992,7 +992,7 @@ public class OlapTable extends Table {
                     newTablet.addReplica(replica, false/* update inverted index */);
                 }
                 Preconditions.checkState(beIds.size() == replicationNum,
-                                         beIds.size() + " vs. " + replicationNum);
+                        beIds.size() + " vs. " + replicationNum);
             }
 
             // first colocate table in CG
@@ -1236,8 +1236,8 @@ public class OlapTable extends Table {
     /**
      * @return : table's partition name to list partition names.
      * eg:
-     *  partition columns   : (a, b, c)
-     *  values              : [[1, 2, 3], [4, 5, 6]]
+     * partition columns   : (a, b, c)
+     * values              : [[1, 2, 3], [4, 5, 6]]
      */
     public Map<String, PListCell> getListPartitionItems() {
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
@@ -2248,6 +2248,7 @@ public class OlapTable extends Table {
     // arbitrarily choose a partition, and get the buckets backends sequence from
     // base index.
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
+        TabletMetastore tabletMetastore = GlobalStateMgr.getCurrentState().getTabletMetastore();
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
         Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
         if (optionalPartition.isPresent()) {
@@ -2255,7 +2256,7 @@ public class OlapTable extends Table {
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = partition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
-                LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
+                LocalTablet tablet = (LocalTablet) tabletMetastore.getTablet(baseIdx, tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
                 if (replicaBackendIds.size() < replicationNum) {
                     // this should not happen, but in case, throw an exception to terminate this
@@ -3167,7 +3168,7 @@ public class OlapTable extends Table {
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+        StarRocksMeta.inactiveRelatedMaterializedView(db, this,
                 MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
