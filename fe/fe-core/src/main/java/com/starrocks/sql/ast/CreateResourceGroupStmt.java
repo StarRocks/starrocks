@@ -95,7 +95,7 @@ public class CreateResourceGroupStmt extends DdlStmt {
             throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
         }
 
-        ResourceGroup.validateCpuParameters(resourceGroup.getCpuWeight(), resourceGroup.getExclusiveCpuCores());
+        ResourceGroup.validateCpuParameters(resourceGroup.getRawCpuWeight(), resourceGroup.getExclusiveCpuCores());
 
         if (resourceGroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");

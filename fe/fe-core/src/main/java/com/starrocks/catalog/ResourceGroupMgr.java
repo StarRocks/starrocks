@@ -348,7 +348,7 @@ public class ResourceGroupMgr implements Writable {
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 ResourceGroup changedProperties = stmt.getChangedProperties();
 
-                Integer cpuWeight = changedProperties.getCpuWeight();
+                Integer cpuWeight = changedProperties.getRawCpuWeight();
                 if (cpuWeight == null) {
                     cpuWeight = wg.geNormalizedCpuWeight();
                 }
