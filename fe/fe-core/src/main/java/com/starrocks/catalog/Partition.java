@@ -156,7 +156,13 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
     // Aborted transactions wait to be GC on the files generated
     // in share data mode
-    @SerializedName(value = "lakeAbortedTxnsWaitedForGC")
+    // For simplicity, this member will not be persistented. It will be
+    // empty if FE restart or unconsistent when FE leader is changed.
+    // There will be no correctness issues in either case. But may cause some useless
+    // vacuum request or miss deletion for some files (it seems that low probability)
+    
+    // In the future, we will introduced full vacuum to delete the remained files if
+    // lakeAbortedTxnsWaitedForGC infomation is lost.
     private Set<Long> lakeAbortedTxnsWaitedForGC = Sets.newLinkedHashSet();
     private ReentrantLock lakeAbortedTxnsWaitedForGCLock = new ReentrantLock();
 
