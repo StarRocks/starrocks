@@ -390,6 +390,8 @@ struct THdfsScanRange {
     // Paimon Deletion Vector File
     27: optional TPaimonDeletionFile paimon_deletion_file
 
+    // for extended column like iceberg data_seq_num or spec_id
+    28: optional map<Types.TSlotId, Exprs.TExpr> extended_columns;
 }
 
 struct TBinlogScanRange {
@@ -1127,6 +1129,9 @@ struct THdfsScanNode {
     21: optional string metadata_table_type
 
     22: optional DataCache.TDataCacheOptions datacache_options;
+
+    // for extended column like iceberg data_seq_num or spec_id
+    23: optional list<Types.TSlotId> extended_slot_ids;
 }
 
 struct TProjectNode {
