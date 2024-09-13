@@ -19,14 +19,14 @@ import org.apache.parquet.crypto.AesGcmEncryptor;
 import org.apache.parquet.crypto.AesMode;
 import org.apache.parquet.crypto.ModuleCipherFactory;
 
-import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.SecureRandom;
 import java.util.Base64;
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class EncryptionUtil {
 

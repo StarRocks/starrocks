@@ -410,9 +410,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             Schema schema = arrowConnectProcessor.fetchArrowSchema(address, pUniqueId, 600);
 
-            String encrypt_data = EncryptionUtil
+            String encryptData = EncryptionUtil
                     .aesEncrypt(hexStringFromUniqueId(finstId) + ":" + query, Config.arrow_flight_sql_ase_key);
-            final ByteString handle = ByteString.copyFromUtf8(encrypt_data);
+            final ByteString handle = ByteString.copyFromUtf8(encryptData);
             FlightSql.TicketStatementQuery ticketStatementQuery =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
 
