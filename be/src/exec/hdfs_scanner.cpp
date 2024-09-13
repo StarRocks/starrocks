@@ -594,6 +594,29 @@ void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_
     ck->set_num_rows(row_count);
 }
 
+void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (extended_columns.size() == 0) return;
+    ChunkPtr& ck = (*chunk);
+    for (size_t i = 0; i < extended_columns.size(); i++) {
+        SlotDescriptor* slot_desc = extended_columns[i].slot_desc;
+        DCHECK(extended_values[i]->is_constant());
+        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(extended_values[i]);
+        ColumnPtr data_column = const_column->data_column();
+        auto chunk_extended_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+
+        if (row_count > 0) {
+            if (data_column->is_nullable()) {
+                chunk_extended_column->append_nulls(1);
+            } else {
+                chunk_extended_column->append(*data_column, 0, 1);
+            }
+            chunk_extended_column->assign(row_count, 0);
+        }
+        ck->append_or_update_column(std::move(chunk_extended_column), slot_desc->id());
+    }
+    ck->set_num_rows(row_count);
+}
+
 bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const {
     if (!slot->type().is_string_type()) {
         return false;

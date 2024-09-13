@@ -16,7 +16,10 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.common.ExceptionChecker;
+=======
+>>>>>>> 162e88d6db (eq-delete)
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
@@ -487,6 +490,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
                 () -> UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql));
 
         starRocksAssert.getCtx().getSessionVariable().setEnableReadIcebergEqDeleteWithPartitionEvolution(true);
+
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
         assertContains(plan, "4:Project\n" +
                 "  |  <slot 2> : 2: k2\n" +
@@ -549,4 +553,8 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 162e88d6db (eq-delete)
 }
