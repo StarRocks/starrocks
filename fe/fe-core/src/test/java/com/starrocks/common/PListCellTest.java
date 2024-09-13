@@ -63,9 +63,9 @@ public class PListCellTest {
                             new PListCell(ImmutableList.of(ImmutableList.of("2024-01-01"))),
                             new PListCell(ImmutableList.of(ImmutableList.of("2024-01-02")))
                     );
-            String ser = PListCell.serializePListCells(s1);
+            String ser = PListCell.batchSerialize(s1);
             System.out.println(ser);
-            Set<PListCell> s2 = PListCell.deserializePListCells(ser);
+            Set<PListCell> s2 = PListCell.batchDeserialize(ser);
             Assert.assertEquals(s1, s2);
         }
         // one value with multi partition columns
@@ -75,9 +75,9 @@ public class PListCellTest {
                             new PListCell(ImmutableList.of(ImmutableList.of("beijing", "2024-01-01"))),
                             new PListCell(ImmutableList.of(ImmutableList.of("beijing", "2024-01-02")))
                     );
-            String ser = PListCell.serializePListCells(s1);
+            String ser = PListCell.batchSerialize(s1);
             System.out.println(ser);
-            Set<PListCell> s2 = PListCell.deserializePListCells(ser);
+            Set<PListCell> s2 = PListCell.batchDeserialize(ser);
             Assert.assertEquals(s1, s2);
         }
         // multi values with multi partition columns
@@ -103,9 +103,9 @@ public class PListCellTest {
                                     ImmutableList.of("shanghai", "2024-01-04")
                             ))
                     );
-            String ser = PListCell.serializePListCells(s1);
+            String ser = PListCell.batchSerialize(s1);
             System.out.println(ser);
-            Set<PListCell> s2 = PListCell.deserializePListCells(ser);
+            Set<PListCell> s2 = PListCell.batchDeserialize(ser);
             Assert.assertEquals(s1, s2);
         }
     }

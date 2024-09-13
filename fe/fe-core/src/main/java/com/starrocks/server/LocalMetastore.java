@@ -3214,7 +3214,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             } else if (!partitionDesc.getSecond().isEmpty()) {
                 Set<PListCell> list = partitionDesc.right();
                 if (!CollectionUtils.isEmpty(list)) {
-                    taskRunProperties.put(TaskRun.PARTITION_VALUES, PListCell.serializePListCells(list));
+                    taskRunProperties.put(TaskRun.PARTITION_VALUES, PListCell.batchSerialize(list));
                 }
             }
         }

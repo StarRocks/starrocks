@@ -681,6 +681,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
         newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
+        //TODO: partition values may be too long, need to be optimized later.
         newProperties.put(TaskRun.PARTITION_VALUES, mvContext.getNextListPartitionValues());
         if (mvContext.getStatus() != null) {
             newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
@@ -949,7 +950,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                                  boolean tentative)
             throws AnalysisException {
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        MVRefreshParams mvRefreshParams = new MVRefreshParams(materializedView, properties, tentative);
+        MVRefreshParams mvRefreshParams = new MVRefreshParams(partitionInfo, properties, tentative);
         Set<String> needRefreshMvPartitionNames = getPartitionsToRefreshForMaterializedView(partitionInfo,
                 mvRefreshParams, mvPotentialPartitionNames);
 

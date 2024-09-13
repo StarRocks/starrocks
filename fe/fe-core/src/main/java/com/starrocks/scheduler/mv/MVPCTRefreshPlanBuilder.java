@@ -66,29 +66,30 @@ public class MVPCTRefreshPlanBuilder {
 
     // push down partition predicates into table relation
     private static final String EXTRA_PREDICATE_KEY = "_EXTRA_";
-    private final Map<String, String> pbMessage = Maps.newLinkedHashMap();
+    // record mv's plan builder message to trace push-downed partition names and predicates
+    private final Map<String, String> mvPlanBuildMessage = Maps.newLinkedHashMap();
 
     private void tracePartitionNames(Table table, Set<String> partitionNames) {
         if (table == null || CollectionUtils.isEmpty(partitionNames)) {
             return;
         }
-        pbMessage.put(table.getName(), Joiner.on(",").join(partitionNames));
+        mvPlanBuildMessage.put(table.getName(), Joiner.on(",").join(partitionNames));
     }
 
     private void tracePartitionPredicate(Table table, Expr partitionPredicate) {
         if (table == null || partitionPredicate == null) {
             return;
         }
-        pbMessage.put(table.getName(), partitionPredicate.debugString());
+        mvPlanBuildMessage.put(table.getName(), partitionPredicate.debugString());
     }
 
     private void tracePartitionPredicates(List<Expr> partitionPredicate) {
-        pbMessage.put(EXTRA_PREDICATE_KEY,
+        mvPlanBuildMessage.put(EXTRA_PREDICATE_KEY,
                 partitionPredicate.stream().map(Expr::debugString).collect(Collectors.joining(",")));
     }
 
     public Map<String, String> getPlanBuilderMessage() {
-        return pbMessage;
+        return mvPlanBuildMessage;
     }
 
     public MVPCTRefreshPlanBuilder(MaterializedView mv,

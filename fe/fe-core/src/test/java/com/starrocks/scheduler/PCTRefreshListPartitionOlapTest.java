@@ -1097,7 +1097,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                         Map<String, String> props = Maps.newHashMap();
                         PListCell partitionValues = new PListCell("20240102");
-                        props.put(TaskRun.PARTITION_VALUES, PListCell.serializePListCells(ImmutableSet.of(partitionValues)));
+                        props.put(TaskRun.PARTITION_VALUES, PListCell.batchSerialize(ImmutableSet.of(partitionValues)));
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
@@ -1144,7 +1144,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                         Map<String, String> props = Maps.newHashMap();
                         PListCell partitionValues = new PListCell("beijing");
-                        props.put(TaskRun.PARTITION_VALUES, PListCell.serializePListCells(ImmutableSet.of(partitionValues)));
+                        props.put(TaskRun.PARTITION_VALUES, PListCell.batchSerialize(ImmutableSet.of(partitionValues)));
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
@@ -1190,7 +1190,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                         Map<String, String> props = Maps.newHashMap();
                         // even base table has multi partition columns, mv only contain one column
                         PListCell partitionValues = new PListCell(ImmutableList.of(ImmutableList.of("beijing")));
-                        props.put(TaskRun.PARTITION_VALUES, PListCell.serializePListCells(ImmutableSet.of(partitionValues)));
+                        props.put(TaskRun.PARTITION_VALUES, PListCell.batchSerialize(ImmutableSet.of(partitionValues)));
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();

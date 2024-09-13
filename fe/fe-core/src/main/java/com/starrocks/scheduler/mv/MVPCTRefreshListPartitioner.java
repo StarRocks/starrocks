@@ -264,10 +264,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     /**
-     * Filter partitions by partition_ttl_number
+     * Filter partitions by partition_ttl_number, save the kept partitions and return the next task run partition values.
      * @param inputPartitions the partitions to refresh/add
      * @param filterNumber the number to filter/reserve
-     * @return <startPartitionName, endPartitionName> pair after the reserved partition_ttl_number
+     * @return the next task run partition list cells after the reserved partition_ttl_number
      */
     private Set<PListCell> filterPartitionsByNumber(Map<String, PListCell> inputPartitions,
                                                     int filterNumber) {
@@ -286,16 +286,18 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 iter.next();
             }
         }
-        Set<PListCell> remains = Sets.newHashSet();
+
+        // compute next partition list cells in the next task run
+        Set<PListCell> nextPartitionCells = Sets.newHashSet();
         while (iter.hasNext()) {
             Map.Entry<String, PListCell> entry = iter.next();
-            remains.add(entry.getValue());
+            nextPartitionCells.add(entry.getValue());
             // remove the partition which is not reserved
             inputPartitions.remove(entry.getKey());
         }
         LOG.info("Filter partitions by partition_ttl_number, ttl_number:{}, result:{}, remains:{}",
-                filterNumber, inputPartitions, remains);
-        return remains;
+                filterNumber, inputPartitions, nextPartitionCells);
+        return nextPartitionCells;
     }
 
     @Override
@@ -312,16 +314,16 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             mappedPartitionsToRefresh.put(partitionName, listCell);
         }
         int refreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
-        Set<PListCell> remains = filterPartitionsByNumber(mappedPartitionsToRefresh, refreshNumber);
+        Set<PListCell> nextPartitionCells = filterPartitionsByNumber(mappedPartitionsToRefresh, refreshNumber);
         // do filter input mvPartitionsToRefresh since it's a reference
         mvPartitionsToRefresh.retainAll(mappedPartitionsToRefresh.keySet());
-        if (CollectionUtils.isEmpty(remains)) {
+        if (CollectionUtils.isEmpty(nextPartitionCells)) {
             return;
         }
         if (!tentative) {
             // partitionNameIter has just been traversed, and endPartitionName is not updated
             // will cause endPartitionName == null
-            mvContext.setNextListPartitionValues(PListCell.serializePListCells(remains));
+            mvContext.setNextListPartitionValues(PListCell.batchSerialize(nextPartitionCells));
         }
     }
 

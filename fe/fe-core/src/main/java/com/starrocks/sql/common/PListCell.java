@@ -19,6 +19,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
@@ -149,13 +150,16 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
     }
 
     /**
-     * Serialize the partition items to string
-     * @return
+     * Serialize the PListCell to string
      */
     public String serialize() {
         return GsonUtils.GSON.toJson(this);
     }
 
+    /**
+     * Deserialize PListCell items from string
+     * @param str serialized partition items string
+     */
     public static PListCell deserialize(String str) {
         if (StringUtils.isEmpty(str)) {
             return null;
@@ -163,11 +167,14 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
         return GsonUtils.GSON.fromJson(str, PListCell.class);
     }
 
-    public static class BatchPListCellJSONRecord {
+    /**
+     * PListCellBatchRecord represents a batch of PListCell which is used to serialize and deserialize PListCells.
+     */
+    private static class PListCellBatchRecord {
         @SerializedName("data")
         private final Set<PListCell> pListCells;
 
-        public BatchPListCellJSONRecord(Set<PListCell> pListCells) {
+        public PListCellBatchRecord(Set<PListCell> pListCells) {
             this.pListCells = pListCells;
         }
 
@@ -175,24 +182,32 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
             return pListCells;
         }
 
-        public static BatchPListCellJSONRecord fromJson(String json) {
-            return GsonUtils.GSON.fromJson(json, BatchPListCellJSONRecord.class);
+        public static PListCellBatchRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, PListCellBatchRecord.class);
         }
     }
 
-    public static String serializePListCells(Set<PListCell> partitionValues) {
-        if (partitionValues == null) {
+    /**
+     * Serialize the PListCell values to string
+     * @param partitionValues list partition values
+     */
+    public static String batchSerialize(Set<PListCell> partitionValues) {
+        if (CollectionUtils.isEmpty(partitionValues)) {
             return null;
         }
-        BatchPListCellJSONRecord batch = new BatchPListCellJSONRecord(partitionValues);
+        PListCellBatchRecord batch = new PListCellBatchRecord(partitionValues);
         return GsonUtils.GSON.toJson(batch);
     }
 
-    public static Set<PListCell> deserializePListCells(String partitionValues) {
+    /**
+     * Deserialize the PListCell values from string
+     * @param partitionValues serialized partition values string
+     */
+    public static Set<PListCell> batchDeserialize(String partitionValues) {
         if (StringUtils.isEmpty(partitionValues)) {
             return null;
         }
-        BatchPListCellJSONRecord batch = BatchPListCellJSONRecord.fromJson(partitionValues);
+        PListCellBatchRecord batch = PListCellBatchRecord.fromJson(partitionValues);
         return batch.getPListCells();
     }
 }

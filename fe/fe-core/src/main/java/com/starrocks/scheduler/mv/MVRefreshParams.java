@@ -15,7 +15,6 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.common.PListCell;
@@ -25,6 +24,9 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * MVRefreshParams is used to store the parameters for refreshing a materialized view.
+ */
 public class MVRefreshParams {
     private final String rangeStart;
     private final String rangeEnd;
@@ -32,16 +34,16 @@ public class MVRefreshParams {
     private final Set<PListCell> listValues;
     private final PartitionInfo mvPartitionInfo;
 
-    public MVRefreshParams(MaterializedView mv,
+    public MVRefreshParams(PartitionInfo partitionInfo,
                            Map<String, String> properties,
                            boolean tentative) {
-        Preconditions.checkArgument(mv != null, "MaterializedView is null");
+        Preconditions.checkArgument(partitionInfo != null, "MaterializedView's partition info is null");
         Preconditions.checkArgument(properties != null, "Properties is null");
         this.rangeStart = properties.get(TaskRun.PARTITION_START);
         this.rangeEnd = properties.get(TaskRun.PARTITION_END);
         this.isForce = tentative | Boolean.parseBoolean(properties.get(TaskRun.FORCE));
-        this.listValues = PListCell.deserializePListCells(properties.get(TaskRun.PARTITION_VALUES));
-        this.mvPartitionInfo = mv.getPartitionInfo();
+        this.listValues = PListCell.batchDeserialize(properties.get(TaskRun.PARTITION_VALUES));
+        this.mvPartitionInfo = partitionInfo;
     }
 
     public boolean isForceCompleteRefresh() {
