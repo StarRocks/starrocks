@@ -69,6 +69,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -941,7 +942,7 @@ public class MvUtils {
         List<Range<PartitionKey>> latestBaseTableRanges =
                 getLatestPartitionRangeForTable(partitionByTable, partitionTableAndColumns.second,
                         mv, mvPartitionNamesToRefresh);
-        if (latestBaseTableRanges.isEmpty()) {
+        if (CollectionUtils.isEmpty(latestBaseTableRanges)) {
             // if there isn't an updated partition, do not rewrite
             return null;
         }
@@ -969,6 +970,9 @@ public class MvUtils {
                                                                       MaterializedView mv,
                                                                       Set<String> mvPartitionNamesToRefresh) {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
+        if (modifiedPartitionNames == null) {
+            return null;
+        }
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);

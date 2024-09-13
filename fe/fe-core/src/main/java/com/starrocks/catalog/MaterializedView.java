@@ -600,6 +600,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             result.addAll(getUpdatedPartitionNamesOfOlapTable(baseTable));
             if (withMv && baseTable.isMaterializedView()) {
                 Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
+                if (partitionNames == null) {
+                    return null;
+                }
                 result.addAll(partitionNames);
             }
             return result;
@@ -1138,7 +1141,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 // Check the partition consistency
                 Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
                 if (CollectionUtils.isNotEmpty(partitionNames)) {
-                    return getPartitionNames();
+                    return null;
                 }
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
@@ -1202,7 +1205,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
-                return getPartitionNames();
+                return null;
             }
         }
         // check partition-by table

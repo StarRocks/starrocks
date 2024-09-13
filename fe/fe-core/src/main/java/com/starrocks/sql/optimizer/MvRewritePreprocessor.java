@@ -137,6 +137,10 @@ public class MvRewritePreprocessor {
         }
 
         Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
+        if (partitionNamesToRefresh == null) {
+            logMVPrepare(connectContext, mv, "MV to-refresh partition names are not valid: {}", mv.getName());
+            return;
+        }
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
