@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
@@ -197,32 +198,19 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     // Collect the failure txn_id for the Partition without generated txn log
     // and GC those garbage files in a aysnchronous way (e.g Vacuum)
-    private void addAbortedTxnIdToUnFinishedPartition(TransactionState txnState) {
-        Set<Long> finishedPartitionIds = Sets.newHashSet();
-
-        if (txnState.getTabletCommitInfos() != null && !txnState.getTabletCommitInfos().isEmpty()) {
-            TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
-            List<Long> finishedTabletIds = txnState.getTabletCommitInfos().stream()
-                                            .map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
-            List<TabletMeta> finishedTabletMetaList = tabletInvertedIndex.getTabletMetaList(finishedTabletIds);
-            for (int i = 0; i < finishedTabletMetaList.size(); i++) {
-                TabletMeta tabletMeta = finishedTabletMetaList.get(i);
-                if (tabletMeta.getTableId() != table.getId()) {
-                    continue;
-                }
-                if (table.getPhysicalPartition(tabletMeta.getPartitionId()) == null) {
-                    // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
-                    continue;
-                }
-                finishedPartitionIds.add(tabletMeta.getPartitionId());
-            }
-        }
-
+    private void addAbortedTxnIdToUnFinishedPartition(TransactionState txnState, List<TabletCommitInfo> finishedTablets) {
+        List<Long> finishedTabletIds = finishedTablets.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            if (finishedPartitionIds.contains(partition.getId())) {
-                continue;
+            List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
+            for (MaterializedIndex index : allIndices) {
+                Optional<Tablet> unfinishedTablet = index.getTablets().stream()
+                                                    .filter(t -> !finishedTabletIds.contains(t.getId())).findAny();
+                if (unfinishedTablet.isPresent()) {
+                    // not all tablets in this partition finished, set aborted txn id for it
+                    partition.addAbortedTxnId(txnState.getTransactionId());
+                    break;
+                } /* otherwise, handle by abort txn on BE/CN side */
             }
-            partition.addAbortedTxnId(txnState.getTransactionId());
         }
     }
 
@@ -233,7 +221,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         if (!finishedTablets.isEmpty()) {
             txnState.setTabletCommitInfos(finishedTablets);
         }
-        addAbortedTxnIdToUnFinishedPartition(txnState);
+        addAbortedTxnIdToUnFinishedPartition(txnState, finishedTablets);
         if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
             abortTxnSkipCleanup(txnState);
         } else {

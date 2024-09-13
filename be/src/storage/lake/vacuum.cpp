@@ -455,20 +455,18 @@ static Status vacuum_aborted_txn_file(std::string_view root_location, const std:
     auto ret = Status::OK();
 
     auto data_dir = join_path(root_location, kSegmentDirectoryName);
-    std::vector<std::string> prefix_dirs;
-    prefix_dirs.resize(abort_txn_ids.size());
+    std::vector<std::string> file_prefixs;
+    file_prefixs.resize(abort_txn_ids.size());
     for (int i = 0; i < abort_txn_ids.size(); ++i) {
-        // use prefix dir to list Objects:
-        // root_loc/data/abortTxnId -> {root_loc/data/abortTxnId_uuid1, root_loc/data/abortTxnId_uuid2, ...}
-        prefix_dirs[i] = join_path(data_dir, fmt::format("{:016X}", abort_txn_ids[i]));
+        file_prefixs[i] = join_path("", fmt::format("{:016X}", abort_txn_ids[i]));
     }
 
-    for (const auto& prefix_dir : prefix_dirs) {
-        auto iter_st = ignore_not_found(fs->iterate_dir2_with_prefix(prefix_dir, [&](DirEntry entry) {
+    for (const auto& file_prefix : file_prefixs) {
+        auto iter_st = ignore_not_found(fs->iterate_dir2_by_prefix(data_dir, file_prefix, [&](DirEntry entry) {
             if (!is_segment(entry.name) && !is_del(entry.name)) {
                 return true;
             }
-            auto full_file_name = fmt::format("{}{}", prefix_dir, entry.name);
+            auto full_file_name = fmt::format("{}{}", data_dir, entry.name);
 
             *vacuumed_files += 1;
             *vacuumed_file_size += entry.size.value_or(0);

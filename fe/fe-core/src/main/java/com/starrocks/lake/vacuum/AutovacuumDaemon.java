@@ -216,7 +216,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
             partition.addAbortedTxnIds(abortTxnIds);
         }
 
-        partition.setLastVacuumTime(startTime);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,

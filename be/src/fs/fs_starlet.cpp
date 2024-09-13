@@ -366,23 +366,10 @@ public:
     }
 
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
-        auto fs_st = get_shard_filesystem(pair.second);
-        if (!fs_st.ok()) {
-            return to_status(fs_st.status());
-        }
-        auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat e) {
-            DirEntry entry{.name = e.name,
-                           .mtime = std::move(e.mtime),
-                           .size = std::move(e.size),
-                           .is_dir = std::move(e.is_dir)};
-            return cb(entry);
-        });
-        return to_status(st);
+        return iterate_dir2_by_prefix(dir, "", cb);
     }
 
-    Status iterate_dir2_with_prefix(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
-        RETURN_IF(dir.back() == '/', Status::InvalidArgument(fmt::format("Invalid dir for prefix iterate: {}", dir)));
+    Status iterate_dir2_by_prefix(const std::string& dir, const std::string& file_prefix, const std::function<bool(DirEntry)>& cb) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
@@ -394,7 +381,7 @@ public:
                            .size = std::move(e.size),
                            .is_dir = std::move(e.is_dir)};
             return cb(entry);
-        }, false);
+        }, file_prefix);
         return to_status(st);
     }
 
