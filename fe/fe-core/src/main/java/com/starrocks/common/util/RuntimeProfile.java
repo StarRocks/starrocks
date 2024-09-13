@@ -35,6 +35,7 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -63,6 +64,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -135,10 +137,6 @@ public class RuntimeProfile {
         childMap.clear();
     }
 
-    public Counter addCounter(String name, TUnit type, TCounterStrategy strategy) {
-        return addCounter(name, type, strategy, ROOT_COUNTER);
-    }
-
     public Counter.SummerizationCounter addSummarizationCounter(String name, TUnit type, TCounterStrategy strategy,
                                                                 String parentName) {
         if (strategy == null) {
@@ -148,6 +146,9 @@ public class RuntimeProfile {
         if (pair != null) {
             return pair.first;
         } else {
+            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
+                    || this.fragmentCounterMap.containsKey(parentName));
+
             Counter.SummerizationCounter newCounter = new Counter.SummerizationCounter(type, strategy);
             this.fragmentCounterMap.put(name, Pair.create(newCounter, parentName));
 
@@ -158,6 +159,10 @@ public class RuntimeProfile {
             childNames.add(name);
             return newCounter;
         }
+    }
+
+    public Counter addCounter(String name, TUnit type, TCounterStrategy strategy) {
+        return addCounter(name, type, strategy, ROOT_COUNTER);
     }
 
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy, String parentName) {
@@ -232,6 +237,17 @@ public class RuntimeProfile {
         return getCounter(name);
     }
 
+    public void copyAllCountersRecursiveFrom(RuntimeProfile srcProfile) {
+        copyAllCountersFrom(srcProfile);
+        copyAllInfoStringsFrom(srcProfile, null);
+
+        for (var child : srcProfile.childMap.values()) {
+            RuntimeProfile childProfile = new RuntimeProfile(child.name);
+            childProfile.copyAllCountersRecursiveFrom(child);
+            addChild(childProfile);
+        }
+    }
+
     // Copy all the counters from src profile
     public void copyAllCountersFrom(RuntimeProfile srcProfile) {
         if (srcProfile == null || this == srcProfile) {
@@ -302,8 +318,12 @@ public class RuntimeProfile {
             }
 
             // Find counters that cannot be merged, we need to skip them
+            Predicate<String> isBeMerged = Predicates.alwaysFalse();
+
+            //                    (name) -> name.startsWith(MERGED_INFO_PREFIX_MAX) || name.startsWith
+            //                    (MERGED_INFO_PREFIX_MIN);
             Set<String> skippedCounters = node.counters.stream()
-                    .filter(x -> Counter.isSkipMerge(x.getStrategy()))
+                    .filter(x -> isBeMerged.test(x.getName()))
                     .map(TCounter::getName)
                     .collect(Collectors.toSet());
 
@@ -389,6 +409,27 @@ public class RuntimeProfile {
         }
     }
 
+    //    static abstract class TreeTopDownVisitor {
+    //
+    //        public void visit() {
+    //            Queue<String> nameQueue = Lists.newLinkedList();
+    //            nameQueue.offer(ROOT_COUNTER);
+    //
+    //            while (!nameQueue.isEmpty()) {
+    //                String topName = nameQueue.poll();
+    //                visitNode(topName);
+    //
+    //                for (String child : getChildren(topName)) {
+    //                    nameQueue.offer(child);
+    //                }
+    //            }
+    //        }
+    //
+    //        public abstract Collection<String> getChildren(String nodeName);
+    //
+    //        public abstract void visitNode(String name);
+    //    }
+
     /**
      * Copy the merged counters into existing counters
      */
@@ -403,8 +444,12 @@ public class RuntimeProfile {
             Counter sumCounter = new Counter(counter.unit, counter.strategy, 0);
             counter.finalized(minCounter, maxCounter, sumCounter);
 
+            //            addCounter(name, counter.unit, counter.strategy, parentName);
             counterMap.put(name, Pair.create(sumCounter, parentName));
+            childCounterMap.computeIfAbsent(parentName, (x) -> Sets.newHashSet()).add(name);
             if (!Counter.isSkipMinMax(counter.strategy)) {
+                //                addCounter(MERGED_INFO_PREFIX_MIN + name, counter.unit, counter.strategy, parentName);
+                //                addCounter(MERGED_INFO_PREFIX_MAX + name, counter.unit, counter.strategy, parentName);
                 counterMap.put(MERGED_INFO_PREFIX_MIN + name, Pair.create(minCounter, parentName));
                 counterMap.put(MERGED_INFO_PREFIX_MAX + name, Pair.create(sumCounter, parentName));
             }
@@ -619,7 +664,7 @@ public class RuntimeProfile {
 
     // concurrency safe
     public void addChild(RuntimeProfile child) {
-        if (child == null) {
+        if (child == null || childMap.containsKey(child.name)) {
             return;
         }
 

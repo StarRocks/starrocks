@@ -429,8 +429,7 @@ public class QueryRuntimeProfile {
 
             RuntimeProfile mergedFragmentProfile = mergedFragmentProfiles.get(i);
             mergedFragmentProfile.finalizeMerge();
-            newFragmentProfile.copyAllCountersFrom(mergedFragmentProfile);
-            newFragmentProfile.copyAllInfoStringsFrom(mergedFragmentProfile, null);
+            newFragmentProfile.copyAllCountersRecursiveFrom(mergedFragmentProfile);
 
             if (fragmentProfile.getChildList().isEmpty()) {
                 continue;
