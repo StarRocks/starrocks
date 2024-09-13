@@ -38,6 +38,28 @@ ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
 ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
+Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
+    for (int i = 1;i < _children.size(); ++i) {
+        RETURN_IF_ERROR(_children[i]->prepare(state, context));
+    }
+    auto lambda_expr = down_cast<LambdaFunction*>(_children[0]);
+    // before prepare lambda
+    // collect max slot id
+    LambdaFunction::ExtractContext extract_ctx;
+    extract_ctx.next_slot_id = lambda_expr->max_used_slot_id() + 1;
+
+    LOG(INFO) << "ArrayMap::prepre, next slot id: " << extract_ctx.next_slot_id;
+    RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, &extract_ctx));
+    _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
+
+    for (auto [_, expr]: _outer_common_exprs) {
+        RETURN_IF_ERROR(expr->prepare(state, context));
+    }
+    RETURN_IF_ERROR(lambda_expr->prepare(state, context));
+
+    return Status::OK();
+}
+
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
@@ -48,6 +70,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     // ArrayColumn* input_array = nullptr;
     ColumnPtr input_array = nullptr;
     ColumnPtr input_array_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
+
+    ColumnPtr aligned_offsets;
+    // @TODO we should eval common expr first
 
     // for many valid arguments:
     // if one of them is a null literal, the result is a null literal;
@@ -61,11 +86,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         if (child_col->only_null()) {
             return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
         }
-        LOG(INFO) << "eval child: " << child_col->get_name();
+        LOG(INFO) << "eval child: " << child_col->get_name() << ", " << _children[i]->debug_string();
         // no optimization for const columns.
-        if (child_col->is_constant()) {
-            LOG(INFO) << "unpack const, " << child_col->get_name();
-        }
+        // if (child_col->is_constant()) {
+        //     LOG(INFO) << "unpack const, " << child_col->get_name();
+        // }
 
         bool is_const = child_col->is_constant();
         bool is_nullable = child_col->is_nullable();
@@ -85,9 +110,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable_column);
             data_column = nullable_column->data_column();
             // empty null array with non-zero elements
-            // @TODO remove this, do all things in align phase?
-            // column->empty_null_in_complex_column(nullable->null_column()->get_data(),
-            //                                      down_cast<const ArrayColumn*>(column.get())->offsets().get_data());
+            // @TODO can we remove it??
+            data_column->empty_null_in_complex_column(nullable_column->null_column()->get_data(),
+                                                 down_cast<const ArrayColumn*>(data_column.get())->offsets().get_data());
 
             // @TODO what is is_single_nullable_child..
             if (null_column) {
@@ -104,15 +129,20 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         // @TODO should keep one column ,make sure array len is same
 
+        auto array_column = down_cast<const ArrayColumn*>(data_column.get());
         // check each array size in this column?
         if (input_array == nullptr) {
             // input_array = cur_array;
             input_array = data_column;
             input_array_ptr_ref = data_column;
             LOG(INFO) << "input_array: " << data_column->get_name();
-            // input_array = column;
-            // input_array_ptr_ref = column;
-            // @TODO what if input_array is const column
+            // compute aligned_offsets
+            if (is_const) {
+                aligned_offsets = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), ConstColumn::create(array_column->offsets_column(), 1));
+            } else {
+                aligned_offsets = array_column->offsets_column();
+            }
+
         } else {
             // @TODO need a function to check each array size
             // if (UNLIKELY(!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column()))) {
@@ -123,7 +153,6 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         // @TODO
         // elements maybe const 
         ColumnPtr elements_column = nullptr;
-        auto array_column = down_cast<const ArrayColumn*>(data_column.get());
         if (is_const) {
             // if original column is const column, should keep const
             elements_column = ConstColumn::create(array_column->elements_column(), num_rows);
@@ -136,6 +165,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         // input_elements.push_back(cur_array->elements_column());
     }
+
 
     if (is_single_nullable_child) {
         DCHECK(null_column != nullptr);
@@ -155,6 +185,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     } else {
         // construct a new chunk to evaluate the lambda expression.
         auto cur_chunk = std::make_shared<Chunk>();
+        // @TODO assign column id
+        // @TODO eval common expr 
+
         // put all arguments into the new chunk
         std::vector<SlotId> arguments_ids;
         auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
@@ -164,12 +197,29 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             cur_chunk->append_column(input_elements[i], arguments_ids[i]); // column ref
             LOG(INFO) << "input elements: " << input_elements[i]->get_name() << ", arg id: " << arguments_ids[i];
         }
+        // @TODO how to know
 
+        // @TODO we can choos to filter all non before eval?, not sure
+
+        // @TODO capture column dont need 
         // @TODO align all element column
         // put captured columns into the new chunk aligning with the first array's offsets
         // @TODO we don't need align?
+        
+
+        // const auto& independent_capture_expr = lambda_func->get_independent_capture_exprs();
+        LOG(INFO) << "eval outer common exprs, size: " << _outer_common_exprs.size();
+        for (const auto& [column_ref, expr]: _outer_common_exprs) {
+            auto slot_id = down_cast<ColumnRef*>(column_ref)->slot_id();
+            LOG(INFO) << "eval non-capture expr: " << slot_id;
+            ASSIGN_OR_RETURN(auto col, context->evaluate(expr, chunk));
+            chunk->append_column(col, slot_id);
+        }
         std::vector<SlotId> slot_ids;
-        _children[0]->get_slot_ids(&slot_ids);
+        lambda_func->get_slot_ids(&slot_ids);
+        for (auto id: slot_ids) {
+            LOG(INFO) << "lambda capture column: " << id << ", " << chunk->get_column_by_slot_id(id)->get_name();
+        }
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);
@@ -180,28 +230,21 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             // @TODO maybe we need binary view column too...
             // @TODO if capture is a binary column, replicate is expansive too
             // @TODO not sure if captured is array??
-            LOG(INFO) << "capture column: " << captured->get_name() << ", id: " << id;
+            LOG(INFO) << "capture column: " << captured->get_name() << ", id: " << id
+                << ", size: " << captured->size() << ", num_rows:" << cur_chunk->num_rows();
+            // @TODO how to know
             // if (captured->is_array()) {
             //     LOG(INFO) << "build array view column from captured, slot id: " << id;
             //     ASSIGN_OR_RETURN(captured, ArrayViewColumn::from_array_column(captured));
             //     captured->check_or_die();
             // }
             // capture column may be not lambda arguement?
+            /// if this capture column is not lambada argument, we treat it as const column to avoid slot
+            auto offsets = down_cast<const UInt32Column*>(aligned_offsets.get())->get_data();
 
             // align offsets
-            if (!captured->is_constant()) {
-                // @TODO replicate??
-                // for non-const column, we should align-up offsets.
-                // @TODO must replicate...
-                cur_chunk->append_column(captured, id);
-            } else {
-                cur_chunk->append_column(captured, id);
-            }
-
-            // @TODO align array-argument is enough, if other column don't ref to array, replictte is not necessar
-            // @TODO consider alignup, what if first column is const??
-            // cur_chunk->append_column(captured->align_offsets({}), id);
-            // cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
+            LOG(INFO) << "relicate captured column, id: "<<id;
+            cur_chunk->append_column(captured->replicate(offsets), id);
         }
         
         // @TODO
@@ -278,10 +321,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     // @TODO handle const?
 
     // attach offsets
-    // auto array_col = std::make_shared<ArrayColumn>(
-    //         column, ColumnHelper::as_column<UInt32Column>(input_array->offsets_column()->clone_shared()));
-    auto array_col = std::make_shared<ArrayColumn>(column, UInt32Column::create());
-
+    auto array_col = std::make_shared<ArrayColumn>(
+            column, ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone_shared()));
 
     if (null_column != nullptr) {
         return NullableColumn::create(std::move(array_col), null_column);

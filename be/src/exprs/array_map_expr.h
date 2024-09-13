@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -34,8 +35,13 @@ public:
     // for tests
     explicit ArrayMapExpr(TypeDescriptor type);
 
+    Status prepare(RuntimeState* state, ExprContext* context) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayMapExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+private:
+    // use map to make sure the order of execution
+    std::map<Expr*, Expr*> _outer_common_exprs;
 };
 } // namespace starrocks

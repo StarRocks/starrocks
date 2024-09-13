@@ -73,6 +73,7 @@
 #include "exprs/match_expr.h"
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -606,7 +607,7 @@ std::string Expr::debug_string(const std::vector<Expr*>& exprs) {
     out << "[";
 
     for (int i = 0; i < exprs.size(); ++i) {
-        out << (i == 0 ? "" : " ") << exprs[i]->debug_string();
+        out << (i == 0 ? "" : "\n") << exprs[i]->debug_string();
     }
 
     out << "]";

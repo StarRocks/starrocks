@@ -16,11 +16,11 @@
 
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "common/global_types.h"
 #include "common/object_pool.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
@@ -47,6 +47,7 @@ public:
 
     // the slot ids of lambda expression may be originally from the arguments of this lambda function
     // or its parent lambda functions, or captured columns, remove the first one.
+    //  only capture column id, 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
         slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
         return _captured_slot_ids.size();
@@ -58,12 +59,32 @@ public:
     }
 
     Expr* get_lambda_expr() const { return _children[0]; }
+    std::string debug_string() const override;
+
+    struct ExtractContext {
+        std::unordered_set<SlotId> lambda_arguments;
+        SlotId next_slot_id;
+        std::map<Expr*, Expr*> outer_common_exprs;
+    };
+    SlotId max_used_slot_id() const;
+
+    Status extract_outer_common_exprs(RuntimeState* state, ExtractContext* ctx);
 
 private:
+    Status collect_lambda_argument_ids();
+    Status collect_capture_slot_ids();
+    Status extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx);
+    // void extract_outer_common_exprs(RuntimeState* state);
+    // static const SlotId kIndependentStartId = 10000;
+    // void find_all_independent_capture_column(Expr* expr, std::vector<SlotId>* ids);
+    // void try_to_replace_commom_expr(RuntimeState* state, Expr* expr);
+
     std::vector<SlotId> _captured_slot_ids;
     std::vector<SlotId> _arguments_ids;
     std::vector<SlotId> _common_sub_expr_ids;
     std::vector<Expr*> _common_sub_expr;
+
+    // std::unordered_map<Expr*, Expr*> _outer_common_exprs;
     int _common_sub_expr_num;
     bool _is_prepared = false;
 };

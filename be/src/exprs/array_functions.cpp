@@ -1104,6 +1104,8 @@ StatusOr<ColumnPtr> ArrayFunctions::any_match(FunctionContext* context, const Co
 StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
+    // @TODO optimize for const column
+
     auto num_rows = columns[0]->size();
     LOG(INFO) << "array_concat, num_rows: " << num_rows;
     for (auto& column: columns) {
@@ -1130,6 +1132,7 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
             auto nullable_column = down_cast<NullableColumn*>(column.get());
             array_columns.emplace_back(std::static_pointer_cast<ArrayColumn>(nullable_column->data_column()));
         } else if (column->is_constant()) {
+            // @TODO no need
             // NOTE: I'm not sure if there will be const array, just to be safe
             array_columns.emplace_back(std::static_pointer_cast<ArrayColumn>(
                     ColumnHelper::unpack_and_duplicate_const_column(num_rows, column)));
