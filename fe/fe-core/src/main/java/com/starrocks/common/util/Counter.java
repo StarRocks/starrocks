@@ -203,8 +203,13 @@ public class Counter {
         }
 
         public void merge(TCounter counter) {
-            sum += counter.value;
-            cnt++;
+            if (isSkipMerge(strategy)) {
+                sum = counter.value;
+                cnt = 1;
+            } else {
+                sum += counter.value;
+                cnt++;
+            }
             min = Long.min(min, counter.getValue());
             max = Long.max(max, counter.getValue());
         }

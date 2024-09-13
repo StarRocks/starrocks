@@ -343,8 +343,8 @@ public class QueryRuntimeProfile {
             LOG.debug("update profile, profilingPlan: {}, profile: {}", profilingPlan, profile);
         }
 
-        // Update fragment profile
-        if (params.isSetProfile()) {
+        // Merge it into fragment-profile if this instance already finished
+        if (params.isSetProfile() && params.isDone()) {
             int fragmentIndex = execState.getFragmentIndex();
             RuntimeProfile fragmentProfile = mergedFragmentProfiles.get(fragmentIndex);
             fragmentProfile.merge(params.profile);
