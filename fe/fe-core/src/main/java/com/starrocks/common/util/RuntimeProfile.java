@@ -35,7 +35,6 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -64,7 +63,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -135,6 +133,20 @@ public class RuntimeProfile {
     public void removeAllChildren() {
         childList.clear();
         childMap.clear();
+    }
+
+    public Counter.SummerizationCounter getOrAddSummarizationCounter(String name, TUnit unit,
+                                                                     TCounterStrategy strategy, String parentName) {
+        Pair<Counter.SummerizationCounter, String> pair = fragmentCounterMap.get(name);
+        Counter.SummerizationCounter result;
+        if (pair == null && parentName != null) {
+            result = addSummarizationCounter(name, unit, strategy, parentName);
+        } else if (pair != null) {
+            result = pair.first;
+        } else {
+            result = null;
+        }
+        return result;
     }
 
     public Counter.SummerizationCounter addSummarizationCounter(String name, TUnit type, TCounterStrategy strategy,
@@ -317,43 +329,33 @@ public class RuntimeProfile {
                 }
             }
 
-            // Find counters that cannot be merged, we need to skip them
-            Predicate<String> isBeMerged = Predicates.alwaysFalse();
-
-            //                    (name) -> name.startsWith(MERGED_INFO_PREFIX_MAX) || name.startsWith
-            //                    (MERGED_INFO_PREFIX_MIN);
-            Set<String> skippedCounters = node.counters.stream()
-                    .filter(x -> isBeMerged.test(x.getName()))
-                    .map(TCounter::getName)
-                    .collect(Collectors.toSet());
-
             // First processing counters by hierarchy
             Map<String, TCounter> tCounterMap = node.counters.stream()
-                    .filter(x -> !skippedCounters.contains(x.getName()))
                     .collect(Collectors.toMap(TCounter::getName, t -> t));
             Queue<String> nameQueue = Lists.newLinkedList();
             nameQueue.offer(ROOT_COUNTER);
-            LOG.debug("skip counter {}", skippedCounters);
 
             while (!nameQueue.isEmpty()) {
                 String topName = nameQueue.poll();
 
                 if (!Objects.equals(ROOT_COUNTER, topName)) {
-                    Pair<Counter.SummerizationCounter, String> pair = fragmentCounterMap.get(topName);
                     TCounter tcounter = tCounterMap.get(topName);
                     String parentName = child2ParentMap.get(topName);
 
-                    Counter.SummerizationCounter summerizationCounter;
-                    LOG.debug("merge counter {}", tcounter);
-                    if (pair == null && tcounter != null && parentName != null) {
-                        summerizationCounter =
-                                addSummarizationCounter(topName, tcounter.type, tcounter.strategy, parentName);
-                    } else if (pair != null && tcounter != null) {
-                        summerizationCounter = pair.first;
-                    } else {
+                    String target = topName;
+                    // For this kind of special counter, we need to merge them into another target
+                    if (topName.startsWith(MERGED_INFO_PREFIX_MIN) || topName.startsWith(MERGED_INFO_PREFIX_MAX)) {
+                        target = org.apache.commons.lang3.StringUtils.removeStart(target, MERGED_INFO_PREFIX_MIN);
+                        target = org.apache.commons.lang3.StringUtils.removeStart(target, MERGED_INFO_PREFIX_MAX);
+                    }
+
+                    Counter.SummerizationCounter summarization =
+                            getOrAddSummarizationCounter(target, tcounter.type, tcounter.strategy, parentName);
+                    if (summarization == null) {
                         continue;
                     }
-                    summerizationCounter.merge(tcounter);
+
+                    summarization.merge(tcounter);
                     tCounterMap.remove(topName);
                 }
 
@@ -377,10 +379,6 @@ public class RuntimeProfile {
                     pair.first.merge(tcounter);
                 }
             }
-
-            node.counters =
-                    node.counters.stream().filter(x -> skippedCounters.contains(x.getName()))
-                            .collect(Collectors.toList());
         }
 
         if (!isNodeOld && node.info_strings_display_order != null) {
@@ -409,27 +407,6 @@ public class RuntimeProfile {
         }
     }
 
-    //    static abstract class TreeTopDownVisitor {
-    //
-    //        public void visit() {
-    //            Queue<String> nameQueue = Lists.newLinkedList();
-    //            nameQueue.offer(ROOT_COUNTER);
-    //
-    //            while (!nameQueue.isEmpty()) {
-    //                String topName = nameQueue.poll();
-    //                visitNode(topName);
-    //
-    //                for (String child : getChildren(topName)) {
-    //                    nameQueue.offer(child);
-    //                }
-    //            }
-    //        }
-    //
-    //        public abstract Collection<String> getChildren(String nodeName);
-    //
-    //        public abstract void visitNode(String name);
-    //    }
-
     /**
      * Copy the merged counters into existing counters
      */
@@ -444,12 +421,9 @@ public class RuntimeProfile {
             Counter sumCounter = new Counter(counter.unit, counter.strategy, 0);
             counter.finalized(minCounter, maxCounter, sumCounter);
 
-            //            addCounter(name, counter.unit, counter.strategy, parentName);
             counterMap.put(name, Pair.create(sumCounter, parentName));
             childCounterMap.computeIfAbsent(parentName, (x) -> Sets.newHashSet()).add(name);
             if (!Counter.isSkipMinMax(counter.strategy)) {
-                //                addCounter(MERGED_INFO_PREFIX_MIN + name, counter.unit, counter.strategy, parentName);
-                //                addCounter(MERGED_INFO_PREFIX_MAX + name, counter.unit, counter.strategy, parentName);
                 counterMap.put(MERGED_INFO_PREFIX_MIN + name, Pair.create(minCounter, parentName));
                 counterMap.put(MERGED_INFO_PREFIX_MAX + name, Pair.create(sumCounter, parentName));
             }
