@@ -18,7 +18,9 @@ import com.starrocks.service.arrow.flight.sql.auth.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
 import org.apache.arrow.flight.FlightServer;
+import org.apache.arrow.flight.FlightServerMiddleware;
 import org.apache.arrow.flight.Location;
+import org.apache.arrow.flight.ServerHeaderMiddleware;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.logging.log4j.LogManager;
@@ -46,8 +48,10 @@ public class ArrowFlightSqlService {
                 new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager, location, arrowFlightBePort);
         ArrowFlightSqlAuthenticator arrowFlightSqlAuthenticator =
                 new ArrowFlightSqlAuthenticator(arrowFlightSqlTokenManager);
-        flightServer = FlightServer.builder(allocator, location, producer).
-                headerAuthenticator(arrowFlightSqlAuthenticator).build();
+
+        flightServer = FlightServer.builder(allocator, location, producer)
+                .headerAuthenticator(arrowFlightSqlAuthenticator)
+                .build();
     }
 
     public void start() {

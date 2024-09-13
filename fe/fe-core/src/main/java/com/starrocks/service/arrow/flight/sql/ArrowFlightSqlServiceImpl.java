@@ -17,7 +17,10 @@ package com.starrocks.service.arrow.flight.sql;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
+import com.starrocks.common.Config;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.ArrowUtil;
+import com.starrocks.encryption.EncryptionUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.DefaultCoordinator;
@@ -30,6 +33,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.Criteria;
+import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightEndpoint;
 import org.apache.arrow.flight.FlightInfo;
@@ -94,6 +98,11 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             String peerIdentity = callContext.peerIdentity();
             ArrowFlightSqlConnectContext ctx = arrowFlightSqlSessionManager.getConnectContext(peerIdentity);
             try {
+                if (Config.arrow_flight_sql_ase_key.length() != 43) {
+                    throw new InvalidConfException(
+                            "FE configuration item arrow_flight_sql_ase_key is invalid.");
+                }
+
                 String query = actionCreatePreparedStatementRequest.getQuery();
                 initConnectContext(ctx, query);
                 // To prevent the client from mistakenly interpreting an empty Schema as an update statement (instead of a query statement),
@@ -143,6 +152,10 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             FlightDescriptor flightDescriptor) {
         String peerIdentity = callContext.peerIdentity();
         ArrowFlightSqlConnectContext ctx = arrowFlightSqlSessionManager.getConnectContext(peerIdentity);
+        String database = callContext.getMiddleware(FlightConstants.HEADER_KEY).headers().get("database");
+        if (database != null || !database.isEmpty()) {
+            ctx.setDatabase(database);
+        }
         return getFlightInfoFromQuery(peerIdentity, ctx, flightDescriptor);
     }
 
@@ -397,8 +410,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             Schema schema = arrowConnectProcessor.fetchArrowSchema(address, pUniqueId, 600);
 
-            final ByteString handle;
-            handle = ByteString.copyFromUtf8(hexStringFromUniqueId(finstId) + ":" + query);
+            String encrypt_data = EncryptionUtil
+                    .aesEncrypt(hexStringFromUniqueId(finstId) + ":" + query, Config.arrow_flight_sql_ase_key);
+            final ByteString handle = ByteString.copyFromUtf8(encrypt_data);
             FlightSql.TicketStatementQuery ticketStatementQuery =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
 
@@ -414,16 +428,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private StatementBase parse(String sql, SessionVariable sessionVariables) {
-        StatementBase parsedStmt;
         List<StatementBase> stmts;
 
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, sessionVariables);
-
         if (stmts.size() > 1) {
             throw new RuntimeException("arrow flight sql query does not support execute multiple query");
         }
 
-        parsedStmt = stmts.get(0);
+        StatementBase parsedStmt = stmts.get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql));
         return parsedStmt;
     }

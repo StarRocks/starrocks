@@ -43,7 +43,7 @@ import java.io.IOException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-// inherit ConnectProcessor  to record the audit log and Query Detail
+// inherit ConnectProcessor to record the audit log and Query Detail
 public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlConnectProcessor.class);
 

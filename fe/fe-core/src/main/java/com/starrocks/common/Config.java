@@ -3309,4 +3309,7 @@ public class Config extends ConfigBase {
     public static int batch_write_idle_ms = 3600000;
 
     public static int batch_write_executor_threads_num = 4096;
+
+    @ConfField
+    public static String arrow_flight_sql_ase_key = "";
 }

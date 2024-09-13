@@ -40,6 +40,7 @@ public class ArrowFlightSqlAuthenticator implements org.apache.arrow.flight.auth
             AuthResult authResult = basicCallHeaderAuthenticator.authenticate(incomingHeaders);
             return authResult;
         }
+
         return validateToken(token);
     }
 
