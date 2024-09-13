@@ -1334,9 +1334,9 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
 
     phmap::flat_hash_set<uint32_t> sets;
 
-    uint32_t hash[elements->size()];
-    memset(hash, 0, elements->size() * sizeof(uint32_t));
-    elements->fnv_hash(hash, 0, elements->size());
+    // TODO: Maybe consume large memory, need optimized later.
+    std::vector<uint32_t> hash(elements->size(), 0);
+    elements->fnv_hash(hash.data(), 0, elements->size());
 
     size_t rows = columns[0]->size();
     for (auto i = 0; i < rows; i++) {
