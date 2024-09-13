@@ -95,8 +95,7 @@ public class AsyncTaskQueue<T> {
     public void start(List<? extends Task<T>> tasks) {
         taskQueue.addAll(tasks);
         taskQueueSize.addAndGet(tasks.size());
-        // or we have to trigger tasks?
-        triggerTask();
+        triggerTasks();
     }
 
     public int computeOutputSize(T output) {
@@ -154,6 +153,9 @@ public class AsyncTaskQueue<T> {
     }
 
     public boolean hasMoreOutput() {
+        if (outputQueueSize.get() > 0) {
+            return true;
+        }
         // update end of stream state
         tryGetOutputs(null, 0);
         return hasMoreOutput;
