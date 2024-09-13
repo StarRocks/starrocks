@@ -1732,14 +1732,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             // process partition by
             if (desc.primaryExpression() != null) {
-<<<<<<< HEAD
-                if (expressionPartitionDesc != null) {
-                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION"), clausePos);
-=======
                 if (partitionByExpr != null) {
-                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION", "building materialized view"),
-                            clausePos);
->>>>>>> 72f95bf8ab ([Enhancement] List Partition For AMV(Part 4): Support more patterns for list partition materialized views (#50844))
+                    throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION"), clausePos);
                 }
                 Expr expr = (Expr) visit(desc.primaryExpression());
                 if (expr instanceof SlotRef) {
