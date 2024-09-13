@@ -130,7 +130,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
         mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
         mvContext.setRefBaseTableRangePartitionMap(result.refBaseTablePartitionMap);
-        mvContext.setExternalRefBaseTableMVPartitionMap(result.refBaseTableMVPartitionMap);
+        mvContext.setExternalRefBaseTableMVPartitionMap(result.getRefBaseTableMVPartitionMap());
         return true;
     }
 
