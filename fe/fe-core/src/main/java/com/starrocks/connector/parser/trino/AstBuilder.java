@@ -83,6 +83,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
@@ -162,6 +163,7 @@ import io.trino.sql.tree.Row;
 import io.trino.sql.tree.RowDataType;
 import io.trino.sql.tree.SearchedCaseExpression;
 import io.trino.sql.tree.SetOperation;
+import io.trino.sql.tree.ShowSchemas;
 import io.trino.sql.tree.SimpleCaseExpression;
 import io.trino.sql.tree.SimpleGroupBy;
 import io.trino.sql.tree.SingleColumn;
@@ -737,6 +739,21 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
         return callExpr;
 
+    }
+
+    @Override
+    protected ParseNode visitShowSchemas(ShowSchemas node, ParseTreeContext context) {
+        String catalog = null;
+        if (!node.getCatalog().isEmpty()) {
+            catalog = node.getCatalog().map(Identifier::getValue).get();
+        }
+
+        if (!node.getLikePattern().isEmpty()) {
+            String likePattern = node.getLikePattern().get();
+            return new ShowDbStmt(likePattern, null, catalog, null);
+        } else {
+            return new ShowDbStmt(null, null, catalog, null);
+        }
     }
 
     private static AnalyticWindow.Type getFrameType(WindowFrame.Type type) {

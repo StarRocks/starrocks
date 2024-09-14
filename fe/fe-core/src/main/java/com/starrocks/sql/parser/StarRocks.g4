@@ -321,7 +321,7 @@ setCatalogStatement
 
 showDatabasesStatement
     : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS (FROM catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 alterDbQuotaStatement
