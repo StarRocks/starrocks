@@ -385,6 +385,10 @@ public class RuntimeProfile {
                     pair.first.merge(tcounter);
                 }
             }
+
+            // Remove counters from this fragment-profile
+            node.counters.clear();
+            node.child_counters_map.clear();
         }
 
         if (!isNodeOld && node.info_strings_display_order != null) {
