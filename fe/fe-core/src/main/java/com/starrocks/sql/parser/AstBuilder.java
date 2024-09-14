@@ -370,6 +370,7 @@ import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
+import com.starrocks.sql.ast.ShowCatalogRecycleBinStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
@@ -8051,6 +8052,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------
+
+    @Override
+    public ParseNode visitShowCatalogRecycleBinStatement(StarRocksParser.ShowCatalogRecycleBinStatementContext context) {
+        return new ShowCatalogRecycleBinStmt(createPos(context));
+    }
 
     protected <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
         return contexts.stream()
