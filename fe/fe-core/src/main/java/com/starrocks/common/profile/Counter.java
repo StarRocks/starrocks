@@ -32,9 +32,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common.util;
+package com.starrocks.common.profile;
 
-import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
 import com.starrocks.thrift.TCounterMinMaxType;
@@ -44,7 +43,7 @@ import com.starrocks.thrift.TUnit;
 import java.util.List;
 import java.util.Objects;
 
-// Counter means indicators field. The counter's name is key, the counter itself is value.  
+// Counter means indicators field. The counter's name is key, the counter itself is value.
 public class Counter {
     private volatile int type;
     private volatile TCounterStrategy strategy;
@@ -188,43 +187,6 @@ public class Counter {
         }
     }
 
-    public static final class SummerizationCounter {
-
-        public final TUnit unit;
-        public final TCounterStrategy strategy;
-        public long min = Long.MAX_VALUE;
-        public long max = Long.MIN_VALUE;
-        public long sum = 0L;
-        public long cnt = 0L;
-
-        public SummerizationCounter(TUnit unit, TCounterStrategy strategy) {
-            this.unit = unit;
-            this.strategy = strategy;
-        }
-
-        public void merge(TCounter counter) {
-            if (isSkipMerge(strategy)) {
-                sum = counter.value;
-                cnt = 1;
-            } else {
-                sum += counter.value;
-                cnt++;
-            }
-            min = Long.min(min, counter.getValue());
-            max = Long.max(max, counter.getValue());
-        }
-
-        public void finalized(Counter minCounter, Counter maxCounter, Counter mergedCounter) {
-            if (cnt == 0) {
-                return;
-            }
-            long mergedValue = Counter.isAvg(strategy) ? sum / cnt : sum;
-            minCounter.setValue(min);
-            maxCounter.setValue(max);
-            mergedCounter.setValue(mergedValue);
-        }
-
-    }
     @Override
     public String toString() {
         return "Counter{" +

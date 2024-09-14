@@ -43,6 +43,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
+import com.starrocks.common.profile.Counter;
+import com.starrocks.common.profile.SummarizationCounter;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TRuntimeProfileNode;
@@ -90,7 +92,7 @@ public class RuntimeProfile {
     private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newCopyOnWriteArrayList();
 
     // Only used for Fragment Profile, these counters can be accumulated
-    private final Map<String, Pair<Counter.SummerizationCounter, String>> fragmentCounterMap = Maps.newConcurrentMap();
+    private final Map<String, Pair<SummarizationCounter, String>> fragmentCounterMap = Maps.newConcurrentMap();
 
     private String name;
     private double localTimePercent;
@@ -135,10 +137,10 @@ public class RuntimeProfile {
         childMap.clear();
     }
 
-    public Counter.SummerizationCounter getOrAddSummarizationCounter(String name, TUnit unit,
-                                                                     TCounterStrategy strategy, String parentName) {
-        Pair<Counter.SummerizationCounter, String> pair = fragmentCounterMap.get(name);
-        Counter.SummerizationCounter result;
+    public SummarizationCounter getOrAddSummarizationCounter(String name, TUnit unit,
+                                                             TCounterStrategy strategy, String parentName) {
+        Pair<SummarizationCounter, String> pair = fragmentCounterMap.get(name);
+        SummarizationCounter result;
         if (pair == null && parentName != null) {
             result = addSummarizationCounter(name, unit, strategy, parentName);
         } else if (pair != null) {
@@ -149,19 +151,19 @@ public class RuntimeProfile {
         return result;
     }
 
-    public Counter.SummerizationCounter addSummarizationCounter(String name, TUnit type, TCounterStrategy strategy,
-                                                                String parentName) {
+    public SummarizationCounter addSummarizationCounter(String name, TUnit type, TCounterStrategy strategy,
+                                                        String parentName) {
         if (strategy == null) {
             strategy = Counter.createStrategy(type);
         }
-        Pair<Counter.SummerizationCounter, String> pair = this.fragmentCounterMap.get(name);
+        Pair<SummarizationCounter, String> pair = this.fragmentCounterMap.get(name);
         if (pair != null) {
             return pair.first;
         } else {
             Preconditions.checkState(parentName.equals(ROOT_COUNTER)
                     || this.fragmentCounterMap.containsKey(parentName));
 
-            Counter.SummerizationCounter newCounter = new Counter.SummerizationCounter(type, strategy);
+            SummarizationCounter newCounter = new SummarizationCounter(type, strategy);
             this.fragmentCounterMap.put(name, Pair.create(newCounter, parentName));
 
             if (!childCounterMap.containsKey(parentName)) {
@@ -353,7 +355,7 @@ public class RuntimeProfile {
                         target = org.apache.commons.lang3.StringUtils.removeStart(target, MERGED_INFO_PREFIX_MAX);
                     }
 
-                    Counter.SummerizationCounter summarization =
+                    SummarizationCounter summarization =
                             getOrAddSummarizationCounter(target, tcounter.type, tcounter.strategy, parentName);
                     if (summarization == null) {
                         continue;
@@ -374,9 +376,9 @@ public class RuntimeProfile {
             }
             // Second, processing the remaining counters, set ROOT_COUNTER as it's parent
             for (TCounter tcounter : tCounterMap.values()) {
-                Pair<Counter.SummerizationCounter, String> pair = fragmentCounterMap.get(tcounter.name);
+                Pair<SummarizationCounter, String> pair = fragmentCounterMap.get(tcounter.name);
                 if (pair == null) {
-                    Counter.SummerizationCounter counter =
+                    SummarizationCounter counter =
                             addSummarizationCounter(tcounter.name, tcounter.type, tcounter.strategy, ROOT_COUNTER);
                 } else {
                     Preconditions.checkArgument(pair.first.unit == tcounter.type);
@@ -417,7 +419,7 @@ public class RuntimeProfile {
     public void finalizeMerge() {
         for (var entry : fragmentCounterMap.entrySet()) {
             String name = entry.getKey();
-            Counter.SummerizationCounter counter = entry.getValue().first;
+            SummarizationCounter counter = entry.getValue().first;
             String parentName = entry.getValue().second;
 
             Counter minCounter = new Counter(counter.unit, counter.strategy, 0);

@@ -22,7 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.Counter;
+import com.starrocks.common.profile.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -98,6 +98,8 @@ public class QueryRuntimeProfile {
 
     private RuntimeProfile queryProfile;
     private List<RuntimeProfile> fragmentProfiles;
+    // Merged fragment-file from instance-profile, if that instance already finished
+    // It's used to reduce memory usage of running profile, which needs to be kept in memory all the time
     private List<RuntimeProfile> mergedFragmentProfiles;
 
     // The load channel profile is only present if loading to OlapTables.
