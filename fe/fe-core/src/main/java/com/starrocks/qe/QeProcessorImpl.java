@@ -39,11 +39,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.Pair;
-=======
 import com.starrocks.common.Status;
->>>>>>> d7ad29e758 ([Enhancement] support phased schedule (#47868))
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;

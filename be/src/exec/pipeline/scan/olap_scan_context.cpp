@@ -85,21 +85,11 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
     for (int i = 0; i < olap_scan_ranges.size(); ++i) {
         auto* scan_range = olap_scan_ranges[i];
 
-        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
         ASSIGN_OR_RETURN(TabletSharedPtr tablet, OlapScanNode::get_tablet(scan_range));
         ASSIGN_OR_RETURN(tablet_rowsets[i], OlapScanNode::capture_tablet_rowsets(tablet, scan_range));
 
-<<<<<<< HEAD
-        // Capture row sets of this version tablet.
-        {
-            std::shared_lock l(tablet->get_header_lock());
-            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
-            Rowset::acquire_readers(_tablet_rowsets[i]);
-        }
-=======
         VLOG(1) << "capture tablet rowsets: " << tablet->full_name() << ", rowsets: " << tablet_rowsets[i].size()
-                << ", version: " << scan_range->version << ", gtid: " << scan_range->gtid;
->>>>>>> d7ad29e758 ([Enhancement] support phased schedule (#47868))
+                << ", version: " << scan_range->version;
 
         _tablets[i] = std::move(tablet);
     }
