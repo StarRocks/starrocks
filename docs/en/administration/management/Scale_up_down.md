@@ -65,3 +65,29 @@ The commands of both methods are similar:
 Drop backend is a dangerous operation, so you need to confirm it twice before executing it
 
 * `alter system drop backend "be_host:be_heartbeat_service_port";`
+
+## Scale CN in and out
+
+### Scale CN out
+
+Run the following command to scale CN out.
+
+~~~sql
+ALTER SYSTEM ADD COMPUTE NODE "cn_host:cn_heartbeat_service_port";
+~~~
+
+Run the following command to check the CN status.
+
+~~~sql
+SHOW PROC '/compute_nodes';
+~~~
+
+### Scale CN in
+
+CN scale-in is similar to the scale-out. Run the following command to scale CN in.
+
+~~~sql
+ALTER SYSTEM DROP COMPUTE NODE "cn_host:cn_heartbeat_service_port";
+~~~
+
+You can view the node information by running `SHOW PROC '/compute_nodes';`.
