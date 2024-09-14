@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
@@ -207,7 +206,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                                                     .filter(t -> !finishedTabletIds.contains(t.getId())).findAny();
                 if (unfinishedTablet.isPresent()) {
                     // not all tablets in this partition finished, set aborted txn id for it
-                    partition.addAbortedTxnId(txnState.getTransactionId());
+                    partition.addAbortedTxnIdToTime(txnState.getTransactionId(), System.currentTimeMillis());
                     break;
                 } /* otherwise, handle by abort txn on BE/CN side */
             }

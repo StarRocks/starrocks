@@ -3208,4 +3208,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static double partition_hash_join_min_cardinality_rate = 0.3;
+
+    @ConfField(mutable = true)
+    public static int lake_autovacuum_keep_partition_aborted_txn_sec = 1800;
 }

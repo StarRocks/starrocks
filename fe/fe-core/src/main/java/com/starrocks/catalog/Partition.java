@@ -38,7 +38,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -53,7 +52,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -154,17 +152,25 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
     private volatile long minRetainVersion = 0;
 
-    // Aborted transactions wait to be GC on the files generated
-    // in share data mode
-    // For simplicity, this member will not be persistented. It will be
-    // empty if FE restart or unconsistent when FE leader is changed.
-    // There will be no correctness issues in either case. But may cause some useless
-    // vacuum request or miss deletion for some files (it seems that low probability)
-    
-    // In the future, we will introduced full vacuum to delete the remained files if
-    // lakeAbortedTxnsWaitedForGC infomation is lost.
-    private Set<Long> lakeAbortedTxnsWaitedForGC = Sets.newLinkedHashSet();
-    private ReentrantLock lakeAbortedTxnsWaitedForGCLock = new ReentrantLock();
+    /*
+     * Aborted transactions wait to be GC on the files generated
+     * in share data mode. There are still two situations where missing deletions may occur:
+
+     * 1. For simplicity, this member will not be persistented. It will be empty if FE
+     *    restart or unconsistent when FE leader is changed. There will be no correctness
+     *    issues in either case. But may cause some useless vacuum request or miss deletion
+     *    for some files (it seems that low probability)
+     * 2. We maintain the abortedTxnId -> timestampWhenIdAdded mapping to make sure keep
+     *    the abortedTxnid for a period of time. Because when the transaction is aborted,
+     *    the garbage files may not be flushed immediately by BE/CN nodes. We even don't
+     *    know when all the files have been flushed. So we need to keep the infomation for
+     *    a period of time and continue to GC.
+
+     * In the future, we will introduced full vacuum to delete the remained files to deal with
+     * this cases.
+    */
+    private Map<Long, Long> lakeAbortedTxnsWaitedForGCToTime = Maps.newHashMap();
+    private ReentrantLock lakeAbortedTxnsWaitedForGCToTimeLock = new ReentrantLock();
 
     private Partition() {
     }
@@ -595,32 +601,32 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
                 && Objects.equal(idToVisibleRollupIndex, partition.idToVisibleRollupIndex);
     }
 
-    public void addAbortedTxnId(long txnId) {
-        lakeAbortedTxnsWaitedForGCLock.lock();
+    public void addAbortedTxnIdToTime(long txnId, long time) {
+        lakeAbortedTxnsWaitedForGCToTimeLock.lock();
         try {
-            lakeAbortedTxnsWaitedForGC.add(txnId);
+            lakeAbortedTxnsWaitedForGCToTime.put(txnId, time);
         } finally {
-            lakeAbortedTxnsWaitedForGCLock.unlock();
+            lakeAbortedTxnsWaitedForGCToTimeLock.unlock();
         }
     }
 
-    public void addAbortedTxnIds(Set<Long> txnIds) {
-        lakeAbortedTxnsWaitedForGCLock.lock();
+    public void addAbortedTxnIdsToTime(Map<Long, Long> txnIdsToTime) {
+        lakeAbortedTxnsWaitedForGCToTimeLock.lock();
         try {
-            lakeAbortedTxnsWaitedForGC.addAll(txnIds);
+            lakeAbortedTxnsWaitedForGCToTime.putAll(txnIdsToTime);
         } finally {
-            lakeAbortedTxnsWaitedForGCLock.unlock();
+            lakeAbortedTxnsWaitedForGCToTimeLock.unlock();
         }
     }
 
-    public Set<Long> getCopiedAbortedTxnIdAndReset() {
-        Set<Long> copied = Sets.newLinkedHashSet();
-        lakeAbortedTxnsWaitedForGCLock.lock();
+    public Map<Long, Long> getCopiedAbortedTxnIdToTimeAndReset() {
+        Map<Long, Long> copied = Maps.newHashMap();
+        lakeAbortedTxnsWaitedForGCToTimeLock.lock();
         try {
-            copied = Sets.newLinkedHashSet(lakeAbortedTxnsWaitedForGC);
-            lakeAbortedTxnsWaitedForGC.clear();
+            copied = Maps.newHashMap(lakeAbortedTxnsWaitedForGCToTime);
+            lakeAbortedTxnsWaitedForGCToTime.clear();
         } finally {
-            lakeAbortedTxnsWaitedForGCLock.unlock();
+            lakeAbortedTxnsWaitedForGCToTimeLock.unlock();
         }
 
         return copied;

@@ -458,7 +458,7 @@ static Status vacuum_aborted_txn_file(std::string_view root_location, const std:
     std::vector<std::string> file_prefixs;
     file_prefixs.resize(abort_txn_ids.size());
     for (int i = 0; i < abort_txn_ids.size(); ++i) {
-        file_prefixs[i] = join_path("", fmt::format("{:016X}", abort_txn_ids[i]));
+        file_prefixs[i] = fmt::format("{:016X}", abort_txn_ids[i]);
     }
 
     for (const auto& file_prefix : file_prefixs) {
