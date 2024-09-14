@@ -1082,6 +1082,8 @@ select one.tiny_column, two.int_column from small_table one, big_table two where
 
 ### PIVOT
 
+该函数从 3.3 版本开始支持。
+
 PIVOT操作符是SQL中的一个高级特性，它允许你将表中的行转换为列，通常用于数据透视表的创建。这在处理数据库报表或分析时非常有用，特别是当你需要对数据进行汇总或分类展示时。
 
 实际上，PIVOT 是一种语法糖，它可以简化像 sum(case when ... then ... end) 这样的查询语句的编写。
