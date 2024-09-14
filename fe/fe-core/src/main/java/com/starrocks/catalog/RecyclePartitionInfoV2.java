@@ -36,6 +36,10 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
         this.dataCacheInfo = dataCacheInfo;
     }
 
+    public RecyclePartitionInfoV2() {
+        super();
+    }
+
     @Override
     public Range<PartitionKey> getRange() {
         return null;

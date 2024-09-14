@@ -73,6 +73,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -495,7 +496,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         List<Long> finishedTables = Lists.newArrayList();
         for (RecycleTableInfo info : tableToErase) {
-            boolean succ = info.table.deleteFromRecycleBin(info.dbId, false);
+            boolean succ = info.table.submitAndCheckAsyncDeleteFromRecycleBin(info.dbId, info.asyncDeleteReturn);
             if (!info.table.isDeleteRetryable()) {
                 // Nothing to do
                 continue;
@@ -503,7 +504,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Preconditions.checkState(!info.isRecoverable());
             if (succ) {
                 finishedTables.add(info.table.getId());
-            } else {
+            } else if (info.getAsyncDeleteReturn().isEmpty()) {
                 setNextEraseMinTime(info.table.getId(), System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
             }
         }
@@ -525,7 +526,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     public synchronized void replayEraseTable(List<Long> tableIds) {
         List<RecycleTableInfo> removedTableInfos = removeTableFromRecycleBin(tableIds);
         for (RecycleTableInfo info : removedTableInfos) {
-            info.table.deleteFromRecycleBin(info.dbId, true);
+            info.table.replayDeleteFromRecycleBin(info.dbId);
         }
         LOG.info("Finished replay erase tables. table id list: {}", StringUtils.join(tableIds, ","));
     }
@@ -542,7 +543,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             if (!canErasePartition(partitionInfo, currentTimeMs)) {
                 continue;
             }
-            if (partitionInfo.delete()) {
+            if (partitionInfo.submitAndCheckAsyncDelete()) {
                 iterator.remove();
                 removeRecycleMarkers(partitionId);
 
@@ -554,7 +555,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
                 }
-            } else {
+            } else if (partitionInfo.getAsyncDeleteReturn().isEmpty()) {
                 Preconditions.checkState(!partitionInfo.isRecoverable());
                 setNextEraseMinTime(partitionId, System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
             }
@@ -908,6 +909,21 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return idToRecycleTime.get(id) != null;
     }
 
+    @VisibleForTesting
+    synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
+        return idToPartition.get(id);
+    }
+
+    @VisibleForTesting
+    synchronized RecycleTableInfo getRecycleTableInfo(long id) {
+        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
+            if (tableEntry.get(id) != null) {
+                return tableEntry.get(id);
+            }
+        }
+        return null;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         int count = idToDatabase.size();
@@ -985,6 +1001,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // Whether this table can be recovered later.
         @SerializedName(value = "r")
         private boolean recoverable;
+        // use for async delete
+        private List<CompletableFuture<Boolean>> asyncDeleteReturn = Lists.newArrayList();
 
         public RecycleTableInfo() {
             // The default constructor is called when deserializing from json to `RecycleTableInfo` object.
@@ -1013,6 +1031,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         public boolean isRecoverable() {
             return recoverable;
+        }
+
+        public List<CompletableFuture<Boolean>> getAsyncDeleteReturn() {
+            return asyncDeleteReturn;
         }
 
         @Override
