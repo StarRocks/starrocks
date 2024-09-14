@@ -2726,7 +2726,7 @@ public class OlapTable extends Table {
      *
      */
     public void replaceTempPartitions(List<String> partitionNames, List<String> tempPartitionNames,
-                                      boolean strictRange, boolean useTempPartitionName) throws DdlException {
+                                  boolean strictRange, boolean useTempPartitionName, boolean isForceDrop) throws DdlException {
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
 
@@ -2788,7 +2788,7 @@ public class OlapTable extends Table {
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
             // This will also drop all tablets of the partition from TabletInvertedIndex
-            dropPartition(-1, partitionName, true);
+            dropPartition(-1, partitionName, isForceDrop);
         }
 
         // 2. add temp partitions' range info to rangeInfo, and remove them from
@@ -2817,14 +2817,14 @@ public class OlapTable extends Table {
 
     // used for unpartitioned table in insert overwrite
     // replace partition with temp partition
-    public void replacePartition(String sourcePartitionName, String tempPartitionName) {
+    public void replacePartition(String sourcePartitionName, String tempPartitionName, boolean isForceDrop) {
         if (partitionInfo.getType() != PartitionType.UNPARTITIONED) {
             return;
         }
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            dropPartition(-1, sourcePartitionName, true);
+            dropPartition(-1, sourcePartitionName, isForceDrop);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);

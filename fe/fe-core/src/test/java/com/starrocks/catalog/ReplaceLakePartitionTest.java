@@ -181,7 +181,7 @@ public class ReplaceLakePartitionTest {
     @Test
     public void testUnPartitionedLakeTableReplacePartition() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
-        tbl.replacePartition(partitionName, tempPartitionName);
+        tbl.replacePartition(partitionName, tempPartitionName, true);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
         erasePartition();
         Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
