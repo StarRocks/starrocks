@@ -240,6 +240,10 @@ public class RuntimeProfile {
         return counterMap.get(name);
     }
 
+    public Counter getMinCounter(String name) {
+        return getCounter(MERGED_INFO_PREFIX_MIN + name);
+    }
+
     public Counter getMaxCounter(String name) {
         Counter counter;
         if ((counter = getCounter(MERGED_INFO_PREFIX_MAX + name)) != null) {
@@ -425,7 +429,7 @@ public class RuntimeProfile {
             childCounterMap.computeIfAbsent(parentName, (x) -> Sets.newHashSet()).add(name);
             if (!Counter.isSkipMinMax(counter.strategy)) {
                 counterMap.put(MERGED_INFO_PREFIX_MIN + name, Pair.create(minCounter, parentName));
-                counterMap.put(MERGED_INFO_PREFIX_MAX + name, Pair.create(sumCounter, parentName));
+                counterMap.put(MERGED_INFO_PREFIX_MAX + name, Pair.create(maxCounter, parentName));
             }
         }
         LOG.debug("finalize merge {} counters of {}", fragmentCounterMap.size(), name);

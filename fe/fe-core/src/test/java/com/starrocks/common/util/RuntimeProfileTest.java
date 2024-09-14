@@ -47,20 +47,25 @@ import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
-import org.junit.Assert;
-import org.junit.Test;
+import junit.framework.Assert;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 public class RuntimeProfileTest {
 
     private static void testCounterPrinter(TUnit type, long value, String expected) {
         Counter counter = new Counter(type, null, value);
         String printContent = RuntimeProfile.printCounter(counter);
-        Assert.assertEquals(expected, printContent);
+        Assertions.assertEquals(expected, printContent);
     }
 
     @Test
@@ -129,9 +134,9 @@ public class RuntimeProfileTest {
         long time1 = profile.getChildList().get(1).first.getCounterTotalTime().getValue();
         long time2 = profile.getChildList().get(2).first.getCounterTotalTime().getValue();
 
-        Assert.assertEquals(3, time0);
-        Assert.assertEquals(2, time1);
-        Assert.assertEquals(1, time2);
+        Assertions.assertEquals(3, time0);
+        Assertions.assertEquals(2, time1);
+        Assertions.assertEquals(1, time2);
     }
 
     @Test
@@ -144,7 +149,7 @@ public class RuntimeProfileTest {
         profile.addInfoString("key", "value");
         String value = profile.getInfoString("key");
         Assert.assertNotNull(value);
-        Assert.assertEquals(value, "value");
+        Assertions.assertEquals(value, "value");
         // from thrift to profile and first update
         TRuntimeProfileTree tprofileTree = new TRuntimeProfileTree();
         TRuntimeProfileNode tnode = new TRuntimeProfileNode();
@@ -157,17 +162,17 @@ public class RuntimeProfileTest {
         tnode.info_strings_display_order.add("key3");
 
         profile.update(tprofileTree);
-        Assert.assertEquals(profile.getInfoString("key"), "value2");
-        Assert.assertEquals(profile.getInfoString("key3"), "value3");
+        Assertions.assertEquals(profile.getInfoString("key"), "value2");
+        Assertions.assertEquals(profile.getInfoString("key3"), "value3");
         // second update
         tnode.info_strings.put("key", "value4");
 
         profile.update(tprofileTree);
-        Assert.assertEquals(profile.getInfoString("key"), "value4");
+        Assertions.assertEquals(profile.getInfoString("key"), "value4");
 
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
-        Assert.assertEquals(builder.toString(),
+        Assertions.assertEquals(builder.toString(),
                 "profileName:\n   - key: value4\n   - key3: value3\n");
     }
 
@@ -178,7 +183,7 @@ public class RuntimeProfileTest {
         Assert.assertNotNull(profile.getCounterMap().get("key"));
         Assert.assertNull(profile.getCounterMap().get("key2"));
         profile.getCounterMap().get("key").setValue(1);
-        Assert.assertEquals(profile.getCounterMap().get("key").getValue(), 1);
+        Assertions.assertEquals(profile.getCounterMap().get("key").getValue(), 1);
     }
 
     @Test
@@ -282,31 +287,31 @@ public class RuntimeProfileTest {
         Assert.assertNotNull(mergedProfile);
 
         Counter mergedTime1 = mergedProfile.getCounter("time1");
-        Assert.assertEquals(2000000000L, mergedTime1.getValue());
+        Assertions.assertEquals(2000000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
         Counter mergedMaxOfTime1 = mergedProfile.getCounter("__MAX_OF_time1");
         Assert.assertNotNull(mergedMinOfTime1);
         Assert.assertNotNull(mergedMaxOfTime1);
-        Assert.assertEquals(2000000000L, mergedMinOfTime1.getValue());
-        Assert.assertEquals(2000000000L, mergedMaxOfTime1.getValue());
+        Assertions.assertEquals(2000000000L, mergedMinOfTime1.getValue());
+        Assertions.assertEquals(2000000000L, mergedMaxOfTime1.getValue());
 
         Counter mergedTime2 = mergedProfile.getCounter("time2");
-        Assert.assertEquals(1000000000L, mergedTime2.getValue());
+        Assertions.assertEquals(1000000000L, mergedTime2.getValue());
         Counter mergedMinOfTime2 = mergedProfile.getCounter("__MIN_OF_time2");
         Counter mergedMaxOfTime2 = mergedProfile.getCounter("__MAX_OF_time2");
         Assert.assertNotNull(mergedMinOfTime2);
         Assert.assertNotNull(mergedMaxOfTime2);
-        Assert.assertEquals(0, mergedMinOfTime2.getValue());
-        Assert.assertEquals(2000000000L, mergedMaxOfTime2.getValue());
+        Assertions.assertEquals(0, mergedMinOfTime2.getValue());
+        Assertions.assertEquals(2000000000L, mergedMaxOfTime2.getValue());
 
         Counter mergedCount1 = mergedProfile.getCounter("count1");
-        Assert.assertEquals(2, mergedCount1.getValue());
+        Assertions.assertEquals(2, mergedCount1.getValue());
         Counter mergedMinOfCount1 = mergedProfile.getCounter("__MIN_OF_count1");
         Counter mergedMaxOfCount1 = mergedProfile.getCounter("__MAX_OF_count1");
         Assert.assertNotNull(mergedMinOfCount1);
         Assert.assertNotNull(mergedMaxOfCount1);
-        Assert.assertEquals(1, mergedMinOfCount1.getValue());
-        Assert.assertEquals(1, mergedMaxOfCount1.getValue());
+        Assertions.assertEquals(1, mergedMinOfCount1.getValue());
+        Assertions.assertEquals(1, mergedMaxOfCount1.getValue());
     }
 
     @Test
@@ -355,22 +360,22 @@ public class RuntimeProfileTest {
         Assert.assertNotNull(mergedProfile);
 
         Counter mergedTime1 = mergedProfile.getCounter("time1");
-        Assert.assertEquals(2500000000L, mergedTime1.getValue());
+        Assertions.assertEquals(2500000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
         Counter mergedMaxOfTime1 = mergedProfile.getCounter("__MAX_OF_time1");
         Assert.assertNotNull(mergedMinOfTime1);
         Assert.assertNotNull(mergedMaxOfTime1);
-        Assert.assertEquals(100000000L, mergedMinOfTime1.getValue());
-        Assert.assertEquals(5000000000L, mergedMaxOfTime1.getValue());
+        Assertions.assertEquals(100000000L, mergedMinOfTime1.getValue());
+        Assertions.assertEquals(5000000000L, mergedMaxOfTime1.getValue());
 
         Counter mergedCount1 = mergedProfile.getCounter("count1");
-        Assert.assertEquals(21, mergedCount1.getValue());
+        Assertions.assertEquals(21, mergedCount1.getValue());
         Counter mergedMinOfCount1 = mergedProfile.getCounter("__MIN_OF_count1");
         Counter mergedMaxOfCount1 = mergedProfile.getCounter("__MAX_OF_count1");
         Assert.assertNotNull(mergedMinOfCount1);
         Assert.assertNotNull(mergedMaxOfCount1);
-        Assert.assertEquals(1, mergedMinOfCount1.getValue());
-        Assert.assertEquals(6, mergedMaxOfCount1.getValue());
+        Assertions.assertEquals(1, mergedMinOfCount1.getValue());
+        Assertions.assertEquals(6, mergedMaxOfCount1.getValue());
     }
 
     @Test
@@ -435,32 +440,32 @@ public class RuntimeProfileTest {
         Assert.assertNotNull(mergedProfile);
 
         Counter mergedTime1 = mergedProfile.getCounter("time1");
-        Assert.assertEquals(2000000000L, mergedTime1.getValue());
+        Assertions.assertEquals(2000000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
         Counter mergedMaxOfTime1 = mergedProfile.getCounter("__MAX_OF_time1");
         Assert.assertNotNull(mergedMinOfTime1);
         Assert.assertNotNull(mergedMaxOfTime1);
-        Assert.assertEquals(1000000000L, mergedMinOfTime1.getValue());
-        Assert.assertEquals(1000000000L, mergedMaxOfTime1.getValue());
+        Assertions.assertEquals(1000000000L, mergedMinOfTime1.getValue());
+        Assertions.assertEquals(1000000000L, mergedMaxOfTime1.getValue());
 
         Counter mergedTime2 = mergedProfile.getCounter("time2");
-        Assert.assertEquals(2000000000L, mergedTime2.getValue());
+        Assertions.assertEquals(2000000000L, mergedTime2.getValue());
         Counter mergedMinOfTime2 = mergedProfile.getCounter("__MIN_OF_time2");
         Counter mergedMaxOfTime2 = mergedProfile.getCounter("__MAX_OF_time2");
         Assert.assertNull(mergedMinOfTime2);
         Assert.assertNull(mergedMaxOfTime2);
 
         Counter mergedCount1 = mergedProfile.getCounter("count1");
-        Assert.assertEquals(6, mergedCount1.getValue());
+        Assertions.assertEquals(6, mergedCount1.getValue());
         Counter mergedMinOfCount1 = mergedProfile.getCounter("__MIN_OF_count1");
         Counter mergedMaxOfCount1 = mergedProfile.getCounter("__MAX_OF_count1");
         Assert.assertNotNull(mergedMinOfCount1);
         Assert.assertNotNull(mergedMaxOfCount1);
-        Assert.assertEquals(6, mergedMinOfCount1.getValue());
-        Assert.assertEquals(6, mergedMaxOfCount1.getValue());
+        Assertions.assertEquals(6, mergedMinOfCount1.getValue());
+        Assertions.assertEquals(6, mergedMaxOfCount1.getValue());
 
         Counter mergedCount2 = mergedProfile.getCounter("count2");
-        Assert.assertEquals(8, mergedCount2.getValue());
+        Assertions.assertEquals(8, mergedCount2.getValue());
         Counter mergedMinOfCount2 = mergedProfile.getCounter("__MIN_OF_count2");
         Counter mergedMaxOfCount2 = mergedProfile.getCounter("__MAX_OF_count2");
         Assert.assertNull(mergedMinOfCount2);
@@ -542,21 +547,21 @@ public class RuntimeProfileTest {
         RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
         Assert.assertNotNull(mergedProfile);
 
-        Assert.assertEquals(13, mergedProfile.getCounterMap().size());
+        Assertions.assertEquals(13, mergedProfile.getCounterMap().size());
         RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
-        Assert.assertEquals(7, mergedProfile.getCounterMap().size());
+        Assertions.assertEquals(7, mergedProfile.getCounterMap().size());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1"));
-        Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1").getValue());
+        Assertions.assertEquals(2, mergedProfile.getCounterMap().get("count1").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("__MIN_OF_count1"));
-        Assert.assertEquals(1, mergedProfile.getCounterMap().get("__MIN_OF_count1").getValue());
+        Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MIN_OF_count1").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("__MAX_OF_count1"));
-        Assert.assertEquals(1, mergedProfile.getCounterMap().get("__MAX_OF_count1").getValue());
+        Assertions.assertEquals(1, mergedProfile.getCounterMap().get("__MAX_OF_count1").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
-        Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1_sub").getValue());
+        Assertions.assertEquals(2, mergedProfile.getCounterMap().get("count1_sub").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2"));
-        Assert.assertEquals(5, mergedProfile.getCounterMap().get("count2").getValue());
+        Assertions.assertEquals(5, mergedProfile.getCounterMap().get("count2").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2_sub"));
-        Assert.assertEquals(6, mergedProfile.getCounterMap().get("count2_sub").getValue());
+        Assertions.assertEquals(6, mergedProfile.getCounterMap().get("count2_sub").getValue());
     }
 
     @Test
@@ -608,7 +613,7 @@ public class RuntimeProfileTest {
         actualValues.add(mergedProfile.getInfoString("key1__DUP(3)"));
         actualValues.add(mergedProfile.getInfoString("key1__DUP(4)"));
 
-        Assert.assertEquals(expectedValues, actualValues);
+        Assertions.assertEquals(expectedValues, actualValues);
     }
 
     @Test
@@ -673,22 +678,22 @@ public class RuntimeProfileTest {
         JsonObject jsonObj = new Gson().fromJson(jsonStr, JsonElement.class).getAsJsonObject();
 
         JsonObject jsonObjProfile = jsonObj.getAsJsonObject("profile");
-        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("key").getAsString(), "value");
-        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("key1").getAsString(), "value1");
-        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("count1").getAsString(), "15");
+        Assertions.assertEquals(jsonObjProfile.getAsJsonPrimitive("key").getAsString(), "value");
+        Assertions.assertEquals(jsonObjProfile.getAsJsonPrimitive("key1").getAsString(), "value1");
+        Assertions.assertEquals(jsonObjProfile.getAsJsonPrimitive("count1").getAsString(), "15");
 
         JsonObject jsonObjchild1 = jsonObjProfile.getAsJsonObject("child1");
-        Assert.assertEquals(jsonObjchild1.getAsJsonPrimitive("child1_key").getAsString(), "child1_value");
+        Assertions.assertEquals(jsonObjchild1.getAsJsonPrimitive("child1_key").getAsString(), "child1_value");
 
         JsonObject jsonObjchild11 = jsonObjchild1.getAsJsonObject("child11");
-        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("child11_key").getAsString(), "child11_value");
-        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("count2").getAsString(), "1.000K (1000) /sec");
-        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("data_size").getAsString(), "10.000 KB/sec");
+        Assertions.assertEquals(jsonObjchild11.getAsJsonPrimitive("child11_key").getAsString(), "child11_value");
+        Assertions.assertEquals(jsonObjchild11.getAsJsonPrimitive("count2").getAsString(), "1.000K (1000) /sec");
+        Assertions.assertEquals(jsonObjchild11.getAsJsonPrimitive("data_size").getAsString(), "10.000 KB/sec");
 
         JsonObject jsonObjchild12 = jsonObjchild1.getAsJsonObject("child12");
-        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("count3").getAsString(), "15");
-        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("data_size").getAsString(), "10.000 KB");
-        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("time_ns").getAsString(), "1ms");
+        Assertions.assertEquals(jsonObjchild12.getAsJsonPrimitive("count3").getAsString(), "15");
+        Assertions.assertEquals(jsonObjchild12.getAsJsonPrimitive("data_size").getAsString(), "10.000 KB");
+        Assertions.assertEquals(jsonObjchild12.getAsJsonPrimitive("time_ns").getAsString(), "1ms");
     }
 
     @Test
@@ -699,88 +704,184 @@ public class RuntimeProfileTest {
         profile.addChild(childProfile);
         Counter counter2 = childProfile.addCounter("counter2", TUnit.UNIT, null);
 
-        Assert.assertEquals(0, profile.getVersion());
-        Assert.assertEquals(0, childProfile.getVersion());
+        Assertions.assertEquals(0, profile.getVersion());
+        Assertions.assertEquals(0, childProfile.getVersion());
         counter1.setValue(1);
         counter2.setValue(2);
-        Assert.assertEquals(1, counter1.getValue());
-        Assert.assertEquals(2, counter2.getValue());
+        Assertions.assertEquals(1, counter1.getValue());
+        Assertions.assertEquals(2, counter2.getValue());
 
         TRuntimeProfileTree tree = profile.toThrift();
-        Assert.assertEquals(2, tree.nodes.size());
+        Assertions.assertEquals(2, tree.nodes.size());
         Assert.assertTrue(tree.nodes.get(0).isSetVersion());
-        Assert.assertEquals(0, tree.nodes.get(0).version);
+        Assertions.assertEquals(0, tree.nodes.get(0).version);
         Assert.assertTrue(tree.nodes.get(1).isSetVersion());
-        Assert.assertEquals(0, tree.nodes.get(1).version);
+        Assertions.assertEquals(0, tree.nodes.get(1).version);
 
         // update with new versions for both parent and child profile,
         // both should update success
         counter1.setValue(2);
         counter2.setValue(3);
-        Assert.assertEquals(2, counter1.getValue());
-        Assert.assertEquals(3, counter2.getValue());
+        Assertions.assertEquals(2, counter1.getValue());
+        Assertions.assertEquals(3, counter2.getValue());
         // make thrift profile versions newer
         tree.nodes.get(0).setVersion(1);
         tree.nodes.get(1).setVersion(1);
         profile.update(tree);
-        Assert.assertEquals(1, counter1.getValue());
-        Assert.assertEquals(2, counter2.getValue());
-        Assert.assertEquals(1, profile.getVersion());
-        Assert.assertEquals(1, childProfile.getVersion());
+        Assertions.assertEquals(1, counter1.getValue());
+        Assertions.assertEquals(2, counter2.getValue());
+        Assertions.assertEquals(1, profile.getVersion());
+        Assertions.assertEquals(1, childProfile.getVersion());
 
         // update with an old version for both parent profile, and a new
         // version for child profile, both should skip
         counter1.setValue(4);
         counter2.setValue(5);
-        Assert.assertEquals(4, counter1.getValue());
-        Assert.assertEquals(5, counter2.getValue());
+        Assertions.assertEquals(4, counter1.getValue());
+        Assertions.assertEquals(5, counter2.getValue());
         // make thrift parent older, and child newer
         tree.nodes.get(0).setVersion(0);
         tree.nodes.get(1).setVersion(2);
         profile.update(tree);
-        Assert.assertEquals(4, counter1.getValue());
-        Assert.assertEquals(5, counter2.getValue());
-        Assert.assertEquals(1, profile.getVersion());
-        Assert.assertEquals(1, childProfile.getVersion());
+        Assertions.assertEquals(4, counter1.getValue());
+        Assertions.assertEquals(5, counter2.getValue());
+        Assertions.assertEquals(1, profile.getVersion());
+        Assertions.assertEquals(1, childProfile.getVersion());
 
         // update with a new version for parent profile, and an old
         // version for child profile, the parent should success, and
         // the child skip
         counter1.setValue(5);
         counter2.setValue(6);
-        Assert.assertEquals(5, counter1.getValue());
-        Assert.assertEquals(6, counter2.getValue());
+        Assertions.assertEquals(5, counter1.getValue());
+        Assertions.assertEquals(6, counter2.getValue());
         // make thrift parent equal, and child older
         tree.nodes.get(0).setVersion(1);
         tree.nodes.get(1).setVersion(0);
         profile.update(tree);
-        Assert.assertEquals(1, counter1.getValue());
-        Assert.assertEquals(6, counter2.getValue());
-        Assert.assertEquals(1, profile.getVersion());
-        Assert.assertEquals(1, childProfile.getVersion());
+        Assertions.assertEquals(1, counter1.getValue());
+        Assertions.assertEquals(6, counter2.getValue());
+        Assertions.assertEquals(1, profile.getVersion());
+        Assertions.assertEquals(1, childProfile.getVersion());
 
         // update with old versions for both parent and child profile,
         // both should skip
         counter1.setValue(7);
         counter2.setValue(8);
-        Assert.assertEquals(7, counter1.getValue());
-        Assert.assertEquals(8, counter2.getValue());
+        Assertions.assertEquals(7, counter1.getValue());
+        Assertions.assertEquals(8, counter2.getValue());
         // make thrift both parent and child older
         tree.nodes.get(0).setVersion(0);
         tree.nodes.get(1).setVersion(0);
         profile.update(tree);
-        Assert.assertEquals(7, counter1.getValue());
-        Assert.assertEquals(8, counter2.getValue());
-        Assert.assertEquals(1, profile.getVersion());
-        Assert.assertEquals(1, childProfile.getVersion());
+        Assertions.assertEquals(7, counter1.getValue());
+        Assertions.assertEquals(8, counter2.getValue());
+        Assertions.assertEquals(1, profile.getVersion());
+        Assertions.assertEquals(1, childProfile.getVersion());
 
         // If thrift not set version, should success
         tree.nodes.get(0).setVersionIsSet(false);
         tree.nodes.get(1).setVersionIsSet(false);
         profile.update(tree);
-        Assert.assertEquals(1, counter1.getValue());
-        Assert.assertEquals(2, counter2.getValue());
-        Assert.assertEquals(1, profile.getVersion());
-        Assert.assertEquals(1, childProfile.getVersion());
+        Assertions.assertEquals(1, counter1.getValue());
+        Assertions.assertEquals(2, counter2.getValue());
+        Assertions.assertEquals(1, profile.getVersion());
+        Assertions.assertEquals(1, childProfile.getVersion());
     }
+
+    private static Stream<Arguments> testProfileMergeArguments() {
+        return Stream.of(
+                Arguments.of(TCounterAggregateType.SUM, TCounterMergeType.MERGE_ALL),
+                Arguments.of(TCounterAggregateType.AVG, TCounterMergeType.MERGE_ALL),
+                Arguments.of(TCounterAggregateType.SUM, TCounterMergeType.SKIP_ALL),
+                Arguments.of(TCounterAggregateType.AVG, TCounterMergeType.SKIP_ALL)
+        );
+    }
+
+    @ParameterizedTest(name = "{index}-{0}")
+    @MethodSource("testProfileMergeArguments")
+    public void testProfileMerge(TCounterAggregateType aggregateType, TCounterMergeType mergeType) {
+        RuntimeProfile fragmentProfile = new RuntimeProfile("fragment-1");
+
+        // add an instance profile
+        {
+            RuntimeProfile instanceProfile = new RuntimeProfile("instance-1");
+            instanceProfile.addCounter("c1", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(1);
+            instanceProfile.addCounter("c2", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(2);
+            instanceProfile.addInfoString("instance-id", "id1");
+
+            // add a child into instance
+            RuntimeProfile pipelineProfile = new RuntimeProfile("pipe-1");
+            instanceProfile.addChild(pipelineProfile);
+            pipelineProfile.addCounter("c3", TUnit.BYTES,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(1);
+
+            fragmentProfile.merge(instanceProfile.toThrift());
+        }
+        // add an instance profile
+        {
+            RuntimeProfile instanceProfile = new RuntimeProfile("instance-2");
+            instanceProfile.addCounter("c1", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(3);
+            instanceProfile.addCounter("c2", TUnit.TIME_NS,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(4);
+            instanceProfile.addInfoString("instance-id", "id2");
+
+            // add a child into instance
+            RuntimeProfile pipelineProfile = new RuntimeProfile("pipe-1");
+            instanceProfile.addChild(pipelineProfile);
+            pipelineProfile.addCounter("c3", TUnit.BYTES,
+                            new TCounterStrategy(aggregateType, mergeType, 0))
+                    .setValue(5);
+
+            fragmentProfile.merge(instanceProfile.toThrift());
+        }
+
+        // finalize merge
+        fragmentProfile.finalizeMerge();
+        // copy into query
+        RuntimeProfile queryRuntimeProfile = new RuntimeProfile("q1");
+        queryRuntimeProfile.copyAllCountersRecursiveFrom(fragmentProfile);
+        queryRuntimeProfile.copyAllInfoStringsFrom(fragmentProfile, null);
+
+        Assertions.assertEquals(fragmentProfile.getCounter("c1").getValue(),
+                queryRuntimeProfile.getCounter("c1").getValue());
+        Assertions.assertEquals(fragmentProfile.getCounter("c2").getValue(),
+                queryRuntimeProfile.getCounter("c2").getValue());
+        Assertions.assertEquals(fragmentProfile.getChild("pipe-1").getCounter("c3").getValue(),
+                queryRuntimeProfile.getChild("pipe-1").getCounter("c3").getValue());
+        Assertions.assertEquals(fragmentProfile.getInfoString("instance-id"),
+                queryRuntimeProfile.getInfoString("instance-id"));
+
+        if (mergeType == TCounterMergeType.MERGE_ALL && aggregateType == TCounterAggregateType.SUM) {
+            Assertions.assertEquals(4, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(6, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(6, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        } else if (mergeType == TCounterMergeType.MERGE_ALL && aggregateType == TCounterAggregateType.AVG) {
+            Assertions.assertEquals(2, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(3, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(3, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        } else if (mergeType == TCounterMergeType.SKIP_ALL && aggregateType == TCounterAggregateType.SUM) {
+            Assertions.assertEquals(3, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(4, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(5, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        } else if (mergeType == TCounterMergeType.SKIP_ALL && aggregateType == TCounterAggregateType.AVG) {
+            Assertions.assertEquals(3, fragmentProfile.getCounter("c1").getValue());
+            Assertions.assertEquals(4, fragmentProfile.getCounter("c2").getValue());
+            Assertions.assertEquals(5, fragmentProfile.getChild("pipe-1").getCounter("c3").getValue());
+        }
+
+        Assertions.assertEquals(3, fragmentProfile.getMaxCounter("c1").getValue());
+        Assertions.assertEquals(1, fragmentProfile.getMinCounter("c1").getValue());
+        Assertions.assertEquals(2, fragmentProfile.getMinCounter("c2").getValue());
+        Assertions.assertEquals(1, fragmentProfile.getChild("pipe-1").getMinCounter("c3").getValue());
+    }
+
 }
