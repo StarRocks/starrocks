@@ -17,7 +17,10 @@ package com.starrocks.sql.common;
 import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.PartitionValue;
 import org.apache.commons.collections4.CollectionUtils;
@@ -35,6 +38,14 @@ import java.util.stream.Collectors;
  *  partitionItems  : ((1, 'a'), (2, 'b'))
  */
 public final class PListCell extends PCell implements Comparable<PListCell> {
+    // default partition values which may contain null value, and should be compared in the end
+    public static Set<String> DEFAULT_PARTITION_VALUES = new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            .add(PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE)
+            .add(PartitionUtil.ICEBERG_DEFAULT_PARTITION)
+            .add(HiveMetaClient.PARTITION_NULL_VALUE)
+            .add(HiveMetaClient.HUDI_PARTITION_NULL_VALUE)
+            .build();
+
     // multi values: the order is only associated comparing.
     @SerializedName(("partitionItems"))
     private final List<List<String>> partitionItems;
@@ -133,7 +144,7 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
     }
 
     private boolean isDefaultPartitionValue(String val) {
-        return PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE.equalsIgnoreCase(val);
+        return DEFAULT_PARTITION_VALUES.contains(val);
     }
 
     @Override
