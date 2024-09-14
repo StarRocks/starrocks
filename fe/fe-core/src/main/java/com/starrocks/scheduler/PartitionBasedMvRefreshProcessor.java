@@ -306,7 +306,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             "partitionsToRefresh:{}, mvPotentialPartitionNames:{}, next start:{}, next end:{}, " +
                             "next list values:{}",
                     materializedView.getName(), partitionRefreshNumber, mvToRefreshedPartitions, mvPotentialPartitionNames,
-                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextListPartitionValues());
+                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.READ);
         }
@@ -679,10 +679,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 newProperties.put(proEntry.getKey(), proEntry.getValue());
             }
         }
-        newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
-        newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
-        //TODO: partition values may be too long, need to be optimized later.
-        newProperties.put(TaskRun.PARTITION_VALUES, mvContext.getNextListPartitionValues());
+        PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+        if (partitionInfo.isListPartition()) {
+            //TODO: partition values may be too long, need to be optimized later.
+            newProperties.put(TaskRun.PARTITION_VALUES, mvContext.getNextPartitionValues());
+        } else {
+            newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
+            newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
+        }
         if (mvContext.getStatus() != null) {
             newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
         }
@@ -690,6 +694,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
             extraMessage.setNextPartitionStart(mvContext.getNextPartitionStart());
             extraMessage.setNextPartitionEnd(mvContext.getNextPartitionEnd());
+            extraMessage.setNextPartitionEnd(mvContext.getNextPartitionValues());
         });
 
         // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks

@@ -19,6 +19,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.PartitionValue;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -112,6 +113,15 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
                 return Integer.compare(atom1.size(), atom2.size());
             }
             for (int j = 0; j < atom1.size(); j++) {
+                String value1 = atom1.get(j);
+                String value2 = atom2.get(j);
+                // if one of the partition item is default partition value, prefer the other one
+                if (isDefaultPartitionValue(value1)) {
+                    return -1;
+                }
+                if (isDefaultPartitionValue(value2)) {
+                    return 1;
+                }
                 ans = atom1.get(j).compareTo(atom2.get(j));
                 if (ans != 0) {
                     return ans;
@@ -120,6 +130,10 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
         }
         // compare len if all partition items are equal
         return Integer.compare(len1, len2);
+    }
+
+    private boolean isDefaultPartitionValue(String val) {
+        return PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE.equalsIgnoreCase(val);
     }
 
     @Override

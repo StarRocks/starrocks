@@ -56,6 +56,8 @@ public class MVTaskRunExtraMessage implements Writable {
     private String nextPartitionStart;
     @SerializedName("nextPartitionEnd")
     private String nextPartitionEnd;
+    @SerializedName("nextPartitionValues")
+    private String nextPartitionValues;
 
     // task run starts to process time
     // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
@@ -167,7 +169,15 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setNextPartitionEnd(String nextPartitionEnd) {
-        this.nextPartitionEnd = nextPartitionEnd;
+        this.nextPartitionEnd = MvUtils.shrinkToSize(nextPartitionEnd, 1024);
+    }
+
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
+    }
+
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
     }
 
     public long getProcessStartTime() {

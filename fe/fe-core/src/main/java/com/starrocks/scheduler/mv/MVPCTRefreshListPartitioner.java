@@ -314,16 +314,16 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             mappedPartitionsToRefresh.put(partitionName, listCell);
         }
         int refreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
-        Set<PListCell> nextPartitionCells = filterPartitionsByNumber(mappedPartitionsToRefresh, refreshNumber);
+        Set<PListCell> nextPartitionValues = filterPartitionsByNumber(mappedPartitionsToRefresh, refreshNumber);
         // do filter input mvPartitionsToRefresh since it's a reference
         mvPartitionsToRefresh.retainAll(mappedPartitionsToRefresh.keySet());
-        if (CollectionUtils.isEmpty(nextPartitionCells)) {
+        if (CollectionUtils.isEmpty(nextPartitionValues)) {
             return;
         }
         if (!tentative) {
             // partitionNameIter has just been traversed, and endPartitionName is not updated
             // will cause endPartitionName == null
-            mvContext.setNextListPartitionValues(PListCell.batchSerialize(nextPartitionCells));
+            mvContext.setNextPartitionValues(PListCell.batchSerialize(nextPartitionValues));
         }
     }
 

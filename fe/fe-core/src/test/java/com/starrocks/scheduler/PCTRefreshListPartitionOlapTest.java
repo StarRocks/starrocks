@@ -1103,7 +1103,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 .build();
                         PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-                        Assert.assertNull(mvTaskRunContext.getNextListPartitionValues());
+                        Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assert.assertEquals("p2", message.getMvPartitionsToRefreshString());
                         Assert.assertEquals("{s2=[p2]}", message.getBasePartitionsToRefreshMapString());
@@ -1150,7 +1150,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 .build();
                         PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-                        Assert.assertNull(mvTaskRunContext.getNextListPartitionValues());
+                        Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assert.assertEquals("p1", message.getMvPartitionsToRefreshString());
                         Assert.assertEquals("{t1=[p1]}", message.getBasePartitionsToRefreshMapString());
@@ -1196,7 +1196,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 .build();
                         PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-                        Assert.assertNull(mvTaskRunContext.getNextListPartitionValues());
+                        Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assert.assertEquals("p1", message.getMvPartitionsToRefreshString());
                         Assert.assertEquals("{t3=[p1, p3]}", message.getBasePartitionsToRefreshMapString());
