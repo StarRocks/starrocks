@@ -1083,6 +1083,8 @@ select one.tiny_column, two.int_column from small_table one, <br/> big_table two
 
 ### PIVOT
 
+This feature is supported from v3.3 onwards.
+
 The PIVOT operation is an advanced feature in SQL that allows you to transform rows into columns in a table, which is particularly useful for creating pivot tables. This comes in handy when dealing with database reports or analytics, especially when you need to summarize or categorize data for presentation.
 
 Actually, the PIVOT is a syntax sugar, which can simplify the writing of the query statement like `sum(case when ... then ... end)`.
