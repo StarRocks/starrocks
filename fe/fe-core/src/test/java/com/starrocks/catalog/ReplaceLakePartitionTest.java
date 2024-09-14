@@ -128,12 +128,11 @@ public class ReplaceLakePartitionTest {
             }
         };
 
-<<<<<<< HEAD
         try {
             GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE);
         } catch (Exception ignore) {
         }
-=======
+
         while (GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(id) != null) {
             ExceptionChecker.expectThrowsNoException(()
                                 -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
