@@ -1,0 +1,36 @@
+-- name: test_orc_struct
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/struct_mix.snappy.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 17,196. OK num: 1(upload 1 files).
+-- !result
+
+select count(*) from files("path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*", "format" = "orc");
+-- result:
+200
+-- !result
+
+create table t1 as select col_int, col_struct, col_struct.c_date from files("path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*", "format" = "orc");
+-- result:
+-- !result
+
+desc t1;
+-- result:
+col_int	int	YES	true	None	
+col_struct	struct<c_int int(11), c_float decimal(38, 9), c_double decimal(38, 9), c_char varchar(30), c_varchar varchar(200), c_date date, c_timestamp datetime, c_boolean boolean>	YES	false	None	
+c_date	date	YES	false	None	
+-- !result
+
+select count(*) from t1;
+-- result:
+200
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null
