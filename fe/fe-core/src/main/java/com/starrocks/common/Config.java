@@ -3112,4 +3112,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int thrift_max_recursion_depth = 64;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
 }

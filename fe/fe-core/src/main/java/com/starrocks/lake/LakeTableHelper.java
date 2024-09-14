@@ -15,6 +15,7 @@
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
@@ -27,6 +28,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
@@ -41,9 +44,14 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 
 public class LakeTableHelper {
     private static final Logger LOG = LogManager.getLogger(LakeTableHelper.class);
+
+    private static final ExecutorService ASYNC_REMOVE_PARTITION_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.lake_remove_partition_thread_num, Integer.MAX_VALUE, "lake-remove-partition-pool", true);
 
     static boolean deleteTable(long dbId, OlapTable table, boolean replay) {
         Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
@@ -56,15 +64,22 @@ public class LakeTableHelper {
         return true;
     }
 
-    static boolean deleteTableFromRecycleBin(long dbId, OlapTable table, boolean replay) {
+    static boolean replayDeleteTableFromRecycleBin(long dbId, OlapTable table) {
         Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
-        table.removeTableBinds(replay);
-        if (replay) {
-            table.removeTabletsFromInvertedIndex();
-            return true;
-        }
-        LakeTableCleaner cleaner = new LakeTableCleaner(table);
-        boolean succ = cleaner.cleanTable();
+        table.removeTableBinds(true);
+        table.removeTabletsFromInvertedIndex();
+        return true;
+    }
+
+    static boolean submitAndCheckAsyncDeleteTableFromRecycleBin(long dbId, OlapTable table,
+                                                                List<CompletableFuture<Boolean>> asyncDeleteReturn) {
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
+        table.removeTableBinds(false);
+
+        LakeTableCleaner cleaner =  new LakeTableCleaner(table, asyncDeleteReturn);
+
+        // return false if submit failed or some of the deletion task has been failed.
+        boolean succ = cleaner.submitAndCheckAsyncCleanTable();
         if (succ) {
             table.removeTabletsFromInvertedIndex();
         }
@@ -119,7 +134,6 @@ public class LakeTableHelper {
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
                         workerGroupId);
-
                 return Optional.of(shardInfo);
             } catch (StarClientException e) {
                 if (e.getCode() != StatusCode.NOT_EXIST) {
@@ -131,8 +145,8 @@ public class LakeTableHelper {
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition, long warehouseId) throws StarClientException {
-        boolean ret = true;
+    static List<ShardInfo> getAllShardInfoFromPartition(Partition partition, long warehouseId) throws StarClientException {
+        List<ShardInfo> shardInfos = Lists.newArrayList();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             ShardInfo shardInfo = getAssociatedShardInfo(subPartition, warehouseId).orElse(null);
             if (shardInfo == null) {
@@ -144,11 +158,30 @@ public class LakeTableHelper {
                         shardInfo.getFilePath().getFullPath());
                 continue;
             }
+            shardInfos.add(shardInfo);
+        }
+        return shardInfos;
+    }
+
+    static boolean removePartitionDirectory(Partition partition, long warehouseId) throws StarClientException {
+        boolean ret = true;
+        List<ShardInfo> shardInfos = getAllShardInfoFromPartition(partition, warehouseId);
+        for (ShardInfo shardInfo : shardInfos) {
             if (!removeShardRootDirectory(shardInfo)) {
                 ret = false;
             }
         }
         return ret;
+    }
+
+    static void submitAsyncRemovePartitionDirectory(Partition partition, long warehouseId,
+                                    List<CompletableFuture<Boolean>> asyncDeleteReturn) throws StarClientException {
+        List<ShardInfo> shardInfos = getAllShardInfoFromPartition(partition, warehouseId);
+        for (ShardInfo shardInfo : shardInfos) {
+            asyncDeleteReturn.add(CompletableFuture.supplyAsync(() -> {
+                return removeShardRootDirectory(shardInfo);
+            }, LakeTableHelper.ASYNC_REMOVE_PARTITION_EXECUTOR));
+        }
     }
 
     public static boolean isSharedPartitionDirectory(PhysicalPartition partition, long warehouseId) throws StarClientException {

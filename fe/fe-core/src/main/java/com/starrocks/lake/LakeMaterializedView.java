@@ -42,6 +42,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Metadata for StarRocks lake materialized view
@@ -110,8 +111,13 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public boolean deleteFromRecycleBin(long dbId, boolean replay) {
-        return LakeTableHelper.deleteTableFromRecycleBin(dbId, this, replay);
+    public boolean replayDeleteFromRecycleBin(long dbId) {
+        return LakeTableHelper.replayDeleteTableFromRecycleBin(dbId, this);
+    }
+
+    @Override
+    public boolean submitAndCheckAsyncDeleteFromRecycleBin(long dbId, List<CompletableFuture<Boolean>> asyncDeleteReturn) {
+        return LakeTableHelper.submitAndCheckAsyncDeleteTableFromRecycleBin(dbId, this, asyncDeleteReturn);
     }
 
     @Override
