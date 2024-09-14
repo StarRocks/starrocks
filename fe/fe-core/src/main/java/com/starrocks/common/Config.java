@@ -633,7 +633,7 @@ public class Config extends ConfigBase {
      * (Because most of the follower data has been damaged).
      */
     @ConfField
-    public static String bdbje_reset_election_group = "false";
+    public static boolean bdbje_reset_election_group = false;
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
