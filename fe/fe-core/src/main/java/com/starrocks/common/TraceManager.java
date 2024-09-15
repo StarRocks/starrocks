@@ -14,6 +14,7 @@
 
 package com.starrocks.common;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.internal.TemporaryBuffers;
 import io.opentelemetry.api.trace.Span;
@@ -30,6 +31,9 @@ import io.opentelemetry.sdk.trace.SdkTracerProviderBuilder;
 import io.opentelemetry.sdk.trace.SpanProcessor;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class TraceManager {
     private static final String SERVICE_NAME = "starrocks-fe";
     private static volatile Tracer instance = null;
@@ -41,28 +45,28 @@ public class TraceManager {
         return getOrCreateTracer();
     }
 
+    /**
+     * Create a Tracer instance with span processors based on configuration-supplied values.
+     * If a Tracer instance already exists, return it.
+     * If tracing is not enabled via the configuration, a no-op Tracer is returned.
+     */
     private static synchronized Tracer getOrCreateTracer() {
         if (instance != null) {
             return instance;
         }
+
+        List<SpanProcessor> processors = getSpanProcessors();
+
+        if (processors.isEmpty()) {
+            instance = OpenTelemetry.noop().getTracer(SERVICE_NAME);
+            return instance;
+        }
+
         Resource resource = Resource.builder().put("service.name", SERVICE_NAME).build();
         SdkTracerProviderBuilder tracerProviderBuilder = SdkTracerProvider.builder()
                 .setResource(resource);
-        if (!Config.jaeger_grpc_endpoint.isEmpty()) {
-            SpanProcessor jaegerProcessor = BatchSpanProcessor.builder(
-                    JaegerGrpcSpanExporter.builder()
-                            .setEndpoint(Config.jaeger_grpc_endpoint)
-                            .build()
-            ).build();
-            tracerProviderBuilder.addSpanProcessor(jaegerProcessor);
-        }
-        if (!Config.otlp_exporter_grpc_endpoint.isEmpty()) {
-            SpanProcessor otlpProcessor = BatchSpanProcessor.builder(
-                    OtlpGrpcSpanExporter.builder()
-                            .setEndpoint(Config.otlp_exporter_grpc_endpoint)
-                            .build()
-            ).build();
-            tracerProviderBuilder.addSpanProcessor(otlpProcessor);
+        for (SpanProcessor processor : processors) {
+            tracerProviderBuilder.addSpanProcessor(processor);
         }
         OpenTelemetrySdkBuilder otelBuilder = OpenTelemetrySdk.builder();
         otelBuilder.setTracerProvider(tracerProviderBuilder.build());
@@ -71,8 +75,33 @@ public class TraceManager {
         return instance;
     }
 
+    @VisibleForTesting
     protected static void setTracer(Tracer tracer) {
         instance = tracer;
+    }
+
+    /**
+     * Get span processors based on configuration-supplied values.
+     * If tracing is not enabled via the configuration, an empty list is returned.
+     */
+    @VisibleForTesting
+    protected static List<SpanProcessor> getSpanProcessors() {
+        List<SpanProcessor> processors = new ArrayList<>();
+        if (!Config.jaeger_grpc_endpoint.isEmpty()) {
+            processors.add(BatchSpanProcessor.builder(
+                    JaegerGrpcSpanExporter.builder()
+                            .setEndpoint(Config.jaeger_grpc_endpoint)
+                            .build()
+            ).build());
+        }
+        if (!Config.otlp_exporter_grpc_endpoint.isEmpty()) {
+            processors.add(BatchSpanProcessor.builder(
+                    OtlpGrpcSpanExporter.builder()
+                            .setEndpoint(Config.otlp_exporter_grpc_endpoint)
+                            .build()
+            ).build());
+        }
+        return processors;
     }
 
     public static Span startSpan(String name, Span parent) {
