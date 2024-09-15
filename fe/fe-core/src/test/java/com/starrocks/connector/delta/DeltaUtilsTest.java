@@ -51,7 +51,7 @@ public class DeltaUtilsTest {
     public void testCheckTableFeatureSupported() {
         expectedEx.expect(ValidateException.class);
         expectedEx.expectMessage("Delta table is missing protocol or metadata information.");
-        DeltaUtils.checkTableFeatureSupported(null, null);
+        DeltaUtils.checkProtocolAndMetadata(null, null);
     }
 
     @Test
@@ -67,7 +67,7 @@ public class DeltaUtilsTest {
             }
         };
 
-        DeltaUtils.checkTableFeatureSupported(new Protocol(3, 7, Lists.newArrayList(),
+        DeltaUtils.checkProtocolAndMetadata(new Protocol(3, 7, Lists.newArrayList(),
                 Lists.newArrayList()), metadata);
     }
 

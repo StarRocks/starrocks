@@ -32,6 +32,7 @@ import io.delta.kernel.Snapshot;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
+import io.delta.kernel.types.StructType;
 
 import java.util.List;
 import java.util.Set;
@@ -41,6 +42,7 @@ public class DeltaLakeTable extends Table {
     private String catalogName;
     private String dbName;
     private String tableName;
+    private StructType physicalSchema;
     private List<String> partColumnNames;
     private SnapshotImpl deltaSnapshot;
     private String tableLocation;
@@ -52,13 +54,14 @@ public class DeltaLakeTable extends Table {
         super(TableType.DELTALAKE);
     }
 
-    public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
-                          List<String> partitionNames, SnapshotImpl deltaSnapshot, String tableLocation,
-                          Engine deltaEngine, long createTime) {
-        super(id, tableName, TableType.DELTALAKE, schema);
+    public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> localSchema,
+                          StructType physicalSchema, List<String> partitionNames,
+                          SnapshotImpl deltaSnapshot, String tableLocation, Engine deltaEngine, long createTime) {
+        super(id, tableName, TableType.DELTALAKE, localSchema);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
+        this.physicalSchema = physicalSchema;
         this.partColumnNames = partitionNames;
         this.deltaSnapshot = deltaSnapshot;
         this.tableLocation = tableLocation;
@@ -120,7 +123,7 @@ public class DeltaLakeTable extends Table {
     }
 
     public boolean isUnPartitioned() {
-        return partColumnNames.size() == 0;
+        return partColumnNames.isEmpty();
     }
 
     public THdfsPartition toHdfsPartition(DescriptorTable.ReferencedPartitionInfo info) {
@@ -175,6 +178,7 @@ public class DeltaLakeTable extends Table {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.DELTALAKE_TABLE,
                 fullSchema.size(), 0, tableName, dbName);
         tTableDescriptor.setDeltaLakeTable(tDeltaLakeTable);
+        tTableDescriptor.setPhysicalSchema(DeltaUtils.getPhysicalSchema(physicalSchema, getDeltaMetadata()));
         return tTableDescriptor;
     }
 }

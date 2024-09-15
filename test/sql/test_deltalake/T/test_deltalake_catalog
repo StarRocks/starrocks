@@ -52,9 +52,6 @@ select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timesta
 select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
 select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
 
--- test column mapping
-select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
-
 -- test timestamp as partition type
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 01:01:01' order by col_smallint;

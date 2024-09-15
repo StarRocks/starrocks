@@ -203,8 +203,12 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
+<<<<<<< HEAD
     Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
                                const THdfsPartition& thrift_partition);
+=======
+    const TPhysicalSchema* get_physical_schema() const { return &_physical_schema; }
+>>>>>>> 307e09b8a0 ([Feature] Support column mapping for delta lake)
 
 protected:
     std::string _hdfs_base_path;
@@ -213,6 +217,8 @@ protected:
     mutable std::shared_mutex _map_mutex;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
+
+    TPhysicalSchema _physical_schema;
 };
 
 class HdfsTableDescriptor : public HiveTableDescriptor {

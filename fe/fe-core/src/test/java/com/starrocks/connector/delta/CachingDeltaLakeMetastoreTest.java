@@ -26,6 +26,7 @@ import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
 import io.delta.kernel.engine.Engine;
+import io.delta.kernel.types.StructType;
 import mockit.Expectations;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -98,7 +99,7 @@ public class CachingDeltaLakeMetastoreTest {
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                         Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        Lists.newArrayList(), new StructType(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
             }
         };
@@ -150,7 +151,7 @@ public class CachingDeltaLakeMetastoreTest {
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                         Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "tbl1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        Lists.newArrayList(), new StructType(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
             }
         };
@@ -169,7 +170,7 @@ public class CachingDeltaLakeMetastoreTest {
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                         Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        Lists.newArrayList(), new StructType(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
             }
         };

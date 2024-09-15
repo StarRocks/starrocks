@@ -185,7 +185,8 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
         return std::make_shared<IcebergMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
                                                    _scanner_ctx->iceberg_schema);
     } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive);
+        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
+                                                   _scanner_ctx->physical_schema);
     }
 }
 
