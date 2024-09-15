@@ -151,6 +151,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.split_context = _scanner_params.split_context;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
+    ctx.physical_schema = _scanner_params.physical_schema;
     return Status::OK();
 }
 

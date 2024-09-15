@@ -206,12 +206,16 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
+    const TPhysicalSchema* get_physical_schema() const { return &_physical_schema; }
+
 protected:
     std::string _hdfs_base_path;
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
+
+    TPhysicalSchema _physical_schema;
 };
 
 class HdfsTableDescriptor : public HiveTableDescriptor {

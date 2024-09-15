@@ -294,6 +294,7 @@ DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc
     _table_location = tdesc.deltaLakeTable.location;
     _columns = tdesc.deltaLakeTable.columns;
     _partition_columns = tdesc.deltaLakeTable.partition_columns;
+    _physical_schema = tdesc.physicalSchema;
     for (const auto& entry : tdesc.deltaLakeTable.partitions) {
         auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.deltaLakeTable, entry.second));
         _partition_id_to_desc_map[entry.first] = partition;

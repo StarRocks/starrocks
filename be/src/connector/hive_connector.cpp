@@ -622,6 +622,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
 
+    scanner_params.physical_schema = _hive_table->get_physical_schema();
+
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
 

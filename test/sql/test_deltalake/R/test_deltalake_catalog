@@ -193,10 +193,6 @@ select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timesta
 2	2024-01-03 04:05:06
 4	2024-01-04 01:02:03
 -- !result
-select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
--- result:
-E: (1064, "Unknown table 'Delta table feature [column mapping] is not supported'")
--- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
 -- result:
 1	1	2024-01-01 01:01:01

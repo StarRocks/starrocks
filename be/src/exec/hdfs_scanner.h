@@ -221,6 +221,8 @@ struct HdfsScannerParams {
     MORParams mor_params;
 
     int64_t connector_max_split_size = 0;
+
+    const TPhysicalSchema* physical_schema = nullptr;
 };
 
 struct HdfsScannerContext {
@@ -293,6 +295,8 @@ struct HdfsScannerContext {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
     int64_t connector_max_split_size = 0;
+
+    const TPhysicalSchema* physical_schema = nullptr;
 
     // update none_existed_slot
     // update conjunct
