@@ -56,7 +56,6 @@ public class TraceManager {
         }
 
         List<SpanProcessor> processors = getSpanProcessors();
-
         if (processors.isEmpty()) {
             instance = OpenTelemetry.noop().getTracer(SERVICE_NAME);
             return instance;
