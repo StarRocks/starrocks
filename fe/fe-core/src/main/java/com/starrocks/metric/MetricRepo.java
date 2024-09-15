@@ -111,6 +111,34 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
     public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
 
+    public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_PENDING;
+    public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_RUNNING;
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_pending_slots", MetricUnit.REQUESTS,
+                            "the number of current pending slots for each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_RUNNING =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_running_slots", MetricUnit.REQUESTS,
+                            "the number of current running slots for each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_ALLOCATED_TOTAL =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_total_allocated_slots", MetricUnit.REQUESTS,
+                            "the accumulated value of allocated slots for each category"));
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Integer>> GAUGE_QUERY_QUEUE_CATEGORY_WEIGHT =
+            new MetricWithLabelGroup<>("category",
+                    () -> new GaugeMetricImpl<>("query_queue_v2_category_weight", MetricUnit.REQUESTS,
+                            "the weight of each category"));
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Integer>> GAUGE_QUERY_QUEUE_CATEGORY_SLOT_MIN_SLOTS =
+            new MetricWithLabelGroup<>("category",
+                    () -> new GaugeMetricImpl<>("query_queue_v2_category_min_slots", MetricUnit.REQUESTS,
+                            "the min slots of each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_STATE =
+            new MetricWithLabelGroup<>("category",
+                    () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
+                            "the current state of each category"));
+
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
 
@@ -390,6 +418,14 @@ public final class MetricRepo {
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
+
+        COUNTER_QUERY_QUEUE_SLOT_PENDING = new LongCounterMetric("query_queue_slot_pending", MetricUnit.REQUESTS,
+                "total pending query slot");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_SLOT_PENDING);
+        COUNTER_QUERY_QUEUE_SLOT_RUNNING = new LongCounterMetric("query_queue_slot_running", MetricUnit.REQUESTS,
+                "total running query slot");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_SLOT_RUNNING);
+
         COUNTER_QUERY_QUEUE_TOTAL = new LongCounterMetric("query_queue_total", MetricUnit.REQUESTS,
                 "total history queued query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_TOTAL);
@@ -632,6 +668,7 @@ public final class MetricRepo {
         GAUGE_MEMORY_USAGE_STATS = memoryUsageGauges;
         GAUGE_OBJECT_COUNT_STATS = objectCountGauges;
     }
+
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,

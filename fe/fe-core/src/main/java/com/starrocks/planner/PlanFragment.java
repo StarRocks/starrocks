@@ -661,6 +661,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return dataPartition;
     }
 
+    public boolean isGatherFragment() {
+        return getDataPartition() == DataPartition.UNPARTITIONED;
+    }
+
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
     }
