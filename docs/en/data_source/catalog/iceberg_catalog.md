@@ -4,7 +4,7 @@ toc_max_heading_level: 5
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../_assets/commonMarkdown/quickstat-iceberg-tip.mdx'
+import QSTip from '../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 
 # Iceberg catalog
 

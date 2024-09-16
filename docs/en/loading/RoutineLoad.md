@@ -5,7 +5,7 @@ displayed_sidebar: docs
 # Load data using Routine Load
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
-import QSTip from '../_assets/commonMarkdown/quickstat-routine-load-tip.mdx'
+import QSTip from '../_assets/commonMarkdown/quickstart-routine-load-tip.mdx'
 
 <QSTip />
 
