@@ -1,0 +1,2 @@
+-- name: test_yearweek
+select yearweek('2023-12-31', 2), yearweek('2024-01-01', 2);
