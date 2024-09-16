@@ -106,6 +106,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         PARALLEL_STREAM_LOAD     // default
     }
 
+    private static final double DEFAULT_MAX_FILTER_RATIO = 0.0;
+
     @SerializedName(value = "id")
     private long id;
     private TUniqueId loadId;
@@ -177,7 +179,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private Type type = Type.PARALLEL_STREAM_LOAD;
 
     private List<State> channels;
-    private StreamLoadParam streamLoadParam;
+    private StreamLoadKvParams streamLoadParams;
     private StreamLoadInfo streamLoadInfo;
     private Coordinator coord;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPAddress;
@@ -256,7 +258,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.channelIdToBEHTTPAddress = null;
         this.channelIdToBEHTTPPort = null;
         this.coord = null;
-        this.streamLoadParam = null;
+        this.streamLoadParams = null;
         this.streamLoadInfo = null;
         this.isCommitting = false;
     }
@@ -762,8 +764,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void unprotectedExecute(HttpHeaders headers) throws UserException {
-        streamLoadParam = StreamLoadParam.parseHttpHeader(headers);
-        streamLoadInfo = StreamLoadInfo.fromStreamLoadContext(loadId, txnId, (int) timeoutMs / 1000, streamLoadParam);
+        streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
+        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(loadId, txnId, (int) timeoutMs / 1000, streamLoadParams);
         if (table == null) {
             getTable();
         }
@@ -941,11 +943,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             return true;
         }
 
-        if (numRowsAbnormal > (numRowsAbnormal + numRowsNormal) * streamLoadParam.maxFilterRatio) {
-            return false;
-        }
-
-        return true;
+        return !(numRowsAbnormal > (numRowsAbnormal + numRowsNormal) *
+                streamLoadParams.getMaxFilterRatio().orElse(DEFAULT_MAX_FILTER_RATIO));
     }
 
     public boolean checkNeedPrepareTxn() {
@@ -1219,7 +1218,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         channelIdToBEHTTPAddress = null;
         channelIdToBEHTTPPort = null;
         table = null;
-        streamLoadParam = null;
+        streamLoadParams = null;
         streamLoadInfo = null;
     }
 

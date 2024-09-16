@@ -99,9 +99,11 @@ public class StreamLoadInfo {
         this.stripOuterArray = false;
     }
 
-    public StreamLoadInfo(TUniqueId id, long txnId, int timeout) {
+    public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, int timeout) {
         this.id = id;
         this.txnId = txnId;
+        this.fileType = fileType;
+        this.formatType = formatType;
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
@@ -268,93 +270,27 @@ public class StreamLoadInfo {
         return warehouseId;
     }
 
-    public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
+    public static StreamLoadInfo fromHttpStreamLoadRequest(TUniqueId id, long txnId, int timeout, StreamLoadKvParams params)
             throws UserException {
-        StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId, timeout);
-        streamLoadInfo.setOptionalFromStreamLoadContext(context);
+        StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
+                params.getFileType().orElse(TFileType.FILE_STREAM),
+                params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
+        streamLoadInfo.setOptionalFromStreamLoad(params);
         return streamLoadInfo;
-    }
-
-    private void setOptionalFromStreamLoadContext(StreamLoadParam context) throws UserException {
-        if (context.columns != null) {
-            setColumnToColumnExpr(context.columns);
-        }
-        if (context.whereExpr != null) {
-            setWhereExpr(context.whereExpr);
-        }
-        if (context.columnSeparator != null) {
-            columnSeparator = new ColumnSeparator(context.columnSeparator);
-        }
-        if (context.rowDelimiter != null) {
-            rowDelimiter = new RowDelimiter(context.rowDelimiter);
-        }
-        if (context.partitions != null) {
-            String[] partNames = PART_NAME_SPLIT.split(context.partitions.trim());
-            if (context.useTempPartition) {
-                partitions = new PartitionNames(true, Lists.newArrayList(partNames));
-            } else {
-                partitions = new PartitionNames(false, Lists.newArrayList(partNames));
-            }
-        }
-        if (context.fileType != null) {
-            this.fileType = context.fileType;
-        }
-        if (context.formatType != null) {
-            this.formatType = context.formatType;
-        }
-        switch (context.fileType) {
-            case FILE_STREAM:
-                path = context.path;
-                break;
-            default:
-                throw new UserException("unsupported file type, type=" + context.fileType);
-        }
-        if (context.negative) {
-            negative = context.negative;
-        }
-        if (context.strictMode) {
-            strictMode = context.strictMode;
-        }
-        if (context.timezone != null) {
-            timezone = TimeUtils.checkTimeZoneValidAndStandardize(context.timezone);
-        }
-        if (context.loadMemLimit != -1) {
-            loadMemLimit = context.loadMemLimit;
-        }
-        if (context.formatType == TFileFormatType.FORMAT_JSON) {
-            if (context.jsonPaths != null) {
-                jsonPaths = context.jsonPaths;
-            }
-            if (context.jsonRoot != null) {
-                jsonRoot = context.jsonRoot;
-            }
-            stripOuterArray = context.stripOuterArray;
-        }
-        if (context.partialUpdate) {
-            partialUpdate = context.partialUpdate;
-        }
-        if (context.transmissionCompressionType != null) {
-            compressionType = CompressionUtils.findTCompressionByName(context.transmissionCompressionType);
-        }
-        if (context.loadDop != -1) {
-            loadParallelRequestNum = context.loadDop;
-        }
-        if (context.partialUpdateMode != null) {
-            if (context.partialUpdateMode.equals("column")) {
-                partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
-            } else if (context.partialUpdateMode.equals("auto")) {
-                partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
-            } else if (context.partialUpdateMode.equals("row")) {
-                partialUpdateMode = TPartialUpdateMode.ROW_MODE;
-            }
-        }
     }
 
     public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
             throws UserException {
+        StreamLoadThriftParams streamLoadParams = new StreamLoadThriftParams(request);
+        if (streamLoadParams.getFileFormatType().isEmpty()) {
+            throw new UserException("There is no file format type");
+        }
+        if (streamLoadParams.getFileType().isEmpty()) {
+            throw new UserException("There is no file type");
+        }
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
-                request.getFileType(), request.getFormatType());
-        streamLoadInfo.setOptionalFromTSLPutRequest(request, db);
+                streamLoadParams.getFileType().get(), streamLoadParams.getFileFormatType().get());
+        streamLoadInfo.setOptionalFromStreamLoad(streamLoadParams);
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         if (request.isSetBackend_id()) {
             SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -370,101 +306,103 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
-    private void setOptionalFromTSLPutRequest(TStreamLoadPutRequest request, Database db) throws UserException {
-        if (request.isSetColumns()) {
-            setColumnToColumnExpr(request.getColumns());
+    private void setOptionalFromStreamLoad(StreamLoadParams params) throws UserException {
+        if (params.getColumns().isPresent()) {
+            setColumnToColumnExpr(params.getColumns().get());
         }
-        if (request.isSetWhere()) {
-            setWhereExpr(request.getWhere());
+        if (params.getWhere().isPresent()) {
+            setWhereExpr(params.getWhere().get());
         }
-        if (request.isSetColumnSeparator()) {
-            columnSeparator = new ColumnSeparator(request.getColumnSeparator());
+        if (params.getColumnSeparator().isPresent()) {
+            columnSeparator = new ColumnSeparator(params.getColumnSeparator().get());
         }
-        if (request.isSetRowDelimiter()) {
-            rowDelimiter = new RowDelimiter(request.getRowDelimiter());
+        if (params.getRowDelimiter().isPresent()) {
+            rowDelimiter = new RowDelimiter(params.getRowDelimiter().get());
         }
-        if (request.isSetSkipHeader()) {
-            skipHeader = request.getSkipHeader();
+        if (params.getSkipHeader().isPresent()) {
+            skipHeader = params.getSkipHeader().get();
         }
-        if (request.isSetEnclose()) {
-            enclose = request.getEnclose();
+        if (params.getEnclose().isPresent()) {
+            enclose = params.getEnclose().get();
         }
-        if (request.isSetEscape()) {
-            escape = request.getEscape();
+        if (params.getEscape().isPresent()) {
+            escape = params.getEscape().get();
         }
-        if (request.isSetTrimSpace()) {
-            trimSpace = request.isTrimSpace();
+        if (params.getTrimSpace().isPresent()) {
+            trimSpace = params.getTrimSpace().get();
         }
-        if (request.isSetPartitions()) {
-            String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
-            if (request.isSetIsTempPartition()) {
-                partitions = new PartitionNames(request.isIsTempPartition(), Lists.newArrayList(partNames));
+        if (params.getPartitions().isPresent()) {
+            String[] partNames = PART_NAME_SPLIT.split(params.getPartitions().get().trim());
+            if (params.getIsTempPartition().isPresent()) {
+                partitions = new PartitionNames(params.getIsTempPartition().get(), Lists.newArrayList(partNames));
             } else {
                 partitions = new PartitionNames(false, Lists.newArrayList(partNames));
             }
         }
-        switch (request.getFileType()) {
-            case FILE_STREAM:
-                path = request.getPath();
-                break;
-            default:
-                throw new UserException("unsupported file type, type=" + request.getFileType());
+        if (fileType == TFileType.FILE_STREAM) {
+            path = params.getFilePath().orElse(null);
+        } else {
+            throw new UserException("Unsupported file type, type=" + fileType);
         }
-        if (request.isSetNegative()) {
-            negative = request.isNegative();
+        if (params.getNegative().isPresent()) {
+            negative = params.getNegative().get();
         }
-        if (request.isSetTimeout()) {
-            timeout = request.getTimeout();
+        if (params.getTimeout().isPresent()) {
+            timeout = params.getTimeout().get();
         }
-        if (request.isSetStrictMode()) {
-            strictMode = request.isStrictMode();
+        if (params.getStrictMode().isPresent()) {
+            strictMode = params.getStrictMode().get();
         }
-        if (request.isSetTimezone()) {
-            timezone = TimeUtils.checkTimeZoneValidAndStandardize(request.getTimezone());
+        if (params.getTimezone().isPresent()) {
+            timezone = TimeUtils.checkTimeZoneValidAndStandardize(params.getTimezone().get());
         }
-        if (request.isSetLoadMemLimit()) {
-            loadMemLimit = request.getLoadMemLimit();
+        if (params.getLoadMemLimit().isPresent()) {
+            loadMemLimit = params.getLoadMemLimit().get();
         }
-        if (request.getFormatType() == TFileFormatType.FORMAT_JSON) {
-            if (request.getJsonpaths() != null) {
-                jsonPaths = request.getJsonpaths();
+        if (formatType == TFileFormatType.FORMAT_JSON) {
+            if (params.getJsonPaths().isPresent()) {
+                jsonPaths = params.getJsonPaths().get();
             }
-            if (request.getJson_root() != null) {
-                jsonRoot = request.getJson_root();
+            if (params.getJsonRoot().isPresent()) {
+                jsonRoot = params.getJsonRoot().get();
             }
-            stripOuterArray = request.isStrip_outer_array();
+            if (params.getStripOuterArray().isPresent()) {
+                stripOuterArray = params.getStripOuterArray().get();
+            }
         }
-        if (request.isSetTransmission_compression_type()) {
-            compressionType = CompressionUtils.findTCompressionByName(request.getTransmission_compression_type());
+        if (params.getTransmissionCompressionType().isPresent()) {
+            compressionType = CompressionUtils.findTCompressionByName(
+                    params.getTransmissionCompressionType().get());
         }
-        if (request.isSetLoad_dop()) {
-            loadParallelRequestNum = request.getLoad_dop();
-        }
-
-        if (request.isSetEnable_replicated_storage()) {
-            enableReplicatedStorage = request.isEnable_replicated_storage();
-        }
-
-        if (request.isSetMerge_condition()) {
-            mergeConditionStr = request.getMerge_condition();
+        if (params.getLoadDop().isPresent()) {
+            loadParallelRequestNum = params.getLoadDop().get();
         }
 
-        if (request.isSetLog_rejected_record_num()) {
-            logRejectedRecordNum = request.getLog_rejected_record_num();
+        if (params.getEnableReplicatedStorage().isPresent()) {
+            enableReplicatedStorage = params.getEnableReplicatedStorage().get();
         }
 
-        if (request.isSetPartial_update()) {
-            partialUpdate = request.isPartial_update();
+        if (params.getMergeCondition().isPresent()) {
+            mergeConditionStr = params.getMergeCondition().get();
         }
 
-        if (request.isSetPartial_update_mode()) {
-            partialUpdateMode = request.getPartial_update_mode();
+        if (params.getLogRejectedRecordNum().isPresent()) {
+            logRejectedRecordNum = params.getLogRejectedRecordNum().get();
         }
 
-        if (request.isSetPayload_compression_type()) {
-            payloadCompressionType = CompressionUtils.findTCompressionByName(request.getPayload_compression_type());
+        if (params.getPartialUpdate().isPresent()) {
+            partialUpdate = params.getPartialUpdate().get();
+        }
+
+        if (params.getPartialUpdateMode().isPresent()) {
+            partialUpdateMode = params.getPartialUpdateMode().get();
+        }
+
+        if (params.getPayloadCompressionType().isPresent()) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(
+                    params.getPayloadCompressionType().get());
             if (payloadCompressionType == null) {
-                throw new UserException("unsupported compression type: " + request.getPayload_compression_type());
+                throw new UserException("Unsupported compression type: " + params.getPayloadCompressionType().get());
             }
         }
     }
