@@ -86,7 +86,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PhysicalPartitionImpl;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -3007,7 +3006,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         materializedView.getWarehouseId());
                 materializedView.addPartition(partition);
             } else {
-                Expr partitionExpr = stmt.getPartitionExpDesc().getExpr();
+                Expr partitionExpr = stmt.getPartitionByExpr();
                 Map<Expr, SlotRef> partitionExprMaps = MVPartitionExprResolver.getMVPartitionExprsChecked(partitionExpr,
                         stmt.getQueryStatement(), stmt.getBaseTableInfos());
                 LOG.info("Generate mv {} partition exprs: {}", mvName, partitionExprMaps);
@@ -3051,30 +3050,35 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
-        ExpressionPartitionDesc expressionPartitionDesc = stmt.getPartitionExpDesc();
-        if (expressionPartitionDesc != null) {
-            Expr expr = expressionPartitionDesc.getExpr();
-            if (expr instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) expr;
-                if (slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
-                    return new ListPartitionInfo(PartitionType.LIST,
-                            Collections.singletonList(stmt.getPartitionColumn()));
+        Expr partitionByExpr = stmt.getPartitionByExpr();
+        PartitionType partitionType = stmt.getPartitionType();
+        if (partitionByExpr != null) {
+            if (partitionType == PartitionType.LIST) {
+                if (!(partitionByExpr instanceof SlotRef)) {
+                    throw new DdlException("List partition only support partition by slot ref column:"
+                            + partitionByExpr.toSql());
                 }
-            }
-            if ((expr instanceof FunctionCallExpr)) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    Column partitionColumn = new Column(stmt.getPartitionColumn());
-                    partitionColumn.setType(com.starrocks.catalog.Type.DATE);
-                    return expressionPartitionDesc.toPartitionInfo(
-                            Collections.singletonList(partitionColumn),
-                            Maps.newHashMap(), false);
+                return new ListPartitionInfo(PartitionType.LIST, Collections.singletonList(stmt.getPartitionColumn()));
+            } else {
+                ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(partitionByExpr);
+                if ((partitionByExpr instanceof FunctionCallExpr)) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionByExpr;
+                    if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                        Column partitionColumn = new Column(stmt.getPartitionColumn());
+                        partitionColumn.setType(com.starrocks.catalog.Type.DATE);
+                        return expressionPartitionDesc.toPartitionInfo(
+                                Collections.singletonList(partitionColumn),
+                                Maps.newHashMap(), false);
+                    }
                 }
+                return expressionPartitionDesc.toPartitionInfo(
+                        Collections.singletonList(stmt.getPartitionColumn()),
+                        Maps.newHashMap(), false);
             }
-            return expressionPartitionDesc.toPartitionInfo(
-                    Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
         } else {
+            if (partitionType != PartitionType.UNPARTITIONED && partitionType != null) {
+                throw new DdlException("Partition type is " + stmt.getPartitionType() + ", but partition by expr is null");
+            }
             return new SinglePartitionInfo();
         }
     }

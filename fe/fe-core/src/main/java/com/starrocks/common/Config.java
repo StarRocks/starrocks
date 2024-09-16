@@ -1096,6 +1096,12 @@ public class Config extends ConfigBase {
     public static int max_broker_load_job_concurrency = 5;
 
     /**
+     * Push down target table schema to files() in `insert from files()`
+     */
+    @ConfField(mutable = true)
+    public static boolean files_enable_insert_push_down_schema = true;
+
+    /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
      */
     @ConfField(mutable = true)
@@ -2091,6 +2097,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_small_table_interval = 6 * 60 * 60; // unit: second, default 6h
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_large_table_interval = 24 * 60 * 60; // unit: second, default 24h
+
+    @ConfField(mutable = true)
+    public static int connector_table_query_trigger_analyze_max_running_task_num = 2;
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_max_pending_task_num = 100;
+
+    @ConfField(mutable = true)
+    public static long connector_table_query_trigger_analyze_schedule_interval = 30; // unit: second, default 30s
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
@@ -2660,6 +2684,16 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
+
+    @ConfField(mutable = true, comment =
+            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
+    public static boolean lake_enable_balance_tablets_between_workers = false;
+
+    @ConfField(mutable = true, comment =
+            "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
+                    "calculated as f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets), " +
+                    "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
+    public static double lake_balance_tablets_threshold = 0.15;
 
     /**
      * Default lake compaction txn timeout

@@ -22,6 +22,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
@@ -49,7 +50,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeClause refreshSchemeDesc;
-    private ExpressionPartitionDesc expressionPartitionDesc;
+
+    // partition by clause which may be list or range partition expr.
+    private final Expr partitionByExpr;
+    // partition type of the mv which is deduced by its referred base table.
+    private PartitionType partitionType;
+
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
@@ -88,7 +94,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            List<IndexDef> indexDefs,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
-                                           ExpressionPartitionDesc expressionPartitionDesc,
+                                           Expr partitionByExpr,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
@@ -101,7 +107,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.expressionPartitionDesc = expressionPartitionDesc;
+        this.partitionByExpr = partitionByExpr;
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
@@ -149,12 +155,23 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
-    public ExpressionPartitionDesc getPartitionExpDesc() {
-        return expressionPartitionDesc;
+    /**
+     * Get partition by expr of the mv
+     */
+    public Expr getPartitionByExpr() {
+        return partitionByExpr;
     }
 
-    public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
-        this.expressionPartitionDesc = expressionPartitionDesc;
+    /**
+     * Get partition type of the mv
+     * @return
+     */
+    public PartitionType getPartitionType() {
+        return partitionType;
+    }
+
+    public void setPartitionType(PartitionType partitionType) {
+        this.partitionType = partitionType;
     }
 
     public void setKeysType(KeysType keysType) {
