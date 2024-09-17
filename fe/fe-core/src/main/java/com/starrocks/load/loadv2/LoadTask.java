@@ -75,6 +75,7 @@ public abstract class LoadTask extends PriorityLeaderTask {
             isFinished = true;
         } catch (UserException e) {
             failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
+            failMsg.setCancelType(FailMsg.CancelType.USER_CANCEL);
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
                     .add("error_msg", "Failed to execute load task").build(), e);
         } catch (Exception e) {
