@@ -96,7 +96,7 @@ PARTITION (p1, p2, p3)
 
 `TEMPORARY PARTITION`
 
-The name of the [temporary partition](../../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
+The name of the [temporary partition](../../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 ### `job_properties`
 

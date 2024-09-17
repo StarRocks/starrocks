@@ -121,7 +121,7 @@ INTO TABLE <table_name>
 
 - `TEMPORARY PARTITION`
 
-  Specifies the name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
+  Specifies the name of the [temporary partition](../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 - `COLUMNS TERMINATED BY`
 

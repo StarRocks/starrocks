@@ -3,6 +3,7 @@ displayed_sidebar: docs
 keywords: ['fenqu','fentong', 'lengre']
 toc_max_heading_level: 4
 description: 分区与分桶
+sidebar_position: 30
 ---
 
 # 数据分布
@@ -24,7 +25,7 @@ import TabItem from '@theme/TabItem';
 
 现代分布式数据库中，常见的数据分布方式有如下几种：Round-Robin、Range、List 和 Hash。如下图所示：
 
-![数据分布方式](../_assets/3.3.2-1.png)
+![数据分布方式](../../_assets/3.3.2-1.png)
 
 - Round-Robin：以轮询的方式把数据逐个放置在相邻节点上。
 
@@ -191,9 +192,9 @@ StarRocks 支持单独和组合使用数据分布方式。
 
 > **注意**
 >
-> 3.1 版本起，StarRocks [存算分离模式](../deployment/shared_data/shared_data.mdx)支持时间函数的分区表达式。
+> 3.1 版本起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持时间函数的分区表达式。
 
-[表达式分区](./expression_partitioning.md)，原称自动创建分区，更加灵活易用，适用于大多数场景，比如按照连续日期范围或者枚举值来查询和管理数据。
+[表达式分区](expression_partitioning.md)，原称自动创建分区，更加灵活易用，适用于大多数场景，比如按照连续日期范围或者枚举值来查询和管理数据。
 
 您仅需要在建表时使用分区表达式（时间函数表达式或列表达式），即可实现导入数据时自动创建分区，不需要预先创建出分区或者配置动态分区属性。
 
@@ -321,7 +322,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
 ##### 动态分区
 
-建表时[配置动态分区属性](./dynamic_partitioning.md)，StarRocks 会⾃动提前创建新的分区，删除过期分区，从而确保数据的时效性，实现对分区的⽣命周期管理（Time to Life，简称 “TTL”）。
+建表时[配置动态分区属性](dynamic_partitioning.md)，StarRocks 会⾃动提前创建新的分区，删除过期分区，从而确保数据的时效性，实现对分区的⽣命周期管理（Time to Life，简称 “TTL”）。
 
 区别于表达式分区中自动创建分区功能，动态创建分区只是根据您配置的动态分区属性，定期提前创建一些分区。如果导入的新数据不属于这些提前创建的分区，则导入任务会报错。而表达式分区中自动创建分区功能会根据导入数据创建对应的新分区。
 
@@ -523,7 +524,7 @@ Range 分区适用于简单且具有连续性的数据，如时间序列数据�
 
 #### List 分区（自 v3.1）
 
-[List 分区](./list_partitioning.md)适用于按照枚举值来查询和管理数据。尤其适用于一个分区中需要包含各分区列的多个值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。
+[List 分区](list_partitioning.md)适用于按照枚举值来查询和管理数据。尤其适用于一个分区中需要包含各分区列的多个值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。
 
 StarRocks 会按照您显式定义的枚举值列表与分区的映射关系将数据分配到相应的分区中。
 
@@ -546,7 +547,7 @@ DISTRIBUTED BY HASH(site_id);
 
 执行如下语句，删除 `site_access` 表中分区 p1 及数据：
 
-> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../sql-reference/sql-statements/backup_restore/RECOVER.md)恢复分区及数据。
+> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 [RECOVER 命令](../../sql-reference/sql-statements/backup_restore/RECOVER.md)恢复分区及数据。
 
 ```SQL
 ALTER TABLE site_access
@@ -580,8 +581,8 @@ SHOW PARTITIONS FROM site_access;
 **使用限制**
 
 - 仅支持明细表。
-- 不支持指定 [Colocation Group](../using_starrocks/Colocate_join.md)。
-- 不支持 [Spark Load](../loading/SparkLoad.md)。
+- 不支持指定 [Colocation Group](../../using_starrocks/Colocate_join.md)。
+- 不支持 [Spark Load](../../loading/SparkLoad.md)。
 
 如下建表示例中，没有使用 `DISTRIBUTED BY xxx` 语句，即表示默认由 StarRocks 使用随机分桶，并且由 StarRocks 自动设置分桶数量。
 
@@ -723,7 +724,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   :::warning
 
   - 如果需要启用按需动态增加分桶数量，您需要设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
-  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 成功后才能回滚。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 成功后才能回滚。
 
   :::
 
@@ -834,7 +835,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   :::warning
 
   - 如果需要启用按需动态增加分桶数量，您需要设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
-  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 成功后才能回滚。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 成功后才能回滚。
 
   :::
 
@@ -906,13 +907,13 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 #### 查看分桶数量
 
-如果查看分区中分桶数量，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md)。
+如果查看分区中分桶数量，您可以执行 [SHOW PARTITIONS](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md)。
 
 :::info
 
 - 如果是随机分桶表并且开启按需动态增加分桶数量，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示的是分区**当前**的分桶数量。
 
-- 如果是随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此  [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+- 如果是随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此  [SHOW PARTITIONS](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
 
 :::
 
@@ -920,7 +921,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 > **注意**
 >
-> StarRocks [存算分离模式](../deployment/shared_data/shared_data.mdx)暂不支持该特性。
+> StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)暂不支持该特性。
 
 随着业务场景中查询模式和数据量变化，建表时设置的分桶方式和分桶数量，以及排序键可能不再能适应新的业务场景，导致查询性能下降，此时可以通过 `ALTER TABLE` 调整分桶方式和分桶数量，以及排序键，优化数据分布。比如：
 
@@ -944,7 +945,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ALTER TABLE t ORDER BY k2, k1;
     ```
 
-更多信息，参见 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 。
+更多信息，参见 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 。
 
 ## 最佳实践
 
