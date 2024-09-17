@@ -46,6 +46,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 
 public class StreamLoadInfo {
 
@@ -282,14 +283,8 @@ public class StreamLoadInfo {
     public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
             throws UserException {
         StreamLoadThriftParams streamLoadParams = new StreamLoadThriftParams(request);
-        if (streamLoadParams.getFileFormatType().isEmpty()) {
-            throw new UserException("There is no file format type");
-        }
-        if (streamLoadParams.getFileType().isEmpty()) {
-            throw new UserException("There is no file type");
-        }
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
-                streamLoadParams.getFileType().get(), streamLoadParams.getFileFormatType().get());
+                streamLoadParams.getFileType().orElse(null), streamLoadParams.getFileFormatType().orElse(null));
         streamLoadInfo.setOptionalFromStreamLoad(streamLoadParams);
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         if (request.isSetBackend_id()) {
@@ -307,102 +302,71 @@ public class StreamLoadInfo {
     }
 
     private void setOptionalFromStreamLoad(StreamLoadParams params) throws UserException {
-        if (params.getColumns().isPresent()) {
-            setColumnToColumnExpr(params.getColumns().get());
+        Optional<String> columns = params.getColumns();
+        if (columns.isPresent()) {
+            setColumnToColumnExpr(columns.get());
         }
-        if (params.getWhere().isPresent()) {
-            setWhereExpr(params.getWhere().get());
+        Optional<String> where = params.getWhere();
+        if (where.isPresent()) {
+            setWhereExpr(where.get());
         }
-        if (params.getColumnSeparator().isPresent()) {
-            columnSeparator = new ColumnSeparator(params.getColumnSeparator().get());
-        }
-        if (params.getRowDelimiter().isPresent()) {
-            rowDelimiter = new RowDelimiter(params.getRowDelimiter().get());
-        }
-        if (params.getSkipHeader().isPresent()) {
-            skipHeader = params.getSkipHeader().get();
-        }
-        if (params.getEnclose().isPresent()) {
-            enclose = params.getEnclose().get();
-        }
-        if (params.getEscape().isPresent()) {
-            escape = params.getEscape().get();
-        }
-        if (params.getTrimSpace().isPresent()) {
-            trimSpace = params.getTrimSpace().get();
-        }
-        if (params.getPartitions().isPresent()) {
-            String[] partNames = PART_NAME_SPLIT.split(params.getPartitions().get().trim());
-            if (params.getIsTempPartition().isPresent()) {
-                partitions = new PartitionNames(params.getIsTempPartition().get(), Lists.newArrayList(partNames));
+        params.getColumnSeparator().ifPresent(value -> columnSeparator = new ColumnSeparator(value));
+        params.getRowDelimiter().ifPresent(value -> rowDelimiter = new RowDelimiter(value));
+        params.getSkipHeader().ifPresent(value -> skipHeader = value);
+        params.getEnclose().ifPresent(value -> enclose = value);
+        params.getEscape().ifPresent(value -> escape = value);
+        params.getTrimSpace().ifPresent(value -> trimSpace = value);
+
+        Optional<String> parts = params.getPartitions();
+        if (parts.isPresent()) {
+            String[] partNames = PART_NAME_SPLIT.split(parts.get().trim());
+            Optional<Boolean> isTempPartition = params.getIsTempPartition();
+            if (isTempPartition.isPresent()) {
+                partitions = new PartitionNames(isTempPartition.get(), Lists.newArrayList(partNames));
             } else {
                 partitions = new PartitionNames(false, Lists.newArrayList(partNames));
             }
         }
-        if (fileType == TFileType.FILE_STREAM) {
-            path = params.getFilePath().orElse(null);
-        } else {
-            throw new UserException("Unsupported file type, type=" + fileType);
+
+        if (fileType != null) {
+            if (fileType == TFileType.FILE_STREAM) {
+                path = params.getFilePath().orElse(null);
+            } else {
+                throw new UserException("Unsupported file type, type=" + fileType);
+            }
         }
-        if (params.getNegative().isPresent()) {
-            negative = params.getNegative().get();
+
+        params.getNegative().ifPresent(value -> negative = value);
+        params.getTimeout().ifPresent(value -> timeout = value);
+        params.getStrictMode().ifPresent(value -> strictMode = value);
+        Optional<String> timezoneOptional = params.getTimezone();
+
+        if (timezoneOptional.isPresent()) {
+            timezone = TimeUtils.checkTimeZoneValidAndStandardize(timezoneOptional.get());
         }
-        if (params.getTimeout().isPresent()) {
-            timeout = params.getTimeout().get();
-        }
-        if (params.getStrictMode().isPresent()) {
-            strictMode = params.getStrictMode().get();
-        }
-        if (params.getTimezone().isPresent()) {
-            timezone = TimeUtils.checkTimeZoneValidAndStandardize(params.getTimezone().get());
-        }
-        if (params.getLoadMemLimit().isPresent()) {
-            loadMemLimit = params.getLoadMemLimit().get();
-        }
+
+        params.getLoadMemLimit().ifPresent(value -> loadMemLimit = value);
+
         if (formatType == TFileFormatType.FORMAT_JSON) {
-            if (params.getJsonPaths().isPresent()) {
-                jsonPaths = params.getJsonPaths().get();
-            }
-            if (params.getJsonRoot().isPresent()) {
-                jsonRoot = params.getJsonRoot().get();
-            }
-            if (params.getStripOuterArray().isPresent()) {
-                stripOuterArray = params.getStripOuterArray().get();
-            }
-        }
-        if (params.getTransmissionCompressionType().isPresent()) {
-            compressionType = CompressionUtils.findTCompressionByName(
-                    params.getTransmissionCompressionType().get());
-        }
-        if (params.getLoadDop().isPresent()) {
-            loadParallelRequestNum = params.getLoadDop().get();
+            params.getJsonPaths().ifPresent(value -> jsonPaths = value);
+            params.getJsonRoot().ifPresent(value -> jsonRoot = value);
+            params.getStripOuterArray().ifPresent(value -> stripOuterArray = value);
         }
 
-        if (params.getEnableReplicatedStorage().isPresent()) {
-            enableReplicatedStorage = params.getEnableReplicatedStorage().get();
-        }
+        params.getTransmissionCompressionType().ifPresent(
+                value -> compressionType = CompressionUtils.findTCompressionByName(value));
+        params.getLoadDop().ifPresent(value -> loadParallelRequestNum = value);
+        params.getEnableReplicatedStorage().ifPresent(value -> enableReplicatedStorage = value);
+        params.getMergeCondition().ifPresent(value -> mergeConditionStr = value);
+        params.getLogRejectedRecordNum().ifPresent(value -> logRejectedRecordNum = value);
+        params.getPartialUpdate().ifPresent(value -> partialUpdate = value);
+        params.getPartialUpdateMode().ifPresent(value -> partialUpdateMode = value);
 
-        if (params.getMergeCondition().isPresent()) {
-            mergeConditionStr = params.getMergeCondition().get();
-        }
-
-        if (params.getLogRejectedRecordNum().isPresent()) {
-            logRejectedRecordNum = params.getLogRejectedRecordNum().get();
-        }
-
-        if (params.getPartialUpdate().isPresent()) {
-            partialUpdate = params.getPartialUpdate().get();
-        }
-
-        if (params.getPartialUpdateMode().isPresent()) {
-            partialUpdateMode = params.getPartialUpdateMode().get();
-        }
-
-        if (params.getPayloadCompressionType().isPresent()) {
-            payloadCompressionType = CompressionUtils.findTCompressionByName(
-                    params.getPayloadCompressionType().get());
+        Optional<String> compressionType = params.getPayloadCompressionType();
+        if (compressionType.isPresent()) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(compressionType.get());
             if (payloadCompressionType == null) {
-                throw new UserException("Unsupported compression type: " + params.getPayloadCompressionType().get());
+                throw new UserException("Unsupported compression type: " + compressionType.get());
             }
         }
     }

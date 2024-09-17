@@ -28,7 +28,7 @@ public class StreamLoadHttpHeaderTest {
         List<String> headerKeyList = StreamLoadHttpHeader.HTTP_HEADER_LIST;
 
         for (Field field : fields) {
-            if (field.getName().equals("HTTP_HEADER_KEY_LIST")) {
+            if (field.getName().equals("HTTP_HEADER_LIST")) {
                 continue;
             }
             if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
