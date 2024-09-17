@@ -32,6 +32,18 @@ public abstract class StreamLoadParamsTestBase {
                 buildFileFormatType(TFileFormatType.FORMAT_CSV_PLAIN).getFileFormatType().orElse(null));
         assertEquals(TFileFormatType.FORMAT_JSON,
                 buildFileFormatType(TFileFormatType.FORMAT_JSON).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_CSV_GZ,
+                buildFileFormatType(TFileFormatType.FORMAT_CSV_GZ).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_CSV_BZ2,
+                buildFileFormatType(TFileFormatType.FORMAT_CSV_BZ2).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME,
+                buildFileFormatType(TFileFormatType.FORMAT_CSV_LZ4_FRAME).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE,
+                buildFileFormatType(TFileFormatType.FORMAT_CSV_DEFLATE).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE,
+                buildFileFormatType(TFileFormatType.FORMAT_CSV_DEFLATE).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
+                buildFileFormatType(TFileFormatType.FORMAT_CSV_ZSTD).getFileFormatType().orElse(null));
     }
 
     protected abstract StreamLoadParams buildFileFormatType(TFileFormatType expected);
@@ -201,6 +213,8 @@ public abstract class StreamLoadParamsTestBase {
                 buildPartialUpdateMode(TPartialUpdateMode.ROW_MODE).getPartialUpdateMode().orElse(null));
         assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE,
                 buildPartialUpdateMode(TPartialUpdateMode.COLUMN_UPSERT_MODE).getPartialUpdateMode().orElse(null));
+        assertEquals(TPartialUpdateMode.AUTO_MODE,
+                buildPartialUpdateMode(TPartialUpdateMode.AUTO_MODE).getPartialUpdateMode().orElse(null));
     }
 
     protected abstract StreamLoadParams buildPartialUpdateMode(TPartialUpdateMode expected);

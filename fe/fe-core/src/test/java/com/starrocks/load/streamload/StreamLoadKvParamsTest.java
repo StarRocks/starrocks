@@ -54,6 +54,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRIM_SPACE
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -297,5 +298,32 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
             return new StreamLoadKvParams(Collections.emptyMap());
         }
         return new StreamLoadKvParams(Collections.singletonMap(key, value));
+    }
+
+    @Test
+    public void testHashCodeAndEquals() {
+        Map<String, String> map1 = new HashMap<>();
+        map1.put(HTTP_FORMAT, "csv");
+        map1.put(HTTP_COLUMN_SEPARATOR, "|");
+        map1.put(HTTP_COLUMNS, "c0");
+        StreamLoadKvParams params1 = new StreamLoadKvParams(map1);
+
+        Map<String, String> map2 = new HashMap<>();
+        map2.put(HTTP_COLUMNS, "c0");
+        map2.put(HTTP_COLUMN_SEPARATOR, "|");
+        map2.put(HTTP_FORMAT, "csv");
+        StreamLoadKvParams params2 = new StreamLoadKvParams(map2);
+
+        Map<String, String> map3 = new HashMap<>();
+        map3.put(HTTP_FORMAT, "csv");
+        map3.put(HTTP_COLUMN_SEPARATOR, ",");
+        map3.put(HTTP_COLUMNS, "c0");
+        StreamLoadKvParams params3 = new StreamLoadKvParams(map3);
+
+        assertEquals(params1.hashCode(), params2.hashCode());
+        assertEquals(params1, params2);
+
+        assertNotEquals(params1.hashCode(), params3.hashCode());
+        assertNotEquals(params1, params3);
     }
 }
