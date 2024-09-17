@@ -694,7 +694,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
             extraMessage.setNextPartitionStart(mvContext.getNextPartitionStart());
             extraMessage.setNextPartitionEnd(mvContext.getNextPartitionEnd());
-            extraMessage.setNextPartitionEnd(mvContext.getNextPartitionValues());
+            extraMessage.setNextPartitionValues(mvContext.getNextPartitionValues());
         });
 
         // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks

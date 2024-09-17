@@ -169,7 +169,7 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setNextPartitionEnd(String nextPartitionEnd) {
-        this.nextPartitionEnd = MvUtils.shrinkToSize(nextPartitionEnd, 1024);
+        this.nextPartitionEnd = nextPartitionEnd;
     }
 
     public String getNextPartitionValues() {
