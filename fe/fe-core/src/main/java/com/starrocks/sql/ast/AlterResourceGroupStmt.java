@@ -77,7 +77,7 @@ public class AlterResourceGroupStmt extends DdlStmt {
             if (changedProperties.getResourceGroupType() != null) {
                 throw new SemanticException("type of ResourceGroup is immutable");
             }
-            if (changedProperties.getCpuWeight() == null &&
+            if (changedProperties.getRawCpuWeight() == null &&
                     changedProperties.getExclusiveCpuCores() == null &&
                     changedProperties.getMemLimit() == null &&
                     changedProperties.getConcurrencyLimit() == null &&
