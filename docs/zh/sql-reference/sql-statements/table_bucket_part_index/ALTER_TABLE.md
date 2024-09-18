@@ -209,7 +209,7 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
 
-详细使用信息，请查阅[临时分区](../../../table_design/Temporary_partition.md)。
+详细使用信息，请查阅[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。
 
 语法：
 
