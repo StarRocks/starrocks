@@ -292,21 +292,12 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
     使用指定的 key 列和指定的数值范围进行分区。
 
-<<<<<<< HEAD
     * 分区名称仅支持字母开头，由字母、数字和下划线组成。
     * 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
     * 分区为左闭右开区间，首个分区的左边界为最小值。
     * NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     * 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
     * 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
-=======
-    - 分区名称的命名要求，参见[系统限制](../../System_limit.md)。
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
-    - 分区为左闭右开区间，首个分区的左边界为最小值。
-    - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
-    - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
-    - 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
     注意：
 
@@ -425,17 +416,10 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     说明：
     用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
 
-<<<<<<< HEAD
     * 当前分区列仅支持日期类型和整数类型。
     * 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
     * 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     * 仅支持指定一列作为分区列。
-=======
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
-    - 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
-    - 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
-    - 仅支持指定一列作为分区列。
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
     更多信息，请参见[批量创建分区](../../../table_design/data_distribution/Data_distribution.md#range-分区)。
 
@@ -473,17 +457,10 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
   **注意事项**
 
-<<<<<<< HEAD
   * 不支持主键模型表、更新模型表和聚合表。
   * 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
   * 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
-=======
-  - 不支持主键表、更新表和聚合表。
-  - 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
-  - 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/data_distribution/Data_distribution.md#确定分桶数量)。
 
   更多随机分桶的信息，请参见[随机分桶](../../../table_design/data_distribution/Data_distribution.md#随机分桶自-v31)。
 
