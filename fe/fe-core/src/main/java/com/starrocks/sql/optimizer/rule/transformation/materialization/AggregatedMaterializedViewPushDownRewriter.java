@@ -688,7 +688,8 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             // rewrite by mv.
             OptExpression rewritten = doRewritePushDownAgg(ctx, optAggOp, queryTables);
             if (rewritten == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite table scan node by mv failed");
+                logMVRewrite(mvRewriteContext,
+                        "Rewrite table " + scanOp.getTable().getTableIdentifier() + " scan node by mv failed");
                 return AggRewriteInfo.NOT_REWRITE;
             }
             // Generate the push down aggregate function for the given call operator.
