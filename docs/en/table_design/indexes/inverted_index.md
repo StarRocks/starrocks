@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+sidebar_position: 50
 ---
 
 # [Preview] Full-text inverted index

@@ -12,9 +12,9 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 2.4 版本中，StarRocks 进一步支持通过 INSERT OVERWRITE 语句批量**覆盖写入**目标表。INSERT OVERWRITE 语句通过整合以下三部分操作来实现覆盖写入：
 
-1. 为目标分区[创建临时分区](../table_design/Temporary_partition.md#创建临时分区)
-2. [写入数据至临时分区](../table_design/Temporary_partition.md#导入数据至临时分区)
-3. [使用临时分区原子替换目标分区](../table_design/Temporary_partition.md#使用临时分区进行替换)
+1. 为目标分区[创建临时分区](../table_design/data_distribution/Temporary_partition.md#创建临时分区)
+2. [写入数据至临时分区](../table_design/data_distribution/Temporary_partition.md#导入数据至临时分区)
+3. [使用临时分区原子替换目标分区](../table_design/data_distribution/Temporary_partition.md#使用临时分区进行替换)
 
 如果您希望在替换前验证数据，可以根据以上步骤自行实现覆盖写入数据。
 
@@ -109,7 +109,7 @@ DISTRIBUTED BY HASH(user);
 
 > **注意**
 >
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 通过 INSERT INTO VALUES 语句导入数据
 

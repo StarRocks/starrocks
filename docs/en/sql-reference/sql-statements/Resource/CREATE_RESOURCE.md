@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Description
 
-Creates resources. The following types of resources can be created: Apache Spark™, Apache Hive™, Apache Iceberg, Apache Hudi, and JDBC. Spark resources are used in [Spark Load](../../../loading/SparkLoad.md) to manage loading information, such as YARN configurations, storage path of intermediate data, and Broker configurations. Hive, Iceberg, Hudi, and JDBC resources are used for managing data source access information involved in querying [External tables](../../../data_source/External_table.md).
+Creates resources. The following types of resources can be created: Apache Spark™, Apache Hive™, Apache Iceberg, Apache Hudi, and JDBC. Spark resources are used in Spark Load to manage loading information, such as YARN configurations, storage path of intermediate data, and Broker configurations. Hive, Iceberg, Hudi, and JDBC resources are used for managing data source access information involved in querying [External tables](../../../data_source/External_table.md).
 
 :::tip
 

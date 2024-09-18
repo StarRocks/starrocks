@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Resource group
@@ -60,7 +61,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   > **NOTE**
   >
-  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
+  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter.
 
 - `concurrency_limit`
 
@@ -68,7 +69,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 - `max_cpu_cores`
 
-  The CPU core threshold for triggering query queue in FE. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues). It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
+  The CPU core threshold for triggering query queue in FE. This only takes effect when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
 
 - `spill_mem_limit_threshold`
 
@@ -360,9 +361,9 @@ The following FE metrics only provide statistics within the current FE node:
 | starrocks_fe_query_resource_group               | Count | Instantaneous | The number of queries historically run in this resource group (including those currently running). |
 | starrocks_fe_query_resource_group_latency       | ms    | Instantaneous | The query latency percentile for this resource group. The label `type` indicates specific percentiles, including `mean`, `75_quantile`, `95_quantile`, `98_quantile`, `99_quantile`, `999_quantile`. |
 | starrocks_fe_query_resource_group_err           | Count | Instantaneous | The number of queries in this resource group that encountered an error. |
-| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
+| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
 
 ### BE metrics
 
@@ -412,11 +413,3 @@ MySQL [(none)]> SHOW USAGE RESOURCE GROUPS;
 | wg2        | 0  | 127.0.0.1 | 0.400           | 4               | 8                |
 +------------+----+-----------+-----------------+-----------------+------------------+
 ```
-
-## What to do next
-
-After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
-
-- [Memory management](./Memory_management.md)
-
-- [Query management](./Query_management.md)

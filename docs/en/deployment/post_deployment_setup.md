@@ -90,4 +90,4 @@ ALTER USER '<username>' SET PROPERTIES ("max_user_connections" = "1000");
 
 ## What to do next
 
-After deploying and setting up your StarRocks cluster, you can then proceed to design tables that best work for your scenarios. See [Understand StarRocks table design](../table_design/Table_design.md) for detailed instructions on designing a table.
+After deploying and setting up your StarRocks cluster, you can then proceed to design tables that best work for your scenarios. See [Understand StarRocks table design](../table_design/table_design.md) for detailed instructions on designing a table.

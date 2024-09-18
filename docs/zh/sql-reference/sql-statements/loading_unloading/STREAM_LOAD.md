@@ -97,7 +97,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | file_path    | 是           | 指定源数据文件的保存路径。文件名里可选包含或者不包含扩展名。 |
 | format       | 否           | 指定待导入数据的格式。取值包括 `CSV` 和 `JSON`。默认值：`CSV`。 |
 | partitions   | 否           | 指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。 |
-| temporary_partitions | 否           | 指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。|
+| temporary_partitions | 否           | 指定要把数据导入哪些[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。|
 | columns      | 否           | 指定源数据文件和 StarRocks 表之间的列对应关系。如果源数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定 `columns` 参数。您可以通过 `columns` 参数实现数据转换。例如，要导入一个 CSV 格式的数据文件，文件中有两列，分别可以对应到目标 StarRocks 表的 `id` 和 `city` 两列。如果要实现把数据文件中第一列的数据乘以 100 以后再落入 StarRocks 表的转换，可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。具体请参见本文“[列映射](#列映射)”章节。 |
 
 #### CSV 适用参数

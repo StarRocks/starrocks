@@ -4,12 +4,11 @@ toc_max_heading_level: 5
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import QSTip from '../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 
 # Iceberg catalog
 
-:::tip
-Try it in this [hands-on tutorial](../../quick_start/iceberg.md)
-:::
+<QSTip />
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 

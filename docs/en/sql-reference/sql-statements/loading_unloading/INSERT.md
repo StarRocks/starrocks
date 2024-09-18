@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Description
 
-Inserts data into a specific table or overwrites a specific table with data. For detailed information about the application scenarios, see [Load data with INSERT](../../../loading/InsertInto.md). From v3.2.0 onwards, INSERT supports writing data into files in remote storage. You can [use INSERT INTO FILES() to unload data from StarRocks to remote storage](../../../unloading/unload_using_insert_into_files.md).
+Inserts data into a specific table or overwrites a specific table with data. From v3.2.0 onwards, INSERT supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
 
 You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.md).
 
@@ -39,13 +39,13 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.m
 | OVERWRITE     | To overwrite the table with data.                            |
 | table_name    | The name of the table into which you want to load data. It can be specified with the database the table resides as `db_name.table_name`. |
 | PARTITION    |  The partitions into which you want to load the data. You can specify multiple partitions, which must be separated by commas (,). It must be set to partitions that exist in the destination table. If you specify this parameter, the data will be inserted only into the specified partitions. If you do not specify this parameter, the data will be inserted into all partitions. |
-| TEMPORARY PARTITION |The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).|
+| TEMPORARY PARTITION |The name of the [temporary partition](../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).|
 | label         | The unique identification label for each data load transaction within the database. If it is not specified, the system automatically generates one for the transaction. We recommend you specify the label for the transaction. Otherwise, you cannot check the transaction status if a connection error occurs and no result is returned. You can check the transaction status via `SHOW LOAD WHERE label="label"` statement. For the naming conventions of labels, see [System Limits](../../System_limit.md). |
 | column_name   | The name of the destination column(s) to load data in. It must be set as columns that exist in the destination table. The destination columns you specify are mapped one on one in sequence to the columns of the source table, regardless of what the destination column names are. If no destination column is specified, the default value is all columns in the destination table. If the specified column in the source table does not exist in the destination column, the default value will be written to this column, and the transaction will fail if the specified column does not have a default value. If the column type of the source table is inconsistent with that of the destination table, the system will perform an implicit conversion on the mismatched column. If the conversion fails, a syntax parsing error will be returned.<br />**NOTE**<br />From v3.3.1, specifying a column list in the INSERT INTO statement on a Primary Key table will perform Partial Updates (instead of Full Upsert in earlier versions). If the column list is not specified, the system will perform Full Upsert. |
 | expression    | Expression that assigns values to the column.                |
 | DEFAULT       | Assigns default value to the column.                         |
 | query         | Query statement whose result will be loaded into the destination table. It can be any SQL statement supported by StarRocks. |
-| FILES()       | Table function [FILES()](../../sql-functions/table-functions/files.md). You can use this function to unload data into remote storage. For more information, see [Use INSERT INTO FILES() to unload data to remote storage](../../../unloading/unload_using_insert_into_files.md). |
+| FILES()       | Table function [FILES()](../../sql-functions/table-functions/files.md). You can use this function to unload data into remote storage. |
 
 ## Return
 

@@ -5,10 +5,9 @@ displayed_sidebar: docs
 # Load data using Routine Load
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import QSTip from '../_assets/commonMarkdown/quickstart-routine-load-tip.mdx'
 
-:::tip
-Try Routine Load out in this [Quick Start](../quick_start/routine-load.md)
-:::
+<QSTip />
 
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
@@ -115,7 +114,7 @@ DISTRIBUTED BY HASH(`order_id`);
 
 > **NOTICE**
 >
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -196,7 +195,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
   In the example, the number of BE nodes that are alive is `5`, the number of the pre-specified Kafka topic partitions is `5`, and the value of `max_routine_load_task_concurrent_num` is `5`. To increase the actual load task concurrency, you can increase the `desired_concurrent_number` from the default value `3` to `5`.
 
-  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md). For detailed instructions on accelerating the loading, see [Routine Load FAQ](../faq/loading/Routine_load_faq.md).
+  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md).
 
 ### Load JSON-format data
 
@@ -234,7 +233,7 @@ DISTRIBUTED BY HASH(`commodity_id`);
 
 > **NOTICE**
 >
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -339,7 +338,7 @@ DISTRIBUTED BY HASH(`id`);
 
 > **NOTICE**
 >
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -551,7 +550,3 @@ The following example stops the load job `example_tbl2_ordertest2`:
 ```SQL
 STOP ROUTINE LOAD FOR example_tbl2_ordertest2;
 ```
-
-## FAQ
-
-Please see [Routine Load FAQ](../faq/loading/Routine_load_faq.md).

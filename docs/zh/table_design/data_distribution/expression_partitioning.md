@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['fenqu']
+sidebar_position: 10
 ---
 
 # 表达式分区（推荐）
@@ -13,7 +14,7 @@ keywords: ['fenqu']
 
 如果您经常按照连续日期范围来查询和管理数据，则只需要在时间函数分区表达式中，指定一个日期类型（DATE 或者 DATETIME ）的分区列，以及指定分区粒度（年、月、日或小时）。StarRocks 会根据导入的数据和分区表达式，自动创建分区并且设置分区的起止时间。
 
-不过在一些特殊场景下，比如历史数据按月划分分区、最近数据按天划分分区，则需要采用 [Range 分区](./Data_distribution.md#range-分区)创建分区。
+不过在一些特殊场景下，比如历史数据按月划分分区、最近数据按天划分分区，则需要采用 [Range 分区](Data_distribution.md#range-分区)创建分区。
 
 ### 语法
 
@@ -31,7 +32,7 @@ expression ::=
 
 | 参数                    | 是否必填 | 说明                                                         |
 | ----------------------- | -------- | ------------------------------------------------------------ |
-| `expression`            | 是       | 目前仅支持 [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) 和 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 函数。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
+| `expression`            | 是       | 目前仅支持 [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) 和 [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) 函数。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
 | `time_unit`             | 是       | 分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。 |
 | `partition_column`      | 是       | 分区列。  <br /> <ul><li>仅支持为日期类型（DATE 或 DATETIME），不支持为其它类型。如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。分区列的值支持为 `NULL`。</li><li> 如果分区列是 DATE 类型，则范围支持为 [0000-01-01 ~ 9999-12-31]。如果分区列是 DATETIME 类型，则范围支持为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。</li><li> 目前仅支持指定一个分区列，不支持指定多个分区列。</li></ul> |
 | `partition_live_number` | 否       | 保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。|
@@ -115,7 +116,7 @@ DISTRIBUTED BY HASH(event_day, site_id);
 
 如果您经常按照枚举值来查询和管理数据，则您只需要指定表示类型的列为分区列，StarRocks 会根据导入的数据的分区列值，来自动划分并创建分区。
 
-不过在一些特殊场景下，比如表中包含表示城市的列，您经常按照国家和城市来查询和管理数据，希望将同属于一个国家的多个城市的数据存储在一个分区中，则需要使用 [List 分区](./list_partitioning.md)。
+不过在一些特殊场景下，比如表中包含表示城市的列，您经常按照国家和城市来查询和管理数据，希望将同属于一个国家的多个城市的数据存储在一个分区中，则需要使用 [List 分区](list_partitioning.md)。
 
 ### 语法
 
@@ -134,7 +135,7 @@ partition_columns ::=
 
 | 参数                    | 是否必填 | 参数                                                         |
 | ----------------------- | -------- | ------------------------------------------------------------ |
-| `partition_columns`     | 是       | 分区列。<br /><ul><li>支持为字符串（不支持 BINARY）、日期、整数和布尔值。不支持分区列的值为 `NULL`。</li><li> 导入后自动创建的一个分区中只能包含各分区列的一个值，如果需要包含各分区列的多值，请使用 [List 分区](./list_partitioning.md)。</li></ul> |
+| `partition_columns`     | 是       | 分区列。<br /><ul><li>支持为字符串（不支持 BINARY）、日期、整数和布尔值。不支持分区列的值为 `NULL`。</li><li> 导入后自动创建的一个分区中只能包含各分区列的一个值，如果需要包含各分区列的多值，请使用 [List 分区](list_partitioning.md)。</li></ul> |
 
 ### 使用说明
 
@@ -170,7 +171,7 @@ INSERT INTO t_recharge_detail1
 
 > **说明**
 >
-> 分区中只能包含各分区列的一个值，如果需要一个分区中包含各分区列的多值，请使用 [List 分区](./list_partitioning.md)。
+> 分区中只能包含各分区列的一个值，如果需要一个分区中包含各分区列的多值，请使用 [List 分区](list_partitioning.md)。
 
 ```SQL
 MySQL > SHOW PARTITIONS from t_recharge_detail1\G
@@ -201,7 +202,7 @@ LastConsistencyCheckTime: NULL
 
 导入数据时，StarRocks 会根据数据和分区表达式定义的分区规则，自动创建分区。
 
-值得注意的是，如果您建表时使用表达式分区，并且需要使用 [INSERT OVERWRITE](../loading/InsertInto.md#通过-insert-overwrite-select-语句覆盖写入数据) 覆盖写入**指定分区**的数据，不论该分区是否已经创建，目前您都需要在 `PARTITION()` 提供明确的分区范围。而不是同 Range 分区或 List 分区一样，只需要在`PARTITION (partition_name)` 中提供分区名称。
+值得注意的是，如果您建表时使用表达式分区，并且需要使用 [INSERT OVERWRITE](../../loading/InsertInto.md#通过-insert-overwrite-select-语句覆盖写入数据) 覆盖写入**指定分区**的数据，不论该分区是否已经创建，目前您都需要在 `PARTITION()` 提供明确的分区范围。而不是同 Range 分区或 List 分区一样，只需要在`PARTITION (partition_name)` 中提供分区名称。
 
 如果建表时您使用时间函数表达式分区，则此时覆盖写入指定分区，您需要提供该分区的起始范围（分区粒度与建表时配置分区粒度一致）。如果该分区不存在，则导入数据时会自动创建该分区。
 
@@ -234,9 +235,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## 使用限制
 
-- 自 v3.1.0 起，StarRocks [存算分离模式](../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
+- 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
 - 使用 CTAS 建表时暂时不支持表达式分区。
 - 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
-- 列表达式分区暂时不支持[备份与恢复](../administration/management/Backup_and_restore.md)。
+- 列表达式分区暂时不支持[备份与恢复](../../administration/management/Backup_and_restore.md)。
 - 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。

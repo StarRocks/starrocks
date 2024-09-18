@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 90
 ---
 
 # File manager
