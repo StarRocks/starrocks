@@ -497,11 +497,3 @@ select BE_ID, NAME, FINISHED_TASKS, BOUND_CPUS from information_schema.be_thread
 | 10223 | pip_exec_com | 2091366        | 10         |
 +-------+--------------+----------------+------------+
 ```
-
-## What to do next
-
-After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
-
-- [Memory management](./Memory_management.md)
-
-- [Query management](./Query_management.md)
