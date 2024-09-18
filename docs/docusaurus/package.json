@@ -18,9 +18,10 @@
   "dependencies": {
     "@algolia/client-search": "^4.20.0",
     "@docsearch/react": "3",
-    "@docusaurus/core": "^3.5.2",
-    "@docusaurus/preset-classic": "^3.5.2",
-    "@docusaurus/theme-search-algolia": "^3.5.2",
+    "@docusaurus/core": "^3.1.1",
+    "@docusaurus/plugin-client-redirects": "^3.1.1",
+    "@docusaurus/preset-classic": "^3.1.1",
+    "@docusaurus/theme-search-algolia": "^3.1.1",
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
     "fs-extra": "^11.1.1",
@@ -29,8 +30,8 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.5.2",
-    "@docusaurus/types": "^3.5.2"
+    "@docusaurus/module-type-aliases": "^3.1.1",
+    "@docusaurus/types": "^3.1.1"
   },
   "browserslist": {
     "production": [

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: Partition data in StarRocks
+sidebar_position: 10
 ---
 
 # Expression partitioning (recommended)
@@ -13,7 +14,7 @@ You only need to specify a simple partition expression (either a time function e
 
 If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
 
-However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
+However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](Data_distribution.md#range-partitioning) to create partitions.
 
 ### Syntax
 
@@ -32,7 +33,7 @@ expression ::=
 #### `expression`
 
 **Required**: YES<br/>
-**Description**: Currently, only the [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) and [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) functions are supported. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value cannot be `ceil`. <br/>
+**Description**: Currently, only the [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) and [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) functions are supported. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value cannot be `ceil`. <br/>
 
 #### `time_unit`
 
@@ -129,7 +130,7 @@ DISTRIBUTED BY HASH(event_day, site_id)
 
 If you frequently query and manage data of a specific type, you only need to specify the column representing the type as the partition column. StarRocks will automatically create partitions based on the partition column values of the loaded data.
 
-However, in some special scenarios, such as when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [list partitioning](./list_partitioning.md) to store data of multiple cities within the same country in one partition.
+However, in some special scenarios, such as when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [list partitioning](list_partitioning.md) to store data of multiple cities within the same country in one partition.
 
 ### Syntax
 
@@ -149,7 +150,7 @@ partition_columns ::=
 #### `partition_columns`
 
 **Required**: YES<br/>
-**Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
+**Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](list_partitioning.md).</li></ul> <br/>
 
 
 ### Usage notes
@@ -185,7 +186,7 @@ INSERT INTO t_recharge_detail1
 View the partitions. The result shows that StarRocks automatically creates a partition `p20220401_Houston1` based on the loaded data. During subsequent loading, data with the values `2022-04-01` and `Houston` in the partition columns `dt` and `city` are stored in this partition.
 
 :::tip
-Each partition can only contain data with the specified one value for the partition column. To specify multiple values for a partition column in a partition, see [List partitions](./list_partitioning.md).
+Each partition can only contain data with the specified one value for the partition column. To specify multiple values for a partition column in a partition, see [List partitions](list_partitioning.md).
 :::
 
 ```SQL
@@ -217,7 +218,7 @@ LastConsistencyCheckTime: NULL
 
 During data loading, StarRocks will automatically create partitions based on the loaded data and partition rule defined by the partition expression.
 
-Note that if you use expression partitioning at table creation and need to use [INSERT OVERWRITE](../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to overwrite data in a specific partition, whether the partition has been created or not, you currently need to explicitly provide a partition range in `PARTITION()`. This is different from [Range Partitioning](./Data_distribution.md#range-partitioning) or [List Partitioning](./list_partitioning.md), which allow you only to provide the partition name in `PARTITION (<partition_name>)`.
+Note that if you use expression partitioning at table creation and need to use [INSERT OVERWRITE](../../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to overwrite data in a specific partition, whether the partition has been created or not, you currently need to explicitly provide a partition range in `PARTITION()`. This is different from [Range Partitioning../Data_distribution.mdmd#range-partitioning) or [List Partitioning../list_partitioning.mdmd), which allow you only to provide the partition name in `PARTITION (<partition_name>)`.
 
 If you use a time function expression at table creation and want to overwrite data in a specific partition, you need to provide the starting date or datetime of that partition (the partition granularity configured at table creation). If the partition does not exist, it can be automatically created during data loading.
 
@@ -254,4 +255,4 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - Currently, using CTAS to create tables configured expression partitioning is not supported.
 - Currently, using Spark Load to load data to tables that use expression partitioning is not supported.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and cannot be recovered.
-- Currently, you cannot [backup and restore](../administration/management/Backup_and_restore.md) partitions created by the expression partitioning.
+- Currently, you cannot [backup and restore](../../administration/management/Backup_and_restore.md) partitions created by the expression partitioning.

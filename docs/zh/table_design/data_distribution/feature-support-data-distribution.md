@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "能力边界"
+sidebar_position: 50
 ---
 
 # 功能边界：数据分布
@@ -187,5 +188,5 @@ sidebar_label: "能力边界"
 
 :::
 
-有关 List 分区和表达式分区的详细比较，请参阅 [List 分区和表达式分区的区别](./list_partitioning.md)。
+有关 List 分区和表达式分区的详细比较，请参阅 [List 分区和表达式分区的区别](list_partitioning.md)。
 

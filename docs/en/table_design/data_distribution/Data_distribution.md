@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: Partition and bucket data
+sidebar_position: 30
 ---
 
 # Data distribution
@@ -23,7 +24,7 @@ Configuring appropriate partitioning and bucketing at table creation can help to
 
 Modern distributed database systems generally use the following basic distribution methods: Round-Robin, Range, List, and Hash.
 
-![Data distribution method](../_assets/3.3.2-1.png)
+![Data distribution method](../../_assets/3.3.2-1.png)
 
 - **Round-Robin**: distributes data across different nodes in a cyclic.
 - **Range**: distributes data across different nodes based on the ranges of partitioning column values. As shown in the diagram, the ranges [1-3] and [4-6] correspond to different nodes.
@@ -195,7 +196,7 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 >
 > Since v3.1, StarRocks's shared-data mode supports the time function expression and does not support the column expression.
 
-Since v3.0, StarRocks has supported [expression partitioning](./expression_partitioning.md)](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy to use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or ENUM values.
+Since v3.0, StarRocks has supported [expression partitioning](expression_partitioning.md)](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy to use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or ENUM values.
 
 You only need to configure a partition expression (a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
 
@@ -323,7 +324,7 @@ Define the mapping relationship between each partition and the range of partitio
 
 ##### Dynamic partitioning
 
-[Dynamic partitioning](./dynamic_partitioning.md) related properties are configured at table creation. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness, which implements time-to-live (TTL) management for partitions.
+[Dynamic partitioning](dynamic_partitioning.md) related properties are configured at table creation. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness, which implements time-to-live (TTL) management for partitions.
 
 Different from the automatic partition creation ability provided by the expression partitioning, dynamic partitioning can only periodically create new partitions based on the properties. If the new data does not belong to these partitions, an error is returned for the load job. However, the automatic partition creation ability provided by the expression partitioning can always create corresponding new partitions based on the loaded data.
 
@@ -525,7 +526,7 @@ Multiple partitions can be created in batch at and after table creation. You can
 
 #### List partitioning (since v3.1)
 
-[List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on enum values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data for various cities belonging to one country.
+[List Partitioning](list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on enum values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data for various cities belonging to one country.
 
 StarRocks stores data in the corresponding partitions based on the explicit mapping of the predefined value list for each partition.
 
@@ -549,7 +550,7 @@ The following statement deletes partition `p1` from table `site_access`.
 
 > **NOTE**
 >
-> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/backup_restore/RECOVER.md) command to restore the partition and its data.
+> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command to restore the partition and its data.
 
 ```SQL
 ALTER TABLE site_access
@@ -583,8 +584,8 @@ However, note that if you query massive amounts of data and frequently use certa
 #### Limits
 
 - You can only use random bucketing to create a Duplicate Key table.
-- You cannot specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
-- [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+- You cannot specify a table bucketed randomly to belong to a [Colocation Group](../../using_starrocks/Colocate_join.md).
+- Spark Load cannot be used to load data into tables bucketed randomly.
 
 In the following CREATE TABLE example, the `DISTRIBUTED BY xxx` statement is not used, so StarRocks uses random bucketing by default, and automatically sets the number of buckets.
 
@@ -733,7 +734,7 @@ Buckets reflect how data files are actually organized in StarRocks.
   :::warning
 
   - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
-  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) before rolling back.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) before rolling back.
 
   :::
 
@@ -846,7 +847,7 @@ Buckets reflect how data files are actually organized in StarRocks.
   :::warning
 
   - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
-  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) before rolling back.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) before rolling back.
 
   :::
 
@@ -918,7 +919,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 #### View the number of buckets
 
-After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
+After creating a table, you can execute [SHOW PARTITIONS](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
 
 :::info
 
@@ -957,4 +958,4 @@ As query patterns and data volume evolve in business scenarios, the configuratio
   ALTER TABLE t ORDER BY k2, k1;
   ```
 
-For more information, see [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
+For more information, see [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 70
 ---
 
 # Replica management

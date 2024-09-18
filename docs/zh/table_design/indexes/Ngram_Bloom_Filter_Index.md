@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 40
 ---
 
 # [Preview] N-Gram bloom filter 索引

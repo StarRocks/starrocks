@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['zhujian']
+sidebar_position: 20
 ---
 
 # 主键表
@@ -105,7 +106,7 @@ DISTRIBUTED BY HASH (order_id)
 
 并且自 3.0 起主键表解耦了主键和排序键，因此您可以选择经常作为查询过滤条件的列去构成排序键。假设经常根据订单日期和商户组合维度查询商品销售情况，则您可以通过 `ORDER BY (dt,merchant_id)` 指定排序键为 `dt` 和 `merchant_id` 。
 
-注意，如果您使用了[数据分布策略](../Data_distribution.md)，由于目前主键表要求主键必须包括分区列和分桶列，假设采用的数据分布策略是将 `dt` 作为分区列并且 `merchant_id` 作为哈希分桶列，则主键还需要包括 `dt` 和 `merchant_id`。
+注意，如果您使用了[数据分布策略](../data_distribution/Data_distribution.md)，由于目前主键表要求主键必须包括分区列和分桶列，假设采用的数据分布策略是将 `dt` 作为分区列并且 `merchant_id` 作为哈希分桶列，则主键还需要包括 `dt` 和 `merchant_id`。
 
 综上所述，该订单表的建表语句可以为：
 

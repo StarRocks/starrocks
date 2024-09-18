@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 5
 ---
 
 # Catalogs, databases, and tables
@@ -52,6 +53,6 @@ Views, or logical views, are virtual tables that do not hold any data. Views onl
 
 Privileges determine which users can perform which operations on which objects. StarRocks adopts two types of privilege models: identity-based access control and role-based access control. You can first assign privileges to roles, and then assign roles to users. In this case, privileges are passed to users through roles. Or, you can directly assign privileges to user identities.
 
-## [Data storage in storage-compute separation architecture](../introduction/Architecture.md#storage-compute-separation)
+## Data storage in storage-compute separation architecture
 
 Since v3.0, StarRocks introduces the new storage-compute separation (shared-data) architecture. Data storage is separated from BEs. Data is persistently stored in remote object storage or HDFS, while local disks are used for caching hot data to accelerate queries.

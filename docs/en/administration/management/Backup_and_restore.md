@@ -22,7 +22,7 @@ StarRocks supports the following remote storage systems:
 
 StarRocks supports FULL backup on the granularity level of database, table, or partition.
 
-If you have stored a large amount of data in a table, we recommend that you back up and restore data by partition. This way, you can reduce the cost of retries in case of job failures. If you need to back up incremental data on a regular basis, you can strategize a [dynamic partitioning](../../table_design/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and back up only new partitions each time.
+If you have stored a large amount of data in a table, we recommend that you back up and restore data by partition. This way, you can reduce the cost of retries in case of job failures. If you need to back up incremental data on a regular basis, you can strategize a [dynamic partitioning](../../table_design/data_distribution/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and back up only new partitions each time.
 
 ### Create a repository
 

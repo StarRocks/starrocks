@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Table overview
@@ -98,7 +99,7 @@ StarRocks provides four types of tables which are Duplicate Key tables, Primary 
 - Aggregate tables are suitable to store pre-aggregated data, helping reduce the amount of data scanned and calculated and improve efficiency for aggregation queries.
 - Unique tables are also suitable to store frequently updated realtime data. However this type of tables is being replaced by Primary Key tables, which are more powerful.
 
-### [Data distribution](./Data_distribution.md)
+### [Data distribution](data_distribution/Data_distribution.md)
 
 StarRocks uses a partitioning+bucketing two-tier data distribution strategy, to evenly distribute data across BEs. A well-designed data distribution strategy can effectively reduce the amount of data scanned and maximize StarRocks' concurrent processing capabilities, thereby increasing query performance.
 
@@ -123,7 +124,7 @@ StarRocks provides two bucketing methods:
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### [Index](./indexes/indexes_overview.md)
+### [Index](indexes/indexes.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 

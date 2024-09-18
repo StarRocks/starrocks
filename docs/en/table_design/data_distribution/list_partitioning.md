@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # List partitioning
@@ -10,7 +11,7 @@ Since v3.1, StarRocks supports list partitioning. Data is partitioned based on a
 
 You need to explicitly specify the column values list in each partition. These values do not need to be continuous, unlike the continuous time or numeric range required in Range Partitioning. During data loading, StarRocks will store the data in the corresponding partition based on the mapping between the data's partitioning column values and the predefined column values for each partition.
 
-![list_partitioning](../_assets/list_partitioning.png)
+![list_partitioning](../../_assets/list_partitioning.png)
 
 List partitioning is suitable for storing data whose columns contain a small number of enum values, and you often query and manage data based on these enum values. For example, columns represent geographical locations, states, and categories. Each value in a column represents an independent category. By partitioning data based on enum values, you can improve query performance and facilitate data management.
 
@@ -18,7 +19,7 @@ List partitioning is suitable for storing data whose columns contain a small num
 
 If a partition only needs to contain data with the same value of each partitioning column, it is recommended to use [expression partitioning](./expression_partitioning.md).
 
-**Comparison between list partitioning and [expression partitioning](./expression_partitioning.md)**
+**Comparison between list partitioning and [expression partitioning](expression_partitioning.md)**
 
 The main difference between list partitioning and expression partitioning (recommended) is that list partitioning requires you to manually create partitions one by one. On the other hand, expression partitioning can automatically create partitions during loading to simplify partitioning. And in most cases, expression partitioning can replace list partitioning. The specific comparison between the two is shown in the following table:
 
@@ -111,5 +112,5 @@ DISTRIBUTED BY HASH(`id`);
 - List partitioning does support dynamic partitioning and creating multiple partitions at a time.
 - Currently, StarRocks's shared-data mode does not support this feature.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` statement is used to delete a partition created by using list partitioning, data in the partition is directly removed and cannot be recovered.
-- Currently you cannot [backup and restore](../administration/management/management.mdx) partitions created by the list partitioning.
-- Currently, StarRocks does not support creating [asynchronous materialized views](../using_starrocks/Materialized_view.md) with base tables created with the list partitioning strategy.
+- Currently you cannot backup and restore partitions created by the list partitioning.
+- Currently, StarRocks does not support creating [asynchronous materialized views](../../using_starrocks/Materialized_view.md) with base tables created with the list partitioning strategy.
