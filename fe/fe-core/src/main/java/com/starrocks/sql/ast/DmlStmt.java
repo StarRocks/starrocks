@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class DmlStmt extends StatementBase {
@@ -41,4 +42,23 @@ public abstract class DmlStmt extends StatementBase {
     public void setTxnId(long txnId) {
         this.txnId = txnId;
     }
+<<<<<<< HEAD
+=======
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public double getMaxFilterRatio() {
+        if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            try {
+                return Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+
+        return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+>>>>>>> 3c54d5bd43 ([BugFix] Fix filter ratio for insert into external catalog table (#50919))
 }
