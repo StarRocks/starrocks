@@ -845,9 +845,11 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
         }
     }
 
-    // Merge counters
+    // step 1:Merge counters
     {
-        // Find all counters, although these profiles are expected to be isomorphic,
+        // step 1.a: Find all counters, record them in all_level_counters
+        // all_level_counters[i] stores level I's counters in map<counter name, pair<counter type, counter parent name>>
+        // although these profiles are expected to be isomorphic,
         // some counters are only attached to one of them
         std::vector<std::map<std::string, std::pair<TUnit::type, std::string>>> all_level_counters;
         for (auto* profile : profiles) {
@@ -875,7 +877,15 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                         continue;
                     }
                     auto pair_it = profile->_counter_map.find(name);
+                    // _child_counter_map record one counter is some counter's son, but it doesn't exsit in _counter_map
                     DCHECK(pair_it != profile->_counter_map.end());
+                    if (pair_it == profile->_counter_map.end()) {
+                        LOG(WARNING) << "when merging " << profile->name() << "'s counters , counter " + name
+                                     << " exsits in _child_counter_map, but doesn't exsit in counter_map, this is a "
+                                        "bug of profile";
+                        continue;
+                    }
+
                     const auto& pair = pair_it->second;
                     const auto* counter = pair.first;
                     const auto& parent_name = pair.second;
@@ -900,6 +910,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
             }
         }
 
+        // step 1.b
         std::vector<std::tuple<TUnit::type, std::string, std::string>> level_ordered_counters;
         for (const auto& level_counters : all_level_counters) {
             for (const auto& [name, pair] : level_counters) {
@@ -907,6 +918,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
             }
         }
 
+        // step 1.c: deal with each counter, merge every profile's same counter into profile[0]'s merged_counter
         for (const auto& tuple : level_ordered_counters) {
             const auto& type = std::get<0>(tuple);
             const auto& name = std::get<1>(tuple);
@@ -1003,7 +1015,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
         }
     }
 
-    // merge children
+    // step 2: merge children
     {
         size_t max_child_size = 0;
         RuntimeProfile* profile_with_full_child = nullptr;
