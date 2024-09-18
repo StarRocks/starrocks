@@ -148,9 +148,7 @@ public class ResourceGroupMgr implements Writable {
                 dropResourceGroupUnlocked(wg.getName());
             }
 
-            if (wg.getCpuWeight() == null) {
-                wg.setCpuWeight(0);
-            }
+            wg.normalizeCpuWeight();
 
             if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
                 wg.setId(ResourceGroup.DEFAULT_WG_ID);
@@ -350,9 +348,9 @@ public class ResourceGroupMgr implements Writable {
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 ResourceGroup changedProperties = stmt.getChangedProperties();
 
-                Integer cpuWeight = changedProperties.getCpuWeight();
+                Integer cpuWeight = changedProperties.getRawCpuWeight();
                 if (cpuWeight == null) {
-                    cpuWeight = wg.getCpuWeight();
+                    cpuWeight = wg.geNormalizedCpuWeight();
                 }
                 Integer exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
                 if (exclusiveCpuCores == null) {
@@ -377,6 +375,7 @@ public class ResourceGroupMgr implements Writable {
                 if (cpuWeight != null) {
                     wg.setCpuWeight(cpuWeight);
                 }
+                wg.normalizeCpuWeight();
 
                 if (exclusiveCpuCores != null) {
                     sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
