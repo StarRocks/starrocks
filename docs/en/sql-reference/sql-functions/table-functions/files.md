@@ -10,7 +10,7 @@ Defines data files in remote storage.
 
 From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function FILES(). It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md).
 
-From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can [use INSERT INTO FILES() to unload data from StarRocks to remote storage](../../../unloading/unload_using_insert_into_files.md).
+From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
 
 Currently, the FILES() function supports the following data sources and file formats:
 
@@ -246,7 +246,7 @@ Suppose the data file **file1** is stored under a path in the format of `/geo/co
 
 ### unload_data_param
 
-From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading. For detailed instructions, see [Unload data using INSERT INTO FILES](../../../unloading/unload_using_insert_into_files.md).
+From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading.
 
 ```sql
 -- Supported from v3.2 onwards.
