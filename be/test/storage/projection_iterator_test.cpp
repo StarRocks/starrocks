@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
