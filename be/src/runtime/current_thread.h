@@ -63,6 +63,7 @@ inline thread_local MemTracker* tls_exceed_mem_tracker = nullptr;
 // you can add a new check tracker by set up `tls_singleton_check_mem_tracker`.
 inline thread_local MemTracker* tls_singleton_check_mem_tracker = nullptr;
 inline thread_local bool tls_is_thread_status_init = false;
+inline thread_local bool tls_is_catched = false;
 
 class CurrentThread {
 private:
@@ -283,13 +284,13 @@ public:
         tls_singleton_check_mem_tracker = mem_tracker;
     }
 
-    bool set_is_catched(bool is_catched) {
-        bool old = _is_catched;
-        _is_catched = is_catched;
+    static bool set_is_catched(bool is_catched) {
+        bool old = tls_is_catched;
+        tls_is_catched = is_catched;
         return old;
     }
 
-    bool is_catched() const { return _is_catched; }
+    static bool is_catched() { return tls_is_catched; }
 
     void mem_consume(int64_t size) {
         _mem_cache_manager.consume(size);
@@ -371,7 +372,6 @@ private:
     TUniqueId _fragment_instance_id;
     std::string _custom_coredump_msg{};
     int32_t _driver_id = 0;
-    bool _is_catched = false;
     bool _check = true;
     bool _reserve_mod = false;
 };
