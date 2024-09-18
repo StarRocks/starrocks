@@ -37,6 +37,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Joiner;
 import com.starrocks.common.Pair;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
@@ -184,5 +185,16 @@ public class DebugUtil {
         }
         String[] stacks = ExceptionUtils.getRootCauseStackTrace(e);
         return Joiner.on("\n").join(stacks);
+    }
+
+    /**
+     * Get the query-id for current session
+     */
+    public static String getSessionQueryId() {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null || ctx.getQueryId() == null) {
+            return null;
+        }
+        return printId(ctx.getQueryId());
     }
 }
