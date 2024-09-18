@@ -76,6 +76,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * sys_log_enable_compress:
+     *      default is false. if true, then compress fe.log & fe.warn.log by gzip
      */
     @ConfField
     public static String sys_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -92,6 +95,8 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    @ConfField
+    public static boolean sys_log_enable_compress = false;
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
@@ -134,6 +139,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * audit_log_enable_compress:
+     *      default is false. if true, then compress fe.audit.log by gzip
      */
     @ConfField
     public static String audit_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -151,6 +159,8 @@ public class Config extends ConfigBase {
     public static String audit_log_delete_age = "30d";
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField
+    public static boolean audit_log_enable_compress = false;
 
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
