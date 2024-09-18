@@ -467,8 +467,8 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         }
     }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
-        _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes) {
+    if (_cur_chunk->num_rows() <= 0 || (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
+                                        _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes)) {
         // 2. chunk not full
         if (_request_queue.empty()) {
             return Status::OK();
@@ -520,8 +520,8 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         }
     }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
-        _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes) {
+    if (_cur_chunk->num_rows() <= 0 || (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
+                                        _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes)) {
         // 2. chunk not full
         if (_request_queue.empty()) {
             return Status::OK();
