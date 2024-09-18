@@ -1323,9 +1323,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // once mv's base table has updated, refresh the materialized view totally.
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(
                     table, true, isQueryRewrite, MaterializedView.getPartitionExpr(this));
-            if (CollectionUtils.isNotEmpty(partitionNames)) {
+            if (partitionNames != null && CollectionUtils.isNotEmpty(partitionNames)) {
                 toRefreshPartitions.addAll(getVisiblePartitionNames());
-                return true;
+                return false;
             }
         }
         return true;
@@ -1390,7 +1390,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite, partitionExpr);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 toRefreshedPartitioins.addAll(getVisiblePartitionNames());
-                return true;
+                return false;
             }
         }
 
