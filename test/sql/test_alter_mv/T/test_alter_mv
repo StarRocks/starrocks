@@ -1,4 +1,4 @@
--- name: test_alter_mv_add_index
+-- name: test_alter_mv
 CREATE TABLE t0(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
 INSERT INTO t0 VALUES(1,1),(2,2),(1,3),(2,4);
 CREATE MATERIALIZED VIEW mv1 REFRESH IMMEDIATE MANUAL AS SELECT c0 AS k, count(c1) as cnt FROM t0 GROUP BY c0;
@@ -6,3 +6,54 @@ CREATE INDEX index_cnt ON mv1(cnt) USING BITMAP COMMENT 'index1';
 function: wait_alter_table_finish()
 [UC] REFRESH MATERIALIZED VIEW mv1 FORCE WITH SYNC MODE;
 SELECT k, cnt FROM mv1 ORDER BY k;
+DROP TABLE t0;
+
+-- test mv with schema change
+CREATE TABLE `t1` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`) 
+PARTITION BY date_trunc('day', `k1`) 
+DISTRIBUTED BY RANDOM BUCKETS 3 ;
+INSERT INTO t1 VALUES
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889);
+
+CREATE MATERIALIZED VIEW test_mv1 
+REFRESH DEFERRED MANUAL 
+AS SELECT k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 FROM t1;
+
+admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");
+
+-- alter column: k13
+ALTER TABLE t1 MODIFY COLUMN k13 decimal(32, 10);
+function: wait_alter_table_finish()
+[UC] ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+INSERT INTO t1 VALUES
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889);
+[UC] REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+SELECT * FROM test_mv1 ORDER BY k1;
+
+-- alter column: k3
+ALTER TABLE t1 MODIFY COLUMN k3 char(32);
+function: wait_alter_table_finish()
+[UC] ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+INSERT INTO t1 VALUES
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+[UC] REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+SELECT * FROM test_mv1 ORDER BY k1;
+
+DROP TABLE t1;
+admin set frontend config("enable_active_materialized_view_schema_strict_check"="true");
