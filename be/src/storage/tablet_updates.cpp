@@ -4170,7 +4170,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
               << " #column:" << _tablet.thread_safe_get_tablet_schema()->num_columns()
               << " #rowset:" << src_rowsets.size() << " #file:" << total_files << " #row:" << total_rows
               << " bytes:" << total_bytes;
-    ;
     return Status::OK();
 }
 
