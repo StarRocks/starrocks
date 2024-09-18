@@ -1,4 +1,4 @@
--- name: test_alter_mv_add_index
+-- name: test_alter_mv
 CREATE TABLE t0(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:
 -- !result
@@ -17,10 +17,103 @@ None
 -- !result
 [UC] REFRESH MATERIALIZED VIEW mv1 FORCE WITH SYNC MODE;
 -- result:
-73ce5143-1296-11ef-96c0-469314b28ba2
+a2928638-6f21-11ef-b66a-cac4e30a3e1d
 -- !result
 SELECT k, cnt FROM mv1 ORDER BY k;
 -- result:
 1	2
 2	2
+-- !result
+DROP TABLE t0;
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`) 
+PARTITION BY date_trunc('day', `k1`) 
+DISTRIBUTED BY RANDOM BUCKETS 3 ;
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+REFRESH DEFERRED MANUAL 
+AS SELECT k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 FROM t1;
+-- result:
+-- !result
+admin set frontend config("enable_active_materialized_view_schema_strict_check"="false");
+-- result:
+-- !result
+ALTER TABLE t1 MODIFY COLUMN k13 decimal(32, 10);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+[UC] ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+-- result:
+afd4fe2c-6f21-11ef-b66a-cac4e30a3e1d
+-- !result
+SELECT * FROM test_mv1 ORDER BY k1;
+-- result:
+2020-10-11	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+2020-10-12	2020-10-25 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-21	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+ALTER TABLE t1 MODIFY COLUMN k3 char(32);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+[UC] ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+-- result:
+bb99b09b-6f21-11ef-b66a-cac4e30a3e1d
+-- !result
+SELECT * FROM test_mv1 ORDER BY k1;
+-- result:
+2020-10-11	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+2020-10-12	2020-10-25 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-21	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-24 12:12:12	k3	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+2020-10-24	2020-10-25 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+admin set frontend config("enable_active_materialized_view_schema_strict_check"="true");
+-- result:
 -- !result

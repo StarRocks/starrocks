@@ -50,6 +50,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -254,10 +255,13 @@ public class AlterJobMgr {
             throw new SemanticException(String.format("number of columns changed: %d != %d",
                     existedColumns.size(), newColumns.size()));
         }
+
         for (int i = 0; i < existedColumns.size(); i++) {
             Column existed = existedColumns.get(i);
             Column created = newColumns.get(i);
-            if (!existed.isSchemaCompatible(created)) {
+            if (!isSchemaCompatible(existed, created)) {
+                LOG.warn("Active materialized view {} failed, column schema changed: {} != {}",
+                        materializedView.getName(), existed.toString(), created.toString());
                 String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
                         existed.toString(), created.toString());
                 materializedView.setInactiveAndReason(message);
@@ -266,6 +270,36 @@ public class AlterJobMgr {
         }
 
         return createStmt.getQueryStatement();
+    }
+
+    /**
+     * Check if the schema of existed and created column is compatible, if not, return false
+     * @param existed mv's existed column
+     * @param created new mv's created column
+     */
+    private static boolean isSchemaCompatible(Column existed, Column created) {
+        if (Config.enable_active_materialized_view_schema_strict_check) {
+            return existed.isSchemaCompatible(created);
+        } else {
+            return isSchemaCompatibleInLoose(existed, created);
+        }
+    }
+
+    /**
+     * Check if the schema of existed and created column is compatible in loose mode
+     * @param t1 mv's existed column
+     * @param t2 new mv's created column
+     */
+    private static boolean isSchemaCompatibleInLoose(Column t1, Column t2) {
+        // check whether the column name are the same
+        if (!t1.getName().equalsIgnoreCase(t2.getName())) {
+            return false;
+        }
+        // check whether the column primitive type are the same
+        if (!t1.getType().getPrimitiveType().equals(t2.getType().getPrimitiveType())) {
+            return false;
+        }
+        return true;
     }
 
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
