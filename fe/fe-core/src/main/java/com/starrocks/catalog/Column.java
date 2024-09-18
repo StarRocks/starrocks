@@ -206,6 +206,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                     "aggregation type is AGG_STATE_UNION");
         }
         this.aggStateDesc = aggStateDesc;
+        this.type.setAggStateDesc(aggStateDesc);
+
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
@@ -230,6 +232,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.name = column.getName();
         this.columnId = column.getColumnId();
         this.type = column.type;
+        this.type.setAggStateDesc(this.aggStateDesc);
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();
         this.isKey = column.isKey();
@@ -463,7 +466,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.aggregationType != other.aggregationType) {
             throw new DdlException("Can not change aggregation type");
         }
-        if (this.aggStateDesc != null && this.aggStateDesc.equals(other.aggStateDesc)) {
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
             throw new DdlException("Can not change aggregation state desc type");
         }
 
@@ -784,6 +787,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.aggregationType != other.getAggregationType()) {
             return false;
         }
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
+            return false;
+        }
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
             return false;
         }
@@ -816,6 +822,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&
                 AggregateType.isNullOrNone(other.getAggregationType())))) {
+            return false;
+        }
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
             return false;
         }
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
@@ -856,6 +865,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
         if (columnId == null || Strings.isNullOrEmpty(columnId.getId())) {
             columnId = ColumnId.create(name);
+        }
+        if (this.aggStateDesc != null) {
+            this.type.setAggStateDesc(this.aggStateDesc);
         }
     }
 

@@ -37,11 +37,16 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
+import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateMergeCombinator;
+import com.starrocks.catalog.combinator.AggStateUnionCombinator;
+import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -524,6 +529,10 @@ public class FunctionSet {
 
     public static final String CURRENT_ROLE = "current_role";
 
+    public static final String AGG_STATE_SUFFIX = "_state";
+    public static final String AGG_STATE_UNION_SUFFIX = "_union";
+    public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
+
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =
@@ -666,6 +675,8 @@ public class FunctionSet {
             .build();
 
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.LEAD)
+            .add(FunctionSet.LAG)
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)
             .add(FunctionSet.CUME_DIST)
@@ -750,6 +761,28 @@ public class FunctionSet {
 
     public static final Set<String> INDEX_ONLY_FUNCTIONS =
             ImmutableSet.<String>builder().add().add(NGRAM_SEARCH).add(NGRAM_SEARCH_CASE_INSENSITIVE).build();
+
+    // Unsupported functions for agg state combinator.
+    public static final Set<String> UNSUPPORTED_AGG_STATE_FUNCTIONS =
+            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+                    // TODO: Add unsupported functions here.
+                    .add(GROUP_CONCAT) // Unsupported function
+                    // UNSUPPORTED functions
+                    .add(COUNT_IF) // count_if is a syntax sugar in fe
+                    .add(HLL_RAW) // hll_raw use `hll` as input, use existed `hll_union` instead
+                    // Internal functions are not supported.
+                    .add(FLAT_JSON_META)
+                    .add(EXCHANGE_BYTES)
+                    .add(EXCHANGE_SPEED)
+                    .add(FIRST_VALUE_REWRITE)
+                    .add(HISTOGRAM)
+                    .add(DICT_MERGE)
+                    // Functions with constant contexts in be are not supported.
+                    .add(WINDOW_FUNNEL)
+                    .add(APPROX_TOP_K)
+                    .add(INTERSECT_COUNT)
+                    .add(LC_PERCENTILE_DISC)
+                    .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -962,6 +995,26 @@ public class FunctionSet {
      */
     public void addBuiltin(AggregateFunction aggFunc) {
         addBuiltInFunction(aggFunc);
+
+        if (AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+            // register `_state` combinator
+            AggStateCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            // register `_merge`/`_union` combinator for aggregate functions
+            AggStateUnionCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            AggStateMergeCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+        }
+    }
+
+    public static String getAggStateName(String name) {
+        return String.format("%s%s", name, AGG_STATE_SUFFIX);
+    }
+
+    public static String getAggStateUnionName(String name) {
+        return String.format("%s%s", name, AGG_STATE_UNION_SUFFIX);
+    }
+
+    public static String getAggStateMergeName(String name) {
+        return String.format("%s%s", name, AGG_STATE_MERGE_SUFFIX);
     }
 
     // Populate all the aggregate builtins in the globalStateMgr.
