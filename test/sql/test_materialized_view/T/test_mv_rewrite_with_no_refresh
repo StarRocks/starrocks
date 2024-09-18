@@ -1,0 +1,62 @@
+-- name: test_mv_rewrite_with_no_refresh
+
+ CREATE TABLE `dim1` (
+  `dim1_code` bigint(20) NOT NULL COMMENT "",
+  `dim1_name` varchar(256) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`dim1_code`)
+DISTRIBUTED BY HASH(`dim1_code`)
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+CREATE TABLE `dim2` (
+  `dim2_code` bigint(20) NOT NULL COMMENT "",
+  `dim2_name` varchar(256) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`dim2_code`)
+DISTRIBUTED BY HASH(`dim2_code`)
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+CREATE TABLE `fact_table` (
+  `dim2_code` bigint(20) NOT NULL COMMENT "",
+  `dim_public_date_info_date` date NULL COMMENT "",
+  `dim1_code` bigint(20) NOT NULL COMMENT "",
+  `measure_num` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`dim2_code`)
+PARTITION BY RANGE(`dim_public_date_info_date`)
+(
+    PARTITION p20240913 VALUES [("2024-09-13"), ("2024-09-14")),
+    PARTITION p20240914 VALUES [("2024-09-14"), ("2024-09-15")),
+    PARTITION p20240915 VALUES [("2024-09-15"), ("2024-09-16")),
+    PARTITION p20240916 VALUES [("2024-09-16"), ("2024-09-17")))
+DISTRIBUTED BY HASH(`dim2_code`)
+PROPERTIES (
+    "replication_num" = "1",
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.time_zone" = "Asia/Shanghai",
+    "dynamic_partition.start" = "-3",
+    "dynamic_partition.end" = "3",
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.history_partition_num" = "0"
+);
+insert into fact_table values(1,'20240913',1,1);
+insert into dim1 values(1,'区域1');
+
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY HASH(dim2_code)
+PARTITION BY(dim_public_date_info_date)
+REFRESH DEFERRED MANUAL
+AS SELECT t0.dim_public_date_info_date,t0.dim2_code,t0.dim1_code,t1.dim1_name,t2.dim2_name,sum(measure_num)
+from fact_table AS t0
+left join dim1 AS t1 on t0.dim1_code=t1.dim1_code
+left join dim2 AS t2 on t0.dim2_code=t2.dim2_code
+group by t0.dim_public_date_info_date,t0.dim2_code,t0.dim1_code,t1.dim1_name,t2.dim2_name;
+
+-- without no refresh, mv should not rewrite.
+function: check_no_hit_materialized_view("SELECT t0.dim_public_date_info_date,t0.dim2_code,t0.dim1_code,t1.dim1_name,t2.dim2_name,sum(measure_num) from fact_table AS t0 left join dim1 AS t1 on t0.dim1_code=t1.dim1_code left join dim2 AS t2 on t0.dim2_code=t2.dim2_code group by t0.dim_public_date_info_date,t0.dim2_code,t0.dim1_code,t1.dim1_name,t2.dim2_name;", "test_mv1")
+SELECT t0.dim_public_date_info_date,t0.dim2_code,t0.dim1_code,t1.dim1_name,t2.dim2_name,sum(measure_num) from fact_table AS t0 left join dim1 AS t1 on t0.dim1_code=t1.dim1_code left join dim2 AS t2 on t0.dim2_code=t2.dim2_code group by t0.dim_public_date_info_date,t0.dim2_code,t0.dim1_code,t1.dim1_name,t2.dim2_name;
