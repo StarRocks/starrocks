@@ -256,7 +256,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     pair.__set_version(max_continuous_version);
                 }
 
-                if (tablet_tasks.empty() && max_continuous_version < partition_version.version) {
+                if (enable_sync_publish && tablet_tasks.empty() && max_continuous_version < partition_version.version) {
                     error_tablet_ids.push_back(tablet_info.tablet_id);
                 }
             }
