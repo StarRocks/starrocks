@@ -89,11 +89,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TStatusCode;
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -116,11 +112,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
-<<<<<<< HEAD
-=======
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
 
 /**
  * Version 2 of RollupJob.
@@ -457,18 +449,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
 
-<<<<<<< HEAD
+        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
         db.readLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
-=======
-        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
-        try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
@@ -597,15 +584,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                             new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColNames);
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
-<<<<<<< HEAD
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                                 baseTabletId, rollupReplica.getId(), rollupSchemaHash, baseSchemaHash, visibleVersion, jobId,
-                                rollupJobV2Params, baseColumn);
-=======
-                                    rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                                    baseTabletId, rollupReplica.getId(), rollupSchemaHash, baseSchemaHash, visibleVersion, jobId,
-                                    rollupJobV2Params, baseTColumn);
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
+                                rollupJobV2Params, baseTColumn);
+
                         rollupBatchTask.addTask(rollupTask);
                     }
                 }

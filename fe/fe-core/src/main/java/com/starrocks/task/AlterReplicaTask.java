@@ -40,11 +40,6 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
-<<<<<<< HEAD
-import com.starrocks.catalog.Column;
-=======
-import com.starrocks.catalog.ColumnId;
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -147,16 +142,9 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
-<<<<<<< HEAD
             long rollupIndexId, long rollupTabletId, long baseTabletId,
             long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-            long jobId, RollupJobV2Params rollupJobV2Params, List<Column> baseSchemaColumns) {
-=======
-                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
-                                                     long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-                                                     long jobId, RollupJobV2Params rollupJobV2Params,
-                                                     List<TColumn> baseSchemaColumns) {
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
+            long jobId, RollupJobV2Params rollupJobV2Params, List<TColumn> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
@@ -166,13 +154,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType,
-<<<<<<< HEAD
-                             TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq, 
-                             List<Column> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
-=======
                              TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq,
                              List<TColumn> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;

@@ -476,13 +476,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
 
-<<<<<<< HEAD
-        db.readLock();
-=======
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
+        db.readLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
