@@ -188,11 +188,11 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
   DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
   ```
 
-  For more information, see [Data distribution](../../../table_design/Data_distribution.md#data-distribution).
+  For more information, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#data-distribution).
 
   > **NOTE**
   >
-  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
+  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 - **Random bucketing**:
 
@@ -206,7 +206,7 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
   >
   > Asynchronous materialized views with a random bucketing strategy cannot be assigned to a colocation group.
 
-  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31)
+  For more information, see [Random bucketing](../../../table_design/data_distribution/Data_distribution.md#random-bucketing-since-v31)
 
 **refresh_moment** (optional)
 
@@ -263,7 +263,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `storage_medium`: Storage medium type. Valid values: `HDD` and `SSD`.
 - `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.
 - `partition_ttl`: The time-to-live (TTL) for partitions. Partitions whose data is within the specified time range are retained. Expired partitions are deleted automatically. Unit: `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. For example, you can specify this property as `2 MONTH`. This property is recommended over `partition_ttl_number`. It is supported from v3.1.5 onwards.
-- `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+- `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes the current partition and N-1 most recent partitions. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes all pre-created partitions.

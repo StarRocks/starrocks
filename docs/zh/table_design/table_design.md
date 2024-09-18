@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 5
 ---
 
 # Catalogs、databases 和 tables

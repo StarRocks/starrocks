@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 ---
+import QSOverview from '../_assets/commonMarkdown/quickstart-overview-tip.mdx'
 
 # Architecture
 
@@ -79,7 +80,4 @@ Queries against hot data scan the cache directly and then the local disk, while 
 
 Caching can be enabled when creating tables. If caching is enabled, data will be written to both the local disk and backend object storage. During queries, the CN nodes first read data from the local disk. If the data is not found, it will be retrieved from the backend object storage and simultaneously cached on the local disk.
 
-## Learn by doing
-
-- Give [shared-data](../quick_start/shared-data.md) a try using MinIO for object storage.
-- Kubernetes users can use the [Helm quick start](../quick_start/helm.md) and deploy three FEs and three BEs in a shared-nothing architecture using persistent volumes.
+<QSOverview />

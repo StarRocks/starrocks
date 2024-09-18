@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Resource group
@@ -401,9 +402,9 @@ The following FE metrics only provide statistics within the current FE node:
 | starrocks_fe_query_resource_group               | Count | Instantaneous | The number of queries historically run in this resource group (including those currently running). |
 | starrocks_fe_query_resource_group_latency       | ms    | Instantaneous | The query latency percentile for this resource group. The label `type` indicates specific percentiles, including `mean`, `75_quantile`, `95_quantile`, `98_quantile`, `99_quantile`, `999_quantile`. |
 | starrocks_fe_query_resource_group_err           | Count | Instantaneous | The number of queries in this resource group that encountered an error. |
-| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
+| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
 
 ### BE metrics
 
