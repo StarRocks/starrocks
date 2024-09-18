@@ -35,10 +35,15 @@ public class ArrowFlightSqlSessionManager {
 
     public ArrowFlightSqlConnectContext getConnectContext(String peerIdentity) {
         try {
+            ArrowFlightSqlTokenInfo arrowFlightSqlTokenInfo =
+                    arrowFlightSqlTokenManager.validateToken(peerIdentity);
+
+            String token = arrowFlightSqlTokenInfo.getToken();
             ArrowFlightSqlConnectContext arrowFlightSqlConnectContext =
-                    ExecuteEnv.getInstance().getScheduler().getArrowFlightSqlConnectContext(peerIdentity);
+                    ExecuteEnv.getInstance().getScheduler().getArrowFlightSqlConnectContext(token);
             if (arrowFlightSqlConnectContext == null) {
-                arrowFlightSqlConnectContext = createArrowFlightSqlConnectContext(peerIdentity);
+                arrowFlightSqlConnectContext =
+                        createArrowFlightSqlConnectContext(token, arrowFlightSqlTokenInfo);
             }
             return arrowFlightSqlConnectContext;
         } catch (Exception e) {
@@ -46,8 +51,8 @@ public class ArrowFlightSqlSessionManager {
         }
     }
 
-    private ArrowFlightSqlConnectContext createArrowFlightSqlConnectContext(String peerIdentity) {
-        ArrowFlightSqlTokenInfo arrowFlightSqlTokenInfo = arrowFlightSqlTokenManager.validateToken(peerIdentity);
+    private ArrowFlightSqlConnectContext createArrowFlightSqlConnectContext(String token,
+                                                                            ArrowFlightSqlTokenInfo arrowFlightSqlTokenInfo) {
         UserIdentity currentUser = arrowFlightSqlTokenInfo.getCurrentUser();
         ArrowFlightSqlConnectContext ctx = new ArrowFlightSqlConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -56,7 +61,7 @@ public class ArrowFlightSqlSessionManager {
         ctx.setRemoteIP(currentUser.getHost());
         ctx.setCurrentUserIdentity(currentUser);
         ctx.setCurrentRoleIds(currentUser);
-        ctx.setPeerIdentity(peerIdentity);
+        ctx.setToken(token);
 
         Pair<Boolean, String> result = ExecuteEnv.getInstance().getScheduler().registerConnection(ctx);
         if (!result.first) {

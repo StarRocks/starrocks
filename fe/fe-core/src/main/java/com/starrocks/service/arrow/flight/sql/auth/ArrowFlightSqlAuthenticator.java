@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql.auth;
 
+import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenInfo;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
@@ -25,18 +26,27 @@ import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 public class ArrowFlightSqlAuthenticator implements org.apache.arrow.flight.auth2.CallHeaderAuthenticator {
 
     private final ArrowFlightSqlTokenManager arrowFlightSqlTokenManager;
+    private final String arrowFlightSqlAseKey;
 
-    public ArrowFlightSqlAuthenticator(ArrowFlightSqlTokenManager arrowFlightSqlTokenManager) {
+    public ArrowFlightSqlAuthenticator(ArrowFlightSqlTokenManager arrowFlightSqlTokenManager,
+                                       String arrowFlightSqlAseKey) {
         this.arrowFlightSqlTokenManager = arrowFlightSqlTokenManager;
+        this.arrowFlightSqlAseKey = arrowFlightSqlAseKey;
     }
 
     @Override
     public AuthResult authenticate(CallHeaders incomingHeaders) {
+        if (arrowFlightSqlAseKey.length() != 43) {
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("BE configuration item arrow_flight_sql_ase_key is invalid.").toRuntimeException();
+        }
+
         final String token = AuthUtilities.getValueFromAuthHeader(incomingHeaders,
                 Auth2Constants.BEARER_PREFIX);
         if (token == null) {
             BasicCallHeaderAuthenticator basicCallHeaderAuthenticator =
-                    new BasicCallHeaderAuthenticator(new ArrowFlightSqlCredentialValidator(arrowFlightSqlTokenManager));
+                    new BasicCallHeaderAuthenticator(
+                            new ArrowFlightSqlCredentialValidator(arrowFlightSqlTokenManager));
             AuthResult authResult = basicCallHeaderAuthenticator.authenticate(incomingHeaders);
             return authResult;
         }
@@ -46,7 +56,10 @@ public class ArrowFlightSqlAuthenticator implements org.apache.arrow.flight.auth
 
     AuthResult validateToken(String token) {
         try {
-            arrowFlightSqlTokenManager.validateToken(token);
+            ArrowFlightSqlTokenInfo tokenInfo = arrowFlightSqlTokenManager.validateToken(token);
+            if (tokenInfo == null) {
+                throw CallStatus.UNAUTHENTICATED.withDescription("Invalid Token").toRuntimeException();
+            }
             return createAuthResult(token);
         } catch (Exception e) {
             throw CallStatus.UNAUTHENTICATED.withCause(e).withDescription(e.getMessage()).toRuntimeException();

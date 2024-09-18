@@ -21,7 +21,9 @@ import org.apache.parquet.crypto.ModuleCipherFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -61,62 +63,78 @@ public class EncryptionUtil {
     }
 
     public static String aesEncrypt(String message, String encodingAesKey) throws Exception {
-        // 1. Check the length of encodingAesKey before decoding
         if (encodingAesKey.length() != 43) {
             throw new IllegalArgumentException("Invalid encodingAesKey length. encodingAesKey must be 43 characters");
         }
 
-        // 2. Base64 decode the AES key
         byte[] aesKey = Base64.getDecoder().decode(encodingAesKey + "=");
 
-        // 3. Randomly generate a 16-byte string
+        byte[] ivBytes = new byte[16];
+        rand.nextBytes(ivBytes);
+
         byte[] randomBytes = new byte[16];
         rand.nextBytes(randomBytes);
 
-        // 4. Calculate the message length
-        byte[] messageBytes = message.getBytes();
+        byte[] messageBytes = message.getBytes(StandardCharsets.UTF_8);
         int msgLen = messageBytes.length;
 
-        // 5. Create a 4-byte message length (network byte order - Big Endian)
         ByteBuffer msgLenBuffer = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
         msgLenBuffer.putInt(msgLen);
         byte[] msgLenBytes = msgLenBuffer.array();
 
-        // 6. Concatenate random + msg_len + msg
         ByteBuffer fullBuffer = ByteBuffer.allocate(randomBytes.length + msgLenBytes.length + messageBytes.length);
-        fullBuffer.put(randomBytes);        // Put in the 16-byte random string
-        fullBuffer.put(msgLenBytes);        // Put in the 4-byte message length
-        fullBuffer.put(messageBytes);       // Put in the message content
+        fullBuffer.put(randomBytes);
+        fullBuffer.put(msgLenBytes);
+        fullBuffer.put(messageBytes);
         byte[] fullStr = fullBuffer.array();
 
-        // 7. Apply PKCS#7 padding
-        byte[] paddedData = pkcs7Padding(fullStr, aesKey.length);
-
-        // 8. Initialize AES CBC encryption
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         SecretKey secretKey = new SecretKeySpec(aesKey, "AES");
-        IvParameterSpec iv = new IvParameterSpec(aesKey, 0, 16);  // IV is typically the first 16 bytes of AESKey
+        IvParameterSpec iv = new IvParameterSpec(randomBytes);
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, iv);
 
-        // 9. Perform encryption
-        byte[] encrypted = cipher.doFinal(paddedData);
+        byte[] encrypted = cipher.doFinal(fullStr);
+        ByteBuffer resultBuffer = ByteBuffer.allocate(randomBytes.length + encrypted.length);
+        resultBuffer.put(ivBytes);
+        resultBuffer.put(encrypted);
+        byte[] encryptedWithIv = resultBuffer.array();
 
-        // 10. Base64 encode the encrypted data
-        return Base64.getEncoder().encodeToString(encrypted);
+        return Base64.getEncoder().encodeToString(encryptedWithIv);
     }
 
-    // PKCS#7 padding
-    private static byte[] pkcs7Padding(byte[] data, int blockSize) {
-        int paddingLength = blockSize - (data.length % blockSize);
-        byte[] padding = new byte[paddingLength];
-        for (int i = 0; i < paddingLength; i++) {
-            padding[i] = (byte) paddingLength;
+    public static String aesDecrypt(String encryptedData, String encodingAesKey) throws Exception {
+        if (encodingAesKey.length() != 43) {
+            throw new IllegalArgumentException("Invalid encodingAesKey length. encodingAesKey must be 43 characters");
         }
 
-        // Add the padding to the data
-        ByteBuffer paddedBuffer = ByteBuffer.allocate(data.length + paddingLength);
-        paddedBuffer.put(data);
-        paddedBuffer.put(padding);
-        return paddedBuffer.array();
+        byte[] aesKey = Base64.getDecoder().decode(encodingAesKey + "=");
+        byte[] encryptedBytes = Base64.getDecoder().decode(encryptedData);
+        if (encryptedBytes.length < 16) {
+            throw new IllegalArgumentException("Invalid encrypted data");
+        }
+
+        byte[] iv = Arrays.copyOfRange(encryptedBytes, 0, 16);
+        byte[] actualEncryptedData = Arrays.copyOfRange(encryptedBytes, 16, encryptedBytes.length);
+
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        SecretKey secretKey = new SecretKeySpec(aesKey, "AES");
+        IvParameterSpec ivSpec = new IvParameterSpec(iv);
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
+
+        byte[] decryptedData = cipher.doFinal(actualEncryptedData);
+        ByteBuffer buffer = ByteBuffer.wrap(decryptedData).order(ByteOrder.BIG_ENDIAN);
+
+        byte[] randomBytes = new byte[16];
+        buffer.get(randomBytes);
+
+        int msgLen = buffer.getInt();
+        if (msgLen < 0 || msgLen > buffer.remaining()) {
+            throw new IllegalArgumentException("Invalid message length");
+        }
+
+        byte[] messageBytes = new byte[msgLen];
+        buffer.get(messageBytes);
+
+        return new String(messageBytes, StandardCharsets.UTF_8);
     }
 }

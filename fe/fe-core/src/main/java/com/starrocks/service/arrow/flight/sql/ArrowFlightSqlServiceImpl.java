@@ -17,8 +17,6 @@ package com.starrocks.service.arrow.flight.sql;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
-import com.starrocks.common.Config;
-import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.encryption.EncryptionUtil;
 import com.starrocks.mysql.MysqlCommand;
@@ -28,6 +26,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
+import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
@@ -67,16 +66,22 @@ import java.util.concurrent.Executors;
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
     private final BufferAllocator rootAllocator = new RootAllocator();
     private final ArrowFlightSqlSessionManager arrowFlightSqlSessionManager;
+    private final ArrowFlightSqlTokenManager arrowFlightSqlTokenManager;
     private final Location location;
     private final SqlInfoBuilder sqlInfoBuilder;
     private final ExecutorService executorService = Executors.newFixedThreadPool(200);
     private final int arrowFlightBePort;
+    private final String arrowFlightSqlAseKey;
 
     public ArrowFlightSqlServiceImpl(final ArrowFlightSqlSessionManager arrowFlightSqlSessionManager,
-                                     final Location location, final int arrowFlightBePort) {
+                                     final ArrowFlightSqlTokenManager arrowFlightSqlTokenManager,
+                                     final Location location, final int arrowFlightBePort,
+                                     final String arrowFlightSqlAseKey) {
         this.arrowFlightSqlSessionManager = arrowFlightSqlSessionManager;
+        this.arrowFlightSqlTokenManager = arrowFlightSqlTokenManager;
         this.location = location;
         this.arrowFlightBePort = arrowFlightBePort;
+        this.arrowFlightSqlAseKey = arrowFlightSqlAseKey;
         sqlInfoBuilder = new SqlInfoBuilder();
         sqlInfoBuilder.withFlightSqlServerName("StarRocks").withFlightSqlServerVersion("1.0")
                 .withFlightSqlServerArrowVersion("16.0.0")
@@ -95,13 +100,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             FlightSql.ActionCreatePreparedStatementRequest actionCreatePreparedStatementRequest,
             CallContext callContext, StreamListener<Result> streamListener) {
         executorService.submit(() -> {
-            String peerIdentity = callContext.peerIdentity();
-            ArrowFlightSqlConnectContext ctx = arrowFlightSqlSessionManager.getConnectContext(peerIdentity);
             try {
-                if (Config.arrow_flight_sql_ase_key.length() != 43) {
-                    throw new InvalidConfException(
-                            "FE configuration item arrow_flight_sql_ase_key is invalid.");
-                }
+                String peerIdentity = callContext.peerIdentity();
+                ArrowFlightSqlConnectContext ctx = arrowFlightSqlSessionManager.getConnectContext(peerIdentity);
 
                 String query = actionCreatePreparedStatementRequest.getQuery();
                 initConnectContext(ctx, query);
@@ -125,9 +126,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                 .withDescription("createPreparedStatement unexpected error: " + e.getMessage())
                                 .toRuntimeException());
             } finally {
-                ctx.setCommand(MysqlCommand.COM_SLEEP);
+                streamListener.onCompleted();
             }
-            streamListener.onCompleted();
         });
     }
 
@@ -410,8 +410,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             Schema schema = arrowConnectProcessor.fetchArrowSchema(address, pUniqueId, 600);
 
-            String encryptData = EncryptionUtil
-                    .aesEncrypt(hexStringFromUniqueId(finstId) + ":" + query, Config.arrow_flight_sql_ase_key);
+            String encryptData = EncryptionUtil.aesEncrypt(hexStringFromUniqueId(finstId) + ":" + query,
+                    arrowFlightSqlAseKey);
             final ByteString handle = ByteString.copyFromUtf8(encryptData);
             FlightSql.TicketStatementQuery ticketStatementQuery =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();

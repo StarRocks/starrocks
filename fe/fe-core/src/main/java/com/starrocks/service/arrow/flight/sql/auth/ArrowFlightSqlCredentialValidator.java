@@ -40,8 +40,8 @@ public class ArrowFlightSqlCredentialValidator implements BasicCallHeaderAuthent
             throw CallStatus.UNAUTHENTICATED.withDescription("Access denied for " + username).toRuntimeException();
         }
 
-        String token = arrowFlightSqlTokenManager.createToken(currentUser);
-        return createAuthToken(token);
+        String encryptedToken = arrowFlightSqlTokenManager.createToken(currentUser);
+        return createAuthToken(encryptedToken);
     }
 
     private CallHeaderAuthenticator.AuthResult createAuthToken(String token) {

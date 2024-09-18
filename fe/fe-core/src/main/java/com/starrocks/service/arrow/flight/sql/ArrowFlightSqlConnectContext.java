@@ -59,7 +59,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
 
     private boolean returnFromFE;
 
-    private String peerIdentity;
+    private String token;
 
     public ArrowFlightSqlConnectContext() {
         super();
@@ -145,12 +145,12 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         this.returnFromFE = returnFromFE;
     }
 
-    public String getPeerIdentity() {
-        return peerIdentity;
+    public String getToken() {
+        return token;
     }
 
-    public void setPeerIdentity(String peerIdentity) {
-        this.peerIdentity = peerIdentity;
+    public void setToken(String token) {
+        this.token = token;
     }
 
     @Override

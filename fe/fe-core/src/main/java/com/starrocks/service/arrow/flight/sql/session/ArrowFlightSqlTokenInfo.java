@@ -23,6 +23,16 @@ public class ArrowFlightSqlTokenInfo {
 
     public UserIdentity currentUser;
 
+    public String token;
+
+    public String getToken() {
+        return token;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
+    }
+
     public UserIdentity getCurrentUser() {
         return currentUser;
     }
