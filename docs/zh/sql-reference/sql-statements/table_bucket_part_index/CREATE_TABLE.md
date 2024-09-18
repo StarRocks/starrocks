@@ -759,7 +759,7 @@ PROPERTIES ("storage_type" = "column");
 
 > **注意**
 >
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/data_distribution/Data_distribution.md#确定分桶数量)。
 
 ### 创建表并设置存储介质和数据自动降冷时间
 
