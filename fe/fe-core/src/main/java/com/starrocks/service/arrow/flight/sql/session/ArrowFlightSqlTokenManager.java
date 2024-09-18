@@ -51,9 +51,9 @@ public class ArrowFlightSqlTokenManager implements AutoCloseable {
                                     RemovalNotification<String, ArrowFlightSqlTokenInfo> notification) {
                                 ConnectContext context =
                                         ExecuteEnv.getInstance().getScheduler()
-                                                .getContext(notification.getKey());
+                                                .getArrowFlightSqlConnectContext(notification.getKey());
                                 if (context != null) {
-                                    ExecuteEnv.getInstance().getScheduler().registerConnection(context);
+                                    ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
                                 }
                             }
                         })

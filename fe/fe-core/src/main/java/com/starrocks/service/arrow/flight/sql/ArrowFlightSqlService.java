@@ -62,6 +62,10 @@ public class ArrowFlightSqlService {
             running = true;
             LOG.info("Arrow Flight SQL server start.");
             flightServer.awaitTermination();
+        } catch (InterruptedException e) {
+            LOG.error("Arrow Flight SQL server was interrupted", e);
+            Thread.currentThread().interrupt();
+            System.exit(-1);
         } catch (Exception e) {
             LOG.error("Arrow Flight SQL server start failed");
             System.exit(-1);
@@ -75,6 +79,9 @@ public class ArrowFlightSqlService {
                 LOG.info("Stopping Arrow Flight SQL server .");
                 flightServer.shutdown();
                 flightServer.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                LOG.warn("Interrupted while stopping Arrow Flight SQL server", e);
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
                 LOG.warn("Error while stopping Arrow Flight SQL server", e);
             }

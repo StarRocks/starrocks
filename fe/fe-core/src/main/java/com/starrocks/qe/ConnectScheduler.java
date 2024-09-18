@@ -214,10 +214,6 @@ public class ConnectScheduler {
         return connectionMap.get(connectionId);
     }
 
-    public ConnectContext getContext(String token) {
-        return connectionMap.get(token);
-    }
-
     public ArrowFlightSqlConnectContext getArrowFlightSqlConnectContext(String token) {
         return arrowFlightSqlConnectContextMap.get(token);
     }

@@ -66,7 +66,6 @@ import java.util.concurrent.Executors;
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
     private final BufferAllocator rootAllocator = new RootAllocator();
     private final ArrowFlightSqlSessionManager arrowFlightSqlSessionManager;
-    private final ArrowFlightSqlTokenManager arrowFlightSqlTokenManager;
     private final Location location;
     private final SqlInfoBuilder sqlInfoBuilder;
     private final ExecutorService executorService = Executors.newFixedThreadPool(200);
@@ -78,7 +77,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                      final Location location, final int arrowFlightBePort,
                                      final String arrowFlightSqlAseKey) {
         this.arrowFlightSqlSessionManager = arrowFlightSqlSessionManager;
-        this.arrowFlightSqlTokenManager = arrowFlightSqlTokenManager;
         this.location = location;
         this.arrowFlightBePort = arrowFlightBePort;
         this.arrowFlightSqlAseKey = arrowFlightSqlAseKey;
@@ -153,7 +151,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         String peerIdentity = callContext.peerIdentity();
         ArrowFlightSqlConnectContext ctx = arrowFlightSqlSessionManager.getConnectContext(peerIdentity);
         String database = callContext.getMiddleware(FlightConstants.HEADER_KEY).headers().get("database");
-        if (database != null || !database.isEmpty()) {
+        if (database != null && !database.isEmpty()) {
             ctx.setDatabase(database);
         }
         return getFlightInfoFromQuery(peerIdentity, ctx, flightDescriptor);

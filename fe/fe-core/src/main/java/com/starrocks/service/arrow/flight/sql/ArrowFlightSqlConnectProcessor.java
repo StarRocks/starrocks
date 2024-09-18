@@ -100,12 +100,8 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
             Tracers.close();
         }
 
-        if (executor != null) {
-            auditAfterExec(sql, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
-            executor.addFinishedQueryDetail();
-        } else {
-            auditAfterExec(sql, null, null);
-        }
+        auditAfterExec(sql, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+        executor.addFinishedQueryDetail();
     }
 
     @Override
