@@ -37,7 +37,7 @@ CREATE RESOURCE GROUP bigQuery
 TO 
     (db='sr_hub')
 WITH (
-    'cpu_core_limit' = '10',
+    'cpu_weight' = '10',
     'mem_limit' = '20%',
     'big_query_cpu_second_limit' = '100',
     'big_query_scan_rows_limit' = '100000',
