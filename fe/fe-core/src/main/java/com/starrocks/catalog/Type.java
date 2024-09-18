@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
@@ -65,6 +66,32 @@ import java.util.stream.Collectors;
 public abstract class Type implements Cloneable {
     // used for nested type such as map and struct
     protected Boolean[] selectedFields;
+
+    // Why add AggStateDesc into Type class?
+    // 1. AggStateDesc is only used for combinator agg functions, and it's not persisted in Type but rather in Column.
+    // 2. Combinator agg functions cannot deduce input's original type, we need this to record the original type in aggStateDesc.
+    // eg:
+    //  CREATE TABLE test_agg_state_table (
+    //        k1  date,
+    //        v0 multi_distinct_sum(double),
+    //        v1 multi_distinct_sum(float),
+    //        v2 multi_distinct_sum(boolean),
+    //        v3 multi_distinct_sum(tinyint(4)),
+    //        v4 multi_distinct_sum(smallint(6)),
+    //        v5 multi_distinct_sum(int(11)),
+    //        v6 multi_distinct_sum(bigint(20)),
+    //        v7 multi_distinct_sum(largeint(40)),
+    //        v8 multi_distinct_sum(decimal(10, 2)),
+    //        v9 multi_distinct_sum(decimal(10, 2)),
+    //        v10 multi_distinct_sum(decimal(10, 2)))
+    //    DISTRIBUTED BY HASH(k1)
+    //    PROPERTIES (  "replication_num" = "1");
+    // In this case, all column types of v0...v10 are `varbinary`, only use `varbinary` type we cannot deduce the final agg type.
+    // eg: select multi_distinct_sum_merge(v0), multi_distinct_sum_merge(v5) from test_agg_state_table
+    // Even v0/v5's types are varbinary, but multi_distinct_sum_merge(v0) returns double,
+    // multi_distinct_sum_merge(v5) returns bigint.
+    // So we need to record the original column's agg state desc in type to be used in FunctionAnalyzer.
+    protected AggStateDesc aggStateDesc = null;
 
     public static final int CHARSET_BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
@@ -1700,7 +1727,11 @@ public abstract class Type implements Cloneable {
     @Override
     public Type clone() {
         try {
-            return (Type) super.clone();
+            Type cloned = (Type) super.clone();
+            if (aggStateDesc != null) {
+                cloned.setAggStateDesc(aggStateDesc.clone());
+            }
+            return cloned;
         } catch (CloneNotSupportedException ex) {
             throw new Error("Something impossible just happened", ex);
         }
@@ -1738,5 +1769,13 @@ public abstract class Type implements Cloneable {
     // if type is map type, it will return the max unique id between key type and value type
     public int getMaxUniqueId() {
         return -1;
+    }
+
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
+    }
+
+    public AggStateDesc getAggStateDesc() {
+        return aggStateDesc;
     }
 }

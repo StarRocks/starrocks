@@ -302,11 +302,11 @@ public:
 
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { new (ptr) State; }
 
-    void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
+    void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { data(ptr).~State(); }
 
-    size_t size() const final { return sizeof(State); }
+    size_t size() const override { return sizeof(State); }
 
-    size_t alignof_size() const final { return alignof(State); }
+    size_t alignof_size() const override { return alignof(State); }
 
     bool is_pod_state() const override { return pod_state(); }
 };
