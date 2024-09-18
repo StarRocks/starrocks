@@ -41,7 +41,6 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "block_cache/block_cache.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -234,7 +233,6 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
     _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", _process_mem_tracker.get());
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
-    _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
     _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
     _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
@@ -248,8 +246,6 @@ Status GlobalEnv::_init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
-    ForEach<ColumnPoolList>(op);
     _init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }

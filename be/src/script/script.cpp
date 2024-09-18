@@ -222,7 +222,6 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, metadata_mem_tracker);
         REG_METHOD(GlobalEnv, compaction_mem_tracker);
         REG_METHOD(GlobalEnv, schema_change_mem_tracker);
-        REG_METHOD(GlobalEnv, column_pool_mem_tracker);
         REG_METHOD(GlobalEnv, page_cache_mem_tracker);
         REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
         REG_METHOD(GlobalEnv, update_mem_tracker);
