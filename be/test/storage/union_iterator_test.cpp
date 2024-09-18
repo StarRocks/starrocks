@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
