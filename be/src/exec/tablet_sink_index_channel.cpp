@@ -419,7 +419,7 @@ void NodeChannel::_reset_cur_chunk(Chunk* input) {
     int64_t before_consumed_bytes = CurrentThread::current().get_consumed_bytes();
     _cur_chunk = input->clone_empty_with_slot();
     int64_t after_consumed_bytes = CurrentThread::current().get_consumed_bytes();
-    _cur_chunk_mem_usage = after_consumed_bytes - before_consumed_bytes;
+    _cur_chunk_mem_usage += after_consumed_bytes - before_consumed_bytes;
 }
 
 void NodeChannel::_append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
