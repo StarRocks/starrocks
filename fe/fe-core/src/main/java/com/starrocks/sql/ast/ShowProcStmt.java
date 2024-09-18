@@ -37,6 +37,7 @@ public class ShowProcStmt extends ShowStmt {
                 .add("routine_loads")
                 .add("transactions")
                 .add("compactions")
+                .add("replications")
                 .build();
     }
 
