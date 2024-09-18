@@ -196,9 +196,16 @@ public:
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
-    static bool is_all_array_lengths_equal(const ColumnPtr& lhs, const ColumnPtr& rhs, const NullColumnPtr& null_data);
+
+    // check if all of arrays' size is equal
+    // v1 and v2 must be one of ArrayColumn or Const(ArrayColumn)
+    template <bool IgnoreNull>
+    static bool is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
 
 private:
+    template <bool ConstV1, bool ConstV2, bool IgnoreNull>
+    static bool compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2, const NullColumnPtr& null_data);
+
     // Elements must be NullableColumn to facilitate handling nested types.
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.
@@ -207,5 +214,8 @@ private:
     // The two element array has three offsets(0, 3, 6)
     UInt32Column::Ptr _offsets;
 };
+
+extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
+extern template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
 
 } // namespace starrocks
