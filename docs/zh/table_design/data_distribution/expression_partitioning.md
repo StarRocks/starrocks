@@ -235,11 +235,7 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## 使用限制
 
-<<<<<<< HEAD:docs/zh/table_design/expression_partitioning.md
-- 自 v3.1.0 起，StarRocks [存算分离模式](../deployment/deploy_shared_data.md)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks [存算分离模式](../deployment/deploy_shared_data.md)支持[列表达式分区](#列表达式分区自-v31)。
-=======
-- 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073)):docs/zh/table_design/data_distribution/expression_partitioning.md
+- 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/deploy_shared_data.md)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks [存算分离模式](../../deployment/deploy_shared_data.md)支持[列表达式分区](#列表达式分区自-v31)。
 - 使用 CTAS 建表时暂时不支持表达式分区。
 - 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。

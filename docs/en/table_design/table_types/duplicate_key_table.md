@@ -51,15 +51,7 @@ DISTRIBUTED BY HASH(user_id);
 
 - You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
-<<<<<<< HEAD
 - If two identical records are loaded, the Duplicate Key table retains them as two records, rather than one.
-=======
-  Since v3.1.0, StarRocks supports random bucketing for Duplicate Key tables (the default bucketing method). When creating tables or adding partitions, you do not need to set the hash bucketing key (that is the `DISTRIBUTED BY HASH` clause). Before v3.1.0, StarRocks only supports hash bucketing. You need to set the hash bucketing key (that is the `DISTRIBUTED BY HASH` clause) when creating tables or adding partitions, otherwise the table fails to be created. For more information on hash bucketing keys, see [Hash Bucketing](../data_distribution/Data_distribution.md#hash-bucketing).
-
-  - **Bucket number**: Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../data_distribution/Data_distribution.md#set-the-number-of-buckets).
-
-- When you create a table, you can create Bitmap indexes or Bloom Filter indexes on the all columns of the table.
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
 ## What to do next
 

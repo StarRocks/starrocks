@@ -5,13 +5,7 @@ displayed_sidebar: docs
 # Load data using Routine Load
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
-import QSTip from '../_assets/commonMarkdown/quickstart-routine-load-tip.mdx'
 
-<<<<<<< HEAD
-=======
-<QSTip />
-
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.
 
 To continuously load messages of a stream into StarRocks, you can store the message stream in a Kafka topic, and create a Routine Load job to consume the messages. The Routine Load job persists in StarRocks, generates a series of load tasks to consume the messages in all or part of the partitions in the topic, and loads the messages into StarRocks.
@@ -240,11 +234,7 @@ DISTRIBUTED BY HASH(`commodity_id`);
 
 > **NOTICE**
 >
-<<<<<<< HEAD
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
-=======
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -349,11 +339,7 @@ DISTRIBUTED BY HASH(`id`);
 
 > **NOTICE**
 >
-<<<<<<< HEAD
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
-=======
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
->>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/data_distribution/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
