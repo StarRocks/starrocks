@@ -351,6 +351,10 @@ public class Function implements Writable {
         return isPolymorphic;
     }
 
+    public void setPolymorphic(boolean isPolymorphic) {
+        this.isPolymorphic = isPolymorphic;
+    }
+
     public boolean isMetaFunction() {
         return isMetaFunction;
     }

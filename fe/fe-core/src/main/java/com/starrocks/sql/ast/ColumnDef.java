@@ -386,6 +386,12 @@ public class ColumnDef implements ParseNode {
             throw new AnalysisException(String.format("No aggregate function specified for '%s'", name));
         }
 
+        if (aggStateDesc != null) {
+            if (defaultValueDef.isSet) {
+                throw new AnalysisException(String.format("Invalid default value for '%s'", name));
+            }
+            // not set default value
+        }
         if (type.isHllType()) {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
@@ -405,12 +411,6 @@ public class ColumnDef implements ParseNode {
             if (!defaultValueDef.isSet) {
                 defaultValueDef = DefaultValueDef.NULL_DEFAULT_VALUE;
             }
-        }
-        if (aggStateDesc != null) {
-            if (defaultValueDef.isSet) {
-                throw new AnalysisException(String.format("Invalid default value for '%s'", name));
-            }
-            // not set default value
         }
 
         if (!isAllowNull && defaultValueDef == DefaultValueDef.NULL_DEFAULT_VALUE) {

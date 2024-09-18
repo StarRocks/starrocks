@@ -213,6 +213,23 @@ public class AggregateFunction extends Function {
         isDistinct = other.isDistinct;
     }
 
+    /**
+     * Returns a new instance of this aggregate function with new argument types and return type which is used for
+     * original function's argument types are psedo types.
+     */
+    public AggregateFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        AggregateFunction newFn = new AggregateFunction(this.getFunctionName(), newArgTypes, newRetType,
+                this.getIntermediateType(), this.hasVarArgs());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        return newFn;
+    }
+
     public String getSymbolName() {
         return symbolName == null ? Strings.EMPTY : symbolName;
     }
