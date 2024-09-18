@@ -59,6 +59,6 @@ Example 4: modifies the resource limits of the resource group `rg1`.
 
 ```SQL
 ALTER RESOURCE GROUP rg1 WITH (
-    'cpu_core_limit' = '20'
+    'cpu_weight' = '10'
 );
 ```
