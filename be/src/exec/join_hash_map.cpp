@@ -335,7 +335,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         _probe_state->probe_counter = param.probe_counter;
     }
 
-    _table_items->build_chunk = std::make_shared<Chunk>();
+    _table_items->build_chunk = std::make_shared<SegmentedChunk>();
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->mor_reader_mode = param.mor_reader_mode;
@@ -626,7 +626,7 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
 }
 
 void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
-    Columns& columns = _table_items->build_chunk->columns();
+    auto& columns = _table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
@@ -659,8 +659,8 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
 void JoinHashTable::merge_ht(const JoinHashTable& ht) {
     _table_items->row_count += ht._table_items->row_count;
 
-    Columns& columns = _table_items->build_chunk->columns();
-    Columns& other_columns = ht._table_items->build_chunk->columns();
+    auto& columns = _table_items->build_chunk->columns();
+    auto& other_columns = ht._table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         if (!columns[i]->is_nullable() && other_columns[i]->is_nullable()) {
