@@ -608,7 +608,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void postProcess() {
-        mvContext.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(oldTransactionVisibleWaitTimeout);
+        // If mv's not active, mvContext may be null.
+        if (mvContext != null && mvContext.ctx != null) {
+            mvContext.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(oldTransactionVisibleWaitTimeout);
+        }
     }
 
     private boolean isEnableMVRefreshQueryRewrite(ConnectContext ctx,

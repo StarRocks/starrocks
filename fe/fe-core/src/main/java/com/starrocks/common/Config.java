@@ -3016,6 +3016,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
 
+    @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
+    public static boolean enable_active_materialized_view_schema_strict_check = true;
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
