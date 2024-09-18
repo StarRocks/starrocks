@@ -678,6 +678,20 @@ size_t TabletSchema::field_index(std::string_view field_name) const {
     return -1;
 }
 
+size_t TabletSchema::field_index(std::string_view field_name, std::string_view extra_column_name) const {
+    int ordinal = -1;
+    for (auto& column : _cols) {
+        ordinal++;
+        if (column.name() == field_name) {
+            return ordinal;
+        }
+    }
+    if (field_name == extra_column_name) {
+        return ordinal + 1;
+    }
+    return -1;
+}
+
 int32_t TabletSchema::field_index(int32_t col_unique_id) const {
     const auto& found = _unique_id_to_index.find(col_unique_id);
     return (found == _unique_id_to_index.end()) ? -1 : found->second;

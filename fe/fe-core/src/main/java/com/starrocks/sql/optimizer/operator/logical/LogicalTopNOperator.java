@@ -68,7 +68,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_TOPN);
     }
 
-    private LogicalTopNOperator(long limit,
+    public LogicalTopNOperator(long limit,
                                 ScalarOperator predicate, Projection projection,
                                 List<ColumnRefOperator> partitionByColumns,
                                 long partitionLimit,

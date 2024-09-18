@@ -151,6 +151,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRu
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
@@ -269,6 +270,10 @@ public class RuleSet {
                 ExternalScanPartitionPruneRule.ODPS_SCAN,
                 ExternalScanPartitionPruneRule.KUDU_SCAN,
                 new LimitPruneTabletsRule()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.VECTOR_REWRITE, ImmutableList.of(
+                new RewriteToVectorPlanRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(

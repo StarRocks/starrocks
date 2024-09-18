@@ -19,6 +19,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -84,6 +85,8 @@ public class OptimizerContext {
 
     // collect all LogicalOlapScanOperators in the query before any optimization
     private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -309,5 +312,13 @@ public class OptimizerContext {
 
     public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
         return allLogicalOlapScanOperators;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
     }
 }

@@ -132,6 +132,15 @@ void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
     check_or_die();
 }
 
+void Chunk::append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id) {
+    DCHECK(!_cid_to_index.contains(field->id()));
+    _cid_to_index[field->id()] = _columns.size();
+    _slot_id_to_index[slot_id] = _columns.size();
+    _columns.emplace_back(std::move(column));
+    _schema->append(field);
+    check_or_die();
+}
+
 void Chunk::append_column(ColumnPtr column, SlotId slot_id) {
     _slot_id_to_index[slot_id] = _columns.size();
     _columns.emplace_back(std::move(column));

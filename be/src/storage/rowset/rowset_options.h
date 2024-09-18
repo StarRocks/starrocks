@@ -41,6 +41,8 @@ class DeletePredicates;
 class ChunkPredicate;
 struct RowidRangeOption;
 struct ShortKeyRangesOption;
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 class RowsetReadOptions {
     using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -88,6 +90,10 @@ public:
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
     bool has_preaggregation = true;
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
 };
 
 } // namespace starrocks

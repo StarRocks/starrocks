@@ -1,4 +1,4 @@
--- name: test_math_cosine_similarity
+-- name: test_vector_math
 create table t1 (id int, data array<float>) engine = olap distributed by hash(id) properties ("replication_num" = "1");
 -- result:
 -- !result
@@ -19,19 +19,29 @@ select cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2
 -- result:
 0.14000002
 -- !result
-create table test_cosine (id int, data array<float>) ENGINE=olap DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) properties ("replication_num" = "1");
+select l2_distance(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 order by dist desc;
+-- result:
+0.08000001	3
+0.020000001	2
+0.0	1
+-- !result
+select l2_distance(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
+-- result:
+0.0
+-- !result
+create table test_vector (id int, data array<float>) ENGINE=olap DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) properties ("replication_num" = "1");
 -- result:
 -- !result
-insert into test_cosine values (1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]);
+insert into test_vector values (1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]);
 -- result:
 -- !result
-insert into test_cosine values (3, array<float>[0.15, 0.25, 0.32]), (4, array<float>[0.12, 0.11, 0.32]);
+insert into test_vector values (3, array<float>[0.15, 0.25, 0.32]), (4, array<float>[0.12, 0.11, 0.32]);
 -- result:
 -- !result
-insert into test_cosine values (5, array<float>[0.25, 0.12, 0.13]), (6, array<float>[0.22, 0.01, 0.39]);
+insert into test_vector values (5, array<float>[0.25, 0.12, 0.13]), (6, array<float>[0.22, 0.01, 0.39]);
 -- result:
 -- !result
-select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim from test_cosine order by sim desc;
+select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim from test_vector order by sim desc;
 -- result:
 1	[0.1,0.2,0.3]	0.9999999
 3	[0.15,0.25,0.32]	0.99397856
@@ -40,7 +50,7 @@ select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim fro
 6	[0.22,0.01,0.39]	0.841375
 5	[0.25,0.12,0.13]	0.76792216
 -- !result
-select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_cosine as a cross join test_cosine as b;
+select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_vector as a cross join test_vector as b;
 -- result:
 6	4	[0.22,0.01,0.39]	[0.12,0.11,0.32]	0.94712645
 6	1	[0.22,0.01,0.39]	[0.1,0.2,0.3]	0.841375
@@ -79,7 +89,7 @@ select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from
 4	5	[0.12,0.11,0.32]	[0.25,0.12,0.13]	0.77120167
 4	6	[0.12,0.11,0.32]	[0.22,0.01,0.39]	0.94712645
 -- !result
-select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_cosine as a cross join test_cosine as b order by sim desc;
+select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_vector as a cross join test_vector as b order by sim desc;
 -- result:
 3	3	[0.15,0.25,0.32]	[0.15,0.25,0.32]	1.0
 5	5	[0.25,0.12,0.13]	[0.25,0.12,0.13]	0.99999994
@@ -117,4 +127,13 @@ select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from
 4	5	[0.12,0.11,0.32]	[0.25,0.12,0.13]	0.77120167
 1	5	[0.1,0.2,0.3]	[0.25,0.12,0.13]	0.76792216
 5	1	[0.25,0.12,0.13]	[0.1,0.2,0.3]	0.76792216
+-- !result
+select id, data, l2_distance(array<float>[0.1, 0.2, 0.3], data) as sim from test_vector order by sim desc;
+-- result:
+6	[0.22,0.01,0.39]	0.058599994
+5	[0.25,0.12,0.13]	0.057800006
+2	[0.2,0.1,0.3]	0.020000001
+4	[0.12,0.11,0.32]	0.0089
+3	[0.15,0.25,0.32]	0.005399999
+1	[0.1,0.2,0.3]	0.0
 -- !result

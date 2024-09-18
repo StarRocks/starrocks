@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -50,6 +51,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private boolean fromSplitOR;
 
     private long gtid = 0;
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -164,6 +167,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return fromSplitOR;
     }
 
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);
@@ -222,6 +233,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.hintsReplicaIds = scanOperator.hintsReplicaIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             builder.usePkIndex = scanOperator.usePkIndex;
+            builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
             return this;
         }
 
