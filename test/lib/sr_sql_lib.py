@@ -987,14 +987,14 @@ class StarrocksSQLApiLib(object):
             for each_word in copy.copy(match_words):
                 # each_word type: xyz | xyz[*]...
                 # each_word: db[0]  match_keywords: [ db ] each_keyword: db
-                match_keywords: list = re.compile(r"^([a-zA-Z][a-zA-Z0-9_\-]*)").findall(cmd)
+                match_keywords: list = re.compile(r"^([a-zA-Z][a-zA-Z0-9_\-]*)").findall(each_word)
                 tools.eq_(1, len(match_keywords), f"Var num in {match_keywords} != 1")
                 each_keyword = match_keywords[0]
 
                 # only replace the first keywords
                 if each_keyword in self.thread_var[thread_key]:
                     each_keyword_value = each_word.replace(each_keyword,
-                                                           f"self.thread_var[{thread_key}][{each_keyword}]")
+                                                           f"self.thread_var['{thread_key}']['{each_keyword}']")
 
                     if unfold:
                         each_keyword_value = str(eval(each_keyword_value))
@@ -1126,7 +1126,7 @@ class StarrocksSQLApiLib(object):
                 # -------------------------------------------
                 #               [CHECKER]
                 # -------------------------------------------
-                self.check(_cmd_id_str, _each_cmd, expect_res, actual_res, order, ori_sql=cmd_list[_cmd_id].lstrip())
+                self.check(_cmd_id_str, _each_cmd, expect_res, actual_res, order, ori_sql=cmd_list[_cmd_id].lstrip(), thread_key=exec_id)
 
         if record_mode and len(this_res) > 0:
             self.thread_res_log.setdefault(_t_info, [])
@@ -1321,9 +1321,11 @@ class StarrocksSQLApiLib(object):
 
         return loop_check_res
 
-    @staticmethod
-    def check(sql_id, sql, exp, act, order=False, ori_sql=None):
+    def check(self, sql_id, sql, exp, act, order=False, ori_sql=None, thread_key=None):
         """check sql result"""
+
+        _, exp = self.analyse_var(exp, unfold=True, thread_key=thread_key)
+
         # judge if it needs to check
         if exp == "":
             if sql.startswith(SHELL_FLAG):
