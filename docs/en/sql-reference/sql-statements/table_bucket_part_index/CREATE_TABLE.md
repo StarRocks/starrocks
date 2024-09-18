@@ -107,10 +107,15 @@ Default value: `olap`. If this parameter is not specified, an OLAP table (StarRo
 
 Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `iceberg`, and `hudi` (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
 
-**From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md).**
+**We recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated.**
 
-**From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../loading_unloading/INSERT.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
+**From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using INSERT INTO.**
 
+<<<<<<< HEAD
+=======
+**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using INSERT INTO. From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using INSERT INTO**
+
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 - For MySQL, specify the following properties:
 
     ```plaintext
@@ -225,7 +230,7 @@ Partition description can be used in the following ways:
 
 #### Create partitions dynamically
 
-[Dynamic partitioning](../../../table_design/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
+[Dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
 
 #### Create partitions one by one
 
@@ -246,8 +251,13 @@ Note:
 
 Please use specified key columns and specified value ranges for partitioning.
 
+<<<<<<< HEAD
 - Partition name only supports [A-z0-9_]
 - Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+=======
+- For the naming conventions of partitions, see [System limits](../../System_limit.md).
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
@@ -318,10 +328,14 @@ Description
 
 You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
+<<<<<<< HEAD
 - The partitioning column can be of a date or integer type.
+=======
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md).
+For more information, see [Data distribution](../../../table_design/data_distribution/Data_distribution.md).
 
 ### distribution_desc
 
@@ -340,10 +354,15 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   **Precautions**
   - You can only use random bucketing to create Duplicate Key tables.
   - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+<<<<<<< HEAD
   - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+  - Spark Load cannot be used to load data into tables bucketed randomly.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
-  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
+  For more information, see [Random bucketing](../../../table_design/data_distribution/Data_distribution.md#random-bucketing-since-v31).
 
 - Hash bucketing
 
@@ -363,14 +382,18 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
   - If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
 
-  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md#hash-bucketing).
+  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/data_distribution/Data_distribution.md#hash-bucketing).
 
   **Precautions**:
 
   - **When you create a table, you must specify its bucketing columns**.
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
+<<<<<<< HEAD
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
 ### ORDER BY
 
@@ -615,7 +638,7 @@ PROPERTIES (
 
   > **NOTE**
   >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/management/BE_configuration.md).
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`.
 
 - `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
@@ -628,6 +651,17 @@ PROPERTIES (
   - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
   - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
 
+<<<<<<< HEAD
+=======
+#### Set fast schema evolution
+
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+  > **NOTE**
+  >
+  > - This parameter is supported for shared-nothing clusters since v3.2.0, and shared-data clusters since v3.3.0.
+  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter `enable_fast_schema_evolution`.
+
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 ## Examples
 
 ### Create an Aggregate table that uses Hash bucketing and columnar storage

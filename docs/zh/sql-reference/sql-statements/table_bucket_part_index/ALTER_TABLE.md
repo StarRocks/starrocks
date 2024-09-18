@@ -209,7 +209,7 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
 
-详细使用信息，请查阅[临时分区](../../../table_design/Temporary_partition.md)。
+详细使用信息，请查阅[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。
 
 语法：
 
@@ -523,6 +523,35 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP INDEX index_name;
 ```
 
+<<<<<<< HEAD
+=======
+### 修改表的属性
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
+```
+
+参数说明：
+
+- `key` 表示表属性的名称，`value` 表示该表属性的配置。
+
+- 支持修改如下表属性：
+  - `replication_num`
+  - `default.replication_num`
+  - `storage_cooldown_ttl`
+  - `storage_cooldown_time`
+  - [动态分区相关属性 properties](../../../table_design/data_distribution/dynamic_partitioning.md)，比如 `dynamic_partition.enable`
+  - `enable_persistent_index`
+  - `bloom_filter_columns`
+  - `colocate_with`
+  - `bucket_size`（自 3.2 版本支持）
+
+注意：修改表的属性也可以合并到 schema change <!--这个 schema change 除了column相关的alter table还包括啥--> 操作中来修改，见[示例](#示例)部分。
+
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 ### Swap 将两个表原子替换
 
 语法：

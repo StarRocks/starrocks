@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # Primary Key table
@@ -55,6 +56,37 @@ Example 1: Suppose that you need to analyze orders on a daily basis. In this exa
 ```SQL
 create table orders (
     dt date NOT NULL,
+<<<<<<< HEAD
+=======
+    user_id INT NOT NULL,
+    good_id INT NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL
+)
+PRIMARY KEY (order_id)
+DISTRIBUTED BY HASH (order_id)
+;
+```
+
+:::info
+
+Because the Primary Key table only supports hash bucketing as the bucketing strategy, you also need to define the hash bucketing key by using `DISTRIBUTED BY HASH ()`.
+
+:::
+
+However, in real business scenarios, when a Primary Key table is created, additional features such as data distribution and sort key are often used to accelerate queries and manage data more efficiently.
+
+For example, the `order_id` field in the order table can uniquely identify data rows, so the `order_id` field can be used as the primary key.
+
+Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key. Therefore, you can choose columns frequently used as query filter conditions to form the sort key. For example, if you frequently query product sales performance based on the combination of two dimensions, order date and merchant, you can specify the sort key as `dt` and `merchant_id` using the `ORDER BY (dt,merchant_id)` clause.
+
+Note that if you use [data distribution strategies](../data_distribution/Data_distribution.md), the Primary Key table currently requires the primary key to include partitioning and bucketing columns. For example, the data distribution strategy uses `dt` as the partitioning column and `merchant_id` as the hash bucketing column. The primary key also needs to include `dt` and `merchant_id`.
+
+In summary, the CREATE TABLE statement for the above order table can be as follows:
+
+```SQL
+CREATE TABLE orders2 (
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
     order_id bigint NOT NULL,
     user_id int NOT NULL,
     merchant_id int NOT NULL,

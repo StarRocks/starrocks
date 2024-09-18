@@ -2,9 +2,20 @@
 displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
+<<<<<<< HEAD
 
 # Iceberg catalog
 
+=======
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import QSTip from '../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+
+# Iceberg catalog
+
+<QSTip />
+
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
 - Directly query data stored in Iceberg without the need to manually create tables.

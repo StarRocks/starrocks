@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 40
 ---
 
 # 聚合模型
@@ -74,8 +75,13 @@ PROPERTIES (
 
 > **注意**
 >
+<<<<<<< HEAD
 > - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../Data_distribution.md#分桶)。
 > - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../Data_distribution.md#确定分桶数量)。
+=======
+> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../data_distribution/Data_distribution.md#分桶)。
+> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../data_distribution/Data_distribution.md#设置分桶数量)。
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
 ## 使用说明
 

@@ -98,7 +98,11 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
    > **NOTE**
    >
+<<<<<<< HEAD
    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
    a. Create a Primary Key table named `table1`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 

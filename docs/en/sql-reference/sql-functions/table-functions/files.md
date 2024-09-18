@@ -6,7 +6,16 @@ displayed_sidebar: docs
 
 ## Description
 
+<<<<<<< HEAD
 Reads a data file from cloud storage. FILES() accesses cloud storage with the path-related properties of the file, infers the table schema of the data in the file, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md). This feature is supported from v3.1.0 onwards.
+=======
+
+Defines data files in remote storage.
+
+From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function FILES(). It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md).
+
+From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
 Currently, the FILES() function supports the following data sources and file formats:
 
@@ -58,6 +67,65 @@ The authentication information used by StarRocks to access your storage system.
   | aws.s3.secret_key | Yes          | The Secret Access Key that you can use to access the Amazon S3 bucket. |
   | aws.s3.region     | Yes          | The region in which your AWS S3 bucket resides. Example: `us-west-2`. |
 
+<<<<<<< HEAD
+=======
+- Use the IAM user-based authentication to access GCS:
+
+  ```SQL
+  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
+  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+  "fs.s3a.endpoint" = "<gcs_endpoint>"
+  ```
+
+  | **Key**           | **Required** | **Description**                                              |
+  | ----------------- | ------------ | ------------------------------------------------------------ |
+  | fs.s3a.access.key | Yes          | The Access Key ID that you can use to access the GCS bucket. |
+  | fs.s3a.secret.key | Yes          | The Secret Access Key that you can use to access the GCS bucket.|
+  | fs.s3a.endpoint   | Yes          | The endpoint that you can use to access the GCS bucket. Example: `storage.googleapis.com`. |
+
+- Use Shared Key to access Azure Blob Storage:
+
+  ```SQL
+  "azure.blob.storage_account" = "<storage_account>",
+  "azure.blob.shared_key" = "<shared_key>"
+  ```
+
+  | **Key**                    | **Required** | **Description**                                              |
+  | -------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.storage_account | Yes          | The name of the Azure Blob Storage account.                  |
+  | azure.blob.shared_key      | Yes          | The Shared Key that you can use to access the Azure Blob Storage account. |
+
+### columns_from_path
+
+From v3.2 onwards, StarRocks can extract the value of a key/value pair from the file path as the value of a column.
+
+```SQL
+"columns_from_path" = "<column_name> [, ...]"
+```
+
+Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
+
+### unload_data_param
+
+From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading.
+
+```sql
+-- Supported from v3.2 onwards.
+unload_data_param::=
+    "compression" = "<compression_method>",
+    "partition_by" = "<column_name> [, ...]",
+    "single" = { "true" | "false" } ,
+    "target_max_file_size" = "<int>"
+```
+
+| **Key**          | **Required** | **Description**                                              |
+| ---------------- | ------------ | ------------------------------------------------------------ |
+| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
+| partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 5. |
+| single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
+| target_max_file_size | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
+
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 ## Return
 
 When used with SELECT, FILES() returns the data in the file as a table.

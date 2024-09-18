@@ -107,7 +107,11 @@ If the data file you want to load involves only UPSERT operations, you do not ne
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
    b. Insert a record into `table1`.
 
@@ -269,7 +273,11 @@ If the data file you want to load involves only DELETE operations, you must add 
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
    b. Insert two records into `table2`.
 
@@ -381,7 +389,11 @@ If the data file you want to load involves both UPSERT and DELETE operations, yo
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
    b. Insert two records into `table3`.
 
@@ -503,7 +515,11 @@ Since v2.2, StarRocks supports updating only the specified columns of a Primary 
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
    b. Insert a record into `table4`.
 
@@ -635,7 +651,11 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
       > **NOTE**
       >
+<<<<<<< HEAD
       > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+=======
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+>>>>>>> 0be46582cf ([Doc] Autogen nav (#51073))
 
    b. Insert a record into `table5`.
 
