@@ -187,7 +187,6 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;

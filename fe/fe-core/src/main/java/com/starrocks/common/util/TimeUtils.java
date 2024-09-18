@@ -93,7 +93,7 @@ public class TimeUtils {
     // A regular expressions that will support the pattern like ('Date/DateTime TimeZone').
     // For example ('2024-09-09 11:40:40.123 Asia/Shanghai'), ('2024-09-09 Asia/Shanghai').
     public static final Pattern DATETIME_WITH_TIME_ZONE_PATTERN =
-            Pattern.compile( "(?<year>[-+]?\\d{4,})-(?<month>\\d{1,2})-(?<day>\\d{1,2})"
+            Pattern.compile("(?<year>[-+]?\\d{4,})-(?<month>\\d{1,2})-(?<day>\\d{1,2})"
                     + "( (?:(?<hour>\\d{1,2}):(?<minute>\\d{1,2})(?::(?<second>\\d{1,2})(?:\\.(?<fraction>\\d+))?)?)?"
                     + "\\s*(?<timezone>.+)?)?");
 
