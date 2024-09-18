@@ -686,7 +686,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     rollup: t2");
                                 PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/0\n" +
+                                            "     partitions=0/0\n" +
                                             "     rollup: t4");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
@@ -777,7 +777,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     partitions=1/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/0\n" +
+                                            "     partitions=0/0\n" +
                                             "     rollup: t5");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());
@@ -862,7 +862,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     partitions=1/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/0\n" +
+                                            "     partitions=0/0\n" +
                                             "     rollup: t5");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());

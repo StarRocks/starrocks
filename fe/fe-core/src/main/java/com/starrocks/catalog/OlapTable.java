@@ -1594,6 +1594,16 @@ public class OlapTable extends Table {
         return idToPartition.values();
     }
 
+    /**
+     * Return all visible partitions except shadow partitions.
+     */
+    public List<Partition> getVisiblePartitions() {
+        return nameToPartition.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .map(e -> e.getValue())
+                .collect(Collectors.toList());
+    }
+
     public List<Partition> getNonEmptyPartitions() {
         return idToPartition.values().stream().filter(Partition::hasData).collect(Collectors.toList());
     }
