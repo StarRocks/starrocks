@@ -14,6 +14,7 @@
 
 #include "storage/aggregate_iterator.h"
 
+#include "common/config.h"
 #include "gtest/gtest.h"
 #include "storage/aggregate_type.h"
 #include "storage/vector_chunk_iterator.h"
