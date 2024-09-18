@@ -541,7 +541,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2");
+                                            "     partitions=1/1");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(1, partitions.size());
@@ -559,7 +559,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/3");
+                                            "     partitions=1/2");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(2, partitions.size());
                             }
@@ -600,7 +600,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2");
+                                            "     partitions=1/1");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(1, partitions.size());
@@ -621,7 +621,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=2/3");
+                                            "     partitions=2/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(1, partitions.size());
@@ -639,7 +639,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/4");
+                                            "     partitions=1/3");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(2, partitions.size());
                             }
@@ -686,7 +686,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     rollup: t2");
                                 PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/1\n" +
+                                            "     partitions=1/0\n" +
                                             "     rollup: t4");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
@@ -714,7 +714,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     partitions=1/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2");
+                                            "     partitions=1/1");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());
                             }
@@ -777,7 +777,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     partitions=1/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/1\n" +
+                                            "     partitions=1/0\n" +
                                             "     rollup: t5");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());
@@ -800,7 +800,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     rollup: t1");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2");
+                                            "     partitions=1/1");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());
                             }
@@ -862,7 +862,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     partitions=1/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/1\n" +
+                                            "     partitions=1/0\n" +
                                             "     rollup: t5");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());
@@ -874,7 +874,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 executeInsertSql(connectContext, insertSql);
                                 // t5 add a new partition
                                 addListPartition("t5", "p1", "beijing", "2022-01-01");
-                                insertSql = "insert into t5 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                                insertSql = "insert into t5 partition(p1) values(1, 1, '2022-01-01', 'beijing');";
                                 executeInsertSql(connectContext, insertSql);
 
                                 ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
@@ -884,7 +884,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                             "     partitions=2/3");
                                 PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2");
+                                            "     partitions=1/1");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());
                             }
@@ -919,13 +919,13 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             {
                                 // add a new partition
                                 addListPartition("t6", "p1", "beijing", "2022-01-01");
-                                String insertSql = "insert into t6 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                                String insertSql = "insert into t6 partition(p1) values(1, 1, '2021-01-01', 'beijing');";
                                 ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
 
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/2");
+                                            "     partitions=1/1");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(1, partitions.size());
@@ -946,7 +946,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=2/3");
+                                            "     partitions=2/2");
 
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(1, partitions.size());
@@ -964,7 +964,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/4");
+                                            "     partitions=1/3");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(2, partitions.size());
                             }
@@ -977,7 +977,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                                 PlanTestBase.assertContains(plan, "    TABLE: t6\n" +
                                             "     PREAGGREGATION: ON\n" +
-                                            "     partitions=1/5");
+                                            "     partitions=1/4");
                                 Collection<Partition> partitions = materializedView.getPartitions();
                                 Assert.assertEquals(3, partitions.size());
                             }
