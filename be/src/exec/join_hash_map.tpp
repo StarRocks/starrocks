@@ -31,13 +31,13 @@ void JoinBuildFunc<LT>::prepare(RuntimeState* runtime, JoinHashTableItems* table
 
 template <LogicalType LT>
 const Buffer<typename JoinBuildFunc<LT>::CppType>& JoinBuildFunc<LT>::get_key_data(
-        const JoinHashTableItems& table_items) {
+        const JoinHashTableItems& table_items, size_t segment_index) {
     ColumnPtr data_column;
     if (table_items.key_columns[0]->is_nullable()) {
-        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
+        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]->get_segmented_column(segment_index));
         data_column = null_column->data_column();
     } else {
-        data_column = table_items.key_columns[0];
+        data_column = table_items.key_columns[0]->get_segmented_column(segment_index);
     }
 
     if constexpr (lt_is_string<LT>) {
@@ -54,9 +54,12 @@ const Buffer<typename JoinBuildFunc<LT>::CppType>& JoinBuildFunc<LT>::get_key_da
 template <LogicalType LT>
 void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                              HashTableProbeState* probe_state) {
+    size_t table_index = 1;
+    for (int i = 0; i < table_items->key_columns[0]->num_segments(); i++) {
     auto& data = get_key_data(*table_items);
+
     if (table_items->key_columns[0]->is_nullable()) {
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]);
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]->get_segmented_column(i));
         auto& null_array = nullable_column->null_column()->get_data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             if (null_array[i] == 0) {
@@ -71,6 +74,7 @@ void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableI
             table_items->next[i] = table_items->first[bucket_num];
             table_items->first[bucket_num] = i;
         }
+    }
     }
     table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }

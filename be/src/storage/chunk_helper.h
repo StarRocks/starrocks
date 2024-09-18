@@ -149,4 +149,48 @@ private:
     bool _finalized = false;
 };
 
+class SegmentedColumn {
+public:
+    void append(const Column& src);
+    void append(const Column& src, size_t offset, size_t count);
+    bool is_nullable() const;
+    bool has_null() const;
+    size_t size() const;
+    StatusOr<ColumnPtr> upgrade_if_overflow();
+
+    template <class T>
+    std::deque<Buffer<T>> get_data();
+
+    std::vector<uint8_t> null_data() const;
+
+    size_t num_segments() const;
+    ColumnPtr get_segmented_column(size_t segment_index);
+
+    size_t byte_size() const;
+
+private:
+};
+
+// A big-chunk would be segmented into multi small ones, to avoid allocating large-continuous memory
+// It's not a transparent replacement for Chunk, but must be aware of and set a reasonale chunk_size
+class SegmentedChunk {
+public:
+    size_t memory_usage() const;
+    Status upgrade_if_overflow();
+    Status downgrade();
+    bool has_large_column() const;
+
+    void append_column(ColumnPtr column, SlotId slot_id);
+
+    const std::vector<ChunkPtr>& get_chunks() const;
+    std::vector<ChunkPtr>& get_chunks();
+    const SegmentedColumns& columns() const;
+    SegmentedColumns& columns();
+    const SegmentedColumnPtr& get_column_by_slot_id(SlotId slot_id) const;
+    SegmentedColumnPtr get_column_by_slot_id(SlotId slot_id);
+
+private:
+    std::vector<ChunkPtr> _chunks;
+};
+
 } // namespace starrocks

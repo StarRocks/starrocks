@@ -372,6 +372,8 @@ public:
         }
     }
 
+    static SegmentedColumnPtr get_data_column(SegmentedColumnPtr column);
+
     static BinaryColumn* get_binary_column(Column* column) { return down_cast<BinaryColumn*>(get_data_column(column)); }
 
     static bool is_all_const(const Columns& columns);
