@@ -490,13 +490,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
-<<<<<<< HEAD
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.READ)) {
-=======
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
-        try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
->>>>>>> c55f765f9b ([Enhancement] Use the same TColumn list in AlterReplicaTask  (#50855))
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
