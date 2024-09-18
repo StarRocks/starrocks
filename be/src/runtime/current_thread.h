@@ -252,19 +252,9 @@ public:
 
     static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
 
-<<<<<<< HEAD
-    bool set_is_catched(bool is_catched) {
-        bool old = _is_catched;
-        _is_catched = is_catched;
-=======
-    static void set_singleton_check_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        tls_singleton_check_mem_tracker = mem_tracker;
-    }
-
     static bool set_is_catched(bool is_catched) {
         bool old = tls_is_catched;
         tls_is_catched = is_catched;
->>>>>>> 2d3ee0b6bf ([BugFix] Fix thread local variable initialization problem (#50899))
         return old;
     }
 
