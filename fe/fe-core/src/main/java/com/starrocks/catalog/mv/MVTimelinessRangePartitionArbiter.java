@@ -15,7 +15,6 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -83,9 +82,8 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                 mvTimelinessInfo);
 
         // collect all ref base table's partition range map
-        Map<Table, Map<String, Set<String>>> extBaseToMVPartitionNameMap = Maps.newHashMap();
         Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap =
-                RangePartitionDiffer.syncBaseTablePartitionInfos(mv, partitionExpr, extBaseToMVPartitionNameMap);
+                RangePartitionDiffer.syncBaseTablePartitionInfos(mv, partitionExpr);
 
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.
@@ -100,7 +98,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
         RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null,
-                extBaseToMVPartitionNameMap, basePartitionNameToRangeMap, isQueryRewrite);
+                basePartitionNameToRangeMap, isQueryRewrite);
         if (differ == null) {
             throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
                     mv.getName()));

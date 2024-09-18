@@ -40,6 +40,10 @@ public class ReplicationJobState {
         return "UNKNOWN";
     }
 
+    public boolean isRunning() {
+        return id == SNAPSHOTING.id || id == REPLICATING.id;
+    }
+
     public static final ReplicationJobState INITIALIZING = new ReplicationJobState(1);
     public static final ReplicationJobState SNAPSHOTING = new ReplicationJobState(2);
     public static final ReplicationJobState REPLICATING = new ReplicationJobState(3);

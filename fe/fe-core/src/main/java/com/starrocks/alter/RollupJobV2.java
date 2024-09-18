@@ -95,6 +95,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -108,6 +109,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -117,6 +119,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * Version 2 of RollupJob.
@@ -487,6 +490,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
+        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
@@ -504,7 +508,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
                     TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                     long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
-                    List<Column> baseColumn = tbl.getIndexMetaByIndexId(baseIndexId).getSchema();
+                    List<TColumn> baseTColumn = indexToThriftColumns.get(baseIndexId);
+                    if (baseTColumn == null) {
+                        baseTColumn = tbl.getIndexMetaByIndexId(baseIndexId).getSchema()
+                                .stream()
+                                .map(Column::toThrift)
+                                .collect(Collectors.toList());
+                        indexToThriftColumns.put(baseIndexId, baseTColumn);
+                    }
 
                     DescriptorTable descTable = new DescriptorTable();
                     TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
@@ -611,7 +622,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                     rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                                     baseTabletId, rollupReplica.getId(), rollupSchemaHash, baseSchemaHash, visibleVersion, jobId,
-                                    rollupJobV2Params, baseColumn);
+                                    rollupJobV2Params, baseTColumn);
                         rollupBatchTask.addTask(rollupTask);
                     }
                 }

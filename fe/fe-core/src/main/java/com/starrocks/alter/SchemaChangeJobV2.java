@@ -99,6 +99,7 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
@@ -519,6 +520,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
+        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
@@ -658,7 +660,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
-                    List<Column> originSchemaColumns = tbl.getSchemaByIndexId(originIdxId);
+                    List<TColumn> originSchemaTColumns = indexToThriftColumns.get(originIdxId);
+                    if (originSchemaTColumns == null) {
+                        originSchemaTColumns = tbl.getSchemaByIndexId(originIdxId).stream()
+                                .map(Column::toThrift)
+                                .collect(Collectors.toList());
+                        indexToThriftColumns.put(originIdxId, originSchemaTColumns);
+                    }
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -668,7 +676,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
                                     shadowSchemaHash, originSchemaHash, visibleVersion, jobId,
-                                    generatedColumnReq, originSchemaColumns);
+                                    generatedColumnReq, originSchemaTColumns);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }
