@@ -58,13 +58,7 @@ Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the aver
 >
 > For example, suppose three resource groups, rg1, rg2, and rg3, have cpu_weight values of 2, 6, and 8, respectively. On a fully loaded BE node, these groups would receive 12.5%, 37.5%, and 50% of the CPU time. If the node is not fully loaded and rg1 and rg2 are under load while rg3 is idle, rg1 and rg2 would receive 25% and 75% of the CPU time, respectively.
 
-<<<<<<< HEAD
-  > **NOTE**
-  >
-  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
-=======
 ##### `exclusive_cpu_cores`
->>>>>>> 4828caa302 ([Doc] Add document about exclusive_cpu_cores (#50871))
 
 This parameter defines CPU hard hard limit for a resource group. It has two implications:
 
@@ -73,12 +67,8 @@ This parameter defines CPU hard hard limit for a resource group. It has two impl
 
 The value range is (0, `min_be_cpu_cores - 1`], where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes. It takes effect only when greater than 0. Only one of `cpu_weight` or `exclusive_cpu_cores` can be set to greater than 0.
 
-<<<<<<< HEAD
-  The CPU core threshold for triggering query queue in FE. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues). It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
-=======
 - Resource groups with `exclusive_cpu_cores` greater than 0 are called Exclusive resource groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared resource groups and run on Shared Cores.
 - The total number of `exclusive_cpu_cores` across all resource groups cannot exceed `min_be_cpu_cores - 1`. The upper limit is set to leave at least one Shared Core available.
->>>>>>> 4828caa302 ([Doc] Add document about exclusive_cpu_cores (#50871))
 
 The relationship between `exclusive_cpu_cores` and `cpu_weight`:
 
@@ -464,15 +454,6 @@ MySQL [(none)]> SHOW USAGE RESOURCE GROUPS;
 +------------+----+-----------+-----------------+-----------------+------------------+
 ```
 
-<<<<<<< HEAD
-## What to do next
-
-After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
-
-- [Memory management](./Memory_management.md)
-
-- [Query management](./Query_management.md)
-=======
 ### View thread information for Exclusive and Shared resource groups
 
 Query execution mainly involves three thread pools: `pip_exec`, `pip_scan`, and `pip_con_scan`.
@@ -515,4 +496,3 @@ select BE_ID, NAME, FINISHED_TASKS, BOUND_CPUS from information_schema.be_thread
 | 10223 | pip_exec_com | 2091366        | 10         |
 +-------+--------------+----------------+------------+
 ```
->>>>>>> 4828caa302 ([Doc] Add document about exclusive_cpu_cores (#50871))
