@@ -162,7 +162,7 @@ void CmdlineAction::handle(HttpRequest* req) {
         return;
     }
     char buf[1024];
-    if (fscanf(fp, "%s ", buf) != 1) {
+    if (fscanf(fp, "%1023s ", buf) != 1) {
         strcpy(buf, "read cmdline failed");
     }
     fclose(fp);
