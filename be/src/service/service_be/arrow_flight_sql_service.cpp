@@ -62,7 +62,8 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlSe
     return std::make_unique<arrow::flight::RecordBatchStream>(reader);
 }
 
-arrow::Result<std::vector<unsigned char>> ArrowFlightSqlServer::pkcs7_unpadding(const std::vector<unsigned char>& data) {
+arrow::Result<std::vector<unsigned char>> ArrowFlightSqlServer::pkcs7_unpadding(
+        const std::vector<unsigned char>& data) {
     if (data.empty()) {
         return arrow::Status::Invalid("Data is empty");
     }
