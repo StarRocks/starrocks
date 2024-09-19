@@ -180,15 +180,18 @@ replication_job_batch_size=10
 | source_fe_query_port                      | 源集群 FE 的查询端口（`query_port`）。                       |
 | source_cluster_user                       | 用于登录源集群的用户名。此用户需要有 SYSTEM 级 OPERATE 权限。 |
 | source_cluster_password                   | 用于登录源集群的用户密码。                                   |
+| source_cluster_password_secret_key        | 用于对源集群登录用户密码加密。默认值为空，代表不对登录密码进行加密。如果需要对 `source_cluster_password` 加密，可以通过 SQL 语句：`SELECT TO_BASE64(AES_ENCRYPT('plain_password','source_cluster_password_secret_key'))` 获得加密后的 `source_cluster_password` |
 | source_cluster_token                      | 源集群的 Token。关于如何获取集群 Token，见以下[获取集群 Token](#获取集群-token)部分。 |
 | target_fe_host                            | 目标集群 FE 的 IP 地址或 FQDN。                              |
 | target_fe_query_port                      | 目标集群 FE 的查询端口（`query_port`）。                     |
 | target_cluster_user                       | 用于登录目标集群的用户名。此用户需要有 SYSTEM 级 OPERATE 权限。 |
 | target_cluster_password                   | 用于登录目标集群的用户密码。                                 |
+| target_cluster_password_secret_key        | 用于对目标集群登录用户密码加密。默认值为空，代表不对登录密码进行加密。如果需要对 `target_cluster_password` 加密，可以通过 SQL 语句：`SELECT TO_BASE64(AES_ENCRYPT('plain_password','target_cluster_password_secret_key'))` 获得加密后的 `target_cluster_password` |
 | include_data_list                         | 需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。此项优先于 `exclude_data_list` 生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | exclude_data_list                         | 不需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。`include_data_list` 优先于此项生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | target_cluster_storage_volume             | 目标集群为存算分离集群时，建表使用的 Storage Volume。使用默认 Storage Volume 时无须配置该项。|
 | target_cluster_replication_num            | 目标集群建表使用的副本数（replication number）。默认值表示使用与源集群相同的副本数。|
+| target_cluster_max_disk_used_percent      | 目标集群为存算一体时，当目标集群中有任意一个 be 的磁盘使用量超过个改阈值则终止同步。默认值为 `80%` |
 | meta_job_interval_seconds                 | 迁移工具获取源集群和目标集群元数据的周期，单位为秒。此项您可以使用默认值。 |
 | meta_job_threads                          | 迁移工具获取源集群和目标集群元数据使用的线程数。此项您可以使用默认值。 |
 | ddl_job_interval_seconds                  | 迁移工具在目标集群执行 DDL 的周期，单位为秒。此项您可以使用默认值。 |
@@ -196,8 +199,11 @@ replication_job_batch_size=10
 | ddl_job_allow_drop_target_only            | 迁移工具是否自动删除仅在目标集群存在而源集群不存在的数据库，表或分区。默认为 `false`，即不删除。此项您可以使用默认值。 |
 | ddl_job_allow_drop_schema_change_table    | 迁移工具是否自动删除源集群和目标集群 Schema 不一致的表，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的表。 |
 | ddl_job_allow_drop_inconsistent_partition | 迁移工具是否自动删除源集群和目标集群数据分布方式不一致的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
+| ddl_job_allow_drop_partition_target_only  | 迁移工具是否自动删除目标集群上在源集群中不存在的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
 | replication_job_interval_seconds          | 迁移工具触发数据同步任务的周期，单位为秒。此项您可以使用默认值。 |
-| replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。     |
+| replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。 |
+| max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务每次同步数据大小限制，默认值为 `-1` 代表无限制。此项您可以使用默认值。 |
+| report_interval_seconds                   | 迁移工具打印 progress 信息的周期默认 `300`。此项您可以使用默认值。 |
 
 ### 获取集群 Token
 
@@ -286,6 +292,7 @@ TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 主要指标如下：
 
 - `Sync progress`：数据迁移进度。由于迁移工具会周期性地检查目标集群的数据是否落后于源集群，所以当进度为 100% 时，仅代表当前检查周期内数据同步完成。如果源集群持续有新数据导入，该进度可能在下次检查周期内变小。
+- `Sync table progress`： 本次迁移任务过程中已经迁移的表的数量和本次迁移任务中需要迁移表的占比。
 - `total`：本次迁移操作的各类 Job 总数。
 - `ddlPending`：所有待执行的 DDL Job 数量。
 - `jobPending`：所有待执行的数据同步 Job 数量。
@@ -335,6 +342,13 @@ FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_TYPE = 'BASE TABLE' 
 ORDER BY TABLE_NAME;
 ```
+
+## 使用限制
+当前版本支持同步的对象列表如下，未包含的则表示不支持同步：
+- 数据库
+- 内表极其数据
+- 物化视图表结构及构建语句（并不同步物化视图下的数据，如果物化视图对应的基表没有同步到目标集群，则物化视图后台刷新任务报错。）
+- 逻辑视图
 
 ## Q&A
 
