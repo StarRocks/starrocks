@@ -549,13 +549,33 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
 }
 
 template <typename T>
-void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf) {
-    butil::IOBuf tmp_iobuf;
-    butil::IOBufAsZeroCopyOutputStream wrapper(&tmp_iobuf);
+void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf) {
+    butil::IOBuf proto_iobuf; // used for store protbuf serialize data
+    butil::IOBuf chunk_iobuf; // used for store chunks
+    if constexpr (std::is_same<T, PTabletWriterAddChunkRequest>::value) {
+        auto chunk = proto_obj.mutable_chunk();
+        chunk->set_data_size(chunk->data().size());
+        chunk_iobuf.append(chunk->data());
+        chunk->clear_data(); // clear data, so protobuf serialize won't return >2GB error.
+        chunk->mutable_data()->shrink_to_fit();
+    } else if constexpr (std::is_same<T, PTabletWriterAddChunksRequest>::value) {
+        for (int i = 0; i < proto_obj.requests_size(); i++) {
+            auto request = proto_obj.mutable_requests(i);
+            auto chunk = request->mutable_chunk();
+            chunk->set_data_size(chunk->data().size());
+            chunk_iobuf.append(chunk->data());
+            chunk->clear_data(); // clear data, so protobuf serialize won't return >2GB error.
+            chunk->mutable_data()->shrink_to_fit();
+        }
+    }
+    butil::IOBufAsZeroCopyOutputStream wrapper(&proto_iobuf);
     proto_obj.SerializeToZeroCopyStream(&wrapper);
-    size_t request_size = tmp_iobuf.size();
-    iobuf->append(&request_size, sizeof(request_size));
-    iobuf->append(tmp_iobuf);
+    // append protobuf
+    size_t proto_iobuf_size = proto_iobuf.size();
+    iobuf->append(&proto_iobuf_size, sizeof(proto_iobuf_size));
+    iobuf->append(proto_iobuf);
+    // append chunk
+    iobuf->append(chunk_iobuf);
 }
 
 Status NodeChannel::_send_request(bool eos, bool finished) {
@@ -644,7 +664,8 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             }
             auto closure = _add_batch_closures[_current_request_index];
             serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
-            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
+            PHttpRequest fake_request;
+            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, &fake_request, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
@@ -663,8 +684,10 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
                 return res.status();
             }
             auto closure = _add_batch_closures[_current_request_index];
-            serialize_to_iobuf<PTabletWriterAddChunkRequest>(request.requests(0), &closure->cntl.request_attachment());
-            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
+            serialize_to_iobuf<PTabletWriterAddChunkRequest>(*request.mutable_requests(0),
+                                                             &closure->cntl.request_attachment());
+            PHttpRequest fake_request;
+            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, &fake_request, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunk(
