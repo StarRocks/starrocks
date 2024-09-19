@@ -120,7 +120,7 @@ public:
     // of close operation, client should call close_wait() to finish channel's close.
     // We split one close operation into two phases in order to make multiple channels
     // can run parallel.
-    void close(RuntimeState* state);
+    void close(RuntimeState* state) {}
 
     // Get close wait's response, to finish channel close operation.
     void close_wait(RuntimeState* state);
@@ -339,10 +339,6 @@ Status DataStreamSender::Channel::close_internal() {
 
     // Don't wait for the last packet to finish, left it to close_wait.
     return Status::OK();
-}
-
-void DataStreamSender::Channel::close(RuntimeState* state) {
-    state->log_error(close_internal().message());
 }
 
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {
