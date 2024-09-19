@@ -703,6 +703,12 @@ CONF_Int32(metric_late_materialization_ratio, "1000");
 
 // Max batched bytes for each transmit request. (256KB)
 CONF_Int64(max_transmit_batched_bytes, "262144");
+// max chunk size for each tablet write request. (512MB)
+// see: https://github.com/StarRocks/starrocks/pull/50302
+// NOTE: If there are a large number of columns when loading,
+// a too small max_tablet_write_chunk_bytes may cause more frequent RPCs, which may affect performance.
+// In this case, we can try to increase the value to avoid the problem.
+CONF_mInt64(max_tablet_write_chunk_bytes, "536870912");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
