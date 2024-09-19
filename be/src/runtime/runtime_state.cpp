@@ -278,7 +278,6 @@ Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_
            << PrettyPrinter::print(failed_allocation_size, TUnit::BYTES) << " without exceeding limit." << std::endl;
     }
 
-    log_error(ss.str());
     DCHECK(_process_status.is_mem_limit_exceeded());
     return _process_status;
 }
