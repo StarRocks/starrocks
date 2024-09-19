@@ -68,10 +68,6 @@ public class EncryptionUtil {
         }
 
         byte[] aesKey = Base64.getDecoder().decode(encodingAesKey + "=");
-
-        byte[] ivBytes = new byte[16];
-        rand.nextBytes(ivBytes);
-
         byte[] randomBytes = new byte[16];
         rand.nextBytes(randomBytes);
 
@@ -88,18 +84,27 @@ public class EncryptionUtil {
         fullBuffer.put(messageBytes);
         byte[] fullStr = fullBuffer.array();
 
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        byte[] paddedData = pkcs7Padding(fullStr, 32);
+
+        Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
         SecretKey secretKey = new SecretKeySpec(aesKey, "AES");
-        IvParameterSpec iv = new IvParameterSpec(randomBytes);
+        IvParameterSpec iv = new IvParameterSpec(aesKey, 0, 16);
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, iv);
 
-        byte[] encrypted = cipher.doFinal(fullStr);
-        ByteBuffer resultBuffer = ByteBuffer.allocate(randomBytes.length + encrypted.length);
-        resultBuffer.put(ivBytes);
-        resultBuffer.put(encrypted);
-        byte[] encryptedWithIv = resultBuffer.array();
+        byte[] encrypted = cipher.doFinal(paddedData);
 
-        return Base64.getEncoder().encodeToString(encryptedWithIv);
+        return Base64.getEncoder().encodeToString(encrypted);
+    }
+
+    private static byte[] pkcs7Padding(byte[] data, int blockSize) {
+        int padding = blockSize - (data.length % blockSize);
+        if (padding == 0) {
+            padding = blockSize;
+        }
+
+        byte[] paddedData = Arrays.copyOf(data, data.length + padding);
+        Arrays.fill(paddedData, data.length, paddedData.length, (byte) padding);
+        return paddedData;
     }
 
     public static String aesDecrypt(String encryptedData, String encodingAesKey) throws Exception {
@@ -113,15 +118,14 @@ public class EncryptionUtil {
             throw new IllegalArgumentException("Invalid encrypted data");
         }
 
-        byte[] iv = Arrays.copyOfRange(encryptedBytes, 0, 16);
-        byte[] actualEncryptedData = Arrays.copyOfRange(encryptedBytes, 16, encryptedBytes.length);
-
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
         SecretKey secretKey = new SecretKeySpec(aesKey, "AES");
-        IvParameterSpec ivSpec = new IvParameterSpec(iv);
+        IvParameterSpec ivSpec = new IvParameterSpec(aesKey, 0, 16);
         cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
 
-        byte[] decryptedData = cipher.doFinal(actualEncryptedData);
+        byte[] decryptedPaddedData = cipher.doFinal(encryptedBytes);
+        byte[] decryptedData = pkcs7UnPadding(decryptedPaddedData);
+
         ByteBuffer buffer = ByteBuffer.wrap(decryptedData).order(ByteOrder.BIG_ENDIAN);
 
         byte[] randomBytes = new byte[16];
@@ -136,5 +140,18 @@ public class EncryptionUtil {
         buffer.get(messageBytes);
 
         return new String(messageBytes, StandardCharsets.UTF_8);
+    }
+
+    private static byte[] pkcs7UnPadding(byte[] data) {
+        int paddingLength = data[data.length - 1];
+        if (paddingLength < 1 || paddingLength > 32) {
+            throw new IllegalArgumentException("Invalid PKCS7 padding");
+        }
+        for (int i = 0; i < paddingLength; i++) {
+            if (data[data.length - 1 - i] != paddingLength) {
+                throw new IllegalArgumentException("Invalid PKCS7 padding");
+            }
+        }
+        return Arrays.copyOfRange(data, 0, data.length - paddingLength);
     }
 }

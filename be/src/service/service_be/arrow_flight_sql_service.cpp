@@ -62,6 +62,25 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlSe
     return std::make_unique<arrow::flight::RecordBatchStream>(reader);
 }
 
+arrow::Result<std::vector<unsigned char>> ArrowFlightSqlServer::pkcs7_unpadding(const std::vector<unsigned char>& data) {
+    if (data.empty()) {
+        return arrow::Status::Invalid("Data is empty");
+    }
+
+    int padding_length = data.back(); // Use back() for the last element
+    if (padding_length <= 0 || padding_length > 32) {
+        return arrow::Status::Invalid("Invalid PKCS7 padding");
+    }
+
+    for (int i = 0; i < padding_length; ++i) {
+        if (data[data.size() - 1 - i] != padding_length) {
+            return arrow::Status::Invalid("Invalid PKCS7 padding");
+        }
+    }
+
+    return std::vector<unsigned char>(data.begin(), data.end() - padding_length);
+}
+
 arrow::Result<std::pair<std::string, std::string>> ArrowFlightSqlServer::decode_ticket(const std::string& ticket) {
     if (config::arrow_flight_sql_ase_key.size() != 43) {
         return arrow::Status::Invalid("BE configuration item arrow_flight_sql_ase_key is invalid.");
@@ -71,51 +90,42 @@ arrow::Result<std::pair<std::string, std::string>> ArrowFlightSqlServer::decode_
     std::string aes_key_decode;
     aes_key_decode.resize(encoding_aes_key.size() + 3);
     int64_t len = base64_decode2(encoding_aes_key.data(), encoding_aes_key.size(), aes_key_decode.data());
-    if (len <= 0) {
-        return arrow::Status::Invalid("Invalid AES key");
-    }
     aes_key_decode.resize(len);
 
     std::string encrypted_data;
     encrypted_data.resize(ticket.size() + 3);
     len = base64_decode2(ticket.data(), ticket.size(), encrypted_data.data());
-    if (len <= 0) {
-        return arrow::Status::Invalid("Invalid encrypted data");
-    }
     encrypted_data.resize(len);
-    if (encrypted_data.size() < AES_BLOCK_SIZE) {
-        return arrow::Status::Invalid("Invalid encrypted data");
-    }
 
+    std::vector<unsigned char> decrypted_data(encrypted_data.size() + 3);
     unsigned char iv[AES_BLOCK_SIZE];
-    memcpy(iv, encrypted_data.data(), AES_BLOCK_SIZE);
+    memcpy(iv, aes_key_decode.data(), AES_BLOCK_SIZE);
+    len = AesUtil::decrypt(AES_256_CBC, (unsigned char*)encrypted_data.data(), encrypted_data.size(),
+                           (unsigned char*)aes_key_decode.data(), aes_key_decode.size(), iv, false,
+                           decrypted_data.data());
+    if (len < 0) {
+        return arrow::Status::Invalid("Malformed ticket");
+    }
+    decrypted_data.resize(len);
 
-    size_t actual_encrypted_data_len = encrypted_data.size() - AES_BLOCK_SIZE;
-    const unsigned char* actual_encrypted_data =
-            reinterpret_cast<const unsigned char*>(encrypted_data.data() + AES_BLOCK_SIZE);
-
-    std::vector<unsigned char> decrypted_data(actual_encrypted_data_len + AES_BLOCK_SIZE);
-
-    int decrypted_len = AesUtil::decrypt(AES_256_CBC, actual_encrypted_data, actual_encrypted_data_len,
-                                         reinterpret_cast<unsigned char*>(aes_key_decode.data()), aes_key_decode.size(),
-                                         iv, true, decrypted_data.data());
-    if (decrypted_len < 0) {
+    ARROW_ASSIGN_OR_RAISE(decrypted_data, pkcs7_unpadding(decrypted_data));
+    if (decrypted_data.size() < 4) {
         return arrow::Status::Invalid("Malformed ticket");
     }
 
-    decrypted_data.resize(len);
-    if (decrypted_data.size() < 16 + 4) {
+    std::string decrypted_string(decrypted_data.begin(), decrypted_data.end());
+    if (decrypted_data.size() < 20) {
         return arrow::Status::Invalid("Malformed ticket");
     }
 
     uint32_t msg_len = 0;
     memcpy(&msg_len, decrypted_data.data() + 16, 4);
     msg_len = ntohl(msg_len);
-    if (decrypted_data.size() < 16 + 4 + msg_len) {
+    if (decrypted_string.size() < 16 + 4 + msg_len) {
         return arrow::Status::Invalid("Malformed ticket");
     }
 
-    std::string message(reinterpret_cast<char*>(decrypted_data.data() + 16 + 4), msg_len);
+    std::string message = decrypted_string.substr(16 + 4, msg_len);
     auto divider = message.find(':');
     if (divider == std::string::npos) {
         return arrow::Status::Invalid("Malformed ticket");

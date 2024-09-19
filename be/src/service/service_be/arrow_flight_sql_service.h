@@ -36,6 +36,7 @@ public:
             const arrow::flight::sql::StatementQueryTicket& command) override;
 
 private:
+    static arrow::Result<std::vector<unsigned char>> pkcs7_unpadding(const std::vector<unsigned char>& data);
     static arrow::Result<std::pair<std::string, std::string>> decode_ticket(const std::string& ticket);
 };
 

@@ -64,7 +64,7 @@ public class ArrowFlightSqlSessionManager {
         ctx.setToken(token);
 
         Pair<Boolean, String> result = ExecuteEnv.getInstance().getScheduler().registerConnection(ctx);
-        if (!result.first) {
+        if (!result.first.booleanValue()) {
             ctx.getState().setError(result.second);
             throw new IllegalArgumentException(result.second);
         }

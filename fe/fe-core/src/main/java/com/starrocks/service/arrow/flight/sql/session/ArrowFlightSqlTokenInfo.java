@@ -21,9 +21,9 @@ import com.starrocks.sql.ast.UserIdentity;
 
 public class ArrowFlightSqlTokenInfo {
 
-    public UserIdentity currentUser;
+    private UserIdentity currentUser;
 
-    public String token;
+    private String token;
 
     public String getToken() {
         return token;

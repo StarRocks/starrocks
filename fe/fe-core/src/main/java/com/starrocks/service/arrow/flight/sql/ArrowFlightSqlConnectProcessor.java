@@ -130,8 +130,8 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
                 VectorSchemaRoot vectorSchemaRoot = arrowStreamReader.getVectorSchemaRoot();
                 return vectorSchemaRoot.getSchema();
             }
-        } catch (Throwable e) {
-            throw new RuntimeException("fetchArrowSchema, reason: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("fetchArrowSchema fail, reason: " + e.getMessage(), e);
         }
     }
 }

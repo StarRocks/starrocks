@@ -45,7 +45,7 @@ public class ArrowFlightSqlService {
                 new ArrowFlightSqlSessionManager(arrowFlightSqlTokenManager);
 
         ArrowFlightSqlServiceImpl producer =
-                new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager, arrowFlightSqlTokenManager, location,
+                new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager, location,
                         arrowFlightBePort,
                         arrowFlightSqlAseKey);
         ArrowFlightSqlAuthenticator arrowFlightSqlAuthenticator =

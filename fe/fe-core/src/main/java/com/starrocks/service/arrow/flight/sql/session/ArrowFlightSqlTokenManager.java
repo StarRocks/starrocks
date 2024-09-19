@@ -20,7 +20,6 @@ package com.starrocks.service.arrow.flight.sql.session;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.starrocks.encryption.EncryptionUtil;
 import com.starrocks.qe.ConnectContext;
@@ -45,16 +44,12 @@ public class ArrowFlightSqlTokenManager implements AutoCloseable {
                 CacheBuilder.newBuilder()
                         .maximumSize(1024)
                         .expireAfterWrite(3600, TimeUnit.MINUTES)
-                        .removalListener(new RemovalListener<String, ArrowFlightSqlTokenInfo>() {
-                            @Override
-                            public void onRemoval(
-                                    RemovalNotification<String, ArrowFlightSqlTokenInfo> notification) {
-                                ConnectContext context =
-                                        ExecuteEnv.getInstance().getScheduler()
-                                                .getArrowFlightSqlConnectContext(notification.getKey());
-                                if (context != null) {
-                                    ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
-                                }
+                        .removalListener((RemovalNotification<String, ArrowFlightSqlTokenInfo> notification) -> {
+                            ConnectContext context =
+                                    ExecuteEnv.getInstance().getScheduler()
+                                            .getArrowFlightSqlConnectContext(notification.getKey());
+                            if (context != null) {
+                                ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
                             }
                         })
                         .build(new CacheLoader<String, ArrowFlightSqlTokenInfo>() {
@@ -82,8 +77,7 @@ public class ArrowFlightSqlTokenManager implements AutoCloseable {
 
         try {
             String token = EncryptionUtil.aesDecrypt(encryptedToken, arrowFlightSqlAseKey);
-            ArrowFlightSqlTokenInfo tokenInfo = tokenCache.getIfPresent(token);
-            return tokenInfo;
+            return tokenCache.getIfPresent(token);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid Token");
         }

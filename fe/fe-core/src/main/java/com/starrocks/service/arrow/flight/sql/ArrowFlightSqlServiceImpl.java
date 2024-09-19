@@ -26,7 +26,6 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
-import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
@@ -73,7 +72,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private final String arrowFlightSqlAseKey;
 
     public ArrowFlightSqlServiceImpl(final ArrowFlightSqlSessionManager arrowFlightSqlSessionManager,
-                                     final ArrowFlightSqlTokenManager arrowFlightSqlTokenManager,
                                      final Location location, final int arrowFlightBePort,
                                      final String arrowFlightSqlAseKey) {
         this.arrowFlightSqlSessionManager = arrowFlightSqlSessionManager;
@@ -133,7 +131,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     public void closePreparedStatement(
             FlightSql.ActionClosePreparedStatementRequest actionClosePreparedStatementRequest, CallContext callContext,
             StreamListener<Result> streamListener) {
-        executorService.submit(() -> streamListener.onCompleted());
+        executorService.submit(streamListener::onCompleted);
     }
 
     @Override
@@ -410,6 +408,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             String encryptData = EncryptionUtil.aesEncrypt(hexStringFromUniqueId(finstId) + ":" + query,
                     arrowFlightSqlAseKey);
+
             final ByteString handle = ByteString.copyFromUtf8(encryptData);
             FlightSql.TicketStatementQuery ticketStatementQuery =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();

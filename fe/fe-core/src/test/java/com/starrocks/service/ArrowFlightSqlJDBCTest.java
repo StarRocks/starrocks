@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.service;
 
 import java.sql.Connection;
@@ -24,7 +25,7 @@ public class ArrowFlightSqlJDBCTest {
             + "&cachePrepStmts=true&useSSL=false&useEncryption=false";
     static final String USER = "root";
     static final String PASSWORD = "";
-    static int TEST_CASE_NUM = 1;
+    static int testCaseNum = 1;
 
     public static void main(String[] args) {
         try {
@@ -80,7 +81,7 @@ public class ArrowFlightSqlJDBCTest {
     }
 
     private static void executeQuery(Statement stmt, String sql) throws Exception {
-        System.out.println("Test Case:" + TEST_CASE_NUM);
+        System.out.println("Test Case:" + testCaseNum);
         System.out.println("Executing query:" + sql);
         ResultSet rs = stmt.executeQuery(sql);
         System.out.println("Result:" + sql);
@@ -92,16 +93,16 @@ public class ArrowFlightSqlJDBCTest {
             System.out.println();
         }
         rs.close();
-        TEST_CASE_NUM++;
+        testCaseNum++;
         System.out.println();
     }
 
     private static void executeUpdate(Statement stmt, String sql) throws Exception {
-        System.out.println("Test Case:" + TEST_CASE_NUM);
+        System.out.println("Test Case:" + testCaseNum);
         System.out.println("Executing query:" + sql);
         stmt.executeUpdate(sql);
         System.out.println("Result: Success");
-        TEST_CASE_NUM++;
+        testCaseNum++;
         System.out.println();
     }
 }

@@ -71,8 +71,6 @@ private:
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 
-    const size_t _max_row_buffer_size = 1024 * 1024 * 1024;
-
     std::unordered_map<int64_t, std::string> _id_to_col_name;
 };
 
