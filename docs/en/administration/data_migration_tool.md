@@ -180,15 +180,18 @@ The description of the parameters is as follows:
 | source_fe_query_port                      | The query port (`query_port`) of the source cluster's FE.    |
 | source_cluster_user                       | The username used to log in to the source cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
 | source_cluster_password                   | The user password used to log in to the source cluster.      |
+| source_cluster_password_secret_key        | It is used to encrypt the login user password of the source cluster. The default value is empty, indicating that the login password is not encrypted. If it is necessary to encrypt the `source_cluster_password`, the encrypted `source_cluster_password` can be obtained through the SQL statement: `SELECT TO_BASE64(AES_ENCRYPT('plain_password','source_cluster_password_secret_key'))` |
 | source_cluster_token                      | Token of the source cluster. For information on how to obtain the cluster token, refer to [Obtain Cluster Token](#obtain-cluster-token) below. |
 | target_fe_host                            | The IP address or FQDN (Fully Qualified Domain Name) of the target cluster's FE. |
 | target_fe_query_port                      | The query port (`query_port`) of the target cluster's FE.    |
 | target_cluster_user                       | The username used to log in to the target cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
 | target_cluster_password                   | The user password used to log in to the target cluster.      |
+| target_cluster_password_secret_key        | It is used to encrypt the login user password of the target cluster. The default value is empty, indicating that the login password is not encrypted. If it is necessary to encrypt the `target_cluster_password`, the encrypted `target_cluster_password` can be obtained through the SQL statement: `SELECT TO_BASE64(AES_ENCRYPT('plain_password','target_cluster_password_secret_key'))` |
 | include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | target_cluster_storage_volume             | The storage volume used to store tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default storage volume, you do not need to specify this item. |
 | target_cluster_replication_num            | The number of replicas specified when creating tables in the target cluster. If you want to use the same replica number as the source cluster, you do not need to specify this item. |
+| target_cluster_max_disk_used_percent      | When the target cluster is of the storage-computing integrated type, if the disk usage of any BE in the target cluster exceeds this threshold, the synchronization is terminated. The default value is `80%`.   |
 | meta_job_interval_seconds                 | The interval, in seconds, at which the migration tool retrieves metadata from the source and target clusters. You can use the default value for this item. |
 | meta_job_threads                          | The number of threads used by the migration tool to obtain metadata from the source and target clusters. You can use the default value for this item. |
 | ddl_job_interval_seconds                  | The interval, in seconds, at which the migration tool executes DDL statements on the target cluster. You can use the default value for this item. |
@@ -196,8 +199,11 @@ The description of the parameters is as follows:
 | ddl_job_allow_drop_target_only            | Whether to allow the migration tool to delete databases, tables, or partitions that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. You can use the default value for this item. |
 | ddl_job_allow_drop_schema_change_table    | Whether to allow the migration tool to delete tables with inconsistent schemas between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted tables during the migration. |
 | ddl_job_allow_drop_inconsistent_partition | Whether to allow the migration tool to delete partitions with inconsistent data distribution between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
+| ddl_job_allow_drop_partition_target_only  | Whether to automatically delete the partitions on the target cluster that do not exist in the source cluster. The default is `true`, that is, to delete. You can use the default value for this item. The deleted partitions will be automatically synchronized during the synchronization process.   | 
 | replication_job_interval_seconds          | The interval, in seconds, at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
 | replication_job_batch_size                | The batch size at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
+| max_replication_data_size_per_job_in_gb   | The limit on the size of data synchronized each time for the synchronization task. The default value is `-1`, representing no limit. You can use the default value for this item.  |
+| report_interval_seconds                   | The period for the migration tool to print progress information is defaulted to `300`. You can use the default value for this item.  |
 
 ### Obtain Cluster Token
 
@@ -286,6 +292,7 @@ Example:
 The important metrics are as follows:
 
 - `Sync progress`: The progress of data migration. The migration tool regularly checks whether the data in the target cluster is lagging behind the source cluster. Therefore, a progress of 100% only means that the data synchronization is completed within the current check interval. If new data continues to be loaded into the source cluster, the progress may decrease in the next check interval.
+- `Sync table progress`： The number of tables that have been migrated during this migration task and the proportion of tables that need to be synchronized in this synchronization task. 
 - `total`: The total number of all types of jobs in this migration operation.
 - `ddlPending`: The number of DDL jobs pending to be executed.
 - `jobPending`: The number of pending data synchronization jobs to be executed.
@@ -336,6 +343,13 @@ WHERE TABLE_TYPE = 'BASE TABLE'
 ORDER BY TABLE_NAME;
 ```
 
+## Limits
+
+The list of objects supported for synchronization in the current version is as follows. Those not included indicate that synchronization is not supported:
+- Databases
+- Internal tables and their data
+- Materialized view table structures and construction statements (Data under the materialized views is not synchronized. If the base table corresponding to the materialized view is not synchronized to the target cluster, the background refresh task of the materialized view reports an error.)
+- Logical views
 
 ## Q&A
 
