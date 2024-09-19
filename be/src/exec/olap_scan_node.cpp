@@ -158,7 +158,6 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
-    bool first_call = !_start;
     if (!_start && _status.ok()) {
         Status status = _start_scan(state);
         _update_status(status);
