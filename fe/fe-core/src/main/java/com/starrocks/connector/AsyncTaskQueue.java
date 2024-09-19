@@ -14,6 +14,9 @@
 
 package com.starrocks.connector;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -49,6 +52,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 
 public class AsyncTaskQueue<T> {
+    private static final Logger LOG = LogManager.getLogger(AsyncTaskQueue.class);
 
     public interface Task<T> {
         List<T> run() throws InterruptedException;
@@ -80,12 +84,47 @@ public class AsyncTaskQueue<T> {
     AtomicReference<Exception> taskException = new AtomicReference<>(null);
 
     // ---------------
-    int maxRunningTaskCount = Integer.MAX_VALUE;
+    AtomicInteger maxRunningTaskCount = new AtomicInteger(Integer.MAX_VALUE);
     int maxOutputQueueSize = Integer.MAX_VALUE;
     Executor executor;
 
+    class ConcurrencyTuner {
+        long lastTime = 0;
+        int scale = 0;
+
+        static final long INTERVAL_MS = 32;
+
+        public void tune() {
+            long now = System.currentTimeMillis();
+            if ((now - lastTime) < INTERVAL_MS) {
+                return;
+            }
+            lastTime = now;
+            int delta = 0;
+            long queueSize = outputQueueSize.get();
+            if (2 * queueSize < maxOutputQueueSize) {
+                delta += 1;
+            } else if (queueSize > 2L * maxOutputQueueSize) {
+                delta -= 1;
+            }
+            int value = maxRunningTaskCount.get();
+            if (delta > 0 && scale < 3) {
+                scale += 1;
+                value *= 2;
+            } else if (delta < 0 && scale > -3) {
+                if (value >= 2) {
+                    value /= 2;
+                    scale -= 1;
+                }
+            }
+            maxRunningTaskCount.set(value);
+        }
+    }
+
+    ConcurrencyTuner tuner = new ConcurrencyTuner();
+
     public void setMaxRunningTaskCount(int maxRunningTaskCount) {
-        this.maxRunningTaskCount = maxRunningTaskCount;
+        this.maxRunningTaskCount.set(maxRunningTaskCount);
     }
 
     public void setMaxOutputQueueSize(int maxOutputQueueSize) {
@@ -95,8 +134,7 @@ public class AsyncTaskQueue<T> {
     public void start(List<? extends Task<T>> tasks) {
         taskQueue.addAll(tasks);
         taskQueueSize.addAndGet(tasks.size());
-        // or we have to trigger tasks?
-        triggerTask();
+        triggerTasks();
     }
 
     public int computeOutputSize(T output) {
@@ -107,6 +145,7 @@ public class AsyncTaskQueue<T> {
         if (!hasMoreOutput) {
             return;
         }
+        tuner.tune();
         try {
             outputQueueLock.lock();
             while (true) {
@@ -183,12 +222,13 @@ public class AsyncTaskQueue<T> {
 
     // trigger a single task.
     private boolean triggerTask() {
+        int maxRunningTaskCountValue = maxRunningTaskCount.get();
         // don't trigger task when:
         // 1. output queue is pretty full
         // 2. no task to run.
         // 3. a lot of tasks are running.
         if (outputQueueSize.get() > maxOutputQueueSize || taskQueueSize.get() == 0 ||
-                runningTaskCount.get() > maxRunningTaskCount) {
+                runningTaskCount.get() > maxRunningTaskCountValue) {
             return false;
         }
         // trigger a new task
@@ -199,7 +239,7 @@ public class AsyncTaskQueue<T> {
         boolean success = false;
         try {
             int count = runningTaskCount.incrementAndGet();
-            if (count > maxRunningTaskCount) {
+            if (count > maxRunningTaskCountValue) {
                 return false;
             }
             Task task = taskQueue.poll();
@@ -221,7 +261,8 @@ public class AsyncTaskQueue<T> {
 
     // trigger enough tasks.
     private void triggerTasks() {
-        for (int i = 0; i < maxRunningTaskCount; i++) {
+        int maxRunningTaskCountValue = maxRunningTaskCount.get();
+        for (int i = 0; i < maxRunningTaskCountValue; i++) {
             if (!triggerTask()) {
                 break;
             }

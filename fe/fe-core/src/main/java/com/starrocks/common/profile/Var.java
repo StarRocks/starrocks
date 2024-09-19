@@ -42,7 +42,7 @@ public class Var<T> {
         value = var;
     }
 
-    public void add(int var) {
+    public void add(long var) {
     }
 
     public String toString() {

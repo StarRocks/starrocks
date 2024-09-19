@@ -56,6 +56,8 @@ import static com.starrocks.connector.hive.HiveWriteUtils.fileCreatedByQuery;
 public class RemoteFileOperations {
     private static final Logger LOG = LogManager.getLogger(RemoteFileOperations.class);
     public static final String HMS_PARTITIONS_REMOTE_FILES = "HMS.PARTITIONS.LIST_FS_PARTITIONS";
+    public static final String HMS_PARTITIONS_LIST_FIES_ASYNC_GET = "HMS.PARTITIONS.LIST_FS_ASYNC.GET";
+    public static final String HMS_PARTITIONS_LIST_FILES_ASYNC_WAIT = "HMS.PARTITIONS.LIST_FS_ASYNC.WAIT";
     protected CachingRemoteFileIO remoteFileIO;
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
@@ -164,8 +166,16 @@ public class RemoteFileOperations {
 
             @Override
             public List<RemoteFileInfo> getOutputs(int maxSize) {
-                try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES)) {
+                try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_LIST_FIES_ASYNC_GET)) {
                     return super.getOutputs(maxSize);
+                }
+            }
+
+            @Override
+            public boolean hasMoreOutput() {
+                // `hasMoreOutput` will trigger tasks to generate output.
+                try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_LIST_FILES_ASYNC_WAIT)) {
+                    return super.hasMoreOutput();
                 }
             }
 

@@ -111,7 +111,7 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
             for (int index = 0; index < v.size(); index++) {
                 TScanRangeParams p = v.get(index);
                 System.out.println(p + ", " + System.identityHashCode(p));
-                if (p.isPlaceholder()) {
+                if (p.isEmpty()) {
                     if (!p.has_more) {
                         Assert.assertTrue((index + 1) == v.size());
                     }

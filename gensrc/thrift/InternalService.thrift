@@ -326,12 +326,13 @@ struct TQueryOptions {
   152: optional double k_factor;
 }
 
-
 // A scan range plus the parameters needed to execute that scan.
 struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
-  3: optional bool placeholder = false
+  // if this is just a placeholder and no `scan_range` data in it.
+  3: optional bool empty = false;
+  // if there is no more scan range from this scan node.
   4: optional bool has_more = false;
 }
 
