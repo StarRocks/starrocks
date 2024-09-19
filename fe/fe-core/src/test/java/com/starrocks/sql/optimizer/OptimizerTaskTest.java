@@ -2065,7 +2065,7 @@ public class OptimizerTaskTest {
                 result = 0;
                 minTimes = 0;
 
-                olapTable1.getPartitions();
+                olapTable1.getVisiblePartitions();
                 result = Lists.newArrayList(p1);
                 minTimes = 0;
 
@@ -2091,7 +2091,7 @@ public class OptimizerTaskTest {
                 result = 1;
                 minTimes = 0;
 
-                olapTable2.getPartitions();
+                olapTable2.getVisiblePartitions();
                 result = Lists.newArrayList(p2);
                 minTimes = 0;
 
@@ -2287,7 +2287,7 @@ public class OptimizerTaskTest {
                 result = 0;
                 minTimes = 0;
 
-                olapTable1.getPartitions();
+                olapTable1.getVisiblePartitions();
                 result = Lists.newArrayList(p1);
                 minTimes = 0;
 
@@ -2309,7 +2309,7 @@ public class OptimizerTaskTest {
                 result = 1;
                 minTimes = 0;
 
-                olapTable2.getPartitions();
+                olapTable2.getVisiblePartitions();
                 result = Lists.newArrayList(p2);
                 minTimes = 0;
 
