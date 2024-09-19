@@ -306,6 +306,12 @@ TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 ![img](../_assets/data_migration_tool-2.png)
 
 - `Sync table progress`：表迁移进度。本次迁移任务中所已经完成迁移的表在本次迁移任务中所需要迁移的全部表的占比。
+- `finishedTableRatio`: 至少有一次同步任务执行成功过的数据表占比.
+- `expiredTableRatio`: 数据过期的数据表占比.
+- `total table`: 此次数据迁移配置的数据表总数。
+- `finished table`: 至少有一次同步任务执行成功过的数据表数量。
+- `unfinished table`: 还未进行过数据同步的数据表数量。
+- `expired table`: 数据过期的数据表数量.
 
 ### 查看迁移事务状态
 
