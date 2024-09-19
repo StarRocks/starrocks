@@ -811,7 +811,7 @@ public class OlapScanNode extends ScanNode {
 
         if (detailLevel != TExplainLevel.VERBOSE) {
             output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitionNum,
-                    olapTable.getPartitions().size()));
+                    olapTable.getVisiblePartitionNames().size()));
 
             String indexName = olapTable.getIndexNameById(selectedIndexId);
             output.append(prefix).append(String.format("rollup: %s\n", indexName));
@@ -838,7 +838,7 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append(String.format(
                             "partitionsRatio=%s/%s",
                             selectedPartitionNum,
-                            olapTable.getPartitions().size())).append(", ")
+                            olapTable.getVisiblePartitionNames().size())).append(", ")
                     .append(String.format("tabletsRatio=%s/%s", selectedTabletsNum, totalTabletsNum)).append("\n");
 
             if (scanTabletIds.size() > 10) {
