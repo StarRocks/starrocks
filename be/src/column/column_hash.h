@@ -29,6 +29,8 @@
 #include <xmmintrin.h>
 #endif
 
+#include "column/type_traits.h"
+#include "types/logical_type.h"
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
@@ -341,6 +343,28 @@ struct HashTypeTraits {
 template <>
 struct HashTypeTraits<int128_t> {
     using HashFunc = Hash128WithSeed<PhmapSeed2>;
+};
+
+template <LogicalType LT, PhmapSeed seed>
+struct PhmapDefaultHashFunc {
+    std::size_t operator()(const RunTimeCppType<LT>& value) const {
+        static_assert(is_supported(), "unsupported logical type");
+
+        if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
+            return Hash128WithSeed<seed>()(value);
+        } else if constexpr (lt_is_fixedlength<LT>) {
+            return StdHashWithSeed<RunTimeCppType<LT>, seed>()(value);
+        } else if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
+            return SliceHashWithSeed<seed>()(value);
+        } else {
+            assert(false);
+        }
+    }
+
+    constexpr static bool is_supported() {
+        return lt_is_largeint<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT> ||
+               lt_is_binary<LT>;
+    }
 };
 
 } // namespace starrocks
