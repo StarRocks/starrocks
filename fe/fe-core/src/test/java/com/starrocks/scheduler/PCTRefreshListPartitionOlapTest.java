@@ -552,6 +552,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertTrue(execPlan == null);
                         }
 
+<<<<<<< HEAD
                         {
                             addListPartition("t4", "p1", "beijing");
                             String insertSql = "insert into t4 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
@@ -560,6 +561,16 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
                                     "     PREAGGREGATION: ON\n" +
                                     "     partitions=1/2");
+=======
+                            {
+                                addListPartition("t4", "p1", "beijing");
+                                String insertSql = "insert into t4 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/1");
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(1, partitions.size());
@@ -572,6 +583,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             // add a new partition
                             addListPartition("t4", "p3", "hangzhou");
 
+<<<<<<< HEAD
                             String insertSql = "INSERT INTO t4 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
                             ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -582,6 +594,18 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertEquals(2, partitions.size());
                         }
                     });
+=======
+                                String insertSql = "INSERT INTO t4 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/2");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(2, partitions.size());
+                            }
+                        });
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
         });
     }
 
@@ -613,10 +637,17 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             String insertSql = "insert into t5 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
                             ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
 
+<<<<<<< HEAD
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                     "     PREAGGREGATION: ON\n" +
                                     "     partitions=1/2");
+=======
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/1");
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(1, partitions.size());
@@ -633,11 +664,19 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             insertSql = "insert into t5 partition(p2) values(1, 1, '2021-12-02', 'beijing');";
                             executeInsertSql(connectContext, insertSql);
 
+<<<<<<< HEAD
                             ExecPlan execPlan = getExecPlan(taskRun);
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
                                     "     PREAGGREGATION: ON\n" +
                                     "     partitions=2/3");
+=======
+                                ExecPlan execPlan = getExecPlan(taskRun);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=2/2");
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(1, partitions.size());
@@ -647,6 +686,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertTrue(execPlan == null);
                         }
 
+<<<<<<< HEAD
                         {
                             // add a new partition
                             addListPartition("t5", "p5", "hangzhou", "2022-01-01");
@@ -660,6 +700,21 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertEquals(2, partitions.size());
                         }
                     });
+=======
+                            {
+                                // add a new partition
+                                addListPartition("t5", "p5", "hangzhou", "2022-01-01");
+                                String insertSql = "INSERT INTO t5 partition(p5) values(1, 1, '2022-01-01', 'hangzhou')";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/3");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(2, partitions.size());
+                            }
+                        });
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
         });
     }
 
@@ -688,6 +743,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertTrue(execPlan == null);
                         }
 
+<<<<<<< HEAD
                         {
                             // only one table has updated
                             String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
@@ -702,6 +758,22 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                     "     PREAGGREGATION: ON\n" +
                                     "     partitions=1/1\n" +
                                     "     rollup: t4");
+=======
+                            {
+                                // only one table has updated
+                                String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "  1:OlapScanNode\n" +
+                                            "     TABLE: t2\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/2\n" +
+                                            "     rollup: t2");
+                                PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=0/0\n" +
+                                            "     rollup: t4");
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(2, partitions.size());
@@ -721,6 +793,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             insertSql = "INSERT INTO t4 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
                             executeInsertSql(connectContext, insertSql);
 
+<<<<<<< HEAD
                             ExecPlan execPlan = getExecPlan(taskRun);
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "     TABLE: t2\n" +
@@ -733,6 +806,20 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertEquals(3, partitions.size());
                         }
                     });
+=======
+                                ExecPlan execPlan = getExecPlan(taskRun);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t2\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/3");
+                                PlanTestBase.assertContains(plan, "     TABLE: t4\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/1");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(3, partitions.size());
+                            }
+                        });
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
         });
     }
 
@@ -781,6 +868,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             // add a new partition
                             addListPartition("t1", "p3", "hangzhou");
 
+<<<<<<< HEAD
                             String insertSql = "INSERT INTO t1 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
                             ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -794,6 +882,21 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(3, partitions.size());
                         }
+=======
+                                String insertSql = "INSERT INTO t1 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/3");
+                                PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=0/0\n" +
+                                            "     rollup: t5");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(3, partitions.size());
+                            }
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 
                         {
                             // t1 add a new partition
@@ -804,6 +907,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             insertSql = "insert into t5 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
                             executeInsertSql(connectContext, insertSql);
 
+<<<<<<< HEAD
                             ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
@@ -817,6 +921,21 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertEquals(3, partitions.size());
                         }
                     });
+=======
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=2/3\n" +
+                                            "     rollup: t1");
+                                PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/1");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(3, partitions.size());
+                            }
+                        });
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
         });
     }
 
@@ -864,6 +983,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             // add a new partition
                             addListPartition("t1", "p3", "hangzhou");
 
+<<<<<<< HEAD
                             String insertSql = "INSERT INTO t1 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
                             ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -899,6 +1019,43 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertEquals(3, partitions.size());
                         }
                     });
+=======
+                                String insertSql = "INSERT INTO t1 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/3");
+                                PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=0/0\n" +
+                                            "     rollup: t5");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(3, partitions.size());
+                            }
+
+                            {
+                                // t1 add a new partition
+                                String insertSql = "INSERT INTO t1 partition(p3) values(1, 1, '2022-01-01', 'hangzhou')";
+                                executeInsertSql(connectContext, insertSql);
+                                // t5 add a new partition
+                                addListPartition("t5", "p1", "beijing", "2022-01-01");
+                                insertSql = "insert into t5 partition(p1) values(1, 1, '2022-01-01', 'beijing');";
+                                executeInsertSql(connectContext, insertSql);
+
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=2/3");
+                                PlanTestBase.assertContains(plan, "     TABLE: t5\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/1");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(3, partitions.size());
+                            }
+                        });
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
         });
     }
 
@@ -924,6 +1081,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertTrue(execPlan == null);
                         }
 
+<<<<<<< HEAD
                         {
                             // add a new partition
                             addListPartition("t6", "p1", "beijing", "2022-01-01");
@@ -934,6 +1092,18 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
                                     "     PREAGGREGATION: ON\n" +
                                     "     partitions=1/2");
+=======
+                            {
+                                // add a new partition
+                                addListPartition("t6", "p1", "beijing", "2022-01-01");
+                                String insertSql = "insert into t6 partition(p1) values(1, 1, '2021-01-01', 'beijing');";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/1");
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(1, partitions.size());
@@ -950,11 +1120,19 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             insertSql = "insert into t6 partition(p2) values(1, 1, '2021-12-02', 'beijing');";
                             executeInsertSql(connectContext, insertSql);
 
+<<<<<<< HEAD
                             ExecPlan execPlan = getExecPlan(taskRun);
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
                                     "     PREAGGREGATION: ON\n" +
                                     "     partitions=2/3");
+=======
+                                ExecPlan execPlan = getExecPlan(taskRun);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=2/2");
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(1, partitions.size());
@@ -964,6 +1142,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertTrue(execPlan == null);
                         }
 
+<<<<<<< HEAD
                         {
                             // add a new partition
                             addListPartition("t6", "p5", "hangzhou", "2022-01-01");
@@ -990,6 +1169,34 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             Assert.assertEquals(3, partitions.size());
                         }
                     });
+=======
+                            {
+                                // add a new partition
+                                addListPartition("t6", "p5", "hangzhou", "2022-01-01");
+                                String insertSql = "INSERT INTO t6 partition(p5) values(1, 1, '2022-01-01', 'hangzhou')";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/3");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(2, partitions.size());
+                            }
+
+                            {
+                                // add a null partition
+                                addListPartition("t6", "p6", null, null);
+                                String insertSql = "INSERT INTO t6 partition(p6) values(1, 1, NULL, NULL)";
+                                ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                                String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                                PlanTestBase.assertContains(plan, "    TABLE: t6\n" +
+                                            "     PREAGGREGATION: ON\n" +
+                                            "     partitions=1/4");
+                                Collection<Partition> partitions = materializedView.getPartitions();
+                                Assert.assertEquals(3, partitions.size());
+                            }
+                        });
+>>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
         });
     }
 
