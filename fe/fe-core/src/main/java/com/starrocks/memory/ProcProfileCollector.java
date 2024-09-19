@@ -175,7 +175,11 @@ public class ProcProfileCollector extends FrontendDaemon {
         File dir = new File(profileLogDir);
         List<File> validFiles = new ArrayList<>();
         long totalSize = 0;
-        for (File file : dir.listFiles()) {
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
             if (file.getName().startsWith(CPU_FILE_NAME_PREFIX)
                     || file.getName().startsWith(MEM_FILE_NAME_PREFIX)) {
                 validFiles.add(file);
