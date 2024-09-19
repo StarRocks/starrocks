@@ -72,7 +72,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -1598,7 +1597,7 @@ public class PropertyAnalyzer {
                 List<SetListItem> setListItems = Lists.newArrayList();
                 for (Map.Entry<String, String> entry : properties.entrySet()) {
                     SystemVariable variable = getMVSystemVariable(properties, entry);
-                    VariableMgr.checkSystemVariableExist(variable);
+                    GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
                     setListItems.add(variable);
                 }
                 SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);

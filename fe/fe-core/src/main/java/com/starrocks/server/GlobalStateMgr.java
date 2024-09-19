@@ -494,6 +494,8 @@ public class GlobalStateMgr {
     private final GtidGenerator gtidGenerator;
     private final GlobalConstraintManager globalConstraintManager;
 
+    private final VariableMgr variableMgr;
+
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
     private final Authorizer authorizer;
@@ -774,6 +776,8 @@ public class GlobalStateMgr {
 
         this.keyMgr = new KeyMgr();
         this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
+        this.variableMgr = new VariableMgr();
 
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
@@ -1283,7 +1287,7 @@ public class GlobalStateMgr {
                 // configuration. If it is upgraded from an old version, the original
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
-                VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
                                         SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                         LiteralExpr.create("true", Type.BOOLEAN)),
                             false);
@@ -1488,7 +1492,7 @@ public class GlobalStateMgr {
                     .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
                     .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
                     .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
-                    .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                    .put(SRMetaBlockID.VARIABLE_MGR, variableMgr::load)
                     .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
                     .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
                     .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
@@ -1687,7 +1691,7 @@ public class GlobalStateMgr {
                 localMetastore.save(imageWriter);
                 alterJobMgr.save(imageWriter);
                 recycleBin.save(imageWriter);
-                VariableMgr.save(imageWriter);
+                variableMgr.save(imageWriter);
                 resourceMgr.saveResourcesV2(imageWriter);
                 exportMgr.saveExportJobV2(imageWriter);
                 backupHandler.saveBackupHandlerV2(imageWriter);
@@ -2602,5 +2606,9 @@ public class GlobalStateMgr {
 
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
+    }
+
+    public VariableMgr getVariableMgr() {
+        return variableMgr;
     }
 }

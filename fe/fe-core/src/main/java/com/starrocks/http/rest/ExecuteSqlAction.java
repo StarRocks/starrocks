@@ -54,7 +54,7 @@ import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -262,7 +262,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         if (customVariable != null) {
             try {
                 for (String key : customVariable.keySet()) {
-                    VariableMgr.setSystemVariable(context.getSessionVariable(),
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(context.getSessionVariable(),
                             new SystemVariable(key, new StringLiteral(customVariable.get(key))), true);
                 }
                 context.setThreadLocalInfo();

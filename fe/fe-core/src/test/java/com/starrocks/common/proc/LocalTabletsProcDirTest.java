@@ -36,6 +36,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -77,12 +78,18 @@ public class LocalTabletsProcDirTest {
         idToBackend.put(backendId, b1);
         idToBackend.put(backendId + 1, b2);
 
+        VariableMgr variableMgr = new VariableMgr();
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = ImmutableMap.copyOf(idToBackend);
+
+                GlobalStateMgr.getCurrentState().getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 

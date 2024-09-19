@@ -47,6 +47,7 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -104,6 +105,7 @@ public class DeleteTest {
     private Database db;
     private ConnectContext connectContext = new ConnectContext();
     private DeleteMgr deleteHandler;
+    private VariableMgr variableMgr = new VariableMgr();
 
     private Database createDb() {
         // Schema
@@ -170,6 +172,7 @@ public class DeleteTest {
     @Before
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
+        connectContext.setSessionVariable(variableMgr.newSessionVariable());
         deleteHandler = new DeleteMgr();
         db = createDb();
     }
@@ -335,7 +338,6 @@ public class DeleteTest {
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-
             }
         };
     }
