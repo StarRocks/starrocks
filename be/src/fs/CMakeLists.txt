@@ -28,6 +28,9 @@ set(EXEC_FILES
     fs_s3.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
+    s3/poco_http_client_factory.cpp
+    s3/poco_http_client.cpp
+    s3/poco_common.cpp
     fs_util.cpp
     fs_starlet.cpp
     )
