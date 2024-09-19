@@ -131,6 +131,11 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
                 return vectorSchemaRoot.getSchema();
             }
         } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("fetchArrowSchema was interrupted, reason: " + e.getMessage(), e);
+            }
+
             throw new RuntimeException("fetchArrowSchema fail, reason: " + e.getMessage(), e);
         }
     }

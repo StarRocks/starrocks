@@ -107,6 +107,14 @@ public class ConnectScheduler {
                         ConnectContext connectContext = connectionMap.get(connectId);
                         connectContext.checkTimeout(now);
                     }
+
+                    // remove arrow flight sql timeout connect
+                    ArrayList<String> arrowFlightSqlConnections =
+                            new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
+                    for (String token : arrowFlightSqlConnections) {
+                        ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
+                        connectContext.checkTimeout(now);
+                    }
                 }
             } catch (Throwable e) {
                 //Catch Exception to avoid thread exit
@@ -154,7 +162,8 @@ public class ConnectScheduler {
             connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
             AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
             int currentConn = currentConnAtomic.get();
-            long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+            long currentUserMaxConn =
+                    ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
             if (currentConn >= currentUserMaxConn) {
                 String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
                         ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
@@ -199,7 +208,7 @@ public class ConnectScheduler {
 
             if (ctx instanceof ArrowFlightSqlConnectContext) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
-                arrowFlightSqlConnectContextMap.put(context.getToken(), context);
+                arrowFlightSqlConnectContextMap.remove(context.getToken());
             }
         } finally {
             connStatsLock.unlock();
@@ -214,16 +223,20 @@ public class ConnectScheduler {
         return connectionMap.get(connectionId);
     }
 
+    public ConnectContext getContext(String token) {
+        return connectionMap.get(token);
+    }
+
     public ArrowFlightSqlConnectContext getArrowFlightSqlConnectContext(String token) {
         return arrowFlightSqlConnectContextMap.get(token);
     }
 
     public ConnectContext findContextByQueryId(String queryId) {
         return connectionMap.values().stream().filter(
-                        (Predicate<ConnectContext>) c ->
-                                c.getQueryId() != null
+                (Predicate<ConnectContext>) c ->
+                        c.getQueryId() != null
                                 && queryId.equals(c.getQueryId().toString())
-                )
+        )
                 .findFirst().orElse(null);
     }
 
