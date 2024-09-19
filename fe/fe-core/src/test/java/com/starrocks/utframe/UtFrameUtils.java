@@ -94,7 +94,6 @@ import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -1366,8 +1365,13 @@ public class UtFrameUtils {
                     clonedSessionVariable = (SessionVariable) context.getSessionVariable().clone();
                 }
                 for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+<<<<<<< HEAD
                     VariableMgr.setSystemVariable(clonedSessionVariable,
                             new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+=======
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+>>>>>>> a051e4879e ([BugFix] Fix session variable load image bug (#50924))
                 }
             } else if (hint instanceof UserVariableHint) {
                 UserVariableHint userVariableHint = (UserVariableHint) hint;

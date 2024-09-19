@@ -404,16 +404,17 @@ class ParserTest {
 
     @Test
     void testWrongVariableName() {
-        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
+        VariableMgr variableMgr = new VariableMgr();
+        String res = variableMgr.findSimilarVarNames("disable_coloce_join");
         assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
 
-        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        res = variableMgr.findSimilarVarNames("SQL_AUTO_NULL");
         assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'spill_storage_volume'}");
 
-        res = VariableMgr.findSimilarVarNames("pipeline");
+        res = variableMgr.findSimilarVarNames("pipeline");
         assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
 
-        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        res = variableMgr.findSimilarVarNames("disable_joinreorder");
         assertContains(res, "{'disable_join_reorder', 'disable_colocate_join'");
     }
 

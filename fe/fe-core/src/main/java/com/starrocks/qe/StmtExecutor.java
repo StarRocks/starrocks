@@ -798,7 +798,7 @@ public class StmtExecutor {
                         clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
                     }
                     for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-                        VariableMgr.setSystemVariable(clonedSessionVariable,
+                        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
                                 new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
                     }
                 }
