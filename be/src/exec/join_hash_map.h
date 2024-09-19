@@ -102,7 +102,7 @@ struct HashTableSlotDescriptor {
 struct JoinHashTableItems {
     //TODO: memory continues problem?
     SegmentedChunkPtr build_chunk = nullptr;
-    SegmentedColumns key_columns;
+    Columns key_columns;
     std::vector<HashTableSlotDescriptor> build_slots;
     std::vector<HashTableSlotDescriptor> probe_slots;
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
@@ -295,6 +295,9 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
     bool mor_reader_mode = false;
+
+    // TODO: optimize this according to chunk width
+    size_t build_chunk_segment_size = 2 << 15;
 };
 
 template <class T>
@@ -394,7 +397,7 @@ public:
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
-    static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items, size_t segment_index);
+    static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
     static void construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                      HashTableProbeState* probe_state);
 };
@@ -689,9 +692,10 @@ private:
 
     void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
-    void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
+    void _copy_build_column(const SegmentedColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
+                            bool to_nullable);
 
-    void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+    void _copy_build_nullable_column(const SegmentedColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _probe_index_output(ChunkPtr* chunk);
     void _build_index_output(ChunkPtr* chunk);

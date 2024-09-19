@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "column/vectorized_fwd.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
@@ -31,13 +32,13 @@ void JoinBuildFunc<LT>::prepare(RuntimeState* runtime, JoinHashTableItems* table
 
 template <LogicalType LT>
 const Buffer<typename JoinBuildFunc<LT>::CppType>& JoinBuildFunc<LT>::get_key_data(
-        const JoinHashTableItems& table_items, size_t segment_index) {
+        const JoinHashTableItems& table_items) {
     ColumnPtr data_column;
     if (table_items.key_columns[0]->is_nullable()) {
-        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]->get_segmented_column(segment_index));
+        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
         data_column = null_column->data_column();
     } else {
-        data_column = table_items.key_columns[0]->get_segmented_column(segment_index);
+        data_column = table_items.key_columns[0];
     }
 
     if constexpr (lt_is_string<LT>) {
@@ -54,12 +55,9 @@ const Buffer<typename JoinBuildFunc<LT>::CppType>& JoinBuildFunc<LT>::get_key_da
 template <LogicalType LT>
 void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
                                              HashTableProbeState* probe_state) {
-    size_t table_index = 1;
-    for (int i = 0; i < table_items->key_columns[0]->num_segments(); i++) {
     auto& data = get_key_data(*table_items);
-
     if (table_items->key_columns[0]->is_nullable()) {
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]->get_segmented_column(i));
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]);
         auto& null_array = nullable_column->null_column()->get_data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             if (null_array[i] == 0) {
@@ -74,7 +72,6 @@ void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableI
             table_items->next[i] = table_items->first[bucket_num];
             table_items->first[bucket_num] = i;
         }
-    }
     }
     table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }
@@ -417,6 +414,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe_prepare(RuntimeState* state) {
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::build(RuntimeState* state) {
+    _table_items->build_chunk->append_finished();
     BuildFunc().construct_hash_table(state, _table_items, _probe_state);
 }
 
@@ -623,7 +621,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
 
         bool need_output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
         if (need_output) {
-            ColumnPtr& column = _table_items->build_chunk->columns()[i];
+            auto& column = _table_items->build_chunk->columns()[i];
             if (!column->is_nullable()) {
                 _copy_build_column(column, chunk, slot, to_nullable);
             } else {
@@ -688,11 +686,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_nullable_column(ColumnPt
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk,
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const SegmentedColumnPtr& src_column, ChunkPtr* chunk,
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (to_nullable) {
-        auto data_column = src_column->clone_empty();
-        data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+        auto data_column = src_column->clone_selective(_probe_state->build_index.data(), 0, _probe_state->count);
 
         // When left outer join is executed,
         // build_index[i] Equal to 0 means it is not found in the hash table,
@@ -708,18 +705,15 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
         auto dest_column = NullableColumn::create(std::move(data_column), null_column);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
-        auto dest_column = src_column->clone_empty();
-        dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
-        (*chunk)->append_column(std::move(dest_column), slot->id());
+        auto data_column = src_column->clone_selective(_probe_state->build_index.data(), 0, _probe_state->count);
+        (*chunk)->append_column(std::move(data_column), slot->id());
     }
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk,
-                                                                        const SlotDescriptor* slot) {
-    ColumnPtr dest_column = src_column->clone_empty();
-
-    dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const SegmentedColumnPtr& src_column,
+                                                                        ChunkPtr* chunk, const SlotDescriptor* slot) {
+    ColumnPtr dest_column = src_column->clone_selective(_probe_state->build_index.data(), 0, _probe_state->count);
 
     // When left outer join is executed,
     // build_index[i] Equal to 0 means it is not found in the hash table,

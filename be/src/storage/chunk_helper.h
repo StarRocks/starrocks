@@ -17,6 +17,10 @@
 #include <memory>
 #include <queue>
 
+#include "column/column_visitor.h"
+#include "column/column_visitor_adapter.h"
+#include "column/datum.h"
+#include "column/fixed_length_column_base.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/olap_type_infra.h"
@@ -149,48 +153,57 @@ private:
     bool _finalized = false;
 };
 
-class SegmentedColumn {
+class SegmentedColumn : std::enable_shared_from_this<SegmentedColumn> {
 public:
-    void append(const Column& src);
-    void append(const Column& src, size_t offset, size_t count);
+    SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index);
+    ~SegmentedColumn() = default;
+
+    ColumnPtr clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size);
+
     bool is_nullable() const;
     bool has_null() const;
     size_t size() const;
-    StatusOr<ColumnPtr> upgrade_if_overflow();
-
-    template <class T>
-    std::deque<Buffer<T>> get_data();
-
-    std::vector<uint8_t> null_data() const;
-
-    size_t num_segments() const;
-    ColumnPtr get_segmented_column(size_t segment_index);
-
-    size_t byte_size() const;
+    void upgrade_to_nullable();
+    const std::vector<ColumnPtr>& columns() const;
+    size_t segment_size() const;
 
 private:
+    SegmentedChunkPtr _chunk;        // The chunk it belongs to
+    std::vector<ColumnPtr> _columns; // All segmented columns
 };
 
 // A big-chunk would be segmented into multi small ones, to avoid allocating large-continuous memory
 // It's not a transparent replacement for Chunk, but must be aware of and set a reasonale chunk_size
-class SegmentedChunk {
+class SegmentedChunk : std::enable_shared_from_this<SegmentedChunk> {
 public:
+    SegmentedChunk(size_t segment_size);
+    ~SegmentedChunk() = default;
+
+    void append_column(ColumnPtr column, SlotId slot_id);
+    void append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots);
+    void append_chunk(const ChunkPtr& chunk);
+    void append(const SegmentedChunkPtr& chunk, size_t offset);
+    void append_finished();
+
     size_t memory_usage() const;
+    size_t num_rows() const;
+    const SegmentedColumns& columns() const;
+    SegmentedColumns& columns();
+    size_t num_segments() const;
+    const std::vector<ChunkPtr>& segments() const;
+    std::vector<ChunkPtr>& segments();
+    size_t segment_size() const;
+    void reset();
+
     Status upgrade_if_overflow();
     Status downgrade();
     bool has_large_column() const;
 
-    void append_column(ColumnPtr column, SlotId slot_id);
-
-    const std::vector<ChunkPtr>& get_chunks() const;
-    std::vector<ChunkPtr>& get_chunks();
-    const SegmentedColumns& columns() const;
-    SegmentedColumns& columns();
-    const SegmentedColumnPtr& get_column_by_slot_id(SlotId slot_id) const;
-    SegmentedColumnPtr get_column_by_slot_id(SlotId slot_id);
-
 private:
-    std::vector<ChunkPtr> _chunks;
+    std::vector<ChunkPtr> _segments;
+    SegmentedColumns _columns;
+
+    const size_t _segment_size;
 };
 
 } // namespace starrocks
