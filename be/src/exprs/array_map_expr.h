@@ -40,8 +40,10 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
     std::string debug_string() const override;
+
 private:
     // use map to make sure the order of execution
-    std::map<Expr*, Expr*> _outer_common_exprs;
+    // std::map<Expr*, Expr*> _outer_common_exprs;
+    std::map<SlotId, Expr*> _outer_common_exprs;
 };
 } // namespace starrocks

@@ -47,7 +47,7 @@ public:
 
     // the slot ids of lambda expression may be originally from the arguments of this lambda function
     // or its parent lambda functions, or captured columns, remove the first one.
-    //  only capture column id, 
+    //  only capture column id,
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
         slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
         return _captured_slot_ids.size();
@@ -58,8 +58,9 @@ public:
         return _arguments_ids.size();
     }
 
-    bool is_lambda_function() const override {
-        return true;
+    bool is_lambda_function() const override { return true; }
+    bool is_lambda_expr_independent() const {
+        return _is_lambda_expr_independent;
     }
 
     Expr* get_lambda_expr() const { return _children[0]; }
@@ -68,7 +69,7 @@ public:
     struct ExtractContext {
         std::unordered_set<SlotId> lambda_arguments;
         SlotId next_slot_id;
-        std::map<Expr*, Expr*> outer_common_exprs;
+        std::map<SlotId, Expr*> outer_common_exprs;
     };
     SlotId max_used_slot_id() const;
 
@@ -84,6 +85,7 @@ private:
     // void try_to_replace_commom_expr(RuntimeState* state, Expr* expr);
 
     std::vector<SlotId> _captured_slot_ids;
+    // @TODO change to set
     std::vector<SlotId> _arguments_ids;
     std::vector<SlotId> _common_sub_expr_ids;
     std::vector<Expr*> _common_sub_expr;
@@ -91,5 +93,6 @@ private:
     // std::unordered_map<Expr*, Expr*> _outer_common_exprs;
     int _common_sub_expr_num;
     bool _is_prepared = false;
+    bool _is_lambda_expr_independent = false;
 };
 } // namespace starrocks

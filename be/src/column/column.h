@@ -187,13 +187,12 @@ public:
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when aligning offsets.";
         dest->reserve(offsets.back());
-        for (size_t i = 0;i < dest_size;i++) {
+        for (size_t i = 0; i < dest_size; i++) {
             // first value is itself, others append default
             dest->append_value_multiple_times(*this, i, 1);
             if (offsets[i + 1] - offsets[i] > 1) {
                 dest->append_default(offsets[i + 1] - offsets[i] - 1);
             }
-
         }
         return dest;
     }

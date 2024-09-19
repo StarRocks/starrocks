@@ -317,9 +317,7 @@ public:
     Status do_visit(const ObjectColumn<T>& column) {
         return Status::NotSupported("not support");
     }
-    Status do_visit(const ArrayViewColumn& column) {
-        return Status::NotSupported("Not support");
-    }
+    Status do_visit(const ArrayViewColumn& column) { return Status::NotSupported("Not support"); }
 
 private:
     const ColumnPtr _column;

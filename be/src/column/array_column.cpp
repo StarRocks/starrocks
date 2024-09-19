@@ -17,10 +17,10 @@
 #include <cstdint>
 
 #include "column/column_helper.h"
-#include "exprs/function_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/function_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -618,30 +618,44 @@ Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type)
     return Status::OK();
 }
 
-
 template <bool ConstV1, bool ConstV2, bool IgnoreNull>
-bool ArrayColumn::compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2, const NullColumnPtr& null_column) {
+bool ArrayColumn::compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2,
+                                               const NullColumnPtr& null_column) {
     [[maybe_unused]] uint8_t* null_data = nullptr;
     if constexpr (!IgnoreNull) {
         null_data = null_column->get_data().data();
     }
 
-    size_t num_rows = v1.size();
+    size_t num_rows = v1.size() - 1;
+    LOG(INFO) << "num_rows: " << num_rows;
     if constexpr (ConstV1 && ConstV2) {
         // if both are const column, we only compare the first row once
         num_rows = 1;
     }
-
     bool result = true;
     const auto& offsets_v1 = v1.get_data();
     const auto& offsets_v2 = v2.get_data();
-    for (size_t i = 0;i < num_rows && result;i++) {
-        [[maybe_unused]] uint32_t len1 = (ConstV1) ? (offsets_v1[1] - offsets_v1[0]) : (offsets_v1[i + 1] - offsets_v1[i]);
-        [[maybe_unused]] uint32_t len2 = (ConstV2) ? (offsets_v2[1] - offsets_v2[0]) : (offsets_v2[i + 1] - offsets_v2[i]);
+    for (size_t i = 0;i < offsets_v1.size();i++) {
+        LOG(INFO) << "offset v1: " << offsets_v1[i] << ", v2:" << offsets_v2[i];
+    }
+
+
+    for (size_t i = 0; i < num_rows && result; i++) {
+        [[maybe_unused]] uint32_t len1 =
+                (ConstV1) ? (offsets_v1[1] - offsets_v1[0]) : (offsets_v1[i + 1] - offsets_v1[i]);
+        [[maybe_unused]] uint32_t len2 =
+                (ConstV2) ? (offsets_v2[1] - offsets_v2[0]) : (offsets_v2[i + 1] - offsets_v2[i]);
         if constexpr (IgnoreNull) {
+            if (len1 != len2) {
+                LOG(INFO) << "array len mismatch, v1: " << len1 << ", v2: " << len2 << ", idx: " << i;
+            }
             result &= (len1 == len2);
         } else {
+            LOG(INFO) << "check idx: " << i << ", null: " << static_cast<uint32_t>(null_data[i]);
             if (!null_data[i]) {
+                if (len1 != len2) {
+                    LOG(INFO) << "array len mismatch, v1: " << len1 << ", v2: " << len2 << ", idx: " << i;
+                }
                 result &= (len1 == len2);
             }
         }
@@ -649,13 +663,14 @@ bool ArrayColumn::compare_lengths_from_offsets(const UInt32Column& v1, const UIn
     return result;
 }
 
-
 template <bool IgnoreNull>
-bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_column) {
+bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2,
+                                             const NullColumnPtr& null_column) {
     DCHECK(v1->is_array() && v2->is_array());
     DCHECK(!v1->is_nullable() && !v2->is_nullable());
 
     if (v1->size() != v2->size()) {
+        LOG(INFO) << "size not equal, v1: " << v1->size() << ", v2: " << v2->size();
         return false;
     }
     auto data_v1 = FunctionHelper::get_data_column_of_const(v1);
@@ -664,6 +679,7 @@ bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPt
     auto* array_v2 = down_cast<ArrayColumn*>(data_v2.get());
     const auto& offsets_v1 = array_v1->offsets();
     const auto& offsets_v2 = array_v2->offsets();
+    LOG(INFO) << "v1 size: " << v1->size() << ", v2 size: " << v2->size() << ", offset v1: " << offsets_v1.size() << ", offset v2: " << offsets_v2.size();
     if (v1->is_constant() && v2->is_constant()) {
         return compare_lengths_from_offsets<true, true, IgnoreNull>(offsets_v1, offsets_v2, null_column);
     } else if (v1->is_constant() && !v2->is_constant()) {
@@ -675,8 +691,9 @@ bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPt
     return compare_lengths_from_offsets<false, false, IgnoreNull>(offsets_v1, offsets_v2, null_column);
 }
 
-template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
-template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
-
+template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                            const NullColumnPtr& null_data);
+template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                             const NullColumnPtr& null_data);
 
 } // namespace starrocks

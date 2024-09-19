@@ -15,14 +15,17 @@
 #include "exprs/array_map_expr.h"
 
 #include <fmt/format.h>
+
 #include <memory>
+#include <sstream>
 
 #include "column/array_column.h"
+#include "column/array_view_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
-#include "column/array_view_column.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/constexpr.h"
 #include "common/statusor.h"
@@ -40,7 +43,7 @@ ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
 Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
-    for (int i = 1;i < _children.size(); ++i) {
+    for (int i = 1; i < _children.size(); ++i) {
         RETURN_IF_ERROR(_children[i]->prepare(state, context));
     }
     // if child 0 is not lambda, what will happen whe nevaluate
@@ -57,8 +60,8 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, &extract_ctx));
     _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
 
-    for (auto [_, expr]: _outer_common_exprs) {
-        // @TODO 
+    for (auto [_, expr] : _outer_common_exprs) {
+        // @TODO
         LOG(INFO) << "prepare common expr: " << expr->debug_string();
         // @TODO if after rewrite, first expr of array_map become column ref, we can remove it?
         RETURN_IF_ERROR(expr->prepare(state, context));
@@ -82,7 +85,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     ColumnPtr input_array_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
 
     // ColumnPtr aligned_offsets;
-    UInt32Column::Ptr aligned_offsets;
+    UInt32Column::Ptr aligned_offsets = nullptr;
     // @TODO we should eval common expr first
 
     // maybe a NullColumn or a Const(NullColumn)
@@ -123,8 +126,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
             // @TODO we can check it before??
             // this will re-build data column, replace null element to empty array
-            data_column->empty_null_in_complex_column(nullable_column->null_column()->get_data(),
-                                                 down_cast<const ArrayColumn*>(data_column.get())->offsets().get_data());
+            // data_column->empty_null_in_complex_column(
+            //         nullable_column->null_column()->get_data(),
+            //         down_cast<const ArrayColumn*>(data_column.get())->offsets().get_data());
 
             auto null_column = nullable_column->null_column();
             if (is_const) {
@@ -137,13 +141,24 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             if (result_null_column) {
                 is_single_nullable_child = false;
                 // union two null column
-                LOG(INFO) << "union result_null_column, size: " << result_null_column->size() << ", null size: " << null_column->size();
+                LOG(INFO) << "union result_null_column, size: " << result_null_column->size()
+                          << ", null size: " << null_column->size();
                 result_null_column = FunctionHelper::union_null_column(null_column, result_null_column);
                 LOG(INFO) << "union done: " << result_null_column->size();
+                std::ostringstream oss;
+                for (auto null_data: result_null_column->get_data()) {
+                    oss << static_cast<uint32_t>(null_data) << ",";
+                }
+                LOG(INFO) << "null data: " << oss.str();
             } else {
                 is_single_nullable_child = true;
                 result_null_column = null_column;
                 LOG(INFO) << "assign result_null_column, size: " << null_column->size();
+                std::ostringstream oss;
+                for (auto null_data: result_null_column->get_data()) {
+                    oss << static_cast<uint32_t>(null_data) << ",";
+                }
+                LOG(INFO) << "null data: " << oss.str();
             }
         }
         DCHECK(data_column->is_array() && !data_column->is_nullable());
@@ -158,14 +173,17 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         if (!input_elements.empty()) {
             const auto& first_input = input_elements[0];
 
-            bool is_array_lengths_valid = result_null_column ?
-                ArrayColumn::is_all_array_lengths_equal<false>(first_input, column, result_null_column):
-                ArrayColumn::is_all_array_lengths_equal<true>(first_input, column, result_null_column);
+            bool is_array_lengths_valid =
+                    result_null_column
+                            ? ArrayColumn::is_all_array_lengths_equal<false>(first_input, column, result_null_column)
+                            : ArrayColumn::is_all_array_lengths_equal<true>(first_input, column, result_null_column);
             if (!is_array_lengths_valid) {
+                LOG(INFO) << "chunk num: " << chunk->num_rows() << ", current idx: " << i << ", first input size: " << first_input->size()
+                    << ", column size: " << column->size() << ", null size: " << result_null_column->size();
                 return Status::InternalError("Input array element's size is not equal in array_map().");
             }
         }
-        
+
         input_elements.emplace_back(column);
     }
 
@@ -177,24 +195,41 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
 
     ColumnPtr column = nullptr;
-    size_t null_rows = result_null_column ? SIMD::count_nonzero(result_null_column->get_data()): 0;
+    size_t null_rows = result_null_column ? SIMD::count_nonzero(result_null_column->get_data()) : 0;
     if (null_rows == input_elements[0]->size()) {
         // all input is null
+        // @TODO we can give a Const(Nullable(ArrayColumn))
+        LOG(INFO) << "all input is null, null_rows: " << null_rows << ", input_elements[0]->size(): " << input_elements[0]->size();
+        // @TODO create an array column with all null
         column = ColumnHelper::create_column(type().children[0],
                                              true); // array->elements must be of return array->elements' type
+        column->append_default(1);
+        // @TODO handle aligned offsets
+        aligned_offsets = UInt32Column::create(0);
+        aligned_offsets->append(0);
+        aligned_offsets->append(1);
+        auto array_col = std::make_shared<ArrayColumn>(column, aligned_offsets);
+        array_col->check_or_die();
+        LOG(INFO) << "array_col size: " << array_col->size();
+        result_null_column->resize(1);
+        auto result = ConstColumn::create(NullableColumn::create(std::move(array_col), result_null_column), chunk->num_rows());
+        result->check_or_die();
+        return result;
+        // @TODO shoulw give
+        // aligned_offsets->append(0);
     } else {
         // construct a new chunk to evaluate the lambda expression.
         auto cur_chunk = std::make_shared<Chunk>();
 
         // 1. evaluate all outer common exprs
         LOG(INFO) << "eval outer common exprs, size: " << _outer_common_exprs.size();
-        for (const auto& [column_ref, expr]: _outer_common_exprs) {
-            auto slot_id = down_cast<ColumnRef*>(column_ref)->slot_id();
-            LOG(INFO) << "eval non-capture expr: " << slot_id;
+        for (const auto& [slot_id, expr] : _outer_common_exprs) {
+            LOG(INFO) << "eval non-capture expr, slot_id: " << slot_id << ", expr: " << expr->debug_string();
             ASSIGN_OR_RETURN(auto col, context->evaluate(expr, chunk));
             LOG(INFO) << "col size: " << col->size();
             chunk->append_column(col, slot_id);
         }
+        LOG(INFO) << "eval outer common exprs done";
 
         auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
         std::vector<SlotId> slot_ids;
@@ -209,163 +244,296 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                         "The size of the captured column {} is less than array's size.", captured_column->get_name()));
             }
         }
+        // if lambda expr is independet, we can treat is as a const column, skip repliacate
+        if (lambda_func->is_lambda_expr_independent()) {
+            LOG(INFO) << "lambda expr is independent, we can skip replicate";
+            // we can eval lambda expr and return a const column
+            // @TODO consider const 
+            // @TODO skip
+            std::vector<SlotId> arguments_ids;
+            int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
+            DCHECK(argument_num == input_elements.size());
+            for (int i = 0; i < argument_num; ++i) {
+                auto data_column = FunctionHelper::get_data_column_of_const(input_elements[i]);
+                auto array_column = down_cast<const ArrayColumn*>(data_column.get());
+                auto elements_column = array_column->elements_column();
+                UInt32Column::Ptr offsets_column = array_column->offsets_column();
 
-        // 3. align up all columns offsets
-        // if most value is null, we remove all null column, create a new one to evaluate
-        // else alignup offset
-        // @TODO we can't avoid copy data here??
-        // should we replicate capture column???
-        // empty all null is ok
-
-        // @TODO if all input is const, we don't need unpack const
-        if (all_input_is_constant) {
-            // if all input arguments are ConstColumn, we don't need unpack, just evaluate on ConstColumn
-            LOG(INFO) << "all inputs of array_map are ConstColumn";
-
-        }
-        // @TODO udpate aligned_offsets, we can use arg0's offsets?
-
-        std::vector<SlotId> arguments_ids;
-        int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
-        DCHECK(argument_num == input_elements.size());
-        for (int i = 0; i < argument_num; ++i) {
-            auto data_column = FunctionHelper::get_data_column_of_const(input_elements[i]);
-            auto array_column = down_cast<const ArrayColumn*>(data_column.get());
-            auto elements_column = array_column->elements_column();
-            UInt32Column::Ptr offsets_column = array_column->offsets_column();
-
-            if (input_elements[i]->is_constant()) {
-                // if input is const, we should assign data multiple times
-                // seems we cant avoid copy data if we don't have view column?
-                // if input is const, we should wrap its element column as a const column too
-                // @TODO elements should not be a const column
-                size_t elements_num = array_column->get_element_size(0);
-                elements_column = elements_column->clone();
-                // create a new offsets
-                // offsets_column = UInt32Column::create();
-                offsets_column = UInt32Column::create();
-                // replicate N time and ignore null
-                size_t repeat_times = input_elements[i]->size() - null_rows;
-                offsets_column->append(0);
-                size_t offset = elements_num;
-                for (size_t i = 0;i < repeat_times;i++) {
-                    elements_column->append(*elements_column, 0, elements_num);
-                    offset += elements_num;
-                    offsets_column->append(offset);
-                }
-
-            } else {
-                // @TODO null data size is ok, only one row, why offsets has too many data?
-
-                // @TODO empty_null should apply on array column..
-                // elements_column->empty_null_in_complex_column(result_null_column->get_data(), array_column->offsets().get_data());
-                data_column->empty_null_in_complex_column(result_null_column->get_data(), array_column->offsets().get_data());
-                elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
-            }
-            if (aligned_offsets == nullptr) {
-                aligned_offsets = offsets_column;
-            }
-            //append elemt
-            cur_chunk->append_column(elements_column, arguments_ids[i]);
-            LOG(INFO) << "input elements: " << input_elements[i]->get_name() << ", arg id: " << arguments_ids[i];
-        }
-        // @TODO put outer common expr into cur_chunk,
-        // align offset
-        for (const auto& [column_ref, expr]: _outer_common_exprs) {
-            auto slot_id = down_cast<ColumnRef*>(column_ref)->slot_id();
-            auto column = chunk->get_column_by_slot_id(slot_id);
-            column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
-            // replicate column and put int into cur_chunk
-            // @TODO what if column is const?
-            // @TODO this should be in cur_chunk and chunk?
-            auto aligned_column = column->replicate(aligned_offsets->get_data());
-            cur_chunk->append_column(aligned_column, slot_id);
-            LOG(INFO) << "append outer common column: " << slot_id;
-            // chunk->append_column(col, slot_id);
-        }
-        for (auto slot_id : slot_ids) {
-            DCHECK(slot_id > 0);
-            if (cur_chunk->is_slot_exist(slot_id)) {
-                continue;
-            }
-            auto captured_column = chunk->get_column_by_slot_id(slot_id);
-            auto aligned_column = captured_column->replicate(aligned_offsets->get_data());
-            cur_chunk->append_column(aligned_column, slot_id);
-            LOG(INFO) << "append capture column, " << slot_id;
-        }
-        #ifdef DEBUG
-        {
-            auto first_column = cur_chunk->get_column_by_slot_id(arguments_ids[0]);
-            for (int i = 1;i < argument_num;i++) {
-                auto column = cur_chunk->get_column_by_slot_id(arguments_ids[i]);
-                DCHECK_EQ(column->size(), first_column->size()) << "input arguments size should be same";
-            }
-        }
-        #endif
-        
-        // @TODO
-        {
-            // @TODO evalu param may be very large??
-            // cut tmp chunk from cur_chunk, and eval
-            // cut data
-            // if cur_chunk has view_column, we should convert view_column to column again
-
-            // @TODO can we find common expr from chunk?
-            for (const auto& [slot_id, _]: chunk->get_slot_id_to_index_map()) {
-                LOG(INFO) << "chunk contains slot id: " << slot_id;
-            }
-            for (const auto& [slot_id, _] : cur_chunk->get_slot_id_to_index_map()) {
-                LOG(INFO) << "cur_chunk contains slot id: " << slot_id;
-            }
-            // @TODO cut row [x,y] into a tmp chunk
-            ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
-            LOG(INFO) << "cur_chunk rows: " << cur_chunk->num_rows();
-            RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
-            accumulator.finalize();
-            while (auto tmp_chunk = accumulator.pull()) {
-                // if contains view, should translate it back
-                // TODO change column 
-                auto new_chunk = std::make_shared<Chunk>();
-                // const auto& columns = tmp_chunk->columns();
-                LOG(INFO) << "tmp_chunk rows: " << tmp_chunk->num_rows();
-                // for(size_t idx = 0;idx < columns.size();idx++) {
-                //     const auto& column = columns[idx];
-                //     if (column->is_array_view()) {
-                //         LOG(INFO) << "convert array-view to array, " << column->get_name();
-                //         ASSIGN_OR_RETURN(auto new_column, ArrayViewColumn::to_array_column(column));
-                //         LOG(INFO) << "convert done";
-                //         new_column->check_or_die();
-                //         // auto array_view_column = down_cast<const ArrayViewColumn*>(column.get());
-                //         // ASSIGN_OR_RETURN(auto new_column, array_view_column->to_array_column());
-                //         LOG(INFO) << "update column, idx: " << idx;
-                //         tmp_chunk->update_column_by_index(new_column, idx);
-                //     }
-                // }
-                tmp_chunk->check_or_die();
-                // for (const auto& column: tmp_chunk->columns()) {
-                //     LOG(INFO) << "column: " << column->get_name();
-                //     DCHECK(!column->is_array_view()) << "unexpected array view";
-                // }
-
-                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
-                tmp_col->check_or_die();
-                tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
-                if (column == nullptr) {
-                    column = tmp_col;
+                if (input_elements[i]->is_constant()) {
+                    // if input is const, we should assign data multiple times
+                    // seems we cant avoid copy data if we don't have view column?
+                    // if input is const, we should wrap its element column as a const column too
+                    // @TODO elements should not be a const column
+                    size_t elements_num = array_column->get_element_size(0);
+                    elements_column = elements_column->clone();
+                    // create a new offsets
+                    // offsets_column = UInt32Column::create();
+                    offsets_column = UInt32Column::create();
+                    // replicate N time and ignore null
+                    size_t repeat_times = input_elements[i]->size() - null_rows;
+                    offsets_column->append(0);
+                    size_t offset = elements_num;
+                    for (size_t i = 0; i < repeat_times; i++) {
+                        elements_column->append(*elements_column, 0, elements_num);
+                        offset += elements_num;
+                        offsets_column->append(offset);
+                    }
                 } else {
-                    column->append(*tmp_col);
+                    // @TODO null data size is ok, only one row, why offsets has too many data?
+
+                    // @TODO empty_null should apply on array column..
+                    // elements_column->empty_null_in_complex_column(result_null_column->get_data(), array_column->offsets().get_data());
+                    data_column->empty_null_in_complex_column(result_null_column->get_data(),
+                                                            array_column->offsets().get_data());
+                    elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
+                }
+                if (aligned_offsets == nullptr) {
+                    LOG(INFO) << "assign offsets: " << offsets_column->size();
+                    aligned_offsets = offsets_column;
+                }
+                //append elemt
+                // cur_chunk->append_column(elements_column, arguments_ids[i]);
+                LOG(INFO) << "input elements: " << input_elements[i]->get_name() << ", arg id: " << arguments_ids[i];
+            }
+            DCHECK(aligned_offsets != nullptr);
+            LOG(INFO) << "begin append outer common column, num: " << _outer_common_exprs.size();
+            for (const auto& [slot_id, expr] : _outer_common_exprs) {
+                auto column = chunk->get_column_by_slot_id(slot_id);
+                LOG(INFO) << "unpack const column: " << column->get_name() << ", size: " << column->size();
+                column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
+                // replicate column and put int into cur_chunk
+                // @TODO what if column is const?
+                // @TODO this should be in cur_chunk and chunk?
+                LOG(INFO) << "replicate column";
+                // @TODO how to avoid replicate...
+                // @TODO replicate may cost a lot of memory, can we evalute directly to avoid replicate?
+                // auto aligned_column = column->replicate(aligned_offsets->get_data());
+                auto aligned_column = column;
+                LOG(INFO) << "append outer common column: " << slot_id;
+                cur_chunk->append_column(aligned_column, slot_id);
+                // chunk->append_column(col, slot_id);
+            }
+            LOG(INFO) << "begin append capture column, num: " << slot_ids.size();
+            for (auto slot_id : slot_ids) {
+                DCHECK(slot_id > 0);
+                if (cur_chunk->is_slot_exist(slot_id)) {
+                    continue;
+                }
+                auto captured_column = chunk->get_column_by_slot_id(slot_id);
+                // auto aligned_column = captured_column->replicate(aligned_offsets->get_data());
+                auto aligned_column = captured_column;
+                cur_chunk->append_column(aligned_column, slot_id);
+                LOG(INFO) << "append capture column, " << slot_id;
+            }
+            // @TODO 
+            // @TODO we should eval first, get column, then replicate it?
+
+            // eval lambda
+            // @TODO since lambda not depend on argument, after eval all comon expr, we can get result, wrap it as a const column
+            LOG(INFO) << "eval lambda: " << _children[0]->debug_string();
+            ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
+            tmp_col->check_or_die();
+            // tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], cur_chunk->num_rows(), true);
+            LOG(INFO) << "replicate result, result size: " << tmp_col->size() << ", align offset size: " << aligned_offsets->get_data().back() << ", offset num:" << aligned_offsets->size();
+            column = tmp_col->replicate(aligned_offsets->get_data());
+            LOG(INFO) << "column size: " << column->size();
+            column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+            column = ColumnHelper::cast_to_nullable_column(column);
+        } else {
+            // 3. align up all columns offsets
+            // if most value is null, we remove all null column, create a new one to evaluate
+            // else alignup offset
+            // @TODO we can't avoid copy data here??
+            // should we replicate capture column???
+            // empty all null is ok
+
+            // @TODO if all input is const, we don't need unpack const
+            if (all_input_is_constant) {
+                // if all input arguments are ConstColumn, we don't need unpack, just evaluate on ConstColumn
+                LOG(INFO) << "all inputs of array_map are ConstColumn";
+                // just eval, no unpack ,no xx...
+            }
+            // @TODO udpate aligned_offsets, we can use arg0's offsets?
+
+            std::vector<SlotId> arguments_ids;
+            int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
+            DCHECK(argument_num == input_elements.size());
+            for (int i = 0; i < argument_num; ++i) {
+                auto data_column = FunctionHelper::get_data_column_of_const(input_elements[i]);
+                auto array_column = down_cast<const ArrayColumn*>(data_column.get());
+                auto elements_column = array_column->elements_column();
+                UInt32Column::Ptr offsets_column = array_column->offsets_column();
+
+                if (input_elements[i]->is_constant()) {
+                    // if input is const, we should assign data multiple times
+                    // seems we cant avoid copy data if we don't have view column?
+                    // if input is const, we should wrap its element column as a const column too
+                    // @TODO elements should not be a const column
+                    if (all_input_is_constant) {
+                        LOG(INFO) << "all input is const, we just keep const";
+                    } else {
+                        size_t elements_num = array_column->get_element_size(0);
+                        elements_column = elements_column->clone();
+                        // create a new offsets
+                        // offsets_column = UInt32Column::create();
+                        offsets_column = UInt32Column::create();
+                        // replicate N time and ignore null
+                        size_t repeat_times = input_elements[i]->size() - null_rows;
+                        offsets_column->append(0);
+                        size_t offset = elements_num;
+                        for (size_t i = 0; i < repeat_times; i++) {
+                            elements_column->append(*elements_column, 0, elements_num);
+                            offset += elements_num;
+                            offsets_column->append(offset);
+                        }
+                    }
+
+                } else {
+                    // @TODO null data size is ok, only one row, why offsets has too many data?
+
+                    // @TODO empty_null should apply on array column..
+                    // elements_column->empty_null_in_complex_column(result_null_column->get_data(), array_column->offsets().get_data());
+                    data_column->empty_null_in_complex_column(result_null_column->get_data(),
+                                                            array_column->offsets().get_data());
+                    elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
+                }
+                // @TODO consider all const case
+                if (aligned_offsets == nullptr) {
+                    LOG(INFO) << "assign offsets: " << offsets_column->size();
+                    aligned_offsets = offsets_column;
+                }
+                //append elemt
+                cur_chunk->append_column(elements_column, arguments_ids[i]);
+                // LOG(INFO) << "input elements: " << input_elements[i]->get_name() << ", arg id: " << arguments_ids[i];
+            }
+            // @TODO put outer common expr into cur_chunk,
+            DCHECK(aligned_offsets != nullptr);
+
+            // if capture column is empty
+            // align offset
+            LOG(INFO) << "begin append outer common column, num: " << _outer_common_exprs.size();
+            for (const auto& [slot_id, expr] : _outer_common_exprs) {
+                auto column = chunk->get_column_by_slot_id(slot_id);
+                LOG(INFO) << "unpack const column: " << column->get_name() << ", size: " << column->size();
+                column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
+                // replicate column and put int into cur_chunk
+                // @TODO what if column is const?
+                // @TODO this should be in cur_chunk and chunk?
+                LOG(INFO) << "replicate column";
+                // @TODO how to avoid replicate...
+                // @TODO replicate may cost a lot of memory, can we evalute directly to avoid replicate?
+                auto aligned_column = column->replicate(aligned_offsets->get_data());
+                LOG(INFO) << "append outer common column: " << slot_id;
+                cur_chunk->append_column(aligned_column, slot_id);
+                // chunk->append_column(col, slot_id);
+            }
+            LOG(INFO) << "begin append capture column, num: " << slot_ids.size();
+            for (auto slot_id : slot_ids) {
+                DCHECK(slot_id > 0);
+                if (cur_chunk->is_slot_exist(slot_id)) {
+                    continue;
+                }
+                auto captured_column = chunk->get_column_by_slot_id(slot_id);
+                auto aligned_column = captured_column->replicate(aligned_offsets->get_data());
+                cur_chunk->append_column(aligned_column, slot_id);
+                LOG(INFO) << "append capture column, " << slot_id;
+            }
+    #ifdef DEBUG
+            {
+                auto first_column = cur_chunk->get_column_by_slot_id(arguments_ids[0]);
+                for (int i = 1; i < argument_num; i++) {
+                    auto column = cur_chunk->get_column_by_slot_id(arguments_ids[i]);
+                    DCHECK_EQ(column->size(), first_column->size()) << "input arguments size should be same";
+                }
+                LOG(INFO) << "check length done";
+            }
+    #endif
+
+        // @TODO
+            {
+                // @TODO evalu param may be very large??
+                // cut tmp chunk from cur_chunk, and eval
+                // cut data
+                // if cur_chunk has view_column, we should convert view_column to column again
+                if (all_input_is_constant) {
+                    LOG(INFO) << "all input is constant, we just eval const column";
+                    LOG(INFO) << "eval lambda: " << _children[0]->debug_string();
+                    ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
+                    tmp_col->check_or_die();
+                    // tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], cur_chunk->num_rows(), true);
+                    LOG(INFO) << "replicate result, result size: " << tmp_col->size() << ", align offset size: " << aligned_offsets->get_data().back() << ", offset num:" << aligned_offsets->size();
+                    column = ConstColumn::create(FunctionHelper::get_data_column_of_const(tmp_col), tmp_col->size());
+                    // column = FunctionHelper::get_data_column_of_nullable(tmp_col);
+                    // column = tmp_col->replicate(aligned_offsets->get_data());
+                    LOG(INFO) << "column size: " << column->size();
+                    column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+                    LOG(INFO) << "final column: " << column->get_name();
+                    // column = ColumnHelper::cast_to_nullable_column(column);
+                } else {
+
+                    // @TODO can we find common expr from chunk?
+                    for (const auto& [slot_id, _] : chunk->get_slot_id_to_index_map()) {
+                        LOG(INFO) << "chunk contains slot id: " << slot_id;
+                    }
+                    for (const auto& [slot_id, _] : cur_chunk->get_slot_id_to_index_map()) {
+                        LOG(INFO) << "cur_chunk contains slot id: " << slot_id;
+                    }
+                    // @TODO cut row [x,y] into a tmp chunk
+                    ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
+                    LOG(INFO) << "cur_chunk rows: " << cur_chunk->num_rows();
+                    RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
+                    accumulator.finalize();
+                    while (auto tmp_chunk = accumulator.pull()) {
+                        // if contains view, should translate it back
+                        // TODO change column
+                        auto new_chunk = std::make_shared<Chunk>();
+                        // const auto& columns = tmp_chunk->columns();
+                        LOG(INFO) << "tmp_chunk rows: " << tmp_chunk->num_rows();
+                    
+                        tmp_chunk->check_or_die();
+                    
+                        LOG(INFO) << "eval lambda: " << _children[0]->debug_string();
+                        ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
+                        tmp_col->check_or_die();
+                        tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
+                        if (column == nullptr) {
+                            column = tmp_col;
+                        } else {
+                            column->append(*tmp_col);
+                        }
+                    }
                 }
             }
+            // construct the result array
+            DCHECK(column != nullptr);
+            column = ColumnHelper::cast_to_nullable_column(column);
         }
-        // construct the result array
-        DCHECK(column != nullptr);
-        column = ColumnHelper::cast_to_nullable_column(column);
-    
     }
     // @TODO handle const?
 
+    if (all_input_is_constant) {
+        LOG(INFO) << "all input is const, create a const column as result";
+        auto data_column = FunctionHelper::get_data_column_of_const(column);
+        aligned_offsets = UInt32Column::create();
+        aligned_offsets->append(0);
+        aligned_offsets->append(column->size());
+        auto array_col = std::make_shared<ArrayColumn>(
+                data_column, ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone_shared()));
+        array_col->check_or_die();
+        ColumnPtr result_column = array_col;
+        if (result_null_column != nullptr) {
+            result_column = NullableColumn::create(std::move(array_col), result_null_column);
+            result_column->check_or_die();
+            // return ConstColumn::create(NullableColumn::create(std::move(array_col), result_null_column), result_null_column->size());
+            // return NullableColumn::create(std::move(array_col), result_null_column);
+        }
+        result_column = ConstColumn::create(result_column, chunk->num_rows());
+        result_column->check_or_die();
+        LOG(INFO) << "result: " << result_column->get_name() << ", size: " << result_column->size();
+        return result_column;
+    }
     // @TODO aligned offsets maybe null
-
+    // @TODO
     // attach offsets
     auto array_col = std::make_shared<ArrayColumn>(
             column, ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone_shared()));
@@ -380,8 +548,8 @@ std::string ArrayMapExpr::debug_string() const {
     std::stringstream out;
     auto expr_debug_string = Expr::debug_string();
     out << "array_map (";
-    for (int i = 0;i < _children.size();i++) {
-        out << (i == 0 ? "": ", ") << _children[i]->debug_string();
+    for (int i = 0; i < _children.size(); i++) {
+        out << (i == 0 ? "" : ", ") << _children[i]->debug_string();
     }
     out << ")";
     return out.str();

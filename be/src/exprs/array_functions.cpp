@@ -17,11 +17,11 @@
 #include <memory>
 
 #include "column/array_column.h"
+#include "column/array_view_column.h"
 #include "column/column_hash.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
-#include "column/array_view_column.h"
 #include "common/statusor.h"
 #include "simd/simd.h"
 #include "util/raw_container.h"
@@ -1098,6 +1098,7 @@ StatusOr<ColumnPtr> ArrayFunctions::all_match(FunctionContext* context, const Co
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::any_match(FunctionContext* context, const Columns& columns) {
+    LOG(INFO) << "evaluate any_match";
     return ArrayMatch<true>::process(context, columns);
 }
 
@@ -1108,8 +1109,9 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
 
     auto num_rows = columns[0]->size();
     LOG(INFO) << "array_concat, num_rows: " << num_rows;
-    for (auto& column: columns) {
-        LOG(INFO) << "column size: " << column->size() << ", is_const: " << column->is_constant() << ", is_nullable: " << column->is_nullable();
+    for (auto& column : columns) {
+        LOG(INFO) << "column size: " << column->size() << ", is_const: " << column->is_constant()
+                  << ", is_nullable: " << column->is_nullable();
     }
     // compute nulls
     NullColumnPtr nulls;

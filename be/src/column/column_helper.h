@@ -124,7 +124,6 @@ public:
         return column;
     }
 
-
     static inline bool offsets_equal(const UInt32Column::Ptr& offset0, const UInt32Column::Ptr& offset1) {
         if (offset0->size() != offset1->size()) {
             return false;

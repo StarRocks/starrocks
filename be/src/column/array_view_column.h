@@ -24,22 +24,24 @@
 
 namespace starrocks {
 
-class ArrayViewColumn final: public ColumnFactory<Column, ArrayViewColumn> {
+class ArrayViewColumn final : public ColumnFactory<Column, ArrayViewColumn> {
     friend class ColumnFactory<Column, ArrayViewColumn>;
 
 public:
     using ValueType = void; // @TODO need array view?
 
-    ArrayViewColumn(ColumnPtr elements, UInt32Column::Ptr offsets, UInt32Column::Ptr lengths):
-        _elements(std::move(elements)), _offsets(std::move(offsets)), _lengths(std::move(lengths)) {}
+    ArrayViewColumn(ColumnPtr elements, UInt32Column::Ptr offsets, UInt32Column::Ptr lengths)
+            : _elements(std::move(elements)), _offsets(std::move(offsets)), _lengths(std::move(lengths)) {}
 
     ArrayViewColumn(const ArrayViewColumn& rhs)
-        : _elements(rhs._elements),
-          _offsets(std::static_pointer_cast<UInt32Column>(rhs._offsets->clone_shared())),
-          _lengths(std::static_pointer_cast<UInt32Column>(rhs._lengths->clone_shared())) {}
+            : _elements(rhs._elements),
+              _offsets(std::static_pointer_cast<UInt32Column>(rhs._offsets->clone_shared())),
+              _lengths(std::static_pointer_cast<UInt32Column>(rhs._lengths->clone_shared())) {}
 
-    ArrayViewColumn(ArrayViewColumn&& rhs) noexcept:
-     _elements(std::move(rhs._elements)), _offsets(std::move(rhs._offsets)), _lengths(std::move(rhs._lengths)) {}
+    ArrayViewColumn(ArrayViewColumn&& rhs) noexcept
+            : _elements(std::move(rhs._elements)),
+              _offsets(std::move(rhs._offsets)),
+              _lengths(std::move(rhs._lengths)) {}
 
     ArrayViewColumn& operator=(const ArrayViewColumn& rhs) {
         // @TODO
@@ -52,11 +54,9 @@ public:
 
     ~ArrayViewColumn() override = default;
 
-    bool is_array_view() const override {
-        return true;
-    } 
+    bool is_array_view() const override { return true; }
 
-    const uint8_t* raw_data() const override{
+    const uint8_t* raw_data() const override {
         DCHECK(false) << "ArrayViewColumn::raw_data() is not supported";
         return nullptr;
     }
@@ -66,12 +66,8 @@ public:
         return nullptr;
     }
 
-    size_t size() const override {
-        return _offsets->size();
-    }
-    size_t capacity() const override {
-        return _offsets->capacity() + _lengths->capacity();
-    }
+    size_t size() const override { return _offsets->size(); }
+    size_t capacity() const override { return _offsets->capacity() + _lengths->capacity(); }
 
     size_t type_size() const override {
         // @TODO need a array view type
@@ -96,7 +92,6 @@ public:
         _elements->reserve(n);
         _offsets->reserve(n);
         _lengths->reserve(n);
-
     }
     void resize(size_t n) override {
         // DCHECK(false) << "ArrayViewColumn::resize() is not supported";
@@ -135,9 +130,7 @@ public:
         DCHECK(false) << "ArrayViewColumn::append_value_multiple_times() is not supported";
     }
 
-    void append_default() override {
-        DCHECK(false) << "ArrayViewColumn::append_default() is not supported";
-    }
+    void append_default() override { DCHECK(false) << "ArrayViewColumn::append_default() is not supported"; }
     void append_default(size_t count) override {
         DCHECK(false) << "ArrayViewColumn::append_default() is not supported";
     }
@@ -163,7 +156,8 @@ public:
         return 0;
     }
 
-    void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sized, size_t chunk_size, uint32_t max_one_row_size) override {
+    void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sized, size_t chunk_size,
+                         uint32_t max_one_row_size) override {
         DCHECK(false);
     }
     const uint8_t* deserialize_and_append(const uint8_t* pos) override {
@@ -175,9 +169,7 @@ public:
         DCHECK(false);
         return 0;
     }
-    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override {
-        DCHECK(false);
-    }
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override { DCHECK(false); }
 
     MutableColumnPtr clone_empty() const override;
 
@@ -191,54 +183,30 @@ public:
         return 0;
     }
 
-    void compare_column(const Column& rhs, std::vector<int8_t>* output) const {
+    void compare_column(const Column& rhs, std::vector<int8_t>* output) const {}
 
-    }
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override { return 0; }
 
-    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override {
-        return 0;
-    }
+    void crc32_hash_at(uint32_t* seed, uint32_t idx) const override {}
+    void fnv_hash_at(uint32_t* seed, uint32_t idx) const override {}
+    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override {}
 
-    void crc32_hash_at(uint32_t *seed, uint32_t idx) const override {
+    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override {}
 
-    }
-    void fnv_hash_at(uint32_t* seed, uint32_t idx) const override {
+    int64_t xor_checksum(uint32_t from, uint32_t to) const override { return 0; }
 
-    }
-    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override {
-
-    }
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override {
-
-    }
-
-    int64_t xor_checksum(uint32_t from, uint32_t to) const override {
-        return 0;
-    }
-
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override {
-
-    }
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override {}
 
     ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
 
     std::string get_name() const override { return "array-view"; }
 
-    Datum get(size_t idx) const override {
-        return Datum();
-    }
+    Datum get(size_t idx) const override { return Datum(); }
 
-    size_t get_element_null_count(size_t idx) const {
-        return 0;
-    }
-    size_t get_element_size(size_t idx) const {
-        return 0;
-    }
+    size_t get_element_null_count(size_t idx) const { return 0; }
+    size_t get_element_size(size_t idx) const { return 0; }
 
-    bool set_null(size_t idx) override {
-        return false;
-    }
+    bool set_null(size_t idx) override { return false; }
 
     size_t memory_usage() const override { return _elements->memory_usage() + _offsets->memory_usage(); }
 
@@ -246,9 +214,7 @@ public:
         return _elements->container_memory_usage() + _offsets->container_memory_usage();
     }
 
-    size_t reference_memory_usage(size_t from, size_t size) const override {
-        return 0;
-    }
+    size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
     void swap_column(Column& rhs) override {}
 
@@ -260,42 +226,30 @@ public:
 
     const UInt32Column& offsets() const { return *_offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
-    const UInt32Column& lengths() const {
-        return *_lengths;
-    }
+    const UInt32Column& lengths() const { return *_lengths; }
     UInt32Column::Ptr& lengths_column() { return _lengths; }
 
     bool is_nullable() const override { return false; }
 
-    std::string debug_item(size_t idx) const override {
-        return "";
-    }
+    std::string debug_item(size_t idx) const override { return ""; }
 
-    std::string debug_string() const override {
-        return "array-view-column";
-    }
+    std::string debug_string() const override { return "array-view-column"; }
 
     Status capacity_limit_reached() const override {
         RETURN_IF_ERROR(_elements->capacity_limit_reached());
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override {
-        return nullptr;
-    }
+    StatusOr<ColumnPtr> upgrade_if_overflow() override { return nullptr; }
 
-    StatusOr<ColumnPtr> downgrade() override {
-        return nullptr;
-    }
+    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return _elements->has_large_column(); }
 
     void check_or_die() const override;
 
-    Status unfold_const_children(const starrocks::TypeDescriptor& type) override {
-        return Status::NotSupported("TBD");
-    }
-    
+    Status unfold_const_children(const starrocks::TypeDescriptor& type) override { return Status::NotSupported("TBD"); }
+
     // build array_view column from array_column, how to solve null??
     // if array_column is nullable, return Nullable(ArrayViewColumn)
     // else return ArrayViewColumn
@@ -310,4 +264,4 @@ private:
     UInt32Column::Ptr _offsets;
     UInt32Column::Ptr _lengths;
 };
-}
+} // namespace starrocks

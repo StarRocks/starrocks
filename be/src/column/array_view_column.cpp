@@ -13,9 +13,11 @@
 // limitations under the License.
 
 #include "column/array_view_column.h"
+
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -26,13 +28,13 @@ namespace starrocks {
 ColumnPtr ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) {
     // @TODO clone empty???
     // auto dest = this->clone_empty();
-    auto dest_size =  offsets.size() - 1;
+    auto dest_size = offsets.size() - 1;
     auto new_offsets = UInt32Column::create();
     auto new_lengths = UInt32Column::create();
     new_offsets->reserve(offsets.back());
     new_lengths->reserve(offsets.back());
 
-    for (size_t i = 0;i < dest_size;i++) {
+    for (size_t i = 0; i < dest_size; i++) {
         uint32_t repeat_times = offsets[i + 1] - offsets[i];
         new_offsets->append_value_multiple_times(*_offsets, i, repeat_times);
         new_lengths->append_value_multiple_times(*_lengths, i, repeat_times);
@@ -56,7 +58,7 @@ void ArrayViewColumn::append(const Column& src, size_t offset, size_t count) {
         // @TODO should optimize
         // @TODO should avoid this copy...
         uint32_t offset = _elements->size();
-        for (size_t i = 0;i < count;i++) {
+        for (size_t i = 0; i < count; i++) {
             uint32_t src_offset = src_offsets.get_data()[offset + i];
             uint32_t src_length = src_lengths.get_data()[offset + i];
             DCHECK_LE(src_offset + src_length, array_view_column._elements->size());
@@ -72,7 +74,7 @@ void ArrayViewColumn::check_or_die() const {
     DCHECK(_offsets);
     DCHECK(_lengths);
     DCHECK_EQ(_offsets->size(), _lengths->size());
-    for (size_t i = 0;i < _offsets->size();i++) {
+    for (size_t i = 0; i < _offsets->size(); i++) {
         uint32_t offset = _offsets->get_data()[i];
         uint32_t length = _lengths->get_data()[i];
         DCHECK_LE(offset + length, _elements->size());
@@ -96,7 +98,7 @@ StatusOr<ColumnPtr> ArrayViewColumn::to_array_column() const {
     uint32_t last_offset = 0;
     size_t num_rows = _offsets->size();
     // @TODO maybe copy alot...
-    for (size_t i = 0;i < num_rows;i++) {
+    for (size_t i = 0; i < num_rows; i++) {
         uint32_t offset = _offsets->get_data()[i];
         uint32_t length = _lengths->get_data()[i];
         LOG(INFO) << "offset: " << offset << ", len: " << length;
@@ -107,7 +109,6 @@ StatusOr<ColumnPtr> ArrayViewColumn::to_array_column() const {
     }
     return ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
 }
-
 
 StatusOr<ColumnPtr> ArrayViewColumn::from_array_column(const ColumnPtr& column) {
     if (!column->is_array()) {
@@ -142,23 +143,24 @@ StatusOr<ColumnPtr> ArrayViewColumn::from_array_column(const ColumnPtr& column) 
         //  elements column: [1,2,3,4]
         //  offsets column: [0,2,2,3]
         //  length column:  [2,0,0,1]
-        for (size_t i = 0;i < column->size(); i ++) {
+        for (size_t i = 0; i < column->size(); i++) {
             uint32_t offset = array_offsets[i];
-            uint32_t length = null_data[i] ? 0: (array_offsets[i + 1] - offset);
+            uint32_t length = null_data[i] ? 0 : (array_offsets[i + 1] - offset);
             LOG(INFO) << "append offset: " << offset << ", length: " << length;
             view_offsets->append(offset);
             view_lengths->append(length);
         }
-        auto ret = NullableColumn::create(ArrayViewColumn::create(view_elements, view_offsets, view_lengths), nullable_column->null_column());
+        auto ret = NullableColumn::create(ArrayViewColumn::create(view_elements, view_offsets, view_lengths),
+                                          nullable_column->null_column());
         ret->check_or_die();
         return ret;
-    } 
+    }
 
     auto array_column = down_cast<const ArrayColumn*>(column.get());
     view_elements = array_column->elements_column();
     const auto& array_offsets = array_column->offsets().get_data();
 
-    for (size_t i = 0;i < column->size();i++) {
+    for (size_t i = 0; i < column->size(); i++) {
         uint32_t offset = array_offsets[i];
         uint32_t length = array_offsets[i + 1] - offset;
         view_offsets->append(offset);
@@ -184,4 +186,4 @@ StatusOr<ColumnPtr> ArrayViewColumn::to_array_column(const ColumnPtr& column) {
     auto array_view_column = down_cast<const ArrayViewColumn*>(column.get());
     return array_view_column->to_array_column();
 }
-}
+} // namespace starrocks

@@ -145,7 +145,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    std::string get_name() const override { return "array-"+ _elements->get_name(); }
+    std::string get_name() const override { return "array-" + _elements->get_name(); }
 
     Datum get(size_t idx) const override;
 
@@ -196,7 +196,6 @@ public:
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
-
     // check if all of arrays' size is equal
     // v1 and v2 must be one of ArrayColumn or Const(ArrayColumn)
     template <bool IgnoreNull>
@@ -204,7 +203,8 @@ public:
 
 private:
     template <bool ConstV1, bool ConstV2, bool IgnoreNull>
-    static bool compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2, const NullColumnPtr& null_data);
+    static bool compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2,
+                                             const NullColumnPtr& null_data);
 
     // Elements must be NullableColumn to facilitate handling nested types.
     ColumnPtr _elements;
@@ -215,7 +215,9 @@ private:
     UInt32Column::Ptr _offsets;
 };
 
-extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
-extern template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
+extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                                   const NullColumnPtr& null_data);
+extern template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                                    const NullColumnPtr& null_data);
 
 } // namespace starrocks
