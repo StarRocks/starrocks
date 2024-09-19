@@ -1820,8 +1820,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 4> : 4: t1d\n" +
-                "  |  <slot 11> : 18: add\n" +
-                "  |  <slot 18> : clone(18: add)\n" +
+                "  |  <slot 11> : clone(18: add)\n" +
+                "  |  <slot 18> : 18: add\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
                 "  |  <slot 18> : 17: cast + 1");
