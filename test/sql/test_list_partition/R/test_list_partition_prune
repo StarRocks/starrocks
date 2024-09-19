@@ -125,3 +125,32 @@ function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_
 -- result:
 None
 -- !result
+
+
+-- name: test_list_partition_prune_multi_values
+CREATE TABLE tbl(
+                  dt datetime not null,
+                  no varchar(20)
+                ) DUPLICATE KEY(dt)
+                PARTITION BY LIST (dt) (
+                   PARTITION p1 VALUES IN (('2022-01-01 01:02:03'),('2022-02-01 12:12:13')),
+                   PARTITION p2 VALUES IN (('2022-03-01 21:05:26'),('2022-04-01 12:04:56')),
+                   PARTITION p3 VALUES IN (('2022-05-01 19:25:41'),('2022-06-01 18:18:41'))
+                ) DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES (
+"replication_num" = "1");
+-- result:
+-- !result
+insert into tbl values
+                ('2022-01-01 01:02:03', 1),
+                ('2022-02-01 12:12:13', 2),
+                ('2022-03-01 21:05:26', 3),
+                ('2022-04-01 12:04:56', 4),
+                ('2022-05-01 19:25:41', 5);
+-- result:
+-- !result
+select * from tbl where dt not in ('2022-04-01 12:04:56','2022-05-01 09:25:41','2022-01-01 01:02:03') order by 1;    
+-- result:
+2022-02-01 12:12:13	2
+2022-03-01 21:05:26	3
+2022-05-01 19:25:41	5
+-- !result
