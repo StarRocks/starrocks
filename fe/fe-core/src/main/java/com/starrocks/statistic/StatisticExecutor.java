@@ -393,6 +393,7 @@ public class StatisticExecutor {
                     basicStatsMeta = basicStatsMeta.clone();
                     basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                     basicStatsMeta.setProperties(statsJob.getProperties());
+                    basicStatsMeta.setAnalyzeType(statsJob.getType());
                 }
 
                 for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {

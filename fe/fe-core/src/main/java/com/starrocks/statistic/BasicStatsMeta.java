@@ -214,6 +214,10 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
         this.updateTime = updateTime;
     }
 
+    public void setAnalyzeType(StatsConstants.AnalyzeType analyzeType) {
+        this.type = analyzeType;
+    }
+
     public Map<String, ColumnStatsMeta> getAnalyzedColumns() {
         Map<String, ColumnStatsMeta> deduplicate = Maps.newHashMap();
         // TODO: just for compatible, we can remove it at next version
