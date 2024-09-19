@@ -117,6 +117,11 @@ static bool parse_from_iobuf(butil::IOBuf& iobuf, T* proto_obj) {
     // 2. deserialize chunks
     if constexpr (std::is_same<T, PTabletWriterAddChunkRequest>::value) {
         auto chunk = proto_obj->mutable_chunk();
+        if (iobuf.size() < chunk->data_size()) {
+            LOG(ERROR) << fmt::format("Not enough data in iobuf. Expected: {}, available: {}.", chunk->data_size(),
+                                      iobuf.size());
+            return false;
+        }
         auto size = iobuf.cutn(chunk->mutable_data(), chunk->data_size());
         if (size != chunk->data_size()) {
             LOG(ERROR) << fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
@@ -125,6 +130,11 @@ static bool parse_from_iobuf(butil::IOBuf& iobuf, T* proto_obj) {
     } else if constexpr (std::is_same<T, PTabletWriterAddChunksRequest>::value) {
         for (int i = 0; i < proto_obj->requests_size(); i++) {
             auto chunk = proto_obj->mutable_requests(i)->mutable_chunk();
+            if (iobuf.size() < chunk->data_size()) {
+                LOG(ERROR) << fmt::format("Not enough data in iobuf. Expected: {}, available: {}.", chunk->data_size(),
+                                          iobuf.size());
+                return false;
+            }
             auto size = iobuf.cutn(chunk->mutable_data(), chunk->data_size());
             if (size != chunk->data_size()) {
                 LOG(ERROR) << fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
