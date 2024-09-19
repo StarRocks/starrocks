@@ -636,21 +636,10 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
     }
     return false;
 }
-/*
-bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
-    std::unique_lock l(_schema_lock);
-    return add_committed_rowset_unlock(rowset);
-}
-*/
+
 void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
     _committed_rs_map.erase(rowset->rowset_id());
 }
-/*
-void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
-    std::shared_lock l(_schema_lock);
-    return erase_committed_rowset_unlock(rowset);
-}
-*/
 
 void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     std::unique_lock wrlock(_meta_lock);

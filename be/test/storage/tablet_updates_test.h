@@ -378,6 +378,7 @@ public:
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -386,6 +387,7 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(rand());
 
         if (multi_column_pk) {
             TColumn pk1;

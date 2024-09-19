@@ -340,6 +340,7 @@ public:
     std::shared_mutex& get_schema_lock() { return _schema_lock; }
     bool add_committed_rowset(const RowsetSharedPtr& rowset);
     void erase_committed_rowset(const RowsetSharedPtr& rowset);
+    int64_t committed_rowset_size() { return _committed_rs_map.size(); }
 
     void on_shutdown() override;
 
