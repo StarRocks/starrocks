@@ -450,12 +450,8 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.util.EitherOr;
-import com.starrocks.transaction.GtidGenerator;
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -480,11 +476,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-<<<<<<< HEAD
-=======
-import java.util.Optional;
 import java.util.Set;
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;

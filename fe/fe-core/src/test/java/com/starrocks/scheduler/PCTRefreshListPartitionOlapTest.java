@@ -74,8 +74,6 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                 "DISTRIBUTED BY RANDOM\n";
         // table whose partitions have only single values
         T2 = "CREATE TABLE t2 (\n" +
-<<<<<<< HEAD
-=======
                     "      id BIGINT,\n" +
                     "      age SMALLINT,\n" +
                     "      dt VARCHAR(10),\n" +
@@ -89,42 +87,20 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                     "DISTRIBUTED BY RANDOM\n";
         // table whose partitions have only single values
         S2 = "CREATE TABLE s2 (\n" +
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
                 "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "DUPLICATE KEY(id)\n" +
-<<<<<<< HEAD
-                "PARTITION BY LIST (province) (\n" +
-                "     PARTITION p1 VALUES IN (\"beijing\") ,\n" +
-                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
-=======
                 "PARTITION BY LIST (dt) (\n" +
                 "     PARTITION p1 VALUES IN (\"20240101\") ,\n" +
                 "     PARTITION p2 VALUES IN (\"20240102\") ,\n" +
                 "     PARTITION p3 VALUES IN (\"20240103\") \n" +
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
                 ")\n" +
                 "DISTRIBUTED BY RANDOM\n";
         // table whose partitions have multi columns
         T3 = "CREATE TABLE t3 (\n" +
-<<<<<<< HEAD
-                "      id BIGINT,\n" +
-                "      age SMALLINT,\n" +
-                "      dt VARCHAR(10) not null,\n" +
-                "      province VARCHAR(64) not null\n" +
-                ")\n" +
-                "DUPLICATE KEY(id)\n" +
-                "PARTITION BY LIST (province, dt) (\n" +
-                "     PARTITION p1 VALUES IN ((\"beijing\", \"2024-01-01\"))  ,\n" +
-                "     PARTITION p2 VALUES IN ((\"guangdong\", \"2024-01-01\")), \n" +
-                "     PARTITION p3 VALUES IN ((\"beijing\", \"2024-01-02\"))  ,\n" +
-                "     PARTITION p4 VALUES IN ((\"guangdong\", \"2024-01-02\")) \n" +
-                ")\n" +
-                "DISTRIBUTED BY RANDOM\n";
-=======
                     "      id BIGINT,\n" +
                     "      age SMALLINT,\n" +
                     "      dt VARCHAR(10) not null,\n" +
@@ -138,7 +114,6 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                     "     PARTITION p4 VALUES IN ((\"guangdong\", \"2024-01-02\")) \n" +
                     ")\n" +
                     "DISTRIBUTED BY RANDOM\n";
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
         // table with partition expression whose partitions have multiple values
         T4 = "CREATE TABLE t4 (\n" +
                 "      id BIGINT,\n" +
@@ -188,14 +163,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     private ExecPlan getExecPlan(TaskRun taskRun) {
         try {
-<<<<<<< HEAD
-            initAndExecuteTaskRun(taskRun);
-
-            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                    taskRun.getProcessor();
-=======
             PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             return execPlan;

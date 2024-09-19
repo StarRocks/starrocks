@@ -35,11 +35,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-<<<<<<< HEAD
-import com.starrocks.sql.optimizer.QueryMaterializationContext;
-=======
 import com.starrocks.sql.common.PListCell;
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;

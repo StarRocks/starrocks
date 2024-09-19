@@ -38,7 +38,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -231,10 +230,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                            Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions)
             throws AnalysisException, LockTimeoutException {
         // collect partition infos of ref base tables
-<<<<<<< HEAD
-=======
         LOG.debug("Start to sync and check partitions for mv: {}", materializedView.getName());
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
         int retryNum = 0;
         boolean checked = false;
         Stopwatch stopwatch = Stopwatch.createStarted();
@@ -548,10 +544,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     materializedView.getName(), String.join(",", mvToRefreshedPartitions), refTablePartitionNames);
         }
         mvContext.setExecPlan(execPlan);
-<<<<<<< HEAD
-=======
         LOG.info("Finished mv refresh plan for {}", materializedView.getName());
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
         return insertStmt;
     }
 
@@ -727,7 +720,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
         // use it if refresh external table fails
         ConnectContext connectContext = context.getCtx();
-        List<Pair<Table, BaseTableInfo>> toRepairTables = new ArrayList<>();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
             if (dbOpt.isEmpty()) {
@@ -746,14 +738,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
 
             // refresh old table
-<<<<<<< HEAD
             if (table.isNativeTableOrMaterializedView() || table.isHiveView()) {
-                LOG.info("No need to refresh table:{} because it is native table or materialized view or connector view",
-=======
-            Table table = optTable.get();
-            if (table.isNativeTableOrMaterializedView() || table.isConnectorView()) {
                 LOG.debug("No need to refresh table:{} because it is native table or materialized view or connector view",
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
                         baseTableInfo.getTableInfoStr());
                 continue;
             }

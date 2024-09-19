@@ -80,11 +80,8 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ViewRelation;
-<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
-=======
 import com.starrocks.sql.common.PListCell;
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;

@@ -489,16 +489,6 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testMVRestore() {
-        RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
-        checkJobRun(job);
-        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
-    }
-
-    @Test
-=======
->>>>>>> dd3a2a7f53 ([Enhancement] List Partition For AMV(Part 5): Support partial refresh list partition for mv  (#50969))
     public void testMVRestoreMVWithBaseTable1() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
