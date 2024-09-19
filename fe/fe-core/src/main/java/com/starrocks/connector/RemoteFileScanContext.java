@@ -28,10 +28,15 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class RemoteFileScanContext {
     public RemoteFileScanContext(Table table) {
-        this.table = table;
+        this.tableLocation = table.getTableLocation();
     }
 
-    public Table table = null;
+    public RemoteFileScanContext(String tableLocation) {
+        this.tableLocation = tableLocation;
+    }
+
+    public String tableLocation = null;
+
     // ---- concurrent initialization -----
     public AtomicBoolean init = new AtomicBoolean(false);
     public ReentrantLock lock = new ReentrantLock();
