@@ -176,6 +176,10 @@ fi
 if [[ -z ${JEMALLOC_DEBUG} ]]; then
     JEMALLOC_DEBUG=OFF
 fi
+if [[ -z ${ENABLE_JIT} ]]; then
+    ENABLE_JIT=ON
+fi
+
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
 fi
@@ -389,6 +393,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DWITH_TENANN=${WITH_TENANN}                          \
+                  -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}

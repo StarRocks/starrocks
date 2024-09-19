@@ -34,7 +34,6 @@
 
 #include "exprs/expr.h"
 
-#include <llvm/IR/Value.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <sstream>
@@ -66,9 +65,6 @@
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/java_function_call_expr.h"
-#include "exprs/jit/ir_helper.h"
-#include "exprs/jit/jit_engine.h"
-#include "exprs/jit/jit_expr.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"
@@ -81,6 +77,14 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/failpoint/fail_point.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include <llvm/IR/Value.h>
+
+#include "exprs/jit/ir_helper.h"
+#include "exprs/jit/jit_engine.h"
+#include "exprs/jit/jit_expr.h"
+#endif
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -231,6 +235,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
+#ifdef STARROCKS_JIT_ENABLE
 Status Expr::prepare_jit_expr(RuntimeState* state, ExprContext* context) {
     if (this->node_type() == TExprNodeType::JIT_EXPR) {
         RETURN_IF_ERROR(((JITExpr*)this)->prepare_impl(state, context));
@@ -240,6 +245,7 @@ Status Expr::prepare_jit_expr(RuntimeState* state, ExprContext* context) {
     }
     return Status::OK();
 }
+#endif
 
 Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
                                RuntimeState* state, bool can_jit) {
@@ -260,6 +266,7 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
         return status;
     }
 
+#ifdef STARROCKS_JIT_ENABLE
     bool replaced = false;
     status = (*root_expr)->replace_compilable_exprs(root_expr, pool, state, replaced);
     if (!status.ok()) {
@@ -272,6 +279,7 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
         // The node was replaced, so we need to update the context.
         *ctx = pool->add(new ExprContext(*root_expr));
     }
+#endif
 
     return status;
 }
@@ -723,6 +731,7 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
+#ifdef STARROCKS_JIT_ENABLE
 StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, JITContext* jit_ctx) {
     if (this->is_compilable(context->_runtime_state)) {
         return this->generate_ir_impl(context, jit_ctx);
@@ -843,6 +852,7 @@ bool Expr::should_compile(RuntimeState* state) const {
     }
     return true;
 }
+#endif
 
 bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
     bool support = false;

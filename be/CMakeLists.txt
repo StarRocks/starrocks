@@ -497,7 +497,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
 endif()
 
 # LLVM
-# TODO(yueyang): Adjust libraries during the implementation of JIT.
 set (LLVM_LIBRARIES
     LLVMRuntimeDyld
     LLVMBitstreamReader
@@ -557,6 +556,7 @@ foreach(lib IN ITEMS ${LLVM_LIBRARIES})
     add_library(${lib} STATIC IMPORTED GLOBAL)
     set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
 endforeach()
+
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
@@ -675,6 +675,11 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
+endif()
+
+if (STARROCKS_JIT_ENABLE)
+    message(STATUS "Enable JIT")
+    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -DSTARROCKS_JIT_ENABLE")
 endif()
 
 # For any gcc builds:
@@ -837,13 +842,19 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
 )
 set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::aws-crt-cpp)
 
+if (STARROCKS_JIT_ENABLE)
+    set(STARROCKS_DEPENDENCIES 
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        ${LLVM_LIBRARIES}
+        ${WL_END_GROUP}
+    )
+endif()
+
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     build_version
-    ${WL_START_GROUP}
-    ${LLVM_LIBRARIES}
-    ${WL_END_GROUP}
     ${WL_START_GROUP}
     clucene-core
     clucene-shared
