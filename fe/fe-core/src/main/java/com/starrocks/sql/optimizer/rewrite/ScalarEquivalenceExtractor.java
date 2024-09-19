@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -269,6 +270,21 @@ public class ScalarEquivalenceExtractor {
         public Void visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
             return buildEquivalenceValue(predicate);
         }
+
+        @Override
+        public Void visitCall(CallOperator call, Void context) {
+            if (!call.getType().isBoolean()) {
+                return null;
+            }
+            List<ColumnRefOperator> child1Lists = call.getColumnRefs();
+            if (Sets.newHashSet(child1Lists).size() != 1) {
+                return null;
+            }
+            ColumnRefOperator child1 = child1Lists.get(0);
+            columnValuesMap.computeIfAbsent(child1, k -> Sets.newLinkedHashSet()).add(call);
+            return null;
+        }
+
 
         private Void buildEquivalenceValue(PredicateOperator predicate) {
             List<ColumnRefOperator> child1Lists = Utils.extractColumnRef(predicate.getChild(0));
