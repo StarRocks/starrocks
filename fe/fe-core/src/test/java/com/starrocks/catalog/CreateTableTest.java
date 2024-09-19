@@ -92,12 +92,8 @@ public class CreateTableTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
-=======
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
->>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
         UtFrameUtils.setUpForPersistTest();
         starRocksAssert.useDatabase("test");
     }
@@ -2081,28 +2077,6 @@ public class CreateTableTest {
         starRocksAssert.dropTable("news_rt");
         starRocksAssert.withTable(createTableSql);
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testDefaultValueHasEscapeStringNonPK() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
-        String sql1 = "CREATE TABLE `news_rt_non_pk` (\n" +
-                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
-                "  `title` varchar(65533) NOT NULL DEFAULT \"\\\"\" COMMENT \"title\"\n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`id`)\n" +
-                "COMMENT \"news\"\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");";
-        starRocksAssert.withTable(sql1);
-        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt_non_pk;");
-        starRocksAssert.dropTable("news_rt_non_pk");
-        starRocksAssert.withTable(createTableSql);
-    }
 
     @Test
     public void testCreateTableWithNullableColumns1() throws Exception {
@@ -2159,5 +2133,4 @@ public class CreateTableTest {
                     "value in partition[p1]."));
         }
     }
->>>>>>> 90c1b74bb9 ([BugFix] List partition values should not contain NULL partition value if this column is not nullable (#51086))
 }
