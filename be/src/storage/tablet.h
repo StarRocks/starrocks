@@ -337,6 +337,7 @@ public:
     void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
 
     [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
+    void set_update_schema_running(bool is_running) { _update_schema_running.store(is_running); }
     std::shared_mutex& get_schema_lock() { return _schema_lock; }
     bool add_committed_rowset(const RowsetSharedPtr& rowset);
     void erase_committed_rowset(const RowsetSharedPtr& rowset);

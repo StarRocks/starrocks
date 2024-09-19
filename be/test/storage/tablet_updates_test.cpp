@@ -3734,7 +3734,7 @@ TEST_F(TabletUpdatesTest, test_drop_tablet_with_keep_meta_and_files) {
 TEST_F(TabletUpdatesTest, test_skip_schema) {
     int N = 100;
     srand(GetCurrentTimeMicros());
-    _tablet = create_tablet(rand(), rand());
+    _tablet = create_tablet(rand(), rand(), false, rand(), 0);
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
@@ -3826,6 +3826,59 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         auto rs2_meta = RowsetMeta(rs2_meta_value, &parse_ok);
         ASSERT_EQ(true, parse_ok);
         ASSERT_TRUE(rs2_meta.tablet_schema() != nullptr);
+    }
+
+    auto rs3 = create_rowset(_tablet, keys);
+    ASSERT_EQ(false, rs3->rowset_meta()->skip_tablet_schema());
+    _tablet->set_update_schema_running(true);
+    load_id.set_hi(1002);
+    load_id.set_lo(1002);
+    ASSERT_TRUE(StorageEngine::instance()
+                        ->txn_manager()
+                        ->commit_txn(_tablet->data_dir()->get_meta(), 102, 102, _tablet->tablet_id(),
+                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs3, false)
+                        .ok());
+    ASSERT_EQ(false, rs3->rowset_meta()->skip_tablet_schema());
+    ASSERT_EQ(0, _tablet->committed_rowset_size());
+    ASSERT_TRUE(rs3->tablet_schema() != nullptr);
+    {
+        std::string meta_value;
+        ASSERT_TRUE(RowsetMetaManager::get_rowset_meta_value(_tablet->data_dir()->get_meta(), _tablet->tablet_uid(),
+                                                             rs3->rowset_id(), &meta_value)
+                            .ok());
+        bool parse_ok = false;
+        auto rs_meta = RowsetMeta(meta_value, &parse_ok);
+        ASSERT_EQ(true, parse_ok);
+        ASSERT_TRUE(rs_meta.tablet_schema() != nullptr);
+    }
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(102, _tablet, 102, 3, rs3, 0, false).ok());
+
+    _tablet->set_update_schema_running(false);
+    auto rs4 = create_rowset(_tablet, keys);
+    ASSERT_EQ(false, rs4->rowset_meta()->skip_tablet_schema());
+    load_id.set_hi(1003);
+    load_id.set_lo(1003);
+    ASSERT_TRUE(StorageEngine::instance()
+                        ->txn_manager()
+                        ->commit_txn(_tablet->data_dir()->get_meta(), 103, 103, _tablet->tablet_id(),
+                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs4, false)
+                        .ok());
+    ASSERT_EQ(true, rs4->rowset_meta()->skip_tablet_schema());
+    ASSERT_EQ(1, _tablet->committed_rowset_size());
+    ASSERT_TRUE(rs4->tablet_schema() != nullptr);
+
+    {
+        auto tmp_tablet = create_tablet(rand(), rand(), false, _tablet->tablet_schema()->id() + 1,
+                                        _tablet->tablet_schema()->schema_version() + 1);
+        auto new_schema = tmp_tablet->tablet_schema();
+        auto old_schema_id = _tablet->tablet_schema()->id();
+        _tablet->update_max_version_schema(new_schema);
+        ASSERT_EQ(0, _tablet->committed_rowset_size());
+        ASSERT_EQ(false, rs4->rowset_meta()->skip_tablet_schema());
+        ASSERT_EQ(rs4->tablet_schema()->id(), old_schema_id);
+        ASSERT_EQ(rs3->tablet_schema()->id(), old_schema_id);
+        ASSERT_EQ(rs2->tablet_schema()->id(), old_schema_id);
+        ASSERT_EQ(rs1->tablet_schema()->id(), old_schema_id);
     }
 }
 
