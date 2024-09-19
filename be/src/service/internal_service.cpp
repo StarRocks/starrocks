@@ -423,6 +423,11 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+    // incremental scan ranges deployment.
+    if (!t_request.__isset.fragment) {
+        return pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request);
+    }
+
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }

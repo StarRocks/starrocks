@@ -133,7 +133,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             return init_collector(read_params);
         }
 
-        std::vector<std::unique_ptr<pipeline::ScanMorsel>> morsels;
+        pipeline::Morsels morsels;
         morsels.emplace_back(
                 std::make_unique<pipeline::ScanMorsel>(read_params.plan_node_id, *(read_params.scan_range)));
 
