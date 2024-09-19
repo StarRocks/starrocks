@@ -47,6 +47,8 @@ public class MvTaskRunContext extends TaskRunContext {
 
     private String nextPartitionStart = null;
     private String nextPartitionEnd = null;
+    // The next list partition values to be processed
+    private String nextPartitionValues = null;
     private ExecPlan execPlan = null;
 
     private int partitionTTLNumber = TableProperty.INVALID;
@@ -74,7 +76,7 @@ public class MvTaskRunContext extends TaskRunContext {
     }
 
     public boolean hasNextBatchPartition() {
-        return nextPartitionStart != null && nextPartitionEnd != null;
+        return (nextPartitionStart != null && nextPartitionEnd != null) || (nextPartitionValues != null);
     }
 
     public String getNextPartitionStart() {
@@ -91,6 +93,14 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setNextPartitionEnd(String nextPartitionEnd) {
         this.nextPartitionEnd = nextPartitionEnd;
+    }
+
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
+    }
+
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
     }
 
     public Map<Table, Map<String, Range<PartitionKey>>> getRefBaseTableRangePartitionMap() {
