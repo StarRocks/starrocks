@@ -335,7 +335,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         _probe_state->probe_counter = param.probe_counter;
     }
 
-    _table_items->build_chunk = std::make_shared<SegmentedChunk>();
+    _table_items->build_chunk = std::make_shared<SegmentedChunk>(param.build_chunk_segment_size);
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->mor_reader_mode = param.mor_reader_mode;
@@ -545,15 +545,6 @@ Status JoinHashTable::build(RuntimeState* state) {
     RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
     _table_items->has_large_column = _table_items->build_chunk->has_large_column();
 
-    // If the join key is column ref of build chunk, fetch from build chunk directly
-    size_t join_key_count = _table_items->join_keys.size();
-    for (size_t i = 0; i < join_key_count; i++) {
-        if (_table_items->join_keys[i].col_ref != nullptr) {
-            SlotId slot_id = _table_items->join_keys[i].col_ref->slot_id();
-            _table_items->key_columns[i] = _table_items->build_chunk->get_column_by_slot_id(slot_id);
-        }
-    }
-
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
     _hash_map_type = _choose_join_hash_map();
@@ -626,31 +617,22 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
 }
 
 void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
-    auto& columns = _table_items->build_chunk->columns();
-
+    // TODO: simplify the SlotId mapping, if the slot of input chunk is same as build_chunk, we don't need to remap them
+    std::vector<SlotId> slots;
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
-        ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
-
-        if (!columns[i]->is_nullable() && column->is_nullable()) {
-            // upgrade to nullable column
-            columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
-        }
-        columns[i]->append(*column);
+        slots.push_back(slot->id());
     }
+    _table_items->build_chunk->append_chunk(chunk, slots);
 
     for (size_t i = 0; i < _table_items->key_columns.size(); i++) {
-        // If the join key is slot ref, will get from build chunk directly,
-        // otherwise will append from key_column of input
-        if (_table_items->join_keys[i].col_ref == nullptr) {
-            // upgrade to nullable column
-            if (!_table_items->key_columns[i]->is_nullable() && key_columns[i]->is_nullable()) {
-                size_t row_count = _table_items->key_columns[i]->size();
-                _table_items->key_columns[i] =
-                        NullableColumn::create(_table_items->key_columns[i], NullColumn::create(row_count, 0));
-            }
-            _table_items->key_columns[i]->append(*key_columns[i]);
+        // upgrade to nullable column
+        if (!_table_items->key_columns[i]->is_nullable() && key_columns[i]->is_nullable()) {
+            size_t row_count = _table_items->key_columns[i]->size();
+            _table_items->key_columns[i] =
+                    NullableColumn::create(_table_items->key_columns[i], NullColumn::create(row_count, 0));
         }
+        _table_items->key_columns[i]->append(*key_columns[i]);
     }
 
     _table_items->row_count += chunk->num_rows();
@@ -665,10 +647,11 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         if (!columns[i]->is_nullable() && other_columns[i]->is_nullable()) {
             // upgrade to nullable column
-            columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
+            // columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
+            columns[i]->upgrade_to_nullable();
         }
-        columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
     }
+    _table_items->build_chunk->append(ht._table_items->build_chunk, 1);
 }
 
 ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {

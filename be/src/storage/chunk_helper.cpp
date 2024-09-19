@@ -14,6 +14,9 @@
 
 #include "storage/chunk_helper.h"
 
+#include <numeric>
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -22,6 +25,7 @@
 #include "column/schema.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -608,6 +612,267 @@ bool ChunkPipelineAccumulator::need_input() const {
 
 bool ChunkPipelineAccumulator::is_finished() const {
     return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
+}
+
+class SegmentedColumnVisitor final : public ColumnVisitorAdapter<SegmentedColumnVisitor> {
+public:
+    SegmentedColumnVisitor(SegmentedColumnPtr segment_column, const uint32_t* indexes, uint32_t from, uint32_t size)
+            : ColumnVisitorAdapter(this),
+              _segment_column(std::move(segment_column)),
+              _indexes(indexes),
+              _from(from),
+              _size(size) {}
+
+    template <class T>
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
+        using ColumnT = FixedLengthColumnBase<T>;
+        using ContainerT = Buffer<T>*;
+
+        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto& columns = _segment_column->columns();
+        size_t segment_size = _segment_column->segment_size();
+        std::vector<ContainerT> buffers;
+        for (auto& seg_column : columns) {
+            buffers.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_data());
+        }
+
+        for (uint32_t i = _from; i < _size; i++) {
+            uint32_t idx = _indexes[i];
+            int segment_id = idx / segment_size;
+            int segment_offset = idx % segment_size;
+            output->append((*buffers[segment_id])[segment_offset]);
+        }
+        return {};
+    }
+
+    template <class T>
+    Status do_visit(const BinaryColumnBase<T>& column) {
+        using ColumnT = BinaryColumnBase<T>;
+        using ContainerT = typename ColumnT::Container*;
+
+        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto& columns = _segment_column->columns();
+        size_t segment_size = _segment_column->segment_size();
+        std::vector<ContainerT> buffers;
+        for (auto& seg_column : columns) {
+            buffers.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_data());
+        }
+
+        for (uint32_t i = _from; i < _size; i++) {
+            uint32_t idx = _indexes[i];
+            int segment_id = idx / segment_size;
+            int segment_offset = idx % segment_size;
+            output->append((*buffers[segment_id])[segment_offset]);
+        }
+        return {};
+    }
+
+    // TODO
+    template <class T>
+    Status do_visit(const ObjectColumn<T>& column) {
+        return Status::NotSupported("SegmentedColumnVisitor");
+    }
+
+    Status do_visit(const ArrayColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+    Status do_visit(const MapColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+    Status do_visit(const StructColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+    Status do_visit(const ConstColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+    Status do_visit(const NullableColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+
+    ColumnPtr result() { return _result; }
+
+private:
+    SegmentedColumnPtr _segment_column;
+    ColumnPtr _result;
+    const uint32_t* _indexes;
+    uint32_t _from;
+    uint32_t _size;
+};
+
+SegmentedColumn::SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index) : _chunk(std::move(chunk)) {
+    for (auto& segment : _chunk->segments()) {
+        _columns.push_back(segment->get_column_by_index(column_index));
+    }
+}
+
+ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
+    SegmentedColumnVisitor visitor(shared_from_this(), indexes, from, size);
+    (void)_columns[0]->accept(&visitor);
+    return visitor.result();
+}
+
+size_t SegmentedColumn::segment_size() const {
+    return _chunk->segment_size();
+}
+
+size_t SegmentedChunk::segment_size() const {
+    return _segment_size;
+}
+
+bool SegmentedColumn::is_nullable() const {
+    return _columns[0]->is_nullable();
+}
+
+bool SegmentedColumn::has_null() const {
+    for (auto& column : _columns) {
+        RETURN_IF(column->has_null(), true);
+    }
+    return false;
+}
+
+size_t SegmentedColumn::size() const {
+    size_t result = 0;
+    for (auto& column : _columns) {
+        result += column->size();
+    }
+    return result;
+}
+
+const std::vector<ColumnPtr>& SegmentedColumn::columns() const {
+    return _columns;
+}
+
+void SegmentedColumn::upgrade_to_nullable() {
+    for (auto& column : _columns) {
+        column = NullableColumn::wrap_if_necessary(column);
+    }
+}
+
+SegmentedChunk::SegmentedChunk(size_t segment_size) : _segment_size(segment_size) {
+    // put at least one chunk there
+    _segments.resize(1);
+}
+
+void SegmentedChunk::append_column(ColumnPtr column, SlotId slot_id) {
+    _segments.resize(1);
+    _segments[0] = std::make_shared<Chunk>();
+    _segments[0]->append_column(std::move(column), slot_id);
+}
+
+void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots) {
+    ChunkPtr open_segment = _segments[_segments.size() - 1];
+    size_t append_rows = chunk->num_rows();
+    size_t append_index = 0;
+    while (append_rows > 0) {
+        size_t open_segment_append_rows = std::min(_segment_size - open_segment->num_rows(), append_rows);
+        for (int i = 0; i < slots.size(); i++) {
+            SlotId slot = slots[i];
+            ColumnPtr column = chunk->get_column_by_slot_id(slot);
+            open_segment->columns()[i]->append(*column, append_index, open_segment_append_rows);
+        }
+        append_index += open_segment_append_rows;
+        append_rows -= open_segment_append_rows;
+        if (open_segment->num_rows() == _segment_size) {
+            _segments.emplace_back();
+        }
+    }
+}
+
+void SegmentedChunk::append_chunk(const ChunkPtr& chunk) {
+    ChunkPtr open_segment = _segments[_segments.size() - 1];
+    size_t append_rows = chunk->num_rows();
+    size_t append_index = 0;
+    while (append_rows > 0) {
+        size_t open_segment_append_rows = std::min(_segment_size - open_segment->num_rows(), append_rows);
+        for (int i = 0; i < chunk->num_columns(); i++) {
+            ColumnPtr column = chunk->get_column_by_index(i);
+            open_segment->columns()[i]->append(*column, append_index, open_segment_append_rows);
+        }
+        append_index += open_segment_append_rows;
+        append_rows -= open_segment_append_rows;
+        if (open_segment->num_rows() == _segment_size) {
+            _segments.emplace_back();
+        }
+    }
+}
+
+void SegmentedChunk::append(const SegmentedChunkPtr& chunk, size_t offset) {
+    auto& input_segments = chunk->segments();
+    size_t segment_index = offset / chunk->_segment_size;
+    size_t segment_offset = offset % chunk->_segment_size;
+    for (size_t i = segment_index; i < chunk->num_segments(); i++) {
+        // The segment need to cutoff
+        if (i == segment_index) {
+            auto cutoff = input_segments[i]->clone_empty();
+            size_t count = input_segments[i]->num_rows() - segment_offset;
+            cutoff->append(*cutoff, segment_offset, count);
+            ChunkPtr shared(cutoff.release());
+            append_chunk(std::move(shared));
+        } else {
+            append_chunk(input_segments[i]);
+        }
+    }
+}
+
+void SegmentedChunk::append_finished() {
+    size_t num_columns = _segments[0]->num_columns();
+    for (int i = 0; i < num_columns; i++) {
+        _columns.emplace_back(std::make_shared<SegmentedColumn>(shared_from_this(), i));
+    }
+}
+
+size_t SegmentedChunk::memory_usage() const {
+    size_t result = 0;
+    for (auto& chunk : _segments) {
+        result += chunk->memory_usage();
+    }
+    return result;
+}
+
+size_t SegmentedChunk::num_rows() const {
+    size_t result = 0;
+    for (auto& chunk : _segments) {
+        result += chunk->num_rows();
+    }
+    return result;
+}
+
+const SegmentedColumns& SegmentedChunk::columns() const {
+    return _columns;
+}
+
+SegmentedColumns& SegmentedChunk::columns() {
+    return _columns;
+}
+
+Status SegmentedChunk::upgrade_if_overflow() {
+    for (auto& chunk : _segments) {
+        RETURN_IF_ERROR(chunk->upgrade_if_overflow());
+    }
+    return {};
+}
+
+Status SegmentedChunk::downgrade() {
+    for (auto& chunk : _segments) {
+        RETURN_IF_ERROR(chunk->downgrade());
+    }
+    return {};
+}
+
+bool SegmentedChunk::has_large_column() const {
+    for (auto& chunk : _segments) {
+        if (chunk->has_large_column()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t SegmentedChunk::num_segments() const {
+    return _segments.size();
+}
+
+const std::vector<ChunkPtr>& SegmentedChunk::segments() const {
+    return _segments;
+}
+std::vector<ChunkPtr>& SegmentedChunk::segments() {
+    return _segments;
+}
+
+void SegmentedChunk::reset() {
+    for (auto& chunk : _segments) {
+        chunk.reset();
+    }
 }
 
 } // namespace starrocks

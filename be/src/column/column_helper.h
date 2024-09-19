@@ -372,8 +372,6 @@ public:
         }
     }
 
-    static SegmentedColumnPtr get_data_column(SegmentedColumnPtr column);
-
     static BinaryColumn* get_binary_column(Column* column) { return down_cast<BinaryColumn*>(get_data_column(column)); }
 
     static bool is_all_const(const Columns& columns);
@@ -538,12 +536,13 @@ public:
 template <class Ptr = ChunkUniquePtr>
 struct ChunkSliceTemplate {
     Ptr chunk;
+    size_t segment_id = 0;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    Ptr cutoff(size_t required_rows);
+    ChunkUniquePtr cutoff(size_t required_rows);
     void reset(Ptr input);
 };
 
@@ -573,5 +572,6 @@ APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks
