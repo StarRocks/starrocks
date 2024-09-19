@@ -59,8 +59,10 @@ void PipelineDriver::check_operator_close_states(const std::string& func_name) {
             ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
                << " fragment_id="
                << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
-            auto msg = fmt::format("{} close operator {}-{} failed, may leak resources when {}, please reflect to SR",
-                                   ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
+            auto msg = fmt::format(
+                    "{} close operator {}-{} failed, may leak resources when {}, please report an issue at "
+                    "https://github.com/StarRocks/starrocks/issues/new/choose.",
+                    ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
             LOG(ERROR) << msg;
             DCHECK(false) << msg;
         }
