@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
@@ -27,6 +28,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
@@ -44,28 +46,11 @@ public class PolymorphicFunctionAnalyzer {
     private static final Logger LOGGER = LogManager.getLogger(PolymorphicFunctionAnalyzer.class);
 
     private static Function newScalarFunction(ScalarFunction fn, List<Type> newArgTypes, Type newRetType) {
-        ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), newArgTypes, newRetType,
-                fn.getLocation(), fn.getSymbolName(), fn.getPrepareFnSymbol(),
-                fn.getCloseFnSymbol());
-        newFn.setFunctionId(fn.getFunctionId());
-        newFn.setChecksum(fn.getChecksum());
-        newFn.setBinaryType(fn.getBinaryType());
-        newFn.setHasVarArgs(fn.hasVarArgs());
-        newFn.setId(fn.getId());
-        newFn.setUserVisible(fn.isUserVisible());
-        return newFn;
+        return fn.withNewTypes(newArgTypes, newRetType);
     }
 
     private static Function newAggregateFunction(AggregateFunction fn, List<Type> newArgTypes, Type newRetType) {
-        AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), newArgTypes, newRetType,
-                fn.getIntermediateType(), fn.hasVarArgs());
-        newFn.setFunctionId(fn.getFunctionId());
-        newFn.setChecksum(fn.getChecksum());
-        newFn.setBinaryType(fn.getBinaryType());
-        newFn.setHasVarArgs(fn.hasVarArgs());
-        newFn.setId(fn.getId());
-        newFn.setUserVisible(fn.isUserVisible());
-        return newFn;
+        return fn.withNewTypes(newArgTypes, newRetType);
     }
 
     // only works for null into array[null]/map{null:null}/struct(null)
@@ -187,6 +172,25 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class ArrayAggStateDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return FunctionAnalyzer.getArrayAggGroupConcatIntermediateType(FunctionSet.ARRAY_AGG,
+                    types, ImmutableList.of()).second;
+        }
+    }
+
+    private static class ArrayAggMergeDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type type0 = types[0];
+            Preconditions.checkArgument(type0 instanceof StructType);
+            StructType structType = (StructType) type0;
+            StructField field0 = structType.getField(0);
+            return field0.getType();
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
@@ -205,6 +209,12 @@ public class PolymorphicFunctionAnalyzer {
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
             .put(FunctionSet.ANY_VALUE, types -> types[0])
+            .put(FunctionSet.getAggStateName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getAggStateUnionName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getAggStateMergeName(FunctionSet.ANY_VALUE), types -> types[0])
+            .put(FunctionSet.getAggStateName(FunctionSet.ARRAY_AGG), new ArrayAggStateDeduce())
+            .put(FunctionSet.getAggStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
+            .put(FunctionSet.getAggStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {

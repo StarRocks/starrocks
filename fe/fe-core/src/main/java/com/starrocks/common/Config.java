@@ -76,6 +76,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * sys_log_enable_compress:
+     *      default is false. if true, then compress fe.log & fe.warn.log by gzip
      */
     @ConfField
     public static String sys_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -92,11 +95,14 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    @ConfField
+    public static boolean sys_log_enable_compress = false;
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
     @ConfField
-    public static boolean sys_log_to_console = false;
+    public static boolean sys_log_to_console = ((System.getenv("SYS_LOG_TO_CONSOLE") != null)
+            ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false);
 
     @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
     public static String sys_log_format = "plaintext";
@@ -134,6 +140,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * audit_log_enable_compress:
+     *      default is false. if true, then compress fe.audit.log by gzip
      */
     @ConfField
     public static String audit_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -151,6 +160,8 @@ public class Config extends ConfigBase {
     public static String audit_log_delete_age = "30d";
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField
+    public static boolean audit_log_enable_compress = false;
 
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
@@ -441,15 +452,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int edit_log_write_slow_log_threshold_ms = 2000;
-
-    /**
-     * whether ignore unknown log id
-     * when fe rolls back to low version, there may be log id that low version fe can not recognise
-     * if set to true, fe will ignore those id
-     * or fe will exit
-     */
-    @ConfField(mutable = true)
-    public static boolean ignore_unknown_log_id = false;
 
     /**
      * hdfs_read_buffer_size_kb for reading hdfs
@@ -2781,6 +2783,24 @@ public class Config extends ConfigBase {
     public static boolean metadata_enable_recovery_mode = false;
 
     /**
+     * Whether ignore unknown log id
+     * when FE rolls back to low version, there may be log id that low version FE can not recognise
+     * if set to true, FE will ignore those ids
+     * or FE will exit
+     */
+    @ConfField(mutable = true, aliases = {"ignore_unknown_log_id"})
+    public static boolean metadata_ignore_unknown_operation_type = false;
+
+    /**
+     * Whether ignore unknown subtype
+     * when FE rolls back to low version, there may be classes recorded in meta FE can not recognise
+     * if set to true, FE will ignore the unknown subtype
+     * or FE will exit
+     */
+    @ConfField
+    public static boolean metadata_ignore_unknown_subtype = false;
+
+    /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
      * Default value: 500
      */
@@ -3005,6 +3025,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
+    public static boolean enable_active_materialized_view_schema_strict_check = true;
 
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +

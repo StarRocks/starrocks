@@ -93,7 +93,7 @@ FROM data_source
 
 ## Examples
 
-1. The following example increases the value of the property `desired_concurrent_number` of the load job to `5` in order to increase the parallelism of load tasks. For details on task parallelism, see [how to improve load performance](../../../../faq/loading/Routine_load_faq.md#how-can-i-improve-loading-performance).
+1. The following example increases the value of the property `desired_concurrent_number` of the load job to `5` in order to increase the parallelism of load tasks.
 
    ```SQL
    ALTER ROUTINE LOAD FOR example_tbl_ordertest

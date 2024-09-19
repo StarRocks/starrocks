@@ -31,7 +31,6 @@ import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
@@ -169,7 +168,8 @@ public class CachedStatisticStorage implements StatisticStorage {
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> result =
                     connectorTableCachedStatistics.getAll(cacheKeys);
 
-            SessionVariable sessionVariable = ConnectContext.get() == null ? VariableMgr.newSessionVariable() :
+            SessionVariable sessionVariable = ConnectContext.get() == null ?
+                    GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable() :
                     ConnectContext.get().getSessionVariable();
             result.whenCompleteAsync((res, e) -> {
                 if (e != null) {

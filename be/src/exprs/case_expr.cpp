@@ -23,12 +23,15 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exprs/jit/ir_helper.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "simd/mulselector.h"
 #include "types/logical_type_infra.h"
 #include "util/percentile_value.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -71,6 +74,7 @@ public:
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
     }
 
+#ifdef STARROCKS_JIT_ENABLE
     bool is_compilable(RuntimeState* state) const override {
         if (_has_case_expr) {
             return state->can_jit_expr(CompilableExprType::CASE) && IRHelper::support_jit(WhenType) &&
@@ -240,6 +244,7 @@ public:
         out << "}" << (is_constant() ? "c:" : "") << (is_nullable() ? "n:" : "") << type().debug_string();
         return out.str();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;

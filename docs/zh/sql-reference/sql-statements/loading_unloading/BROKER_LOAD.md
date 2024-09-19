@@ -118,7 +118,7 @@ INTO TABLE <table_name>
 
 - `TEMPORARY_PARTITION`
 
-  指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。
+  指定要把数据导入哪些[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。
 
 - `COLUMNS TERMINATED BY`
 

@@ -135,7 +135,6 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
@@ -1043,8 +1042,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
         SetType setType = SetType.fromThrift(params.getVarType());
-        List<List<String>> rows = VariableMgr.dump(setType, ctx.getSessionVariable(),
-                null);
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getVariableMgr().dump(setType,
+                ctx.getSessionVariable(), null);
         if (setType != SetType.VERBOSE) {
             for (List<String> row : rows) {
                 map.put(row.get(0), row.get(1));

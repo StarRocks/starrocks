@@ -54,6 +54,9 @@ void DataSketchesHll::merge(const DataSketchesHll& other) {
         _sketch_union = std::make_unique<hll_union_type>(other.get_lg_config_k(), alloc_type(_memory_usage));
     }
     auto o_sketch = other.get_hll_sketch();
+    if (o_sketch == nullptr) {
+        return;
+    }
     _sketch_union->update(*o_sketch);
     this->mark_changed();
 }
