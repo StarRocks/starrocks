@@ -1456,8 +1456,13 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
+<<<<<<< HEAD
                 "  |  <slot 14> : 8\n" +
                 "  |  <slot 15> : clone(8)\n" +
+=======
+                "  |  <slot 14> : clone(8: S_ADDRESS)\n" +
+                "  |  <slot 15> : 8: S_ADDRESS\n" +
+>>>>>>> 2a85b7cb61 ([BugFix] Fix pushdown subfield with unstrict expression in project error (#51100))
                 "  |  \n" +
                 "  2:Decode\n" +
                 "  |  <dict id 16> : <string id 8>\n" +

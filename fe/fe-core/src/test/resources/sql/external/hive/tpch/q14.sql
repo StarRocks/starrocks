@@ -53,8 +53,13 @@ OutPut Exchange Id: 08
 6:Project
 |  output columns:
 |  21 <-> [21: p_type, VARCHAR, true]
+<<<<<<< HEAD
 |  27 <-> [37: multiply, DECIMAL128(33,4), true]
 |  37 <-> clone([37: multiply, DECIMAL128(33,4), true])
+=======
+|  27 <-> clone([35: multiply, DECIMAL128(31,4), true])
+|  35 <-> [35: multiply, DECIMAL128(31,4), true]
+>>>>>>> 2a85b7cb61 ([BugFix] Fix pushdown subfield with unstrict expression in project error (#51100))
 |  common expressions:
 |  33 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  34 <-> [7: l_discount, DECIMAL64(15,2), true]
