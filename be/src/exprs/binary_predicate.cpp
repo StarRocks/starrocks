@@ -14,21 +14,24 @@
 
 #include "exprs/binary_predicate.h"
 
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Value.h>
-
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
-#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -131,6 +134,7 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
@@ -215,6 +219,7 @@ public:
                _children[1]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
                type().debug_string();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -426,6 +431,7 @@ public:
 
         return builder.build(ColumnHelper::is_all_const(list));
     }
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
@@ -464,6 +470,7 @@ public:
         return "{" + _children[0]->jit_func_name(state) + "<=>" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;

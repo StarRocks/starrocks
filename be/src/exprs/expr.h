@@ -215,6 +215,7 @@ public:
     // Get the first column ref in expr.
     ColumnRef* get_column_ref();
 
+#ifdef STARROCKS_JIT_ENABLE
     StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
 
     virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
@@ -246,6 +247,7 @@ public:
     // The valuable expressions get 1 score per expression, others get 0 score per expression, including
     // comparison expr, logical expr, branch expr, div and mod.
     virtual JitScore compute_jit_score(RuntimeState* state) const;
+#endif
 
     // Return true if this expr or any of its children support ngram bloom filter, otherwise return flase
     virtual bool support_ngram_bloom_filter(ExprContext* context) const;
@@ -357,8 +359,9 @@ protected:
         out << expr_name << "(" << Expr::debug_string() << ")";
         return out.str();
     }
-
+#ifdef STARROCKS_JIT_ENABLE
     Status prepare_jit_expr(RuntimeState* state, ExprContext* context);
+#endif
 
 private:
     // Create a new vectorized expr

@@ -46,7 +46,6 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
-#include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -61,6 +60,10 @@
 #include "util/pretty_printer.h"
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -523,8 +526,12 @@ Status RuntimeState::reset_epoch() {
 }
 
 bool RuntimeState::is_jit_enabled() const {
+#ifdef STARROCKS_JIT_ENABLE
     return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
            _query_options.jit_level != 0;
+#else
+    return false;
+#endif
 }
 
 void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {

@@ -53,7 +53,6 @@
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
-#include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -100,6 +99,10 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -550,11 +553,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
+#ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
     if (!status.ok()) {
         LOG(WARNING) << "Failed to init JIT engine: " << status.message();
     }
+#endif
 
     RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
     PythonEnvManager::getInstance().start_background_cleanup_thread();
