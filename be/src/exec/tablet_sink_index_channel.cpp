@@ -415,6 +415,20 @@ bool NodeChannel::is_full() {
     return false;
 }
 
+void NodeChannel::_reset_cur_chunk(Chunk* input) {
+    int64_t before_consumed_bytes = CurrentThread::current().get_consumed_bytes();
+    _cur_chunk = input->clone_empty_with_slot();
+    int64_t after_consumed_bytes = CurrentThread::current().get_consumed_bytes();
+    _cur_chunk_mem_usage += after_consumed_bytes - before_consumed_bytes;
+}
+
+void NodeChannel::_append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    int64_t before_consumed_bytes = CurrentThread::current().get_consumed_bytes();
+    _cur_chunk->append_selective(src, indexes, from, size);
+    int64_t after_consumed_bytes = CurrentThread::current().get_consumed_bytes();
+    _cur_chunk_mem_usage += after_consumed_bytes - before_consumed_bytes;
+}
+
 Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids,
                               const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size) {
     if (_cancelled || _closed) {
@@ -423,7 +437,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
 
     DCHECK(_rpc_request.requests_size() == 1);
     if (UNLIKELY(_cur_chunk == nullptr)) {
-        _cur_chunk = input->clone_empty_with_slot();
+        _reset_cur_chunk(input);
     }
 
     if (is_full()) {
@@ -436,7 +450,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
     SCOPED_TIMER(_ts_profile->pack_chunk_timer);
     // 1. append data
     if (_where_clause == nullptr) {
-        _cur_chunk->append_selective(*input, indexes.data(), from, size);
+        _append_data_to_cur_chunk(*input, indexes.data(), from, size);
         auto req = _rpc_request.mutable_requests(0);
         for (size_t i = 0; i < size; ++i) {
             req->add_tablet_ids(tablet_ids[indexes[from + i]]);
@@ -445,14 +459,16 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         std::vector<uint32_t> filtered_indexes;
         RETURN_IF_ERROR(_filter_indexes_with_where_expr(input, indexes, filtered_indexes));
         size_t filter_size = filtered_indexes.size();
-        _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filter_size);
+        _append_data_to_cur_chunk(*input, filtered_indexes.data(), from, filter_size);
+
         auto req = _rpc_request.mutable_requests(0);
         for (size_t i = 0; i < filter_size; ++i) {
             req->add_tablet_ids(tablet_ids[filtered_indexes[from + i]]);
         }
     }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+    if (_cur_chunk->num_rows() <= 0 || (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
+                                        _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes)) {
         // 2. chunk not full
         if (_request_queue.empty()) {
             return Status::OK();
@@ -462,7 +478,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         // 3. chunk full push back to queue
         _mem_tracker->consume(_cur_chunk->memory_usage());
         _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
-        _cur_chunk = input->clone_empty_with_slot();
+        _reset_cur_chunk(input);
         _rpc_request.mutable_requests(0)->clear_tablet_ids();
     }
 
@@ -483,7 +499,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
 
     DCHECK(index_tablet_ids.size() == _rpc_request.requests_size());
     if (UNLIKELY(_cur_chunk == nullptr)) {
-        _cur_chunk = input->clone_empty_with_slot();
+        _reset_cur_chunk(input);
     }
 
     if (is_full()) {
@@ -493,8 +509,10 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
     }
 
     SCOPED_TIMER(_ts_profile->pack_chunk_timer);
+
     // 1. append data
-    _cur_chunk->append_selective(*input, indexes.data(), from, size);
+    _append_data_to_cur_chunk(*input, indexes.data(), from, size);
+
     for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
         auto req = _rpc_request.mutable_requests(index_i);
         for (size_t i = from; i < size; ++i) {
@@ -502,7 +520,8 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         }
     }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+    if (_cur_chunk->num_rows() <= 0 || (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
+                                        _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes)) {
         // 2. chunk not full
         if (_request_queue.empty()) {
             return Status::OK();
@@ -512,7 +531,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         // 3. chunk full push back to queue
         _mem_tracker->consume(_cur_chunk->memory_usage());
         _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
-        _cur_chunk = input->clone_empty_with_slot();
+        _reset_cur_chunk(input);
         for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
             _rpc_request.mutable_requests(index_i)->clear_tablet_ids();
         }
@@ -567,6 +586,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             _mem_tracker->consume(_cur_chunk->memory_usage());
             _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
             _cur_chunk = nullptr;
+            _cur_chunk_mem_usage = 0;
         }
 
         // try to send chunk in queue first
