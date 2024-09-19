@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hudi;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -40,6 +41,7 @@ import org.apache.hudi.storage.StoragePath;
 import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Iterator;
 import java.util.List;
@@ -69,7 +71,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             HoodieLocalEngineContext engineContext = new HoodieLocalEngineContext(configuration);
             HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().enable(true).build();
             HoodieTableMetaClient metaClient =
-                    HoodieTableMetaClient.builder().setConf(configuration).setBasePath(ctx.table.getTableLocation()).build();
+                    HoodieTableMetaClient.builder().setConf(configuration).setBasePath(ctx.tableLocation).build();
             // metaClient.reloadActiveTimeline();
             HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
             Option<HoodieInstant> lastInstant = timeline.lastInstant();
@@ -86,11 +88,13 @@ public class HudiRemoteFileIO implements RemoteFileIO {
 
     @Override
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
-        RemoteFileScanContext scanContext = pathKey.getScanContext();
-        String tableLocation = scanContext.table.getTableLocation();
+        String tableLocation = pathKey.getTableLocation();
         if (tableLocation == null) {
             throw new StarRocksConnectorException("Missing hudi table base location on %s", pathKey);
         }
+        // scan context allows `getRemoteFiles` on set of `pathKey` to share a same context and avoid duplicated function calls.
+        // so in most cases, scan context has been created and set outside, so scan context is not nullptr.
+        RemoteFileScanContext scanContext = getScanContext(pathKey, tableLocation);
 
         String partitionPath = pathKey.getPath();
         String partitionName = FSUtils.getRelativePartitionPath(new StoragePath(tableLocation), new StoragePath(partitionPath));
@@ -122,6 +126,17 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                     pathKey, e.getMessage());
         }
         return resultPartitions.put(pathKey, fileDescs).build();
+    }
+
+    @NotNull
+    @VisibleForTesting
+    public static RemoteFileScanContext getScanContext(RemotePathKey pathKey, String tableLocation) {
+        RemoteFileScanContext scanContext = pathKey.getScanContext();
+        // scan context is nullptr when cache is doing reload, and we don't have place to set scan context.
+        if (scanContext == null) {
+            scanContext = new RemoteFileScanContext(tableLocation);
+        }
+        return scanContext;
     }
 
     @Override
