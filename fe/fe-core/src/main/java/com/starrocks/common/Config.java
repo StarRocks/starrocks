@@ -454,15 +454,6 @@ public class Config extends ConfigBase {
     public static int edit_log_write_slow_log_threshold_ms = 2000;
 
     /**
-     * whether ignore unknown log id
-     * when fe rolls back to low version, there may be log id that low version fe can not recognise
-     * if set to true, fe will ignore those id
-     * or fe will exit
-     */
-    @ConfField(mutable = true)
-    public static boolean ignore_unknown_log_id = false;
-
-    /**
      * hdfs_read_buffer_size_kb for reading hdfs
      */
     @ConfField(mutable = true)
@@ -2790,6 +2781,24 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean metadata_enable_recovery_mode = false;
+
+    /**
+     * Whether ignore unknown log id
+     * when FE rolls back to low version, there may be log id that low version FE can not recognise
+     * if set to true, FE will ignore those ids
+     * or FE will exit
+     */
+    @ConfField(mutable = true, aliases = {"ignore_unknown_log_id"})
+    public static boolean metadata_ignore_unknown_operation_type = false;
+
+    /**
+     * Whether ignore unknown subtype
+     * when FE rolls back to low version, there may be classes recorded in meta FE can not recognise
+     * if set to true, FE will ignore the unknown subtype
+     * or FE will exit
+     */
+    @ConfField
+    public static boolean metadata_ignore_unknown_subtype = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
