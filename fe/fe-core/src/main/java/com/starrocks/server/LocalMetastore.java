@@ -228,9 +228,11 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.util.EitherOr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.TabletTaskExecutor;
@@ -3190,20 +3192,32 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return materializedView;
     }
 
-    public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+    public String refreshMaterializedView(String dbName, String mvName, boolean force,
+                                          EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
-        return refreshMaterializedView(dbName, mvName, force, range, priority, mergeRedundant, isManual, false);
+        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority, mergeRedundant, isManual, false);
     }
 
-    public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+    public String refreshMaterializedView(String dbName, String mvName, boolean force,
+                                          EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
                                           int priority, boolean mergeRedundant, boolean isManual, boolean isSync)
             throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
 
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
-        taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+        if (partitionDesc != null) {
+            if (!partitionDesc.getFirst().isEmpty()) {
+                PartitionRangeDesc range = partitionDesc.left();
+                taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
+                taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+            } else if (!partitionDesc.getSecond().isEmpty()) {
+                Set<PListCell> list = partitionDesc.right();
+                if (!CollectionUtils.isEmpty(list)) {
+                    taskRunProperties.put(TaskRun.PARTITION_VALUES, PListCell.batchSerialize(list));
+                }
+            }
+        }
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(force));
 
         ExecuteOption executeOption = new ExecuteOption(priority, mergeRedundant, taskRunProperties);
@@ -3218,8 +3232,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String dbName = refreshMaterializedViewStatement.getMvName().getDb();
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
-        PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
-        return refreshMaterializedView(dbName, mvName, force, range, Constants.TaskRunPriority.HIGH.value(),
+        EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc = refreshMaterializedViewStatement.getPartitionDesc();
+        return refreshMaterializedView(dbName, mvName, force, partitionDesc, Constants.TaskRunPriority.HIGH.value(),
                 Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
     }
 

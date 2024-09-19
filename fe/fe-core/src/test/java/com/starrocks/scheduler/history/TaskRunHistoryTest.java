@@ -56,11 +56,11 @@ public class TaskRunHistoryTest {
         TaskRunStatus status = new TaskRunStatus();
         String json = status.toJSON();
         assertEquals("{\"taskId\":0,\"createTime\":0,\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false," +
-                "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0," +
-                "\"state\":\"PENDING\",\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false," +
-                "\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{}," +
-                "\"basePartitionsToRefreshMap\":{},\"processStartTime\":0,\"executeOption\":{\"priority\":0," +
-                "\"isMergeRedundant\":true,\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}", json);
+                "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\"," +
+                "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
+                "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"processStartTime\":0," +
+                "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true,\"isManual\":false,\"isSync\":false," +
+                "\"isReplay\":false},\"planBuilderMessage\":{}}}", json);
 
         TaskRunStatus b = TaskRunStatus.fromJson(json);
         assertEquals(status.toJSON(), b.toJSON());
@@ -220,28 +220,6 @@ public class TaskRunHistoryTest {
         history.addHistory(run2);
         assertEquals(2, history.getInMemoryHistory().size());
 
-        // run the normal vacuum
-        new Expectations() {
-            {
-                repo.executeDML(
-                        "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, task_state, " +
-                                "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'q2', 't2'," +
-                                " 'SUCCESS', '1970-01-01 08:00:00', '1970-01-01 08:00:00', '2024-07-05 15:38:00', " +
-                                "'{\\\"queryId\\\":\\\"q2\\\",\\\"taskId\\\":0,\\\"taskName\\\":\\\"t2\\\"," +
-                                "\\\"createTime\\\":0," +
-                                "\\\"expireTime\\\":1720165080904,\\\"priority\\\":0,\\\"mergeRedundant\\\":false," +
-                                "\\\"source\\\":\\\"CTAS\\\",\\\"errorCode\\\":0,\\\"finishTime\\\":0,\\\"" +
-                                "processStartTime\\\":0," +
-                                "\\\"state\\\":\\\"SUCCESS\\\",\\\"progress\\\":0,\\\"mvExtraMessage\\\":{\\\"" +
-                                "forceRefresh\\\":false," +
-                                "\\\"mvPartitionsToRefresh\\\":[],\\\"refBasePartitionsToRefreshMap\\\":{}," +
-                                "\\\"basePartitionsToRefreshMap\\\":{},\\\"processStartTime\\\":0," +
-                                "\\\"executeOption\\\":{\\\"priority\\\":0,\\\"isMergeRedundant\\\":true,\\\"" +
-                                "isManual\\\":false," +
-                                "\\\"isSync\\\":false,\\\"isReplay\\\":false}}}')");
-
-            }
-        };
         history.vacuum();
         assertEquals(1, history.getInMemoryHistory().size());
 

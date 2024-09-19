@@ -98,7 +98,7 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public abstract Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                          Map<Long, TableSnapshotInfo> snapshotBaseTables,
-                                                         String start, String end, boolean force,
+                                                         MVRefreshParams mvRefreshParams,
                                                          Set<String> mvPotentialPartitionNames) throws AnalysisException;
     public abstract Set<String> getMVPartitionsToRefreshWithForce(int partitionTTLNumber) throws AnalysisException;
 
@@ -113,7 +113,7 @@ public abstract class MVPCTRefreshPartitioner {
      * @throws AnalysisException
      */
     public abstract Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                           String start, String end,
+                                                           MVRefreshParams mvRefreshParams,
                                                            int partitionTTLNumber,
                                                            boolean isAutoRefresh) throws AnalysisException;
 

@@ -372,11 +372,9 @@ public class TaskRunStatus implements Writable {
         if (!state.isFinishState()) {
             return false;
         }
-        if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
-                !Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart())) {
-            return false;
-        }
-        return true;
+        return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
     }
 
     public long calculateRefreshProcessDuration() {

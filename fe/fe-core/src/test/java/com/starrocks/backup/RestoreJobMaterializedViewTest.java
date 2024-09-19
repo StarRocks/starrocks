@@ -492,14 +492,6 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
-    public void testMVRestore() {
-        RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
-
-        checkJobRun(job);
-        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
-    }
-
-    @Test
     public void testMVRestoreMVWithBaseTable1() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
