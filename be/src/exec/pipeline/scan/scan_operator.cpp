@@ -203,7 +203,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
-    if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
         return false;
     }
 

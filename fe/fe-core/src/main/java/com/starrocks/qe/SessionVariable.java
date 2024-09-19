@@ -2168,7 +2168,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableConnectorIncrementalScanRanges = false;
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
-    private int connectorIncrementalScanRangeSize = 1000;
+    private int connectorIncrementalScanRangeSize = 500;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,

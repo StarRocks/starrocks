@@ -365,12 +365,12 @@ public class HDFSBackendSelectorTest {
             List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
             Assert.assertTrue(scanRangeParams.size() >= 1);
             TScanRangeParams last = scanRangeParams.get(scanRangeParams.size() - 1);
-            Assert.assertTrue(last.isSetPlaceholder());
+            Assert.assertTrue(last.isSetEmpty());
             Assert.assertTrue(last.isSetHas_more());
-            Assert.assertTrue(last.isPlaceholder());
+            Assert.assertTrue(last.isEmpty());
             Assert.assertTrue(last.has_more == false);
             for (TScanRangeParams p : scanRangeParams) {
-                if (!p.isPlaceholder()) {
+                if (!p.isEmpty()) {
                     scanRanges += 1;
                 }
             }

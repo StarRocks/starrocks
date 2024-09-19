@@ -85,7 +85,7 @@ class TracerImpl extends Tracer {
         tracerCost.stop();
     }
 
-    public void count(String name, int count) {
+    public void count(String name, long count) {
         tracerCost.start();
         varTracer.count(timePoint(), name, count);
         tracerCost.stop();
