@@ -34,6 +34,7 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -127,9 +128,17 @@ public class TestUtil {
     }
 
     public static List<String> getTPCHCreateTableSqlList() {
-        return getSqlList("sql/tpch_tables/", "lineitem", "orders", "part", "partsupp", "supplier", "customer",
-                "region",
-                "nation");
+        return getSqlList("sql/tpch_tables/", "lineitem", "orders", "part", "partsupp",
+                "supplier", "customer", "region", "nation");
+    }
+
+    public static List<String> getTPCHMonthlyCreateTableSqlList() {
+        return getSqlList("sql/tpch_tables/", "lineitem_monthly", "orders_monthly", "part",
+                "partsupp", "supplier", "customer", "region", "nation");
+    }
+
+    public static List<String> getTPCHMonthCreateViewSqlList() {
+        return getSqlList("sql/tpch_tables/", "lineitem_monthly_view", "orders_monthly_view");
     }
 
     public static List<Pair<String, String>> getTPCDSQueryList() {
@@ -162,6 +171,11 @@ public class TestUtil {
     }
 
     public static StarRocksAssert prepareTables(String db, Supplier<List<String>> createTableSqlListGetter) {
+        return prepareTables(db, createTableSqlListGetter, Collections::emptyList);
+    }
+
+    public static StarRocksAssert prepareTables(String db, Supplier<List<String>> createTableSqlListGetter,
+                                                Supplier<List<String>> createViewSqlListGetter) {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
@@ -171,10 +185,18 @@ public class TestUtil {
             starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
                     .useDatabase(StatsConstants.STATISTICS_DB_NAME)
                     .withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
+
             starRocksAssert.withDatabase(db).useDatabase(db);
             createTableSqlListGetter.get().forEach(createTblSql -> {
                 try {
                     starRocksAssert.withTable(createTblSql);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            createViewSqlListGetter.get().forEach(createViewSql -> {
+                try {
+                    starRocksAssert.withView(createViewSql);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }

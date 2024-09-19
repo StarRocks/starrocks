@@ -23,8 +23,11 @@ import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PieceCommonState;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
+import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
+import com.starrocks.sql.automv.pn.StrictOp;
 import com.starrocks.sql.automv.pn.TimeGranule;
+import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
@@ -133,14 +136,43 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
         }
 
         ColumnRefToIdConverter newIdConverter = aggPiece.getCommonState().getIdConverter().duplicate();
-
-        Pair<Integer, GenericColumn> partitionByColumn =
-                OpUtil.opToColumn(coarseTimeGranule.getOp(), newIdConverter::nextId);
-
         PieceCommonState newCommonState =
                 new PieceCommonState(newIdConverter, aggPiece.getCommonState().getCoveredQueries(),
                         aggPiece.getCommonState().getFqTableMap());
+
+        Op partitionOp = coarseTimeGranule.getOp();
+        TieredMap<StrictOp, Integer> strictOpToIds =
+                OpUtil.columnsToStrictOpMap(aggPiece.getFlatTable().getPiece().getColumns());
+        Optional<Integer> optId = Optional.ofNullable(strictOpToIds.get(partitionOp.strict()));
+        AggregatePiece.FlatTable newFlatTable;
+        Pair<Integer, GenericColumn> partitionByColumn;
+        if (optId.isPresent()) {
+            Integer id = optId.get();
+            if (aggPiece.getColumns().containsKey(id)) {
+                return Optional.of(aggPiece);
+            }
+            partitionByColumn = OpUtil.opToColumn(partitionOp, () -> id);
+            newFlatTable = aggPiece.getFlatTable();
+        } else {
+            partitionByColumn = OpUtil.opToColumn(coarseTimeGranule.getOp(), newIdConverter::nextId);
+            PlanPiece flatTablePiece = aggPiece.getFlatTable().getPiece();
+            TieredMap<Integer, GenericColumn> newColumns = flatTablePiece.getColumns().newTier()
+                    .put(partitionByColumn.first, partitionByColumn.second)
+                    .build();
+
+            PlanPiece newFlatTablePiece = aggPiece.getFlatTable().getPiece().builder()
+                    .setConjuncts(TieredList.genesis())
+                    .setColumns(newColumns)
+                    .setCommonState(newCommonState)
+                    .build();
+
+            newFlatTable =
+                    new AggregatePiece.FlatTable(newFlatTablePiece, aggPiece.getFlatTable().getStiffConjuncts(),
+                            aggPiece.getFlatTable().getFlexibleConjuncts());
+        }
+
         AggregatePiece newAggPiece = aggPiece.builder().mustCast(AggregatePiece.Builder.class)
+                .setFlatTable(newFlatTable)
                 .setDimensions(aggPiece.getDimensions().newTier()
                         .put(partitionByColumn.first, partitionByColumn.second)
                         .build())

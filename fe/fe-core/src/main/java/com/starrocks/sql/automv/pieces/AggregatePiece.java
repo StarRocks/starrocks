@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -55,7 +56,8 @@ public class AggregatePiece extends PlanPiece {
             TieredList<Op> hoistConjuncts,
             TieredList<Op> nonHoistConjuncts) {
         super(ImmutableList.of(flatTable.getPiece()), columns, conjuncts, commonState, auxState);
-
+        Set<Integer> columnIds = dimensions.merge(rollupDimensions).merge(metrics).merge(distinctMetrics).keySet();
+        Preconditions.checkState(columnIds.equals(columns.keySet()));
         ColumnRefSet rollupDimensionIds = ColumnRefSet.of();
         flatTable.getFlexibleConjuncts().forEach(op -> rollupDimensionIds.union(op.getIds()));
         rollupDimensionIds.except(ColumnRefSet.createByIds(dimensions.keySet()));
@@ -361,14 +363,6 @@ public class AggregatePiece extends PlanPiece {
             boolean noIdConflict = Sets.intersection(flatTable.getPiece().getColumns().keySet(),
                     metrics.merge(distinctMetrics).keySet()).isEmpty();
             Preconditions.checkArgument(shouldUnique && noIdConflict);
-            if (getColumns() != null) {
-                ColumnRefSet columnIds = ColumnRefSet.createByIds(columns.keySet());
-                TieredMap<Integer, GenericColumn> otherColumns = getColumns().entrySet()
-                        .stream()
-                        .filter(e -> !columnIds.contains(e.getKey()))
-                        .collect(TieredMap.toMap());
-                columns = columns.merge(otherColumns);
-            }
             return new AggregatePiece(columns, getConjuncts(), getCommonState(), getAuxState(), flatTable, dimensions,
                     rollupDimensions, metrics, distinctMetrics, hoistConjuncts, nonHoistConjuncts);
         }
