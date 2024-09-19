@@ -116,6 +116,8 @@ public class ColumnDef implements ParseNode {
         // default value for date type CURRENT_TIMESTAMP
         public static DefaultValueDef CURRENT_TIMESTAMP_VALUE = new DefaultValueDef(true,
                 new FunctionCallExpr("now", new ArrayList<>()));
+        public static final DefaultValueDef CURRENT_DATE_VALUE = new DefaultValueDef(true,
+                new FunctionCallExpr("current_date", new ArrayList<>()));
     }
 
     private static final Set<String> CHARSET_NAMES;
@@ -484,6 +486,10 @@ public class ColumnDef implements ParseNode {
             // default function current_timestamp currently only support DATETIME type.
             if (FunctionSet.NOW.equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATETIME) {
                 throw new AnalysisException(String.format("Default function now() for type %s is not supported", type));
+            }
+            // default function current_date currently only support DATE type.
+            if (FunctionSet.CURRENT_DATE.equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATE) {
+                throw new AnalysisException(String.format("Default function current_date() for type %s is not supported", type));
             }
             // default function uuid currently only support VARCHAR type.
             if (FunctionSet.UUID.equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.VARCHAR) {

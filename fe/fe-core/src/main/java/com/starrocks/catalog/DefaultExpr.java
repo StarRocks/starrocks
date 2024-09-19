@@ -25,7 +25,8 @@ import java.util.Set;
 
 public class DefaultExpr {
 
-    public static final Set<String> SUPPORTED_DEFAULT_FNS = ImmutableSet.of("now()", "uuid()", "uuid_numeric()");
+    public static final Set<String> SUPPORTED_DEFAULT_FNS = ImmutableSet.of("now()", "uuid()", "uuid_numeric()",
+            "current_date()");
 
     @SerializedName("expr")
     private String expr;
