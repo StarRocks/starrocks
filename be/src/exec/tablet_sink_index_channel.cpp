@@ -673,9 +673,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             }
             auto closure = _add_batch_closures[_current_request_index];
             serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
-            PHttpRequest fake_request;
-            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, &fake_request, &closure->result, closure);
-            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
+                    << closure->cntl.request_attachment().size();
         } else {
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
                                             &_add_batch_closures[_current_request_index]->result,
@@ -695,9 +695,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             auto closure = _add_batch_closures[_current_request_index];
             serialize_to_iobuf<PTabletWriterAddChunkRequest>(*request.mutable_requests(0),
                                                              &closure->cntl.request_attachment());
-            PHttpRequest fake_request;
-            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, &fake_request, &closure->result, closure);
-            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
+                    << closure->cntl.request_attachment().size();
         } else {
             _stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
