@@ -802,41 +802,17 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int analyzeJobSize = reader.readInt();
-        for (int i = 0; i < analyzeJobSize; ++i) {
-            AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
-            replayAddAnalyzeJob(analyzeJob);
-        }
+        reader.readCollection(AnalyzeJob.class, this::replayAddAnalyzeJob);
 
-        int analyzeStatusSize = reader.readInt();
-        for (int i = 0; i < analyzeStatusSize; ++i) {
-            AnalyzeStatus analyzeStatus = reader.readJson(AnalyzeStatus.class);
-            replayAddAnalyzeStatus(analyzeStatus);
-        }
+        reader.readCollection(AnalyzeStatus.class, this::replayAddAnalyzeStatus);
 
-        int basicStatsMetaSize = reader.readInt();
-        for (int i = 0; i < basicStatsMetaSize; ++i) {
-            BasicStatsMeta basicStatsMeta = reader.readJson(BasicStatsMeta.class);
-            replayAddBasicStatsMeta(basicStatsMeta);
-        }
+        reader.readCollection(BasicStatsMeta.class, this::replayAddBasicStatsMeta);
 
-        int histogramStatsMetaSize = reader.readInt();
-        for (int i = 0; i < histogramStatsMetaSize; ++i) {
-            HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
-            replayAddHistogramStatsMeta(histogramStatsMeta);
-        }
+        reader.readCollection(HistogramStatsMeta.class, this::replayAddHistogramStatsMeta);
 
-        int externalBasicStatsMetaSize = reader.readInt();
-        for (int i = 0; i < externalBasicStatsMetaSize; ++i) {
-            ExternalBasicStatsMeta basicStatsMeta = reader.readJson(ExternalBasicStatsMeta.class);
-            replayAddExternalBasicStatsMeta(basicStatsMeta);
-        }
+        reader.readCollection(ExternalBasicStatsMeta.class, this::replayAddExternalBasicStatsMeta);
 
-        int externalHistogramStatsMetaSize = reader.readInt();
-        for (int i = 0; i < externalHistogramStatsMetaSize; ++i) {
-            ExternalHistogramStatsMeta histogramStatsMeta = reader.readJson(ExternalHistogramStatsMeta.class);
-            replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-        }
+        reader.readCollection(ExternalHistogramStatsMeta.class, this::replayAddExternalHistogramStatsMeta);
     }
 
     private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {

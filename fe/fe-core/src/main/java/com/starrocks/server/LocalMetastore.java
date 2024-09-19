@@ -4956,14 +4956,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * The reload operation of a materialized view should be called by {@link GlobalStateMgr#postLoadImage()}.
      */
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int dbSize = reader.readInt();
-        for (int i = 0; i < dbSize; ++i) {
-            Database db = reader.readJson(Database.class);
-            int tableSize = reader.readInt();
-            for (int j = 0; j < tableSize; ++j) {
-                Table table = reader.readJson(Table.class);
-                db.registerTableUnlocked(table);
-            }
+        reader.readCollection(Database.class, db -> {
+            reader.readCollection(Table.class, db::registerTableUnlocked);
 
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
@@ -4979,7 +4973,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     LOG.error("reload table failed: {}", tbl, e);
                 }
             });
-        }
+        });
 
         AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
         for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {

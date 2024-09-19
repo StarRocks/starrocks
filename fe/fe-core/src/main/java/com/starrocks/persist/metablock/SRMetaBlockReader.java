@@ -22,13 +22,32 @@ public interface SRMetaBlockReader {
 
     SRMetaBlockHeader getHeader();
 
-    <T> T readJson(Class<T> returnClass) throws IOException, SRMetaBlockEOFException;
-
     int readInt() throws IOException, SRMetaBlockEOFException;
 
     long readLong() throws IOException, SRMetaBlockEOFException;
 
-    Object readJson(Type returnType) throws IOException, SRMetaBlockEOFException;
+    byte readByte() throws IOException, SRMetaBlockEOFException;
+
+    short readShort() throws IOException, SRMetaBlockEOFException;
+
+    double readDouble() throws IOException, SRMetaBlockEOFException;
+
+    float readFloat() throws IOException, SRMetaBlockEOFException;
+
+    char readChar() throws IOException, SRMetaBlockEOFException;
+
+    boolean readBoolean() throws IOException, SRMetaBlockEOFException;
+
+    String readString() throws IOException, SRMetaBlockEOFException;
+
+    <T> T readJson(Type returnType) throws IOException, SRMetaBlockEOFException;
+
+    <T> T readJson(Class<T> classType) throws IOException, SRMetaBlockEOFException;
+
+    <T> void readCollection(Class<T> classType, CollectionConsumer<? super T> action) throws IOException, SRMetaBlockEOFException;
+
+    <K, V> void readMap(Type keyType, Type valueType, MapEntryConsumer<? super K, ? super V> action)
+            throws IOException, SRMetaBlockEOFException;
 
     void close() throws IOException, SRMetaBlockException;
 }

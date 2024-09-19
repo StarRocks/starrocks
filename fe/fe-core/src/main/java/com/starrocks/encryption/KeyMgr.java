@@ -189,13 +189,12 @@ public class KeyMgr {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         keysLock.writeLock().lock();
         try {
-            int cnt = reader.readInt();
-            LOG.info("loading {} keys", cnt);
-            for (int i = 0; i < cnt; i++) {
-                EncryptionKeyPB pb = reader.readJson(EncryptionKeyPB.class);
+            reader.readCollection(EncryptionKeyPB.class, pb -> {
                 EncryptionKey key = create(pb);
                 idToKey.put(key.id, key);
-            }
+            });
+            LOG.info("loaded {} keys", idToKey.size());
+
             if (MetricRepo.hasInit) {
                 MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
             }

@@ -1202,7 +1202,7 @@ public class EditLog {
                     break;
                 }
                 default: {
-                    if (Config.ignore_unknown_log_id) {
+                    if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
                     } else {
                         throw new IOException("UNKNOWN Operation Type " + opCode);

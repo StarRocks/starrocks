@@ -17,6 +17,13 @@ package com.starrocks.persist.metablock;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.io.FileUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -32,6 +39,10 @@ import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class SRMetaBlockV2Test {
 
@@ -40,6 +51,7 @@ public class SRMetaBlockV2Test {
     @BeforeClass
     public static void setUp() throws Exception {
         tmpDir = Files.createTempDirectory(Paths.get("."), "SRMetaBlockV2Test");
+        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @AfterClass
@@ -223,5 +235,191 @@ public class SRMetaBlockV2Test {
         } catch (SRMetaBlockException e) {
             Assert.assertTrue(e.getMessage().contains("Block json number mismatch: expect 2 actual 1"));
         }
+    }
+
+
+    public static class TestTable {
+        @SerializedName("clazz")
+        private String clazz = "unknownTable";
+
+        public TestTable() {
+        }
+    }
+
+    @Test
+    public void testSubTypeRollbackInReadCollection() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV2(
+                new JsonWriter(new OutputStreamWriter(image.getDataOutputStream())),
+                SRMetaBlockID.LOCAL_META_STORE, 5);
+        writer.writeInt(4);
+        writer.writeJson(new MysqlTable());
+        writer.writeJson(new HiveTable());
+        writer.writeJson(new JDBCTable());
+        writer.writeJson(new TestTable());
+        writer.close();
+
+        final List<Table> tables = new ArrayList<>();
+        final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        Assert.assertThrows(SubtypeNotFoundException.class,
+                () -> reader.readCollection(Table.class, tables::add));
+
+        List<Table> tables2 = new ArrayList<>();
+        SRMetaBlockReader reader2 =  new SRMetaBlockReaderV2(image.getJsonReader());
+        Config.metadata_ignore_unknown_subtype = true;
+        try {
+            reader2.readCollection(Table.class, tables2::add);
+            reader2.close();
+        } finally {
+            Config.metadata_ignore_unknown_subtype = false;
+        }
+        Assert.assertEquals(3, tables2.size());
+        Assert.assertTrue(tables2.get(0) instanceof MysqlTable);
+        Assert.assertTrue(tables2.get(1) instanceof HiveTable);
+        Assert.assertTrue(tables2.get(2) instanceof JDBCTable);
+    }
+
+    @Test
+    public void testSubTypeRollbackInMapEntry() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV2(
+                new JsonWriter(new OutputStreamWriter(image.getDataOutputStream())),
+                SRMetaBlockID.LOCAL_META_STORE, 9);
+        writer.writeInt(4);
+        writer.writeLong(1);
+        writer.writeJson(new MysqlTable());
+        writer.writeLong(2);
+        writer.writeJson(new HiveTable());
+        writer.writeLong(3);
+        writer.writeJson(new JDBCTable());
+        writer.writeLong(4);
+        writer.writeJson(new TestTable());
+        writer.close();
+
+        final Map<Long, Table> tables = new HashMap<>();
+        final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        Assert.assertThrows(SubtypeNotFoundException.class,
+                () -> reader.readMap(Long.class, Table.class, tables::put));
+
+        Map<Long, Table> tables2 = new HashMap<>();
+        SRMetaBlockReader reader2 = new SRMetaBlockReaderV2(image.getJsonReader());
+        Config.metadata_ignore_unknown_subtype = true;
+        try {
+            reader2.readMap(Long.class, Table.class, tables2::put);
+            reader2.close();
+        } finally {
+            Config.metadata_ignore_unknown_subtype = false;
+        }
+        Assert.assertEquals(3, tables2.size());
+        Assert.assertTrue(tables2.get(1L) instanceof MysqlTable);
+        Assert.assertTrue(tables2.get(2L) instanceof HiveTable);
+        Assert.assertTrue(tables2.get(3L) instanceof JDBCTable);
+    }
+
+    @Test
+    public void testPrimitiveType() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV2(
+                new JsonWriter(new OutputStreamWriter(image.getDataOutputStream())),
+                SRMetaBlockID.LOCAL_META_STORE, 9);
+        writer.writeByte((byte) 1);
+        writer.writeString("xxx");
+        writer.writeInt(3);
+        writer.writeLong(4L);
+        writer.writeBoolean(false);
+        writer.writeChar('a');
+        writer.writeDouble(3.3);
+        writer.writeFloat(3.4f);
+        writer.writeShort((short) 6);
+        writer.close();
+
+        final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        Assert.assertEquals((byte) 1, reader.readByte());
+        Assert.assertEquals("xxx", reader.readString());
+        Assert.assertEquals(3, reader.readInt());
+        Assert.assertEquals(4L, reader.readLong());
+        Assert.assertFalse(reader.readBoolean());
+        Assert.assertEquals('a', reader.readChar());
+        Assert.assertTrue(Math.abs(reader.readDouble() - 3.3) < 1e-6);
+        Assert.assertTrue(Math.abs(reader.readFloat() - 3.4f) < 1e-6);
+        Assert.assertEquals((short) 6, reader.readShort());
+        reader.close();
+    }
+
+    @Test
+    public void testPrimaryTypeInMapEntry() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        SRMetaBlockWriter writer = new SRMetaBlockWriterV2(
+                new JsonWriter(new OutputStreamWriter(image.getDataOutputStream())),
+                SRMetaBlockID.LOCAL_META_STORE, 15);
+        // Map<Long, Boolean>
+        writer.writeInt(1);
+        writer.writeLong(1);
+        writer.writeBoolean(false);
+
+        // Map<Integer, String>
+        writer.writeInt(1);
+        writer.writeInt(1);
+        writer.writeString("xxx");
+
+        // Map<Byte, Character>
+        writer.writeInt(1);
+        writer.writeByte((byte) 4);
+        writer.writeChar('a');
+
+        // Map<Short, Double>
+        writer.writeInt(1);
+        writer.writeShort((short) 3);
+        writer.writeDouble(3.3);
+
+        // Map<Integer, Float>
+        writer.writeInt(1);
+        writer.writeInt(1);
+        writer.writeFloat(3.3f);
+
+        writer.close();
+
+        final boolean[] found = {false};
+        final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        reader.readMap(Long.class, Boolean.class, (MapEntryConsumer<Long, Boolean>) (aLong, aBoolean) -> {
+            Assert.assertEquals(1L, (long) aLong);
+            Assert.assertFalse(aBoolean);
+            found[0] = true;
+        });
+        Assert.assertTrue(found[0]);
+
+        found[0] = false;
+        reader.readMap(Integer.class, String.class, (MapEntryConsumer<Integer, String>) (aInt, aString) -> {
+            Assert.assertEquals(1, (int) aInt);
+            Assert.assertEquals("xxx", aString);
+            found[0] = true;
+        });
+        Assert.assertTrue(found[0]);
+
+        found[0] = false;
+        reader.readMap(Byte.class, Character.class, (MapEntryConsumer<Byte, Character>) (aByte, aChar) -> {
+            Assert.assertEquals(4, (byte) aByte);
+            Assert.assertEquals('a', (char) aChar);
+            found[0] = true;
+        });
+        Assert.assertTrue(found[0]);
+
+        found[0] = false;
+        reader.readMap(Short.class, Double.class, (MapEntryConsumer<Short, Double>) (aShort, aDouble) -> {
+            Assert.assertEquals(3, (short) aShort);
+            Assert.assertTrue(Math.abs(aDouble - 3.3) < 1e-6);
+            found[0] = true;
+        });
+        Assert.assertTrue(found[0]);
+
+        found[0] = false;
+        reader.readMap(Integer.class, Float.class, (MapEntryConsumer<Integer, Float>) (aInt, aFloat) -> {
+            Assert.assertEquals(1, (int) aInt);
+            Assert.assertTrue(Math.abs(aFloat - 3.3) < 1e-6);
+            found[0] = true;
+        });
+        Assert.assertTrue(found[0]);
+
+        reader.close();
     }
 }

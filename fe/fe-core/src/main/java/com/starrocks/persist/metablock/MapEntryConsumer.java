@@ -14,21 +14,8 @@
 
 package com.starrocks.persist.metablock;
 
-import com.google.gson.annotations.SerializedName;
+import java.io.IOException;
 
-public class LongObject {
-    @SerializedName("v")
-    private long value;
-
-    public LongObject(long value) {
-        this.value = value;
-    }
-
-    public long getValue() {
-        return value;
-    }
-
-    public void setValue(long value) {
-        this.value = value;
-    }
+public interface MapEntryConsumer<K, V> {
+    void accept(K k, V v) throws IOException, SRMetaBlockEOFException;
 }
