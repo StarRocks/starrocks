@@ -35,13 +35,7 @@ RUN_DAEMON=0
 HELPER=
 HOST_TYPE=
 ENABLE_DEBUGGER=0
-<<<<<<< HEAD
-RUN_LOG_CONSOLE=0
-=======
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
-# min jdk version required
-MIN_JDK_VERSION=11
->>>>>>> da1a80d47f ([BugFix] multiple sys_log_to_console=true entry in fe.conf every time… (#45851))
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
