@@ -16,7 +16,6 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
@@ -26,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.TimerTask;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -33,12 +33,12 @@ public class MaterializedViewMetricsRegistry {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsRegistry.class);
 
     private final MetricRegistry metricRegistry = new MetricRegistry();
-    private final Map<MvId, MaterializedViewMetricsEntity> idToMVMetrics;
+    private final ConcurrentHashMap<MvId, MaterializedViewMetricsEntity> idToMVMetrics;
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
 
     private MaterializedViewMetricsRegistry() {
-        idToMVMetrics = Maps.newHashMap();
+        idToMVMetrics = new ConcurrentHashMap<>();
         // clear all metrics everyday
         timer = ThreadPoolManager.newDaemonScheduledThreadPool(1, "MaterializedView-Metrics-Cleaner", true);
         // add initial delay to avoid all metrics are cleared at the same time
