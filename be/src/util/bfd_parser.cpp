@@ -116,7 +116,7 @@ BfdParser* BfdParser::create() {
     }
 
     char prog_name[1024];
-    if (fscanf(file, "%s ", prog_name) != 1) {
+    if (fscanf(file, "%1023s ", prog_name) != 1) {
         strcpy(prog_name, "read cmdline failed");
     }
     fclose(file);
