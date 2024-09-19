@@ -260,7 +260,9 @@ public class FunctionSet {
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
     public static final String MAX_BY = "max_by";
+    public static final String MAX_BY_V2 = "max_by_v2";
     public static final String MIN_BY = "min_by";
+    public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
