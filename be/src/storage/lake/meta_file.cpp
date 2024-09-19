@@ -88,6 +88,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             new_dcg_ver.add_unique_column_ids()->CopyFrom(dcg_ver.unique_column_ids(i));
             new_dcg_ver.add_column_files(dcg_ver.column_files(i));
             new_dcg_ver.add_versions(dcg_ver.versions(i));
+            if (i < dcg_ver.encryption_metas_size()) {
+                new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));
+            }
         } else {
             // Put this `.cols` files into orphan files
             FileMetaPB file_meta;

@@ -35,7 +35,7 @@ public class EncryptionKeyPBAdapter
     public static final String TYPE = "type";
     public static final String ALGORITHM = "algorithm";
     public static final String ENCRYPTED_KEY = "encrypted_key";
-    public static final String PLAIN_KEY = "encrypted_key";
+    public static final String PLAIN_KEY = "plain_key";
 
     @Override
     public JsonElement serialize(EncryptionKeyPB encryptionKeyPB, Type type,

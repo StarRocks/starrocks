@@ -187,8 +187,8 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         uint32_t actual = crc32c::Value(page_slice.data, page_slice.size - 4);
         if (expect != actual) {
             return Status::Corruption(
-                    strings::Substitute("Bad page: checksum mismatch (actual=$0 vs expect=$1), file=$2", actual, expect,
-                                        opts.read_file->filename()));
+                    strings::Substitute("Bad page: checksum mismatch (actual=$0 vs expect=$1), file=$2 encrypted=$3",
+                                        actual, expect, opts.read_file->filename(), opts.read_file->is_encrypted()));
         }
     }
 

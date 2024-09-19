@@ -23,6 +23,7 @@
 #include "common/prof/heap_prof.h"
 #include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
@@ -170,6 +171,10 @@ static std::string io_profile_and_get_topn_stats(const std::string& mode, int se
     return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
 }
 
+static std::string key_cache_info() {
+    return KeyCache::instance().to_string();
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -202,6 +207,7 @@ void bind_exec_env(ForeignModule& m) {
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+        cls.funcStaticExt<&key_cache_info>("key_cache_info");
     }
     {
         auto& cls = m.klass<GlobalEnv>("GlobalEnv");
