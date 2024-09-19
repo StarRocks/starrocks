@@ -826,7 +826,7 @@ void ExecEnv::try_release_resource_before_core_dump() {
         storage_page_cache->set_capacity(0);
         LOG(INFO) << "release storage page cache memory";
     }
-    if (_block_cache != nullptr && need_release("data_cache")) {
+    if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
         // TODO: Currently, block cache don't support shutdown now,
         //  so here will temporary use update_mem_quota instead to release memory.
         (void)_block_cache->update_mem_quota(0, false);
