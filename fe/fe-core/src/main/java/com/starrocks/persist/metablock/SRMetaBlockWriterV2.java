@@ -54,12 +54,47 @@ public class SRMetaBlockWriterV2 implements SRMetaBlockWriter {
 
     @Override
     public void writeInt(int value) throws IOException, SRMetaBlockException {
-        writeJson(new IntObject(value));
+        writeJson(new PrimitiveObject<>(value));
     }
 
     @Override
     public void writeLong(long value) throws IOException, SRMetaBlockException {
-        writeJson(new LongObject(value));
+        writeJson(new PrimitiveObject<>(value));
+    }
+
+    @Override
+    public void writeByte(byte value) throws IOException, SRMetaBlockException {
+        writeJson(new PrimitiveObject<>(value));
+    }
+
+    @Override
+    public void writeShort(short value) throws IOException, SRMetaBlockException {
+        writeJson(new PrimitiveObject<>(value));
+    }
+
+    @Override
+    public void writeDouble(double value) throws IOException, SRMetaBlockException {
+        writeJson(new PrimitiveObject<>(value));
+    }
+
+    @Override
+    public void writeFloat(float value) throws IOException, SRMetaBlockException {
+        writeJson(new PrimitiveObject<>(value));
+    }
+
+    @Override
+    public void writeChar(char value) throws IOException, SRMetaBlockException {
+        writeJson(new PrimitiveObject<>(value));
+    }
+
+    @Override
+    public void writeBoolean(boolean value) throws IOException, SRMetaBlockException {
+        writeJson(new PrimitiveObject<>(value));
+    }
+
+    @Override
+    public void writeString(String value) throws IOException, SRMetaBlockException {
+        writeJson(new PrimitiveObject<>(value));
     }
 
     @Override

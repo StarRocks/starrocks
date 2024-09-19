@@ -402,6 +402,7 @@ public class VariableMgr {
         writer.close();
     }
 
+<<<<<<< HEAD
     public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try {
             int sessionVarSize = reader.readInt();
@@ -409,21 +410,30 @@ public class VariableMgr {
                 VariableInfo v = reader.readJson(VariableInfo.class);
                 VarContext varContext = getVarContext(v.name);
                 if (varContext != null) {
+=======
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        reader.readCollection(VariableInfo.class, v -> {
+            VarContext varContext = getVarContext(v.name);
+            if (varContext != null) {
+                try {
+>>>>>>> 790a2b0b24 ([Enhancement] Support Gson subtype rollback (#50471))
                     setValue(varContext.getObj(), varContext.getField(), v.variable);
+                } catch (DdlException e) {
+                    throw new IOException(e);
                 }
             }
+        });
 
-            int globalVarSize = reader.readInt();
-            for (int i = 0; i < globalVarSize; ++i) {
-                VariableInfo v = reader.readJson(VariableInfo.class);
-                VarContext varContext = getVarContext(v.name);
-                if (varContext != null) {
+        reader.readCollection(VariableInfo.class, v -> {
+            VarContext varContext = getVarContext(v.name);
+            if (varContext != null) {
+                try {
                     setValue(varContext.getObj(), varContext.getField(), v.variable);
+                } catch (DdlException e) {
+                    throw new IOException(e);
                 }
             }
-        } catch (DdlException e) {
-            throw new IOException(e);
-        }
+        });
     }
 
     // this method is used to replace the `replayGlobalVariable()`
