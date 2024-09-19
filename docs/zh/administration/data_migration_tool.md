@@ -199,7 +199,7 @@ replication_job_batch_size=10
 | ddl_job_allow_drop_target_only            | 迁移工具是否自动删除仅在目标集群存在而源集群不存在的数据库，表或分区。默认为 `false`，即不删除。此项您可以使用默认值。 |
 | ddl_job_allow_drop_schema_change_table    | 迁移工具是否自动删除源集群和目标集群 Schema 不一致的表，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的表。 |
 | ddl_job_allow_drop_inconsistent_partition | 迁移工具是否自动删除源集群和目标集群数据分布方式不一致的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
-| ddl_job_allow_drop_partition_target_only  | 迁移工具是否自动删除目标集群上在源集群中不存在的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
+| ddl_job_allow_drop_partition_target_only  | 迁移工具是否自动删除目标集群上在源集群中不存在的分区，默认为 `true`，即删除，保持目标集群与源集群上表的分区一致。此项您可以使用默认值。 |
 | replication_job_interval_seconds          | 迁移工具触发数据同步任务的周期，单位为秒。此项您可以使用默认值。 |
 | replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。 |
 | max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务每次同步数据大小限制，默认值为 `-1` 代表无限制。此项您可以使用默认值。 |
