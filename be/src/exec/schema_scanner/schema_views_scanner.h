@@ -35,6 +35,10 @@ private:
     int _table_index{0};
     TGetDbsResult _db_result;
     TListTableStatusResult _table_result;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 809192eb19 ([Refactor] Add default hash func template for phmap (#49736))
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 
