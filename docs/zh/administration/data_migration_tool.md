@@ -143,12 +143,14 @@ source_fe_host=
 source_fe_query_port=9030
 source_cluster_user=root
 source_cluster_password=
+source_cluster_password_secret_key=
 source_cluster_token=
 
 target_fe_host=
 target_fe_query_port=9030
 target_cluster_user=root
 target_cluster_password=
+target_cluster_password_secret_key=
 
 # Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
 # example: db1,db2.tbl2,db3
@@ -159,6 +161,9 @@ exclude_data_list=
 # If there are no special requirements, please maintain the default values for the following configurations.
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
+target_cluster_max_disk_used_percent=80
+
+max_replication_data_size_per_job_in_gb=-1
 
 meta_job_interval_seconds=180
 meta_job_threads=4
@@ -167,8 +172,10 @@ ddl_job_batch_size=10
 ddl_job_allow_drop_target_only=false
 ddl_job_allow_drop_schema_change_table=true
 ddl_job_allow_drop_inconsistent_partition=true
+ddl_job_allow_drop_partition_target_only=true
 replication_job_interval_seconds=10
 replication_job_batch_size=10
+report_interval_seconds=300
 ```
 
 参数说明如下：
