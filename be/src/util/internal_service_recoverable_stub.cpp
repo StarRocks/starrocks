@@ -49,7 +49,7 @@ PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
 
-Status PInternalService_RecoverableStub::reset_channel(const std::string protocal) {
+Status PInternalService_RecoverableStub::reset_channel(const std::string& protocal) {
     std::lock_guard<std::mutex> l(_mutex);
     brpc::ChannelOptions options;
     options.connect_timeout_ms = config::rpc_connect_timeout_ms;
