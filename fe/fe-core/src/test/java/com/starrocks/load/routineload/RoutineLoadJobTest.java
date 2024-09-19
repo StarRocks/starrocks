@@ -167,15 +167,15 @@ public class RoutineLoadJobTest {
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
 
         Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
-        Assert.assertEquals(new Long(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
+        Assert.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
         Assert.assertTrue(routineLoadJob.getOtherMsg(), routineLoadJob.getOtherMsg().endsWith(txnStatusChangeReasonString));
 
-        Assert.assertEquals(new Long(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
+        Assert.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
 
         routineLoadTaskInfoList.clear();
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
-        Assert.assertEquals(new Long(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
-        Assert.assertEquals(new Long(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
+        Assert.assertEquals(Long.valueOf(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
+        Assert.assertEquals(Long.valueOf(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
     }
 
     @Test
@@ -235,13 +235,43 @@ public class RoutineLoadJobTest {
         routineLoadJob.afterCommitted(transactionState, true);
 
         Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
-        Assert.assertEquals(new Long(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
+        Assert.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
 
-        Assert.assertEquals(new Long(prevValue + 1), entity.counterRoutineLoadCommittedTasksTotal.getValue());
+        Assert.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadCommittedTasksTotal.getValue());
     }
 
     @Test
-    public void testGetShowInfo() throws UserException {
+    public void testPulsarGetShowInfo() {
+        {
+            // PAUSE state
+            PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+            ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+            Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
+
+            List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+                    .anyMatch(entity -> entity.equals(errorReason.toString())));
+        }
+
+        {
+            // PAUSE state
+            PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(
+                    1L, "task1", 1, 1, "http://url", "task-1", "sub-1");
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+            ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+            Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
+
+            List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+                    .anyMatch(entity -> entity.equals(errorReason.toString())));
+        }
+    }
+
+    @Test
+    public void testKafkaGetShowInfo() throws UserException {
         {
             // PAUSE state
             KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
