@@ -29,6 +29,7 @@ import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
+import com.starrocks.connector.hudi.HudiRemoteFileIO;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -334,4 +335,20 @@ public class RemoteFileOperationsTest {
         }
     }
 
+    @Test
+    public void testRemotePathKeySetFileScanContext() {
+        RemotePathKey pathKey = new RemotePathKey("hello", true);
+        Assert.assertNull(pathKey.getTableLocation());
+        Assert.assertNull(pathKey.getScanContext());
+
+        RemoteFileScanContext scanContext = null;
+        scanContext = HudiRemoteFileIO.getScanContext(pathKey, "tableLocation");
+        Assert.assertNotNull(scanContext);
+        pathKey.setScanContext(scanContext);
+        Assert.assertEquals(pathKey.getTableLocation(), "tableLocation");
+        Assert.assertTrue(pathKey.getScanContext() == scanContext);
+
+        RemoteFileScanContext scanContext1 = HudiRemoteFileIO.getScanContext(pathKey, "null");
+        Assert.assertTrue(pathKey.getScanContext() == scanContext1);
+    }
 }

@@ -29,6 +29,8 @@ public class RemotePathKey {
     public RemotePathKey(String path, boolean isRecursive) {
         this.path = path;
         this.isRecursive = isRecursive;
+        this.scanContext = null;
+        this.tableLocation = null;
     }
 
     public boolean approximateMatchPath(String basePath, boolean isRecursive) {

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hudi;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -128,7 +129,8 @@ public class HudiRemoteFileIO implements RemoteFileIO {
     }
 
     @NotNull
-    private static RemoteFileScanContext getScanContext(RemotePathKey pathKey, String tableLocation) {
+    @VisibleForTesting
+    public static RemoteFileScanContext getScanContext(RemotePathKey pathKey, String tableLocation) {
         RemoteFileScanContext scanContext = pathKey.getScanContext();
         // scan context is nullptr when cache is doing reload, and we don't have place to set scan context.
         if (scanContext == null) {
