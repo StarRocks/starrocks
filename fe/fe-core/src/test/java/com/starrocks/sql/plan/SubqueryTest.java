@@ -1794,21 +1794,22 @@ public class SubqueryTest extends PlanTestBase {
     public void testCorrelatedPredicateRewrite_1() throws Exception {
         String sql = "select v1 from t0 where v1 = 1 or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-        assertContains(plan, "7:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 8: v4\n" +
+        assertContains(plan, "  |----14:AGGREGATE (merge finalize)\n" +
+                "  |    |  output: count(11: countRows), count(12: countNotNulls)\n" +
+                "  |    |  group by: 10: v4\n" +
+                "  |    |  \n" +
+                "  |    13:EXCHANGE");
+        assertContains(plan, "  9:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 8: v4\n" +
                 "  |  \n" +
-                "  6:EXCHANGE");
-        assertContains(plan, "13:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(1), count(9: v4)\n" +
-                "  |  group by: 10: v4\n" +
-                "  |  \n" +
-                "  12:Project\n" +
-                "  |  <slot 9> : 4: v4\n" +
-                "  |  <slot 10> : 4: v4\n" +
-                "  |  \n" +
-                "  11:EXCHANGE");
+                "  |----8:AGGREGATE (merge finalize)\n" +
+                "  |    |  group by: 8: v4\n" +
+                "  |    |  \n" +
+                "  |    7:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:EXCHANGE");
     }
 
     @Test
@@ -1817,20 +1818,21 @@ public class SubqueryTest extends PlanTestBase {
                 "or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "24:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 12: v4\n" +
+        assertContains(plan, "  |----30:AGGREGATE (merge finalize)\n" +
+                "  |    |  output: count(15: countRows), count(16: countNotNulls)\n" +
+                "  |    |  group by: 14: v4\n" +
+                "  |    |  \n" +
+                "  |    29:EXCHANGE");
+        assertContains(plan, "  17:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 19: v5\n" +
                 "  |  \n" +
-                "  23:EXCHANGE");
-        assertContains(plan, "30:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(1), count(13: v4)\n" +
-                "  |  group by: 14: v4\n" +
-                "  |  \n" +
-                "  29:Project\n" +
-                "  |  <slot 13> : 8: v4\n" +
-                "  |  <slot 14> : 8: v4\n" +
-                "  |  \n" +
-                "  28:EXCHANGE");
+                "  |----16:AGGREGATE (merge finalize)\n" +
+                "  |    |  output: count(20: countRows), count(21: countNotNulls)\n" +
+                "  |    |  group by: 19: v5\n" +
+                "  |    |  \n" +
+                "  |    15:EXCHANGE");
     }
 
     @Test
