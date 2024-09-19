@@ -97,6 +97,9 @@ public class HudiRemoteFileIO implements RemoteFileIO {
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
 
         RemotePathKey.HudiContext hudiContext = pathKey.getHudiContext();
+        if (hudiContext == null) {
+            hudiContext = new RemotePathKey.HudiContext();
+        }
         createHudiContext(hudiContext, tableLocation);
         if (hudiContext.lastInstant == null) {
             return resultPartitions.put(pathKey, fileDescs).build();
