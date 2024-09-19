@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.alter.AlterJobException;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -70,6 +71,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class CreateTableTest {
     private static ConnectContext connectContext;
@@ -93,6 +95,7 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
         UtFrameUtils.setUpForPersistTest();
+        starRocksAssert.useDatabase("test");
     }
 
     private static void createTable(String sql) throws Exception {
@@ -2073,5 +2076,61 @@ public class CreateTableTest {
         String createTableSql = starRocksAssert.showCreateTable("show create table news_rt;");
         starRocksAssert.dropTable("news_rt");
         starRocksAssert.withTable(createTableSql);
+    }
+
+    @Test
+    public void testCreateTableWithNullableColumns1() throws Exception {
+        String createSQL = "CREATE TABLE list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN ((NULL),(\"chongqing\")) ,\n" +
+                "     PARTITION p2 VALUES IN ((\"guangdong\")) \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createSQL);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                "list_partition_tbl1");
+        PartitionInfo info = table.getPartitionInfo();
+        Assert.assertTrue(info.isListPartition());
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) info;
+        Map<Long, List<List<LiteralExpr>>> long2Literal =  listPartitionInfo.getMultiLiteralExprValues();
+        Assert.assertEquals(2, long2Literal.size());
+    }
+
+    @Test
+    public void testCreateTableWithNullableColumns2() {
+        String createSQL = "\n" +
+                "CREATE TABLE t3 (\n" +
+                "  dt date,\n" +
+                "  city varchar(20),\n" +
+                "  name varchar(20),\n" +
+                "  num int\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(dt, city, name)\n" +
+                "PARTITION BY LIST (dt) (\n" +
+                "    PARTITION p1 VALUES IN ((NULL), (\"2022-04-01\")),\n" +
+                "    PARTITION p2 VALUES IN ((\"2022-04-02\")),\n" +
+                "    PARTITION p3 VALUES IN ((\"2022-04-03\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(dt) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            starRocksAssert.withTable(createSQL);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Partition column[dt] could not be null but contains null " +
+                    "value in partition[p1]."));
+        }
     }
 }

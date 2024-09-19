@@ -210,7 +210,7 @@ public class Explain {
             String partitionAndBucketInfo = "partitionRatio: " +
                     scan.getSelectedPartitionId().size() +
                     "/" +
-                    ((OlapTable) scan.getTable()).getPartitions().size() +
+                    ((OlapTable) scan.getTable()).getVisiblePartitionNames().size() +
                     ", tabletRatio: " +
                     scan.getSelectedTabletId().size() +
                     "/" +
