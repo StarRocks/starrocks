@@ -1460,8 +1460,8 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
-                "  |  <slot 14> : 8\n" +
-                "  |  <slot 15> : clone(8)\n" +
+                "  |  <slot 14> : clone(8)\n" +
+                "  |  <slot 15> : 8\n" +
                 "  |  \n" +
                 "  2:Decode\n" +
                 "  |  <dict id 16> : <string id 8>\n" +
