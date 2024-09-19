@@ -548,6 +548,15 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
     return Status::OK();
 }
 
+// Seperate chunk from protobuf, so `SerializeToZeroCopyStream` won't fail because of >2GB serialize.
+//
+// IOBuf format:
+// | protobuf len |
+// | protobuf (without chunk) |
+// | chunk (1) |
+// | chunk (2) |
+// | chunk (...) |
+// | chunk (N) |
 template <typename T>
 void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf) {
     butil::IOBuf proto_iobuf; // used for store protbuf serialize data
