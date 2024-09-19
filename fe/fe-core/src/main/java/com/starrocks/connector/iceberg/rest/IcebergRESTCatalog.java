@@ -41,6 +41,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.BadRequestException;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
@@ -187,7 +188,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public List<String> listTables(String dbName) {
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
-        List<TableIdentifier> viewIdentifiers = delegate.listViews(Namespace.of(dbName));
+        List<TableIdentifier> viewIdentifiers = new ArrayList<>();
+        try {
+            viewIdentifiers = delegate.listViews(Namespace.of(dbName));
+        } catch (BadRequestException e) {
+            LOG.warn("Failed to list views from {} database. Perhaps the server side does not implement the interface. " +
+                    "Ask the user to check it", dbName, e);
+        }
         if (!viewIdentifiers.isEmpty()) {
             tableIdentifiers.addAll(viewIdentifiers);
         }
