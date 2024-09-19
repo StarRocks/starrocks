@@ -1574,25 +1574,25 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
         sb.append("\"").append(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(desireTaskConcurrentNum)).append("\",\n");
+        sb.append(desireTaskConcurrentNum).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(maxErrorNum)).append("\",\n");
+        sb.append(maxErrorNum).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(maxFilterRatio)).append("\",\n");
+        sb.append(maxFilterRatio).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(taskSchedIntervalS)).append("\",\n");
+        sb.append(taskSchedIntervalS).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(maxBatchRows)).append("\",\n");
+        sb.append(maxBatchRows).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.TASK_CONSUME_SECOND).append("\"=\"");
-        sb.append(String.valueOf(taskConsumeSecond)).append("\",\n");
+        sb.append(taskConsumeSecond).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND).append("\"=\"");
-        sb.append(String.valueOf(taskTimeoutSecond)).append("\",\n");
+        sb.append(taskTimeoutSecond).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.FORMAT).append("\"=\"");
         sb.append(getFormat()).append("\",\n");
@@ -1601,19 +1601,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         sb.append(getJsonPaths()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY).append("\"=\"");
-        sb.append(Boolean.toString(isStripOuterArray())).append("\",\n");
+        sb.append(isStripOuterArray()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
         sb.append(getJsonRoot()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
-        sb.append(Boolean.toString(isStrictMode())).append("\",\n");
+        sb.append(isStrictMode()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.TIMEZONE).append("\"=\"");
         sb.append(getTimezone()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.PARTIAL_UPDATE).append("\"=\"");
-        sb.append(Boolean.toString(isPartialUpdate())).append("\",\n");
+        sb.append(isPartialUpdate()).append("\",\n");
 
         if (getMergeCondition() != null) {
             sb.append("\"").append(LoadStmt.MERGE_CONDITION).append("\"=\"");
@@ -1621,7 +1621,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         sb.append("\"").append(CreateRoutineLoadStmt.TRIMSPACE).append("\"=\"");
-        sb.append(Boolean.toString(isTrimspace())).append("\",\n");
+        sb.append(isTrimspace()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.ENCLOSE).append("\"=\"");
         sb.append(StringEscapeUtils.escapeJava(String.valueOf(getEnclose()))).append("\",\n");
@@ -1630,7 +1630,24 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         sb.append(StringEscapeUtils.escapeJava(String.valueOf(getEscape()))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.LOG_REJECTED_RECORD_NUM_PROPERTY).append("\"=\"");
+<<<<<<< HEAD
         sb.append(String.valueOf(getLogRejectedRecordNum())).append("\"\n");
+=======
+        sb.append(getLogRejectedRecordNum());
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            sb.append("\",\n");
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_WAREHOUSE).append("\"=\"");
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse != null) {
+                sb.append(warehouse.getName()).append("\"\n");
+            } else {
+                sb.append("NULL").append("\"\n");
+            }
+        } else {
+            sb.append("\"\n");
+        }
+>>>>>>> 5bc037dadd ([BugFix] Fix the npe of show routine load (#50963))
 
         sb.append(")\n");
         return sb.toString();
