@@ -77,7 +77,7 @@ public class OptOlapPartitionPruner {
 
         if (selectedPartitionIds == null) {
             selectedPartitionIds =
-                    table.getPartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
+                    table.getVisiblePartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
                             Collectors.toList());
             // some test cases need to perceive partitions pruned, so we can not filter empty partitions.
         } else {
