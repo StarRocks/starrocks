@@ -3,9 +3,9 @@
 package com.starrocks.epack.connector.delta;
 
 import com.databricks.sdk.WorkspaceClient;
+import com.databricks.sdk.service.catalog.DataSourceFormat;
 import com.databricks.sdk.service.catalog.SchemaInfo;
 import com.databricks.sdk.service.catalog.TableInfo;
-import com.databricks.sdk.service.catalog.TableType;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
@@ -69,7 +69,7 @@ public class DatabricksUnityMetastore implements IMetastore {
             List<String> tableNames = Lists.newArrayList();
             try {
                 tableNames = Streams.stream(workspaceClient.tables().list(databricksCatalogName, dbName).iterator()).
-                        filter(tableInfo -> tableInfo.getTableType().equals(TableType.MANAGED)).
+                        filter(tableInfo -> tableInfo.getDataSourceFormat() == DataSourceFormat.DELTA).
                         map(TableInfo::getName).collect(Collectors.toList());
             } catch (NullPointerException e) {
                 // empty database will throw null pointer exception, catch here and return empty list
@@ -102,7 +102,7 @@ public class DatabricksUnityMetastore implements IMetastore {
             if (tableInfo == null) {
                 return null;
             }
-            if (!tableInfo.getTableType().equals(TableType.MANAGED)) {
+            if (tableInfo.getDataSourceFormat() != DataSourceFormat.DELTA) {
                 return null;
             }
             String path = tableInfo.getStorageLocation();

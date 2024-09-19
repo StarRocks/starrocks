@@ -9,6 +9,7 @@ import com.databricks.sdk.service.catalog.CatalogsAPI;
 import com.databricks.sdk.service.catalog.CatalogsService;
 import com.databricks.sdk.service.catalog.CreateCatalog;
 import com.databricks.sdk.service.catalog.CreateSchema;
+import com.databricks.sdk.service.catalog.DataSourceFormat;
 import com.databricks.sdk.service.catalog.DeleteCatalogRequest;
 import com.databricks.sdk.service.catalog.DeleteSchemaRequest;
 import com.databricks.sdk.service.catalog.DeleteTableRequest;
@@ -203,12 +204,14 @@ public class MockDatabricksWorkspaceClient extends WorkspaceClient {
             tableInfo1.setSchemaName("db1");
             tableInfo1.setName("table1");
             tableInfo1.setTableType(TableType.MANAGED);
+            tableInfo1.setDataSourceFormat(DataSourceFormat.DELTA);
 
             TableInfo tableInfo2 = new TableInfo();
             tableInfo2.setCatalogName("databricks_catalog");
             tableInfo2.setSchemaName("db1");
             tableInfo2.setName("table2");
             tableInfo2.setTableType(TableType.MANAGED);
+            tableInfo2.setDataSourceFormat(DataSourceFormat.DELTA);
 
             return new Iterable<TableInfo>() {
                 @Override
@@ -228,6 +231,7 @@ public class MockDatabricksWorkspaceClient extends WorkspaceClient {
             tableInfo.setCreatedAt(1000L);
             tableInfo.setStorageLocation("s3://bucket/path/to/" + names[2]);
             tableInfo.setTableType(TableType.MANAGED);
+            tableInfo.setDataSourceFormat(DataSourceFormat.DELTA);
             return tableInfo;
         }
     }
