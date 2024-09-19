@@ -15,12 +15,16 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.GlobalStateMgr;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public abstract class RecyclePartitionInfo extends JsonWriter {
     @SerializedName(value = "dbId")
@@ -37,6 +41,8 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     protected boolean isInMemory;
     @SerializedName(value = "recoverable")
     protected boolean recoverable;
+
+    protected List<CompletableFuture<Boolean>> asyncDeleteReturn = Lists.newArrayList();
 
     public RecyclePartitionInfo() {
         recoverable = true;
@@ -90,9 +96,13 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         this.recoverable = recoverable;
     }
 
-    public boolean delete() {
+    public boolean submitAndCheckAsyncDelete() {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
         return true;
+    }
+
+    public List<CompletableFuture<Boolean>> getAsyncDeleteReturn() {
+        return asyncDeleteReturn;
     }
 
     abstract Range<PartitionKey> getRange();

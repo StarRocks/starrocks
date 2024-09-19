@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -220,5 +221,30 @@ public class Utils {
         }
 
         return Optional.of(node.getWarehouseId());
+    }
+
+    public static boolean checkAllAsyncTaskFinished(List<CompletableFuture<Boolean>> asyncTaskReturn) {
+        boolean allFinished = false;
+        allFinished = asyncTaskReturn.stream().allMatch(future -> future != null && future.isDone());
+        return allFinished;
+    }
+
+    // if return is false, means not all tasks have finished or some task failed
+    public static boolean checkAllAsyncTaskSuccessed(List<CompletableFuture<Boolean>> asyncTaskReturn) {
+        if (!checkAllAsyncTaskFinished(asyncTaskReturn)) {
+            return false;
+        }
+
+        try {
+            for (CompletableFuture<Boolean> future : asyncTaskReturn) {
+                if (!future.get()) {
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            return false;
+        }
+
+        return true;
     }
 }

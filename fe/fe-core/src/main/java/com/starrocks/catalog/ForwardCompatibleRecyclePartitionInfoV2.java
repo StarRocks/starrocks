@@ -25,4 +25,8 @@ public class ForwardCompatibleRecyclePartitionInfoV2 extends RecyclePartitionInf
                                                    DataCacheInfo dataCacheInfo) {
         super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, dataCacheInfo);
     }
+
+    public ForwardCompatibleRecyclePartitionInfoV2() {
+        super();
+    }
 }

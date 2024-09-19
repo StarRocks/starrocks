@@ -25,6 +25,10 @@ public class RecycleListPartitionInfo extends RecyclePartitionInfoV2 {
         setRecoverable(false);
     }
 
+    public RecycleListPartitionInfo() {
+        super();
+    }
+
     @Override
     public void recover(OlapTable table) throws DdlException {
         throw new DdlException("Does not support recover list partition");

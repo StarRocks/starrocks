@@ -47,6 +47,10 @@ public class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements
         this.range = range;
     }
 
+    public RecycleRangePartitionInfo() {
+        super();
+    }
+
     @Override
     public Range<PartitionKey> getRange() {
         return range;

@@ -130,7 +130,7 @@ public class ReplaceLakePartitionTest {
         return new Partition(newPartitionId, partitionName, index, null);
     }
 
-    private void erasePartition() {
+    private void erasePartitionOrTableAndUntilFinished(long id) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -174,17 +174,32 @@ public class ReplaceLakePartitionTest {
             }
         };
 
-        ExceptionChecker.expectThrowsNoException(()
-                            -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
+        while (GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(id) != null) {
+            ExceptionChecker.expectThrowsNoException(()
+                                -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+
+        while (GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(id) != null) {
+            ExceptionChecker.expectThrowsNoException(()
+                                -> GlobalStateMgr.getCurrentState().getRecycleBin().eraseTable(Long.MAX_VALUE));
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
     }
 
     @Test
     public void testUnPartitionedLakeTableReplacePartition() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
         tbl.replacePartition(partitionName, tempPartitionName);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-        erasePartition();
-        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        erasePartitionOrTableAndUntilFinished(partitionId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
     }
 
     @Test
@@ -192,9 +207,9 @@ public class ReplaceLakePartitionTest {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(newPartition);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-        erasePartition();
-        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        erasePartitionOrTableAndUntilFinished(partitionId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
     }
 
     @Test
@@ -202,9 +217,9 @@ public class ReplaceLakePartitionTest {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(newPartition);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-        erasePartition();
-        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        erasePartitionOrTableAndUntilFinished(partitionId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
     }
 
     @Test
@@ -212,8 +227,30 @@ public class ReplaceLakePartitionTest {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(newPartition);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
-        erasePartition();
-        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getRecycleBin().isContainedInidToRecycleTime(partitionId));
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        erasePartitionOrTableAndUntilFinished(partitionId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
+    }
+
+    @Test
+    public void testLakeTableDeleteFromRecycleBin() {
+        LakeTable tbl = null;
+        tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
+        tbl.delete(dbId, false);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
+        erasePartitionOrTableAndUntilFinished(tableId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
+
+        tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
+        tbl.delete(dbId, false);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
+        erasePartitionOrTableAndUntilFinished(tableId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
+
+        tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
+        tbl.delete(dbId, false);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
+        erasePartitionOrTableAndUntilFinished(tableId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
     }
 }
