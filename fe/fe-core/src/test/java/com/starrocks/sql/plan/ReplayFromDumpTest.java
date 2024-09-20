@@ -958,4 +958,20 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertThrows(StarRocksPlannerException.class,
                 () -> getPlanFragment(getDumpInfoFromFile("query_dump/query_timeout"), null, TExplainLevel.NORMAL));
     }
+
+    @Test
+    public void testQueryCacheMisuseExogenousRuntimeFilter() throws Exception {
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableQueryCache(true);
+            QueryDumpInfo dumpInfo =
+                    getDumpInfoFromJson(getDumpInfoFromFile("query_dump/query_cache_misuse_exogenous_runtime_filter"));
+            ExecPlan execPlan = UtFrameUtils.getPlanFragmentFromQueryDump(connectContext, dumpInfo);
+            Assert.assertTrue(execPlan.getFragments().stream().noneMatch(frag -> frag.getCacheParam() != null));
+            Assert.assertTrue(
+                    execPlan.getFragments().stream().anyMatch(frag -> !frag.getProbeRuntimeFilters().isEmpty()));
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
+    }
 }

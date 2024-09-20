@@ -606,14 +606,6 @@ public class DefaultCoordinator extends Coordinator {
         setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcIpAddress());
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
-            // TODO (by satanson): Other DataSink except ResultSink can not support global
-            //  runtime filter merging at present, we should support it in future.
-            // pipeline-level runtime filter needs to derive RuntimeFilterLayout, so we collect
-            // RuntimeFilterDescription
-            for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
-                PlanFragment fragment = execFragment.getPlanFragment();
-                fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            }
             return;
         }
 
@@ -769,8 +761,6 @@ public class DefaultCoordinator extends Coordinator {
 
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             PlanFragment fragment = execFragment.getPlanFragment();
-            fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
                 for (final FragmentInstance instance : execFragment.getInstances()) {
