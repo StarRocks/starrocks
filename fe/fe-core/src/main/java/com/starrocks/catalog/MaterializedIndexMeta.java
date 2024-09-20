@@ -134,10 +134,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.indexId = indexId;
     }
 
-    public void setSchemaIdForRestore(long schemaId) {
-        this.schemaId = schemaId;
-    }
-
     public KeysType getKeysType() {
         return keysType;
     }
