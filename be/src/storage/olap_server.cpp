@@ -117,7 +117,7 @@ Status StorageEngine::start_bg_threads() {
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
     for (auto& tmp_store : _store_map) {
-        data_dirs.push_back(tmp_store.second);
+        data_dirs.push_back(tmp_store.second.get());
     }
     const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
 
