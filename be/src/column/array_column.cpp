@@ -618,6 +618,22 @@ Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type)
     return Status::OK();
 }
 
+size_t ArrayColumn::get_total_elements_num(const NullColumnPtr& null_column) const {
+    if (null_column == nullptr) {
+        return _elements->size();
+    }
+    DCHECK_LE(_offsets->size() -1, null_column->size());
+    size_t elements_num = 0;
+    size_t num_rows = _offsets->size() - 1;
+    const auto& null_data = null_column->get_data();
+    for (size_t i = 0;i < num_rows;i++) {
+        if (!null_data[i]) {
+            elements_num += _offsets->get_data()[i + 1] - _offsets->get_data()[i];
+        }
+    }
+    return elements_num;
+}
+
 template <bool ConstV1, bool ConstV2, bool IgnoreNull>
 bool ArrayColumn::compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2,
                                                const NullColumnPtr& null_column) {
