@@ -122,6 +122,8 @@ public class KeyMgr {
                     Preconditions.checkState(masterKey.equals(masterKeyFromConfig),
                             "default_master_key changed meta:%s config:%s", masterKey.toSpec(),
                             masterKeyFromConfig.toSpec());
+                    // verify config is correct by generating new key
+                    masterKey.generateKey();
                 }
                 if (idToKey.size() == 1) {
                     // setup first KEK

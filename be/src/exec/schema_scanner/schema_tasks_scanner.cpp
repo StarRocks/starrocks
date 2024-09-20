@@ -69,12 +69,9 @@ DatumArray SchemaTasksScanner::_build_row() {
                                 ? TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj())
                                 : kNullDatum;
 
-    return {
-            Slice(task.task_name),  create_time,           Slice(task.schedule),
-            Slice(task.catalog),    Slice(task.warehouse), Slice(task.database),
-            Slice(task.definition), expire_time,           Slice(task.properties),
-            Slice(task.creator)
-    };
+    return {Slice(task.task_name),  create_time,          Slice(task.schedule),   Slice(task.catalog),
+            Slice(task.warehouse),  Slice(task.database), Slice(task.definition), expire_time,
+            Slice(task.properties), Slice(task.creator)};
 }
 
 Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {

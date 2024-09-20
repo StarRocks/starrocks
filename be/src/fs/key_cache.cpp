@@ -270,7 +270,14 @@ static StatusOr<KeySpec> get_key_spec_from_vault(const std::string url) {
         LOG(WARNING) << err;
         return Status::InternalError(err);
     }
-    return get_key_spec_from_vault_response(resp_string);
+    auto st = get_key_spec_from_vault_response(resp_string);
+    if (st.ok()) {
+        return st;
+    } else {
+        LOG(WARNING) << "get_key_spec_from_vault failed, url:" << url_without_query << "resp:" << resp_string
+                     << " error:" << st.status().message();
+        return st.status().clone_and_append(fmt::format(" url:{} resp:{}", url_without_query, resp_string));
+    }
 }
 
 static std::mutex g_get_key_spec_from_vault_cache_lock;
