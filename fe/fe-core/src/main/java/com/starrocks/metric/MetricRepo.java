@@ -917,8 +917,8 @@ public final class MetricRepo {
 
         userConnectionMap.forEach((username, connValue) -> {
             GaugeMetricImpl<Integer> metricConnect =
-                new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
-                    "total connection");
+                    new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
+                        "total connection");
             metricConnect.addLabel(new MetricLabel("user", username));
             metricConnect.setValue(connValue.get());
             userConnect.add(metricConnect);
