@@ -192,11 +192,7 @@ public class GlobalFunctionMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
-        for (int i = 0; i < numJson; ++i) {
-            Function function = reader.readJson(Function.class);
-            replayAddFunction(function);
-        }
+        reader.readCollection(Function.class, this::replayAddFunction);
     }
 }
 

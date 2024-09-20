@@ -12,24 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.persist.metablock;
+package com.starrocks.persist.gson;
 
-import com.google.gson.annotations.SerializedName;
+public class SubtypeNotFoundException extends RuntimeException {
 
-public class IntObject {
+    private final String subtype;
 
-    @SerializedName("v")
-    private int value;
-
-    public IntObject(int value) {
-        this.value = value;
+    public SubtypeNotFoundException(String subtype, String message) {
+        super(message);
+        this.subtype = subtype;
     }
 
-    public int getValue() {
-        return value;
-    }
-
-    public void setValue(int value) {
-        this.value = value;
+    public String getSubtype() {
+        return subtype;
     }
 }
