@@ -85,7 +85,15 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
 bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
+<<<<<<< HEAD
     auto* wg_entity = _sched_entity(task.workgroup);
+=======
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
+
+    auto* wg_entity = _sched_entity(task.workgroup.get());
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
     wg_entity->set_in_queue(this);
     RETURN_IF_UNLIKELY(!wg_entity->queue()->try_offer(std::move(task)), false);
 
@@ -101,6 +109,28 @@ bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
 void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
+<<<<<<< HEAD
+=======
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
+
+    auto* wg_entity = _sched_entity(task.workgroup.get());
+    wg_entity->set_in_queue(this);
+    wg_entity->queue()->force_put(std::move(task));
+
+    if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
+        _enqueue_workgroup(wg_entity);
+    }
+
+    _num_tasks++;
+    _cv.notify_one();
+}
+
+void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+    auto* wg = task.workgroup.get();
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
     auto* wg_entity = _sched_entity(wg);
 
     // Update bandwidth control information.
