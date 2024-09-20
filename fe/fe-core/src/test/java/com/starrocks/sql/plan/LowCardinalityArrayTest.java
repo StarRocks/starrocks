@@ -175,6 +175,17 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     }
 
     @Test
+    public void testWithCTE() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql = "with cte as (select * from supplier_nullable, unnest(S_ADDRESS)) " +
+                "select * from cte union all select * from cte";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "41: DictDefine(39: S_ADDRESS, [<place-holder>])");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
     public void testArrayPredicate3() throws Exception {
         String sql = "select S_ADDRESS from supplier_nullable where S_ADDRESS = ['a', 'b']";
         String plan = getVerboseExplain(sql);
