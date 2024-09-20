@@ -718,6 +718,14 @@ public class CatalogRecycleBinTest {
                 minTimes = 0;
             }
         };
+        String tz = "Asia/Shanghai";
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
 
         recycleBin.eraseDatabase(now);
 
@@ -757,6 +765,14 @@ public class CatalogRecycleBinTest {
                 editLog.logEraseMultiTables((List<Long>) any);
                 minTimes = 0;
                 result = null;
+            }
+        };
+        String tz = "Asia/Shanghai";
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
+                minTimes = 0;
+                result = tz;
             }
         };
 
@@ -817,6 +833,14 @@ public class CatalogRecycleBinTest {
             {
                 editLog.logErasePartition(anyLong);
                 minTimes = 0;
+            }
+        };
+        String tz = "Asia/Shanghai";
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
+                minTimes = 0;
+                result = tz;
             }
         };
 
