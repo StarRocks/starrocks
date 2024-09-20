@@ -916,7 +916,7 @@ public final class MetricRepo {
         Map<String, AtomicInteger> userConnectionMap = ExecuteEnv.getInstance().getScheduler().getUserConnectionMap();
 
         userConnectionMap.forEach((username, connValue) -> {
-            GaugeMetricImpl<Long> metricConnect =
+            GaugeMetricImpl<Integer> metricConnect =
                 new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
                     "total connection");
             metricConnect.addLabel(new MetricLabel("user", username));
