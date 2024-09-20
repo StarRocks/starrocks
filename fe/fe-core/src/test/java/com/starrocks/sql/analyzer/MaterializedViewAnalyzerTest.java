@@ -26,11 +26,14 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -40,6 +43,7 @@ import mockit.Mocked;
 import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
@@ -483,5 +487,33 @@ public class MaterializedViewAnalyzerTest {
         Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), expect);
         Assert.assertEquals(IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i)),
                 isChanged);
+    }
+
+    @Test
+    public void testReplicationNum() throws Exception {
+        short defaultReplication = Config.default_replication_num;
+        final String sql = "create materialized view mv1 refresh manual as " +
+                "SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;";
+
+        {
+            Config.default_replication_num = 1;
+            CreateMaterializedViewStatement statementBase =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            starRocksAssert.getCtx());
+            MaterializedViewAnalyzer.analyze(statementBase, starRocksAssert.getCtx());
+            Assertions.assertEquals("1",
+                    statementBase.getProperties().get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+        }
+        {
+            Config.default_replication_num = 3;
+            CreateMaterializedViewStatement statementBase =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            starRocksAssert.getCtx());
+            MaterializedViewAnalyzer.analyze(statementBase, starRocksAssert.getCtx());
+            Assertions.assertEquals("3",
+                    statementBase.getProperties().get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+        }
+
+        Config.default_replication_num = defaultReplication;
     }
 }
