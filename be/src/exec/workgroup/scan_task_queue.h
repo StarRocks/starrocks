@@ -20,6 +20,7 @@
 #include <queue>
 #include <set>
 #include <unordered_set>
+#include <utility>
 
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -32,9 +33,19 @@ public:
     using WorkFunction = std::function<void()>;
 
     ScanTask() : ScanTask(nullptr, nullptr) {}
+<<<<<<< HEAD
     explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
     ScanTask(WorkGroup* workgroup, WorkFunction work_function)
             : workgroup(workgroup), work_function(std::move(work_function)) {}
+=======
+    explicit ScanTask(WorkFunction work_function) : ScanTask(nullptr, std::move(work_function)) {}
+    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function)
+            : workgroup(std::move(workgroup)), work_function(std::move(work_function)) {}
+    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function, YieldFunction yield_function)
+            : workgroup(std::move(workgroup)),
+              work_function(std::move(work_function)),
+              yield_function(std::move(yield_function)) {}
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
     ~ScanTask() = default;
 
     DISALLOW_COPY(ScanTask);
@@ -49,7 +60,12 @@ public:
     }
 
 public:
+<<<<<<< HEAD
     WorkGroup* workgroup;
+=======
+    WorkGroupPtr workgroup;
+    YieldContext work_context;
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
     WorkFunction work_function;
     int priority = 0;
 };
