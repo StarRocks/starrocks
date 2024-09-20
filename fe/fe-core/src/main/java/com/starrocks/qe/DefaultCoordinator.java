@@ -653,8 +653,6 @@ public class DefaultCoordinator extends Coordinator {
 
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             PlanFragment fragment = execFragment.getPlanFragment();
-            fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
                 for (final FragmentInstance instance : execFragment.getInstances()) {

@@ -367,6 +367,8 @@ public class PlanFragmentBuilder {
         }
 
         fragments.forEach(PlanFragment::removeDictMappingProbeRuntimeFilters);
+        fragments.forEach(PlanFragment::collectBuildRuntimeFilters);
+        fragments.forEach(PlanFragment::collectProbeRuntimeFilters);
 
         if (useQueryCache(execPlan)) {
             for (PlanFragment fragment : execPlan.getFragments()) {
