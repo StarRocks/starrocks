@@ -219,7 +219,7 @@ public class ConnectScheduler {
     }
     
     public Map<String, AtomicInteger> getUserConnectionMap() {
-        return connByUser;
+        return connCountByUser;
     }
 
     private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext,

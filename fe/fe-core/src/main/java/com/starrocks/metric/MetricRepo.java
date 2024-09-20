@@ -921,8 +921,7 @@ public final class MetricRepo {
                         "total connection");
             metricConnect.addLabel(new MetricLabel("user", username));
             metricConnect.setValue(connValue.get());
-            userConnect.add(metricConnect);
-            visitor.visit(userConnect);
+            visitor.visit(metricConnect);
         });
     }
 
