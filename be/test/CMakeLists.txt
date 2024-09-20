@@ -6,7 +6,6 @@ set(EXEC_FILES
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
-        ./column/column_pool_test.cpp
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
