@@ -100,7 +100,6 @@ struct HashTableSlotDescriptor {
 };
 
 struct JoinHashTableItems {
-    //TODO: memory continues problem?
     SegmentedChunkPtr build_chunk = nullptr;
     Columns key_columns;
     std::vector<HashTableSlotDescriptor> build_slots;
@@ -297,7 +296,7 @@ struct HashTableParam {
     bool mor_reader_mode = false;
 
     // TODO: optimize this according to chunk width
-    size_t build_chunk_segment_size = 2 << 15;
+    size_t build_chunk_segment_size = 1 << 16;
 };
 
 template <class T>

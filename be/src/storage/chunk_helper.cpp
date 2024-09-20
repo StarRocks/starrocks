@@ -614,6 +614,19 @@ bool ChunkPipelineAccumulator::is_finished() const {
     return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
 }
 
+template <class T>
+inline constexpr bool is_object = false;
+template <>
+inline constexpr bool is_object<ArrayColumn> = true;
+template <>
+inline constexpr bool is_object<StructColumn> = true;
+template <>
+inline constexpr bool is_object<MapColumn> = true;
+template <>
+inline constexpr bool is_object<JsonColumn> = true;
+template <class T>
+inline constexpr bool is_object<ObjectColumn<T>> = true;
+
 // Selective-copy data from SegmentedColumn according to provided index
 class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {
 public:
@@ -630,6 +643,7 @@ public:
         using ColumnT = FixedLengthColumnBase<T>;
         using ContainerT = typename ColumnT::Container*;
 
+        _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
         auto& columns = _segment_column->columns();
         size_t segment_size = _segment_column->segment_size();
@@ -652,6 +666,7 @@ public:
         using ColumnT = BinaryColumnBase<T>;
         using ContainerT = typename ColumnT::Container*;
 
+        _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
         auto& columns = _segment_column->columns();
         std::vector<ContainerT> buffers;
@@ -669,7 +684,8 @@ public:
 
     // Fallback implementation, it's usually used for Array/Struct/Map/Json
     template <class ColumnT>
-    Status do_visit(const ColumnT& column) {
+    typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
+        _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
         auto& columns = _segment_column->columns();
         for (uint32_t i = _from; i < _size; i++) {
@@ -681,7 +697,6 @@ public:
     }
 
     Status do_visit(const NullableColumn& column) {
-        auto output = ColumnHelper::as_column<NullableColumn>(_result);
         std::vector<ColumnPtr> data_columns, null_columns;
         for (auto& column : _segment_column->columns()) {
             NullableColumn::Ptr nullable = ColumnHelper::as_column<NullableColumn>(column);
@@ -689,12 +704,13 @@ public:
             null_columns.push_back(nullable->null_column());
         }
 
-        auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns);
+        auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size());
         SegmentedColumnSelectiveCopy copy_data(segmented_data_column, _indexes, _from, _size);
         (void)data_columns[0]->accept(&copy_data);
-        auto segmented_null_column = std::make_shared<SegmentedColumn>(null_columns);
+        auto segmented_null_column = std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size());
         SegmentedColumnSelectiveCopy copy_null(segmented_null_column, _indexes, _from, _size);
         (void)null_columns[0]->accept(&copy_null);
+        _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(copy_null.result()));
 
         return {};
     }
@@ -718,13 +734,15 @@ private:
     uint32_t _size;
 };
 
-SegmentedColumn::SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index) : _chunk(std::move(chunk)) {
+SegmentedColumn::SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index)
+        : _chunk(std::move(chunk)), _segment_size(_chunk->segment_size()) {
     for (auto& segment : _chunk->segments()) {
         _columns.push_back(segment->get_column_by_index(column_index));
     }
 }
 
-SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns) : _columns(std::move(columns)) {}
+SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size)
+        : _columns(std::move(columns)), _segment_size(segment_size) {}
 
 ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
     SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
@@ -733,7 +751,7 @@ ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t fro
 }
 
 size_t SegmentedColumn::segment_size() const {
-    return _chunk->segment_size();
+    return _segment_size;
 }
 
 size_t SegmentedChunk::segment_size() const {
