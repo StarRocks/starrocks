@@ -292,7 +292,14 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                 _latch.count_down();
             }
         };
+<<<<<<< HEAD
         RETURN_IF_ERROR(_executor->submit(std::move(task)));
+=======
+        auto yield_func = [&](workgroup::ScanTask&& task) { spill::IOTaskExecutor::force_submit(std::move(task)); };
+        auto io_task =
+                workgroup::ScanTask(_join_builder->spiller()->options().wg, std::move(task), std::move(yield_func));
+        RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
     }
     return Status::OK();
 }
