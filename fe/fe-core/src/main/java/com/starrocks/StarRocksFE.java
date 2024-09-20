@@ -41,6 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
+import com.starrocks.connector.jdbc.JDBCDriverManager;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.Journal;
@@ -112,6 +113,9 @@ public class StarRocksFE {
             checkCommandLineOptions(cmdLineOpts);
 
             Log4jConfig.initLogging();
+
+            // init
+            JDBCDriverManager.getInstance().init(starRocksDir + "/lib/jdbc_drivers");
 
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");

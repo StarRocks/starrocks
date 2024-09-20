@@ -52,7 +52,11 @@ public class JDBCConnector implements Connector {
         // CHECK_SUM used to check the `Dirver` file's integrity in `be`, we only compute it when creating catalog,
         // and put it into properties and then persisted, when `fe` replay create catalog, we can skip it.
         if (this.properties.get(JDBCResource.CHECK_SUM) == null) {
-            computeDriverChecksum();
+            try {
+                JDBCDriverManager.getInstance().createNewDriver(this.properties);
+            } catch (Exception e) {
+                throw new StarRocksConnectorException("Cannot get driver from url: " + properties.get(JDBCResource.DRIVER_URL));
+            }
         }
     }
 
