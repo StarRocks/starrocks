@@ -62,6 +62,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -1108,17 +1109,17 @@ public class MaterializedViewAnalyzer {
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
             // For replication_num, we select the maximum value of all tables replication_num
-            Short defaultReplicationNum = 1;
+            Optional<Short> maxReplicationFromTable = Optional.empty();
             for (Table table : tableNameTableMap.values()) {
                 if (table instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) table;
                     Short replicationNum = olapTable.getDefaultReplicationNum();
-                    if (replicationNum > defaultReplicationNum) {
-                        defaultReplicationNum = replicationNum;
+                    if (maxReplicationFromTable.isEmpty() || replicationNum > maxReplicationFromTable.get()) {
+                        maxReplicationFromTable = Optional.of(replicationNum);
                     }
                 }
             }
-            return defaultReplicationNum;
+            return maxReplicationFromTable.orElseGet(RunMode::defaultReplicationNum);
         }
 
         @Override
