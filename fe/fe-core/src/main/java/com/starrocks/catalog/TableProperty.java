@@ -47,11 +47,8 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
-=======
 import com.starrocks.common.Pair;
->>>>>>> 99b2440f02 ([BugFix] Fix partition ttl loss after FE restart (#51028))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
