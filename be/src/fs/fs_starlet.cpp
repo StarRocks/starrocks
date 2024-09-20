@@ -366,6 +366,10 @@ public:
     }
 
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        return iterate_dir2_by_prefix(dir, "", cb);
+    }
+
+    Status iterate_dir2_by_prefix(const std::string& dir, const std::string& file_prefix, const std::function<bool(DirEntry)>& cb) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
@@ -377,7 +381,7 @@ public:
                            .size = std::move(e.size),
                            .is_dir = std::move(e.is_dir)};
             return cb(entry);
-        });
+        }, file_prefix);
         return to_status(st);
     }
 

@@ -241,6 +241,8 @@ message VacuumRequest {
     optional bool delete_txn_log = 5;
     // ID of the partition the tablet belongs to.
     optional int64 partition_id = 6;
+    // The aborted txn ids waited to be GC
+    repeated int64 aborted_txn_ids = 7;
 }
 
 message VacuumResponse {

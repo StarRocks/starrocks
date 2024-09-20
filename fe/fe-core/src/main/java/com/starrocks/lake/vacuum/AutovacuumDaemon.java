@@ -129,6 +129,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+        Map<Long, Long> abortTxnIdsToTime = partition.getCopiedAbortedTxnIdToTimeAndReset();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
@@ -158,6 +159,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
         boolean needDeleteTxnLog = true;
+        boolean needDeleteAbotedTxnsFiles = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             ComputeNode node = entry.getKey();
@@ -169,8 +171,13 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
+            if (needDeleteAbotedTxnsFiles) {
+                vacuumRequest.abortedTxnIds = new ArrayList<>(abortTxnIdsToTime.keySet());
+            }
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
+            // Perform deletion of files for the aborted txns on the first node only.
+            needDeleteAbotedTxnsFiles = false;
             try {
                 LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 responseFutures.add(service.vacuum(vacuumRequest));
@@ -204,7 +211,22 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
         }
 
-        partition.setLastVacuumTime(startTime);
+        if (!abortTxnIdsToTime.isEmpty()) {
+            LOG.info("breakpoint 1");
+            if (hasError) {
+                // re-Vacuum all aborted txns if error occur
+                partition.addAbortedTxnIdsToTime(abortTxnIdsToTime);
+                LOG.info("breakpoint 2");
+            } else {
+                // re-Vacuum for the abored txns which are not expired
+                partition.addAbortedTxnIdsToTime(abortTxnIdsToTime.entrySet().stream()
+                        .filter(e -> e.getValue() + Config.lake_autovacuum_keep_partition_aborted_txn_sec * 1000 >
+                                System.currentTimeMillis()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+                LOG.info("breakpoint 3");
+            }
+        }
+
+        //partition.setLastVacuumTime(startTime);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,

@@ -53,6 +53,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -150,6 +151,26 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
     private volatile long lastVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
+
+    /*
+     * Aborted transactions wait to be GC on the files generated
+     * in share data mode. There are still two situations where missing deletions may occur:
+
+     * 1. For simplicity, this member will not be persistented. It will be empty if FE
+     *    restart or unconsistent when FE leader is changed. There will be no correctness
+     *    issues in either case. But may cause some useless vacuum request or miss deletion
+     *    for some files (it seems that low probability)
+     * 2. We maintain the abortedTxnId -> timestampWhenIdAdded mapping to make sure keep
+     *    the abortedTxnid for a period of time. Because when the transaction is aborted,
+     *    the garbage files may not be flushed immediately by BE/CN nodes. We even don't
+     *    know when all the files have been flushed. So we need to keep the infomation for
+     *    a period of time and continue to GC.
+
+     * In the future, we will introduced full vacuum to delete the remained files to deal with
+     * this cases.
+    */
+    private Map<Long, Long> lakeAbortedTxnsWaitedForGCToTime = Maps.newHashMap();
+    private ReentrantLock lakeAbortedTxnsWaitedForGCToTimeLock = new ReentrantLock();
 
     private Partition() {
     }
@@ -578,6 +599,37 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
                 && (baseIndex.equals(partition.baseIndex)
                 && distributionInfo.equals(partition.distributionInfo))
                 && Objects.equal(idToVisibleRollupIndex, partition.idToVisibleRollupIndex);
+    }
+
+    public void addAbortedTxnIdToTime(long txnId, long time) {
+        lakeAbortedTxnsWaitedForGCToTimeLock.lock();
+        try {
+            lakeAbortedTxnsWaitedForGCToTime.put(txnId, time);
+        } finally {
+            lakeAbortedTxnsWaitedForGCToTimeLock.unlock();
+        }
+    }
+
+    public void addAbortedTxnIdsToTime(Map<Long, Long> txnIdsToTime) {
+        lakeAbortedTxnsWaitedForGCToTimeLock.lock();
+        try {
+            lakeAbortedTxnsWaitedForGCToTime.putAll(txnIdsToTime);
+        } finally {
+            lakeAbortedTxnsWaitedForGCToTimeLock.unlock();
+        }
+    }
+
+    public Map<Long, Long> getCopiedAbortedTxnIdToTimeAndReset() {
+        Map<Long, Long> copied = Maps.newHashMap();
+        lakeAbortedTxnsWaitedForGCToTimeLock.lock();
+        try {
+            copied = Maps.newHashMap(lakeAbortedTxnsWaitedForGCToTime);
+            lakeAbortedTxnsWaitedForGCToTime.clear();
+        } finally {
+            lakeAbortedTxnsWaitedForGCToTimeLock.unlock();
+        }
+
+        return copied;
     }
 
     @Override

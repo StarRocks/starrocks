@@ -195,6 +195,24 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
+    // Collect the failure txn_id for the Partition without generated txn log
+    // and GC those garbage files in a aysnchronous way (e.g Vacuum)
+    private void addAbortedTxnIdToUnFinishedPartition(TransactionState txnState, List<TabletCommitInfo> finishedTablets) {
+        List<Long> finishedTabletIds = finishedTablets.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
+            for (MaterializedIndex index : allIndices) {
+                Optional<Tablet> unfinishedTablet = index.getTablets().stream()
+                                                    .filter(t -> !finishedTabletIds.contains(t.getId())).findAny();
+                if (unfinishedTablet.isPresent()) {
+                    // not all tablets in this partition finished, set aborted txn id for it
+                    partition.addAbortedTxnIdToTime(txnState.getTransactionId(), System.currentTimeMillis());
+                    break;
+                } /* otherwise, handle by abort txn on BE/CN side */
+            }
+        }
+    }
+
     @Override
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) {
@@ -202,6 +220,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         if (!finishedTablets.isEmpty()) {
             txnState.setTabletCommitInfos(finishedTablets);
         }
+        addAbortedTxnIdToUnFinishedPartition(txnState, finishedTablets);
         if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
             abortTxnSkipCleanup(txnState);
         } else {
