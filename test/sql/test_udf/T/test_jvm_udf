@@ -66,6 +66,14 @@ select count(udtfint) from t0, udtfint(c1);
 select count(udtfbigint) from t0, udtfbigint(c1);
 select count(udtffloat) from t0, udtffloat(c1);
 select count(udtfdouble) from t0, udtfdouble(c1);
+-- test udtf with utf8 case
+select * from TABLE(udtfstring(""));
+select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
+select * from TABLE(udtfstring("中文测试"));
+select * from TABLE(udtfstring("∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა"));
+select * from TABLE(udtfstring("2H₂ + O₂ ⇌ 2H₂O"));
+select * from TABLE(udtfstring("ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"));
+
 
 -- test group by limit case:
 set streaming_preaggregation_mode="force_streaming";
