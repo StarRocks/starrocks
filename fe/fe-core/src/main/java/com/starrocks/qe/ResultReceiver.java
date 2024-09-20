@@ -141,16 +141,16 @@ public class ResultReceiver {
             LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
-                status.setStatus(new Status(TStatusCode.TIMEOUT, ErrorCode.ERR_TIMEOUT.formatErrorMsg(
-                        "Query", timeoutMs / 1000, "please increase the 'query_timeout' session variable")));
+                status.setStatus(new Status(TStatusCode.TIMEOUT, ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                        String.format("please increase the '%s' session variable", SessionVariable.QUERY_TIMEOUT))));
             } else {
                 status.setRpcStatus(e.getMessage());
                 SimpleScheduler.addToBlocklist(backendId);
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
-            status.setInternalErrorStatus(ErrorCode.ERR_TIMEOUT.formatErrorMsg(
-                    "Query", timeoutMs / 1000, "please increase the 'query_timeout' session variable"));
+            status.setInternalErrorStatus(ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                    String.format("please increase the '%s' session variable", SessionVariable.QUERY_TIMEOUT)));
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
             }

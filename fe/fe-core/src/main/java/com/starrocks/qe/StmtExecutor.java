@@ -2247,7 +2247,7 @@ public class StmtExecutor {
                                         "or set parallel_fragment_exec_instance_num to a lower value in session variable");
                     } else {
                         ErrorReport.reportDdlException(ErrorCode.ERR_TIMEOUT, getExecType(), timeout,
-                                "please increase the 'insert_timeout' session variable");
+                                String.format("please increase the '%s' session variable", SessionVariable.INSERT_TIMEOUT));
                     }
                 }
             }
