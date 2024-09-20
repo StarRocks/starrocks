@@ -139,6 +139,106 @@ public class InsertPlanner {
     public InsertPlanner(Map<String, Database> dbs, boolean optimisticLock) {
         this.dbs = dbs;
         this.useOptimisticLock = optimisticLock;
+<<<<<<< HEAD
+=======
+        this.plannerMetaLocker = plannerMetaLocker;
+    }
+
+    private enum GenColumnDependency {
+        NO_DEPENDENCY,
+        NONE_DEPEND_ON_TARGET_COLUMNS,
+        ALL_DEPEND_ON_TARGET_COLUMNS,
+        PARTIALLY_DEPEND_ON_TARGET_COLUMNS
+    }
+
+    private static GenColumnDependency getDependencyType(Column column,
+                                                         Set<String> targetColumns,
+                                                         Map<ColumnId, Column> allColumns) {
+        List<SlotRef> slots = column.getGeneratedColumnRef(allColumns);
+        if (slots.isEmpty()) {
+            return GenColumnDependency.NO_DEPENDENCY;
+        }
+        boolean allDependOnTargetColumns = true;
+        boolean noneDependOnTargetColumns = true;
+        for (SlotRef slot : slots) {
+            String originName = slot.getColumnName().toLowerCase();
+            if (targetColumns.contains(originName)) {
+                noneDependOnTargetColumns = false;
+            } else {
+                allDependOnTargetColumns = false;
+            }
+        }
+        if (allDependOnTargetColumns) {
+            return GenColumnDependency.ALL_DEPEND_ON_TARGET_COLUMNS;
+        }
+        if (noneDependOnTargetColumns) {
+            return GenColumnDependency.NONE_DEPEND_ON_TARGET_COLUMNS;
+        }
+        return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
+    }
+
+    private void inferOutputSchemaForPartialUpdate(InsertStmt insertStmt) {
+        outputBaseSchema = new ArrayList<>();
+        outputFullSchema = new ArrayList<>();
+        Set<String> legalGeneratedColumnDependencies = new HashSet<>();
+        Set<String> outputColumnNames = insertStmt.getTargetColumnNames().stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+        Set<String> baseSchemaNames = insertStmt.getTargetTable().getBaseSchema().stream()
+                .map(Column::getName)
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+        OlapTable targetTable = (OlapTable) insertStmt.getTargetTable();
+        for (Column column : targetTable.getFullSchema()) {
+            String columnName = column.getName().toLowerCase();
+            if (outputColumnNames.contains(columnName) || column.isKey()) {
+                if (baseSchemaNames.contains(columnName)) {
+                    outputBaseSchema.add(column);
+                }
+                outputFullSchema.add(column);
+                legalGeneratedColumnDependencies.add(columnName);
+                continue;
+            }
+            if (column.isAutoIncrement() || column.getDefaultExpr() != null) {
+                if (baseSchemaNames.contains(columnName)) {
+                    outputBaseSchema.add(column);
+                }
+                outputFullSchema.add(column);
+                continue;
+            }
+            if (column.isGeneratedColumn()) {
+                // check if the generated column only depends on the columns in the output schema
+                // if so, add it to the output schema
+                // if is not related to target columns at all, skip it (TODO in future)
+                // else raise error
+                switch (getDependencyType(column, legalGeneratedColumnDependencies, targetTable.getIdToColumn())) {
+                    case NO_DEPENDENCY:
+                        // should not happen, just skip
+                        continue;
+                    case ALL_DEPEND_ON_TARGET_COLUMNS:
+                        if (baseSchemaNames.contains(columnName)) {
+                            outputBaseSchema.add(column);
+                        }
+                        outputFullSchema.add(column);
+                        continue;
+                    case NONE_DEPEND_ON_TARGET_COLUMNS: // TODO: handle this case
+                    case PARTIALLY_DEPEND_ON_TARGET_COLUMNS:
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN,
+                                column.getName());
+                }
+            }
+            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                String originName = Column.removeNamePrefix(column.getName());
+                if (outputColumnNames.contains(originName.toLowerCase())) {
+                    if (baseSchemaNames.contains(column.getName())) {
+                        outputBaseSchema.add(column);
+                    }
+                    outputFullSchema.add(column);
+                }
+                continue;
+            }
+        }
+>>>>>>> 3f73bd0ae3 ([BugFix] default current_timestamp broken after update to 3.3.2 from 3.2.10 (#50911))
     }
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
