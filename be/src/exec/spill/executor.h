@@ -90,6 +90,7 @@ private:
 };
 
 struct IOTaskExecutor {
+<<<<<<< HEAD
     workgroup::ScanExecutor* pool;
     workgroup::WorkGroupPtr wg;
 
@@ -98,12 +99,36 @@ struct IOTaskExecutor {
     template <class Func>
     Status submit(Func&& func) {
         workgroup::ScanTask task(wg.get(), func);
+=======
+    static Status submit(workgroup::ScanTask task) {
+        const auto& task_ctx = task.get_work_context();
+        bool use_local_io_executor = true;
+        if (task_ctx.task_context_data.has_value()) {
+            auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
+            use_local_io_executor = io_ctx->use_local_io_executor;
+        }
+        auto* pool = get_executor(task.workgroup.get(), use_local_io_executor);
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
         if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {
             return Status::InternalError("offer task failed");
         }
     }
+<<<<<<< HEAD
+=======
+    static void force_submit(workgroup::ScanTask task) {
+        const auto& task_ctx = task.get_work_context();
+        auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
+        auto* pool = get_executor(task.workgroup.get(), io_ctx->use_local_io_executor);
+        pool->force_submit(std::move(task));
+    }
+
+private:
+    inline static workgroup::ScanExecutor* get_executor(workgroup::WorkGroup* wg, bool use_local_io_executor) {
+        return use_local_io_executor ? wg->executors()->scan_executor() : wg->executors()->connector_scan_executor();
+    }
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
 };
 
 struct SyncTaskExecutor {

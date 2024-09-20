@@ -50,9 +50,15 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::functi
 PromiseStatusPtr call_hdfs_scan_function_in_pthread(const std::function<Status()>& func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
+<<<<<<< HEAD
         ExecEnv::GetInstance()->connector_scan_executor()->submit(
                 workgroup::ScanTask(workgroup::WorkGroupManager::instance()->get_default_workgroup().get(),
                                     [promise = ms.get(), func]() { promise->set_value(func()); }));
+=======
+        ExecEnv::GetInstance()->connector_scan_executor()->submit(workgroup::ScanTask(
+                ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup(),
+                [promise = ms.get(), func](workgroup::YieldContext&) { promise->set_value(func()); }));
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
     } else {
         ms->set_value(func());
     }

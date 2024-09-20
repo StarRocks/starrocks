@@ -200,7 +200,7 @@ bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
         task.peak_scan_task_queue_size_counter->set(_num_tasks);
     }
 
-    auto* wg_entity = _sched_entity(task.workgroup);
+    auto* wg_entity = _sched_entity(task.workgroup.get());
     wg_entity->set_in_queue(this);
     RETURN_IF_UNLIKELY(!wg_entity->queue()->try_offer(std::move(task)), false);
 
@@ -213,9 +213,31 @@ bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     return true;
 }
 
+<<<<<<< HEAD
+=======
+void WorkGroupScanTaskQueue::force_put(ScanTask task) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
+
+    auto* wg_entity = _sched_entity(task.workgroup.get());
+    wg_entity->set_in_queue(this);
+    wg_entity->queue()->force_put(std::move(task));
+
+    if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
+        _enqueue_workgroup(wg_entity);
+    }
+
+    _num_tasks++;
+    _cv.notify_one();
+}
+
+>>>>>>> 3317f49811 ([BugFix] Capture resource group for scan task (#51121))
 void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
     std::lock_guard<std::mutex> lock(_global_mutex);
-    auto* wg = task.workgroup;
+    auto* wg = task.workgroup.get();
     auto* wg_entity = _sched_entity(wg);
 
     // Update bandwidth control information.
