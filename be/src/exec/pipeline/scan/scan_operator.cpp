@@ -228,6 +228,16 @@ void ScanOperator::_detach_chunk_sources() {
     }
 }
 
+void ScanOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+    if (ctx != nullptr && _bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+        int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+        ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+    }
+}
+
 Status ScanOperator::set_finishing(RuntimeState* state) {
     // check when expired, are there running io tasks or submitted tasks
     if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
@@ -373,6 +383,7 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+            _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;

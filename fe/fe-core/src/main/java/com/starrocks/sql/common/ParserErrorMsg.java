@@ -70,7 +70,7 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported type specification: ''{0}'' {1}")
     String unsupportedType(String a0, String a1);
 
-    @BaseMessage("Unsupported statement: '{0}'")
+    @BaseMessage("Unsupported statement: {0}")
     String unsupportedStatement(String a0);
 
     @BaseMessage("AUTO_INCREMENT column {0} must be NOT NULL")

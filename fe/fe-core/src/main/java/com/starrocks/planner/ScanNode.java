@@ -162,4 +162,9 @@ public abstract class ScanNode extends PlanNode {
     protected boolean supportTopNRuntimeFilter() {
         return false;
     }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
 }

@@ -62,6 +62,8 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    void update_exec_stats(RuntimeState* state) override {}
+
 private:
     bool _is_finished = false;
     const std::shared_ptr<LocalExchanger>& _exchanger;
