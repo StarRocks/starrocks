@@ -395,7 +395,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
-    task.workgroup = _workgroup.get();
+    task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
