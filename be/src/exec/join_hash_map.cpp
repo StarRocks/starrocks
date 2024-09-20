@@ -647,7 +647,6 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         if (!columns[i]->is_nullable() && other_columns[i]->is_nullable()) {
             // upgrade to nullable column
-            // columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
             columns[i]->upgrade_to_nullable();
         }
     }

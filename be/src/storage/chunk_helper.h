@@ -153,9 +153,10 @@ private:
     bool _finalized = false;
 };
 
-class SegmentedColumn : std::enable_shared_from_this<SegmentedColumn> {
+class SegmentedColumn final : public std::enable_shared_from_this<SegmentedColumn> {
 public:
     SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index);
+    SegmentedColumn(const std::vector<ColumnPtr>& columns);
     ~SegmentedColumn() = default;
 
     ColumnPtr clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size);
@@ -174,7 +175,7 @@ private:
 
 // A big-chunk would be segmented into multi small ones, to avoid allocating large-continuous memory
 // It's not a transparent replacement for Chunk, but must be aware of and set a reasonale chunk_size
-class SegmentedChunk : std::enable_shared_from_this<SegmentedChunk> {
+class SegmentedChunk final : public std::enable_shared_from_this<SegmentedChunk> {
 public:
     SegmentedChunk(size_t segment_size);
     ~SegmentedChunk() = default;
