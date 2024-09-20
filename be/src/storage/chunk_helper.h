@@ -156,7 +156,7 @@ private:
 class SegmentedColumn final : public std::enable_shared_from_this<SegmentedColumn> {
 public:
     SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index);
-    SegmentedColumn(const std::vector<ColumnPtr>& columns);
+    SegmentedColumn(std::vector<ColumnPtr> columns);
     ~SegmentedColumn() = default;
 
     ColumnPtr clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size);

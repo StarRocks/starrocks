@@ -724,7 +724,7 @@ SegmentedColumn::SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index) :
     }
 }
 
-SegmentedColumn::SegmentedColumn(const std::vector<ColumnPtr>& columns) : _columns(columns) {}
+SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns) : _columns(std::move(columns)) {}
 
 ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
     SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
