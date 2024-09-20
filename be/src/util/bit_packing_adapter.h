@@ -38,6 +38,10 @@ public:
     static std::pair<const uint8_t*, int64_t> UnpackValues(int bit_width, const uint8_t* __restrict__ in,
                                                            int64_t in_bytes, int64_t num_values,
                                                            OutType* __restrict__ out) {
+        if (bit_width == 0) {
+            std::memset(out, 0, sizeof(OutType) * num_values);
+            return std::make_pair(in, num_values);
+        }
         if (config::enable_bit_unpack_simd) {
             // First unpack as many full batches as possible.
             const int64_t values_to_read = BitPacking::NumValuesToUnpack(bit_width, in_bytes, num_values);
