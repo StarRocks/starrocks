@@ -312,7 +312,7 @@ jobs:
       - name: UPDATE ECI & RUN Clang Tidy
         id: run_clang_tidy
         shell: bash
-        timeout-minutes: 60
+        timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
