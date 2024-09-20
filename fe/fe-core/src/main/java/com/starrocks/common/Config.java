@@ -2647,10 +2647,20 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_cnt = 100;
 
     /**
-     * jaeger tracing endpoint, empty thing disables tracing
+     * Endpoint for exporting Jaeger gRPC spans.
+     * Empty string disables span export.
+     * Default is empty string.
      */
     @ConfField
     public static String jaeger_grpc_endpoint = "";
+
+    /**
+     * Endpoint for exporting OpenTelemetry gRPC spans.
+     * Empty string disables span export.
+     * Default is empty string.
+     */
+    @ConfField
+    public static String otlp_exporter_grpc_endpoint = "";
 
     @ConfField
     public static String lake_compaction_selector = "ScoreSelector";
