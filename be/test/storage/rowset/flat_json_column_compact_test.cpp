@@ -650,6 +650,7 @@ TEST_F(FlatJsonColumnCompactTest, testJsonCompactToFlatJson) {
 }
 
 TEST_F(FlatJsonColumnCompactTest, testNullJsonCompactToFlatJson) {
+    config::json_flat_null_factor = 0.1;
     // clang-format off
     Columns jsons = {
             normal_json(R"({"a": 1, "b": 21})", true),
@@ -785,10 +786,11 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJson4) {
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(5, _meta->children_columns_size());
+    EXPECT_EQ(6, _meta->children_columns_size());
     EXPECT_EQ("b1.b2", _meta->children_columns(2).name());
     EXPECT_EQ("b1.b3.b4", _meta->children_columns(3).name());
-    EXPECT_EQ("remain", _meta->children_columns(4).name());
+    EXPECT_EQ("b1.b3.b5", _meta->children_columns(4).name());
+    EXPECT_EQ("remain", _meta->children_columns(5).name());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());
@@ -822,10 +824,11 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJson) {
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(5, _meta->children_columns_size());
+    EXPECT_EQ(6, _meta->children_columns_size());
     EXPECT_EQ("b1.b2", _meta->children_columns(2).name());
     EXPECT_EQ("b1.b3.b4", _meta->children_columns(3).name());
-    EXPECT_EQ("remain", _meta->children_columns(4).name());
+    EXPECT_EQ("b1.b3.b5", _meta->children_columns(4).name());
+    EXPECT_EQ("remain", _meta->children_columns(5).name());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());
@@ -858,8 +861,8 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson) {
     writer_opts.need_flat = true;
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
-    EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(4, _meta->children_columns_size());
+    EXPECT_FALSE(_meta->json_meta().has_remain());
+    EXPECT_EQ(3, _meta->children_columns_size());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());
@@ -956,11 +959,12 @@ TEST_F(FlatJsonColumnCompactTest, testNullFlatJsonCompactToFlatJson4) {
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(6, _meta->children_columns_size());
+    EXPECT_EQ(7, _meta->children_columns_size());
     EXPECT_EQ("nulls", _meta->children_columns(0).name());
     EXPECT_EQ("b1.b2", _meta->children_columns(3).name());
     EXPECT_EQ("b1.b3.b4", _meta->children_columns(4).name());
-    EXPECT_EQ("remain", _meta->children_columns(5).name());
+    EXPECT_EQ("b1.b3.b5", _meta->children_columns(5).name());
+    EXPECT_EQ("remain", _meta->children_columns(6).name());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());
@@ -993,11 +997,12 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson) {
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(6, _meta->children_columns_size());
+    EXPECT_EQ(7, _meta->children_columns_size());
     EXPECT_EQ("nulls", _meta->children_columns(0).name());
     EXPECT_EQ("b1.b2", _meta->children_columns(3).name());
     EXPECT_EQ("b1.b3.b4", _meta->children_columns(4).name());
-    EXPECT_EQ("remain", _meta->children_columns(5).name());
+    EXPECT_EQ("b1.b3.b5", _meta->children_columns(5).name());
+    EXPECT_EQ("remain", _meta->children_columns(6).name());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());
@@ -1029,11 +1034,12 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson2) {
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(5, _meta->children_columns_size());
+    EXPECT_EQ(6, _meta->children_columns_size());
     EXPECT_EQ("nulls", _meta->children_columns(0).name());
     EXPECT_EQ("b1.b2", _meta->children_columns(2).name());
     EXPECT_EQ("b1.b3.b4", _meta->children_columns(3).name());
-    EXPECT_EQ("remain", _meta->children_columns(4).name());
+    EXPECT_EQ("b1.b3.b5", _meta->children_columns(4).name());
+    EXPECT_EQ("remain", _meta->children_columns(5).name());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());
@@ -1063,10 +1069,11 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson3) {
     test_json(writer_opts, jsons, read_col);
     EXPECT_TRUE(_meta->json_meta().is_flat());
     EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(5, _meta->children_columns_size());
+    EXPECT_EQ(6, _meta->children_columns_size());
     EXPECT_EQ("b1.b2", _meta->children_columns(2).name());
     EXPECT_EQ("b1.b3.b4", _meta->children_columns(3).name());
-    EXPECT_EQ("remain", _meta->children_columns(4).name());
+    EXPECT_EQ("b1.b3.b5", _meta->children_columns(4).name());
+    EXPECT_EQ("remain", _meta->children_columns(5).name());
 
     auto* read_json = get_json_column(read_col);
     EXPECT_FALSE(read_json->is_flat_json());
@@ -1089,24 +1096,12 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson4) {
             normal_json(R"({"a": 5, "b": 25,        "b1": {"b2": 5, "b3": {"b4": "ab5", "b5": false}}, "e": 35})", true),
     };
     // clang-format on
+    JsonPathDeriver deriver;
+    test_compact_path(jsons, &deriver);
 
-    ColumnPtr read_col = jsons[0]->clone_empty();
-    ColumnWriterOptions writer_opts;
-    writer_opts.need_flat = true;
-    test_json(writer_opts, jsons, read_col);
-    EXPECT_TRUE(_meta->json_meta().is_flat());
-    EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(4, _meta->children_columns_size());
-
-    auto* read_json = get_json_column(read_col);
-    EXPECT_FALSE(read_json->is_flat_json());
-    EXPECT_EQ(5, read_json->size());
-    EXPECT_EQ(0, read_json->get_flat_fields().size());
-    EXPECT_EQ(R"({"a": 1, "b1": {"b2": 1, "b3": {"b4": "ab1", "b5": [1, 2, 3]}}, "g": {}})", read_col->debug_item(0));
-    EXPECT_EQ(R"({"a": 2, "b1": {"b2": 2, "b3": {"b4": 123, "b5": {}}}, "k": "abc"})", read_col->debug_item(1));
-    for (size_t i = 2; i < jsons.size(); i++) {
-        EXPECT_EQ(jsons[i]->debug_item(0), read_col->debug_item(i));
-    }
+    EXPECT_EQ(2, deriver.flat_paths().size());
+    EXPECT_EQ(R"([a(BIGINT), b1.b2(BIGINT)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
 TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemain) {
@@ -1196,25 +1191,12 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemain3) {
         }, true),
     };
     // clang-format on
+    JsonPathDeriver deriver;
+    test_compact_path(jsons, &deriver);
 
-    ColumnPtr read_col = jsons[0]->clone_empty();
-    ColumnWriterOptions writer_opts;
-    writer_opts.need_flat = true;
-    test_json(writer_opts, jsons, read_col);
-
-    EXPECT_TRUE(_meta->json_meta().is_flat());
-    EXPECT_TRUE(_meta->json_meta().has_remain());
-    EXPECT_EQ(4, _meta->children_columns_size());
-    EXPECT_EQ("nulls", _meta->children_columns(0).name());
-    EXPECT_EQ("a", _meta->children_columns(1).name());
-    EXPECT_EQ("remain", _meta->children_columns(3).name());
-
-    auto* read_json = get_json_column(read_col);
-    EXPECT_FALSE(read_json->is_flat_json());
-    EXPECT_EQ(21, read_json->size());
-    EXPECT_EQ(R"({"a": 12, "b": "abc2", "c": {"d": 22, "e": 221}})", read_col->debug_item(1));
-    EXPECT_EQ(R"({"a": 29, "b": "efg9", "c": "c29"})", read_col->debug_item(11));
-    EXPECT_EQ(R"({"a": 33, "b": "xwy3", "c": "d33"})", read_col->debug_item(18));
+    EXPECT_EQ(2, deriver.flat_paths().size());
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
 TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemainRead) {
@@ -1272,7 +1254,7 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemainRead) {
     EXPECT_EQ(R"({c: NULL})", read_col->debug_item(18));
 }
 
-TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemainRead3) {
+TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemainReadPaths) {
     config::json_flat_sparsity_factor = 0.6;
     // clang-format off
     Columns jsons = {
@@ -1305,26 +1287,11 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemainRead3) {
         }, true),
     };
     // clang-format on
-
-    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "c");
-
-    ColumnPtr read_col = jsons[0]->clone_empty();
-    ColumnWriterOptions writer_opts;
-    writer_opts.need_flat = true;
-    test_json(writer_opts, jsons, read_col, root.get());
-
-    EXPECT_EQ(4, _meta->children_columns_size());
-    EXPECT_EQ("nulls", _meta->children_columns(0).name());
-    EXPECT_EQ("a", _meta->children_columns(1).name());
-    EXPECT_EQ("remain", _meta->children_columns(3).name());
-
-    auto* read_json = get_json_column(read_col);
-    EXPECT_TRUE(read_json->is_flat_json());
-    EXPECT_EQ(21, read_json->size());
-    EXPECT_EQ(1, read_json->get_flat_fields().size());
-    EXPECT_EQ(R"({c: 'c29'})", read_col->debug_item(11));
-    EXPECT_EQ(R"({c: 'd33'})", read_col->debug_item(18));
+    JsonPathDeriver deriver;
+    test_compact_path(jsons, &deriver);
+    EXPECT_EQ(2, deriver.flat_paths().size());
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
 TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactPaths) {
