@@ -151,7 +151,7 @@ static inline void unpack16(const uint8_t* __restrict__ in, uint16_t* __restrict
     std::memcpy(out, in, numBytes);
 
     in += numBytes;
-    out += numBytes;
+    out += num_values;
 }
 
 // Unpack num_values number of uint32_t values with bit_width in [1, 7] range.
