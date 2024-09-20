@@ -29,11 +29,6 @@ import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
-<<<<<<< HEAD
-=======
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
->>>>>>> a051e4879e ([BugFix] Fix session variable load image bug (#50924))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
@@ -170,22 +165,7 @@ public class CachedStatisticStorage implements StatisticStorage {
         try {
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> result =
                     connectorTableCachedStatistics.getAll(cacheKeys);
-<<<<<<< HEAD
-=======
 
-            SessionVariable sessionVariable = ConnectContext.get() == null ?
-                    GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable() :
-                    ConnectContext.get().getSessionVariable();
-            result.whenCompleteAsync((res, e) -> {
-                if (e != null) {
-                    LOG.warn("Get connector table column statistics filed, exception: ", e);
-                    return;
-                }
-                if (sessionVariable.isEnableQueryTriggerAnalyze() && GlobalStateMgr.getCurrentState().isLeader()) {
-                    GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
-                }
-            }, statsCacheRefresherExecutor);
->>>>>>> a051e4879e ([BugFix] Fix session variable load image bug (#50924))
             if (result.isDone()) {
                 List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
                 Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;

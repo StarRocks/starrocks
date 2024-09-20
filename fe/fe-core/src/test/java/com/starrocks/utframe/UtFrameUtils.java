@@ -1365,13 +1365,8 @@ public class UtFrameUtils {
                     clonedSessionVariable = (SessionVariable) context.getSessionVariable().clone();
                 }
                 for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-<<<<<<< HEAD
-                    VariableMgr.setSystemVariable(clonedSessionVariable,
-                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
-=======
                     GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
->>>>>>> a051e4879e ([BugFix] Fix session variable load image bug (#50924))
+                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
                 }
             } else if (hint instanceof UserVariableHint) {
                 UserVariableHint userVariableHint = (UserVariableHint) hint;

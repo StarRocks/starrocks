@@ -179,12 +179,8 @@ import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-<<<<<<< HEAD
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
-=======
->>>>>>> a051e4879e ([BugFix] Fix session variable load image bug (#50924))
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
