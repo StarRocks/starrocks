@@ -73,6 +73,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         key_options.need_zone_map = false;
         key_options.need_bloom_filter = key_column.is_bf_column();
         key_options.need_bitmap_index = key_column.has_bitmap_index();
+        key_options.need_flat = opts.need_flat;
+        key_options.is_compaction = opts.is_compaction;
         if (key_column.type() == LogicalType::TYPE_ARRAY) {
             if (key_options.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
@@ -93,6 +95,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         value_options.need_zone_map = false;
         value_options.need_bloom_filter = value_column.is_bf_column();
         value_options.need_bitmap_index = value_column.has_bitmap_index();
+        value_options.need_flat = opts.need_flat;
+        value_options.is_compaction = opts.is_compaction;
         if (value_column.type() == LogicalType::TYPE_ARRAY) {
             if (value_options.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");

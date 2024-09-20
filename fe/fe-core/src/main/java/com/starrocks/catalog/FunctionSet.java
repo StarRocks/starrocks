@@ -1258,6 +1258,12 @@ public class FunctionSet {
         // flat json meta
         addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.JSON),
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_STRUCT),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_MAP),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_ARRAY),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion

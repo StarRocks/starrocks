@@ -15,6 +15,7 @@
 #include "column/column_access_path.h"
 
 #include <cstddef>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -31,6 +32,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -209,31 +211,13 @@ StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TAcce
     return std::move(p);
 }
 
-std::pair<std::string, std::string> _split_path(const std::string& path) {
-    size_t pos = 0;
-    if (path.starts_with("\"")) {
-        pos = path.find('\"', 1);
-        DCHECK(pos != std::string::npos);
-    }
-    pos = path.find('.', pos);
-    std::string key;
-    std::string next;
-    if (pos == std::string::npos) {
-        key = path;
-    } else {
-        key = path.substr(0, pos);
-        next = path.substr(pos + 1);
-    }
-
-    return {key, next};
-}
-
 ColumnAccessPath* insert_json_path_impl(const std::string& path, ColumnAccessPath* root) {
     if (path.empty()) {
         return root;
     }
 
-    auto [key, next] = _split_path(path);
+    auto [key_view, next] = JsonFlatPath::split_path(path);
+    auto key = std::string(key_view);
     auto child = root->get_child(key);
     if (child == nullptr) {
         auto n = ColumnAccessPath::create(TAccessPathType::FIELD, key, 0, root->absolute_path());
@@ -241,7 +225,7 @@ ColumnAccessPath* insert_json_path_impl(const std::string& path, ColumnAccessPat
         root->children().emplace_back(std::move(n.value()));
         child = root->children().back().get();
     }
-    return insert_json_path_impl(next, child);
+    return insert_json_path_impl(std::string(next), child);
 }
 
 void ColumnAccessPath::insert_json_path(ColumnAccessPath* root, LogicalType type, const std::string& path) {

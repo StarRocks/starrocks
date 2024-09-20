@@ -525,6 +525,9 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                     state->real_path.paths.emplace_back(p);
                     continue;
                 }
+                if (p.key.find('.') != std::string::npos) {
+                    in_flat = false;
+                }
                 if (in_flat) {
                     flat_path += "." + p.key;
                     if (p.array_selector->type != NONE) {

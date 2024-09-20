@@ -111,11 +111,6 @@ Status OlapMetaReader::_init_seg_meta_collecters(const OlapMetaReaderParams& par
 
 Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& version,
                                      std::vector<SegmentSharedPtr>* segments) {
-    if (tablet->updates() != nullptr) {
-        LOG(INFO) << "Skipped Update tablet";
-        return Status::OK();
-    }
-
     Status acquire_rowset_st;
     {
         std::shared_lock l(tablet->get_header_lock());

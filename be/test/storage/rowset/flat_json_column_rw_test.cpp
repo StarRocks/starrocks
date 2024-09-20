@@ -54,7 +54,10 @@ public:
 protected:
     void SetUp() override { _meta.reset(new ColumnMetaPB()); }
 
-    void TearDown() override {}
+    void TearDown() override {
+        config::json_flat_sparsity_factor = 0.9;
+        config::json_flat_null_factor = 0.3;
+    }
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
         return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
@@ -97,7 +100,6 @@ protected:
             // close the file
             ASSERT_TRUE(wfile->close().ok());
         }
-        LOG(INFO) << "Finish writing";
 
         auto res = ColumnReader::create(_meta.get(), segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
@@ -451,13 +453,14 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson2) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
 
-    EXPECT_EQ(4, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(1).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(2).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_FALSE(read_json->is_flat_json());
@@ -534,13 +537,14 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
 
-    EXPECT_EQ(4, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(1).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(2).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_FALSE(read_json->is_flat_json());
@@ -578,14 +582,15 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
 
-    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(6, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(1).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(2).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(3).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -621,13 +626,14 @@ TEST_F(FlatJsonColumnRWTest, testDeepFlatJson) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
-    EXPECT_EQ(4, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(1).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(2).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -669,16 +675,18 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
-    EXPECT_EQ(7, writer_opts.meta->children_columns_size());
+    int index = 0;
+    EXPECT_EQ(8, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
-    EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
-    EXPECT_EQ("b.b1", writer_opts.meta->children_columns(1).name());
-    EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(2).name());
-    EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(3).name());
-    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(4).name());
-    EXPECT_EQ("gg", writer_opts.meta->children_columns(5).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(6).name());
+    EXPECT_EQ("a", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -1104,14 +1112,15 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullFlatJson2) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
 
-    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(6, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("nulls", writer_opts.meta->children_columns(0).name());
     EXPECT_EQ("a", writer_opts.meta->children_columns(1).name());
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(2).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(3).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
 
     auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_FALSE(read_json->is_flat_json());
@@ -1181,14 +1190,15 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson2) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
 
-    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(6, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("nulls", writer_opts.meta->children_columns(0).name());
     EXPECT_EQ("a", writer_opts.meta->children_columns(1).name());
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(2).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(3).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
 
     auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_FALSE(read_json->is_flat_json());
@@ -1221,7 +1231,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson3) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
 
-    EXPECT_EQ(6, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(7, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("nulls", writer_opts.meta->children_columns(0).name());
@@ -1229,7 +1239,8 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson3) {
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(2).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(3).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(4).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(5).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(6).name());
 
     auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -1260,14 +1271,15 @@ TEST_F(FlatJsonColumnRWTest, testDeepNullFlatJson) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
-    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(6, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     EXPECT_EQ("nulls", writer_opts.meta->children_columns(0).name());
     EXPECT_EQ("a", writer_opts.meta->children_columns(1).name());
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(2).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(3).name());
-    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
 
     auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
@@ -1303,7 +1315,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
-    EXPECT_EQ(8, writer_opts.meta->children_columns_size());
+    EXPECT_EQ(9, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
     EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
     int index = 0;
@@ -1312,6 +1324,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
     EXPECT_EQ("b.b1", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
