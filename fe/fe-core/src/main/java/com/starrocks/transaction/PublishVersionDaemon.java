@@ -174,19 +174,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // DON'T LOG, otherwise the log line will repeat everytime the listener refreshes
             return;
         }
-
-        int oldNumThreads = lakeTaskExecutor.getMaximumPoolSize();
-        if (oldNumThreads == newNumThreads) {
-            return;
-        }
-
-        if (newNumThreads < oldNumThreads) { // scale in
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-        } else { // scale out
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-        }
+        ThreadPoolManager.setFixedThreadPoolSize(lakeTaskExecutor, newNumThreads);
     }
 
     /**
