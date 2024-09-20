@@ -541,8 +541,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(),
-                                               _runtime_state->use_column_pool()));
+    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }

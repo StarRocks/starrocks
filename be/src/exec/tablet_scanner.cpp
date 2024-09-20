@@ -17,7 +17,6 @@
 #include <memory>
 #include <utility>
 
-#include "column/column_pool.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/olap_scan_node.h"
@@ -118,8 +117,6 @@ void TabletScanner::close(RuntimeState* state) {
     _reader.reset();
     _predicate_free_pool.clear();
     Expr::close(_conjunct_ctxs, state);
-    // Reduce the memory usage if the the average string size is greater than 512.
-    release_large_columns<BinaryColumn>(state->chunk_size() * 512);
     _is_closed = true;
 }
 

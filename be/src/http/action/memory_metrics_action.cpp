@@ -49,7 +49,6 @@ void MemoryMetricsAction::handle(HttpRequest* req) {
                                                        "bloom_filter_index",
                                                        "compaction",
                                                        "schema_change",
-                                                       "column_pool",
                                                        "page_cache",
                                                        "datacache",
                                                        "update",
