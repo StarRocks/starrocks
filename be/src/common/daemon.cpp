@@ -38,7 +38,6 @@
 
 #include "block_cache/block_cache.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
@@ -84,36 +83,6 @@ std::atomic<bool> k_starrocks_exit = false;
 // k_starrocks_exit not only require waiting for all existing fragment to complete,
 // but also waiting for all threads to exit gracefully.
 std::atomic<bool> k_starrocks_exit_quick = false;
-
-class ReleaseColumnPool {
-public:
-    explicit ReleaseColumnPool(double ratio) : _ratio(ratio) {}
-
-    template <typename Pool>
-    void operator()() {
-        _freed_bytes += Pool::singleton()->release_free_columns(_ratio);
-    }
-
-    size_t freed_bytes() const { return _freed_bytes; }
-
-private:
-    double _ratio;
-    size_t _freed_bytes = 0;
-};
-
-void gc_memory(void* arg_this) {
-    using namespace starrocks;
-    const static float kFreeRatio = 0.5;
-
-    auto* daemon = static_cast<Daemon*>(arg_this);
-    while (!daemon->stopped()) {
-        nap_sleep(config::memory_maintenance_sleep_time_s, [daemon] { return daemon->stopped(); });
-
-        ReleaseColumnPool releaser(kFreeRatio);
-        ForEach<ColumnPoolList>(releaser);
-        LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-    }
-}
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -198,15 +167,15 @@ void calculate_metrics(void* arg_this) {
 
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
-                "metadata({}), compaction({}), schema_change({}), column_pool({}), "
+                "metadata({}), compaction({}), schema_change({}), "
                 "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({}), "
                 "datacache({}), jit({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
-                mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
-                mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
-                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
+                mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
+                mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->clone_mem_bytes.value(),
+                mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
                 mem_metrics->jit_cache_mem_bytes.value());
 
         nap_sleep(15, [daemon] { return daemon->stopped(); });
@@ -306,10 +275,6 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     date::init_date_cache();
 
     TimezoneUtils::init_time_zones();
-
-    std::thread gc_thread(gc_memory, this);
-    Thread::set_thread_name(gc_thread, "gc_daemon");
-    _daemon_threads.emplace_back(std::move(gc_thread));
 
     init_starrocks_metrics(paths);
 

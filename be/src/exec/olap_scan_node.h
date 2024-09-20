@@ -150,7 +150,7 @@ private:
     void _update_status(const Status& status);
     Status _get_status();
 
-    void _fill_chunk_pool(int count, bool force_column_pool);
+    void _fill_chunk_pool(int count);
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
 

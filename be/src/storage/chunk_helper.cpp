@@ -17,7 +17,6 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/schema.h"
@@ -230,53 +229,34 @@ ColumnId ChunkHelper::max_column_id(const starrocks::Schema& schema) {
 }
 
 template <typename T>
-struct ColumnDeleter {
-    ColumnDeleter(size_t chunk_size) : chunk_size(chunk_size) {}
-    void operator()(Column* ptr) const { return_column<T>(down_cast<T*>(ptr), chunk_size); }
-    size_t chunk_size;
-};
-
-template <typename T, bool force>
-inline std::shared_ptr<T> get_column_ptr(size_t chunk_size) {
-    if constexpr (std::negation_v<HasColumnPool<T>>) {
-        return std::make_shared<T>();
-    } else {
-        T* ptr = get_column<T, force>();
-        if (LIKELY(ptr != nullptr)) {
-            return std::shared_ptr<T>(ptr, ColumnDeleter<T>(chunk_size));
-        } else {
-            return std::make_shared<T>();
-        }
-    }
+inline std::shared_ptr<T> get_column_ptr() {
+    return std::make_shared<T>();
 }
 
-template <typename T, bool force>
-inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precision, int scale, size_t chunk_size) {
-    auto column = get_column_ptr<T, force>(chunk_size);
+template <typename T>
+inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precision, int scale) {
+    auto column = get_column_ptr<T>();
     column->set_precision(precision);
     column->set_scale(scale);
     return column;
 }
 
-template <bool force>
 struct ColumnPtrBuilder {
     template <LogicalType ftype>
-    ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
+    ColumnPtr operator()(const Field& field, int precision, int scale) {
         auto NullableIfNeed = [&](ColumnPtr c) -> ColumnPtr {
-            return field.is_nullable()
-                           ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(chunk_size))
-                           : c;
+            return field.is_nullable() ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn>()) : c;
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
             auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
-            auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
+            auto offsets = get_column_ptr<UInt32Column>();
             auto array = ArrayColumn::create(std::move(elements), offsets);
             return NullableIfNeed(array);
         } else if constexpr (ftype == TYPE_MAP) {
             auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
             auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column());
-            auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
+            auto offsets = get_column_ptr<UInt32Column>();
             auto map = MapColumn::create(std::move(keys), std::move(values), offsets);
             return NullableIfNeed(map);
         } else if constexpr (ftype == TYPE_STRUCT) {
@@ -291,33 +271,31 @@ struct ColumnPtrBuilder {
         } else {
             switch (ftype) {
             case TYPE_DECIMAL32:
-                return NullableIfNeed(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal32Column>(precision, scale));
             case TYPE_DECIMAL64:
-                return NullableIfNeed(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal64Column>(precision, scale));
             case TYPE_DECIMAL128:
-                return NullableIfNeed(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal128Column>(precision, scale));
             default: {
-                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
+                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType>());
             }
             }
         }
     }
 };
 
-template <bool force>
-ColumnPtr column_from_pool(const Field& field, size_t chunk_size) {
+ColumnPtr column_from_pool(const Field& field) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
-    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder<force>(), chunk_size, field, precision,
-                                      scale);
+    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
 }
 
-Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size, bool force) {
+Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size) {
     Columns columns;
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const FieldPtr& f = schema.field(i);
-        auto column = force ? column_from_pool<true>(*f, chunk_size) : column_from_pool<false>(*f, chunk_size);
+        auto column = column_from_pool(*f);
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }

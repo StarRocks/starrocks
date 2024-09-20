@@ -21,7 +21,6 @@
 #include "agent/publish_version.h"
 #include "butil/file_util.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"

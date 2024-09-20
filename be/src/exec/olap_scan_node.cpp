@@ -20,7 +20,6 @@
 #include <thread>
 
 #include "column/column_access_path.h"
-#include "column/column_pool.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -159,7 +158,6 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
-    bool first_call = !_start;
     if (!_start && _status.ok()) {
         Status status = _start_scan(state);
         _update_status(status);
@@ -210,7 +208,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call && state->use_column_pool()));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -256,11 +254,6 @@ void OlapScanNode::close(RuntimeState* state) {
         chunk.reset();
     }
 
-    if (runtime_state() != nullptr) {
-        // Reduce the memory usage if the the average string size is greater than 512.
-        release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
-    }
-
     for (const auto& rowsets_per_tablet : _tablet_rowsets) {
         Rowset::release_readers(rowsets_per_tablet);
     }
@@ -275,10 +268,10 @@ OlapScanNode::~OlapScanNode() {
     DCHECK(is_closed());
 }
 
-void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
+void OlapScanNode::_fill_chunk_pool(int count) {
     const size_t capacity = runtime_state()->chunk_size();
     for (int i = 0; i < count; i++) {
-        ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool));
+        ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity));
         {
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(std::move(chunk));
@@ -736,7 +729,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, state->use_column_pool()));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));
