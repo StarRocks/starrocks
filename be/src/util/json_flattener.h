@@ -34,6 +34,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "storage/rowset/block_split_bloom_filter.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/phmap/phmap.h"
@@ -42,6 +43,7 @@
 namespace starrocks {
 namespace vpack = arangodb::velocypack;
 class ColumnReader;
+class BloomFilter;
 
 #ifndef NDEBUG
 template <typename K, typename V>
@@ -55,9 +57,11 @@ class JsonFlatPath {
 public:
     using OP = uint8_t;
     static const OP OP_INCLUDE = 0;
-    static const OP OP_EXCLUDE = 1; // for compaction remove extract json
-    static const OP OP_IGNORE = 2;  // for merge and read middle json
-    static const OP OP_ROOT = 3;    // to mark new root
+    static const OP OP_EXCLUDE = 1;   // for compaction remove extract json
+    static const OP OP_IGNORE = 2;    // for merge and read middle json
+    static const OP OP_ROOT = 3;      // to mark new root
+    static const OP OP_NEW_LEVEL = 4; // for merge flat json use, to mark the path is need
+
     // for express flat path
     int index = -1; // flat paths array index, only use for leaf, to find column
     LogicalType type = LogicalType::TYPE_JSON;
@@ -94,8 +98,7 @@ public:
         return ss.str();
     }
 
-private:
-    static std::pair<std::string_view, std::string_view> _split_path(const std::string_view& path);
+    static std::pair<std::string_view, std::string_view> split_path(const std::string_view& path);
 };
 
 // to deriver json flanttern path
@@ -113,6 +116,10 @@ public:
 
     bool has_remain_json() const { return _has_remain; }
 
+    void set_generate_filter(bool generate_filter) { _generate_filter = generate_filter; }
+
+    std::shared_ptr<BloomFilter>& remain_fitler() { return _remain_filter; }
+
     std::shared_ptr<JsonFlatPath>& flat_path_root() { return _path_root; }
 
     const std::vector<std::string>& flat_paths() const { return _paths; }
@@ -122,7 +129,11 @@ public:
 private:
     void _derived(const Column* json_data, size_t mark_row);
 
+    JsonFlatPath* _normalize_exists_path(const std::string_view& path, JsonFlatPath* root, uint64_t hits);
+
     void _finalize();
+    uint32_t _dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
+                           std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf);
 
     void _derived_on_flat_json(const std::vector<const Column*>& json_datas);
 
@@ -140,7 +151,7 @@ private:
         uint64_t max = 0;
 
         // same key may appear many times in json, so we need avoid duplicate compute hits
-        uint64_t last_row = -1;
+        int64_t last_row = -1;
         uint64_t multi_times = 0;
     };
 
@@ -148,10 +159,13 @@ private:
     std::vector<std::string> _paths;
     std::vector<LogicalType> _types;
 
-    double _json_sparsity_factory = config::json_flat_sparsity_factor;
+    double _min_json_sparsity_factory = config::json_flat_sparsity_factor;
     size_t _total_rows;
     FlatJsonHashMap<JsonFlatPath*, JsonFlatDesc> _derived_maps;
     std::shared_ptr<JsonFlatPath> _path_root;
+
+    bool _generate_filter = false;
+    std::shared_ptr<BloomFilter> _remain_filter = nullptr;
 };
 
 // flattern JsonColumn to flat json A,B,C
@@ -201,6 +215,8 @@ public:
 
     // for compaction, set exclude paths, to remove the path
     void set_exclude_paths(const std::vector<std::string>& exclude_paths);
+    // for compaction, set level paths, to generate the level in json
+    void add_level_paths(const std::vector<std::string>& level_paths);
 
     bool has_exclude_paths() const { return !_exclude_paths.empty(); }
 
@@ -217,6 +233,8 @@ private:
 
     void _merge_json(const JsonFlatPath* root, vpack::Builder* builder, size_t index);
 
+    void _add_level_paths_impl(const std::string_view& path, JsonFlatPath* root);
+
 private:
     std::vector<std::string> _src_paths;
     bool _has_remain = false;
@@ -224,6 +242,7 @@ private:
     std::shared_ptr<JsonFlatPath> _src_root;
     std::vector<const Column*> _src_columns;
     std::vector<std::string> _exclude_paths;
+    std::vector<std::string> _level_paths;
     bool _output_nullable = false;
 
     ColumnPtr _result;

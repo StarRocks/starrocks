@@ -172,13 +172,15 @@ public:
     virtual void add_hash(uint64_t hash) = 0;
     virtual bool test_hash(uint64_t hash) const = 0;
 
+    static uint32_t estimate_bytes(uint64_t n, double fpp) { return _optimal_bit_num(n, fpp) / 8 + 1; }
+
 private:
     // Compute the optimal bit number according to the following rule:
     //     m = -n * ln(fpp) / (ln(2) ^ 2)
     // n: expected distinct record number
     // fpp: false positive probablity
     // the result will be power of 2
-    uint32_t _optimal_bit_num(uint64_t n, double fpp);
+    static uint32_t _optimal_bit_num(uint64_t n, double fpp);
 
 protected:
     // bloom filter data
