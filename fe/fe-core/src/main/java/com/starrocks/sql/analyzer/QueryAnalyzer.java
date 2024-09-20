@@ -102,6 +102,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AstToStringBuilder.getAliasName;
@@ -427,7 +428,8 @@ public class QueryAnalyzer {
                 return pivotRelation;
             } else if (relation instanceof FileTableFunctionRelation) {
                 FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
-                Table table = resolveTableFunctionTable(tableFunctionRelation.getProperties());
+                Table table = resolveTableFunctionTable(
+                        tableFunctionRelation.getProperties(), tableFunctionRelation.getPushDownSchemaFunc());
                 tableFunctionRelation.setTable(table);
                 return relation;
             } else if (relation instanceof TableRelation) {
@@ -1428,9 +1430,9 @@ public class QueryAnalyzer {
         }
     }
 
-    private Table resolveTableFunctionTable(Map<String, String> properties) {
+    private Table resolveTableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc) {
         try {
-            return new TableFunctionTable(properties);
+            return new TableFunctionTable(properties, pushDownSchemaFunc);
         } catch (DdlException e) {
             throw new StorageAccessException(e);
         }

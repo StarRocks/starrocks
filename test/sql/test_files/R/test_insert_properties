@@ -9,7 +9,7 @@ shell: ossutil64 cp --force ./sql/test_files/csv_format/invalid_int.csv oss://${
 -- result:
 0
 
-Succeed: Total num: 1, size: 12. OK num: 1(upload 1 files).
+Succeed: Total num: 1, size: 27. OK num: 1(upload 1 files).
 -- !result
 
 create table t1 (k1 int);
@@ -29,6 +29,7 @@ select $2 from files(
 -- !result
 select * from t1;
 -- result:
+None
 None
 2
 -- !result
@@ -57,7 +58,7 @@ truncate table t1;
 -- result:
 -- !result
 
-insert into t1 (k1) properties ("strict_mode" = "true", "max_filter_ratio" = "0.5")
+insert into t1 (k1) properties ("strict_mode" = "true", "max_filter_ratio" = "0.7")
 select $2 from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
     "format" = "csv",
@@ -94,9 +95,55 @@ select $2 from files(
 select * from t1;
 -- result:
 None
+None
 2
 -- !result
 truncate table t1;
+-- result:
+-- !result
+
+create table t2 (k1 int, k2 int, k3 int, k4 int, k5 int);
+
+insert into t2 properties ("strict_mode" = "true", "max_filter_ratio" = "0.7")
+select 10, *, 20 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+-- result:
+-- !result
+select * from t2;
+-- result:
+10	1	2	3	20
+-- !result
+truncate table t2;
+-- result:
+-- !result
+
+insert into t2 properties ("strict_mode" = "true", "max_filter_ratio" = "0.7")
+select 10, $1, $2 + 1, $3, 20 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+-- result:
+-- !result
+select * from t2;
+-- result:
+10	1	3	3	20
+10	6	None	7	20
+-- !result
+truncate table t2;
 -- result:
 -- !result
 

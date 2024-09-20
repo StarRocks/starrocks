@@ -36,7 +36,7 @@ select $2 from files(
 select * from t1;
 truncate table t1;
 
-insert into t1 (k1) properties ("strict_mode" = "true", "max_filter_ratio" = "0.5")
+insert into t1 (k1) properties ("strict_mode" = "true", "max_filter_ratio" = "0.7")
 select $2 from files(
     "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
     "format" = "csv",
@@ -63,5 +63,35 @@ select $2 from files(
     );
 select * from t1;
 truncate table t1;
+
+create table t2 (k1 int, k2 int, k3 int, k4 int, k5 int);
+
+insert into t2 properties ("strict_mode" = "true", "max_filter_ratio" = "0.7")
+select 10, *, 20 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+select * from t2;
+truncate table t2;
+
+insert into t2 properties ("strict_mode" = "true", "max_filter_ratio" = "0.7")
+select 10, $1, $2 + 1, $3, 20 from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "auto_detect_sample_rows" = "1",
+    "csv.column_separator" = "\\x01",
+    "csv.row_delimiter" = "\n",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+    );
+select * from t2;
+truncate table t2;
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
