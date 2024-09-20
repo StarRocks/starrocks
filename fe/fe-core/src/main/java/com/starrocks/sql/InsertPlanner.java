@@ -206,7 +206,7 @@ public class InsertPlanner {
                 legalGeneratedColumnDependencies.add(columnName);
                 continue;
             }
-            if (column.isAutoIncrement()) {
+            if (column.isAutoIncrement() || column.getDefaultExpr() != null) {
                 if (baseSchemaNames.contains(columnName)) {
                     outputBaseSchema.add(column);
                 }
