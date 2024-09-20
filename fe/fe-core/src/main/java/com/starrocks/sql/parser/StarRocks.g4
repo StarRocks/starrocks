@@ -301,6 +301,12 @@ statement
     | showDictionaryStatement
     | cancelRefreshDictionaryStatement
 
+    // Plan advisor statement
+    | addPlanAdvisorStatement
+    | clearPlanAdvisorStatement
+    | delPlanAdvisorStatement
+    | showPlanAdvisorStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -1961,6 +1967,20 @@ lock_type
     | LOW_PRIORITY? WRITE
     ;
 
+// ------------------------------------------- Plan Tuning Statement ---------------------------------------------------
+addPlanAdvisorStatement
+    : ADD INTO PLAN ADVISOR queryStatement;
+
+clearPlanAdvisorStatement
+    : CLEAR PLAN ADVISOR;
+
+delPlanAdvisorStatement
+    : DELETE PLAN ADVISOR string;
+
+showPlanAdvisorStatement
+    : SHOW PLAN ADVISOR;
+
+
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -2766,7 +2786,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
     | ARRAY_AGG | ARRAY_AGG_DISTINCT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE
@@ -2786,7 +2806,7 @@ nonReserved
     | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
-    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLUGIN | PLUGINS | POLICY | POLICIES
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
     | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY

@@ -799,6 +799,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
 
+    public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
+
+    public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1549,6 +1553,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    @VarAttr(name = ENABLE_PLAN_ANALYZER, flag = VariableMgr.INVISIBLE)
+    private boolean enablePlanAnalyzer = false;
+
+    @VarAttr(name = ENABLE_PLAN_ADVISOR)
+    private boolean enablePlanAdvisor = true;
+
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4175,6 +4186,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getConnectorRemoteFileAsyncTaskSize() {
         return connectorRemoteFileAsyncTaskSize;
+    }
+
+    public boolean isEnablePlanAnalyzer() {
+        return enablePlanAnalyzer;
+    }
+
+    public void setEnablePlanAnalyzer(boolean enablePlanAnalyzer) {
+        this.enablePlanAnalyzer = enablePlanAnalyzer;
+    }
+
+    public boolean isEnablePlanAdvisor() {
+        return enablePlanAdvisor;
+    }
+
+    public void setEnablePlanAdvisor(boolean enablePlanAdvisor) {
+        this.enablePlanAdvisor = enablePlanAdvisor;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {

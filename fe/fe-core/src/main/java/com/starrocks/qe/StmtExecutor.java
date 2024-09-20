@@ -118,6 +118,12 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
+import com.starrocks.qe.feedback.OperatorTuningGuides;
+import com.starrocks.qe.feedback.PlanAdvisorExecutor;
+import com.starrocks.qe.feedback.PlanTuningAdvisor;
+import com.starrocks.qe.feedback.analyzer.PlanTuningAnalyzer;
+import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
+import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -173,6 +179,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
@@ -725,6 +732,8 @@ public class StmtExecutor {
                 handleAddBackendBlackListStmt();
             } else if (parsedStmt instanceof DelBackendBlackListStmt) {
                 handleDelBackendBlackListStmt();
+            } else if (parsedStmt instanceof PlanAdvisorStmt) {
+                handlePlanAdvisorStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -1123,6 +1132,8 @@ public class StmtExecutor {
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
         boolean isSchedulerExplain = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
+        boolean isPlanAdvisorAnalyze = StatementBase.ExplainLevel.PLAN_ADVISOR.equals(parsedStmt.getExplainLevel());
+
         boolean isOutfileQuery = (parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause();
         if (isOutfileQuery) {
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(parsedStmt);
@@ -1151,7 +1162,6 @@ public class StmtExecutor {
             context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
         }
 
-        StatementBase queryStmt = parsedStmt;
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
@@ -1181,7 +1191,8 @@ public class StmtExecutor {
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan);
         } else {
-            boolean needSendResult = !isExplainAnalyze && !context.getSessionVariable().isEnableExecutionOnly();
+            boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
+                    && !context.getSessionVariable().isEnableExecutionOnly();
             // send mysql result
             // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
             //    We will not send real query result to client. Instead, we only send OK to client with
@@ -1221,7 +1232,7 @@ public class StmtExecutor {
                     context.updateReturnRows(batch.getBatch().getRows().size());
                 }
             } while (!batch.isEos());
-            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze) {
+            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze && !isPlanAdvisorAnalyze) {
                 sendFields(colNames, outputExprs);
             }
         }
@@ -1232,10 +1243,13 @@ public class StmtExecutor {
         } else {
             context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
         }
+
         if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
                 statisticsForAuditLog.statsItems.isEmpty()) {
             return;
         }
+        analyzePlanWithExecStats(execPlan);
+
         // collect table-level metrics
         Set<Long> tableIds = Sets.newHashSet();
         for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
@@ -1247,6 +1261,27 @@ public class StmtExecutor {
         for (Long tableId : tableIds) {
             TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
             entity.counterScanFinishedTotal.increase(1L);
+        }
+    }
+
+    private void analyzePlanWithExecStats(ExecPlan execPlan) {
+        SessionVariable sessionVariable = context.getSessionVariable();
+        if (!sessionVariable.isEnablePlanAdvisor() || CollectionUtils.isEmpty(statisticsForAuditLog.getNodeExecStatsItems())) {
+            return;
+        }
+        long elapseMs = System.currentTimeMillis() - context.getStartTime();
+        OperatorTuningGuides usedTuningGuides = PlanTuningAdvisor.getInstance().getOperatorTuningGuides(context.getQueryId());
+        if (usedTuningGuides != null) {
+            usedTuningGuides.addOptimizedRecord(context.getQueryId(), elapseMs);
+            PlanTuningAdvisor.getInstance().removeOptimizedQueryRecord(context.getQueryId());
+        } else if (sessionVariable.isEnablePlanAnalyzer() || elapseMs > Config.slow_query_analyze_threshold) {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.OPTIMIZER, "AnalyzeExecStats")) {
+                SkeletonBuilder builder = new SkeletonBuilder(statisticsForAuditLog.getNodeExecStatsItems());
+                Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = builder.buildSkeleton(execPlan.getPhysicalPlan());
+                OperatorTuningGuides tuningGuides = new OperatorTuningGuides(context.getQueryId(), elapseMs);
+                PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
+                PlanTuningAdvisor.getInstance().putTuningGuides(parsedStmt.getOrigStmt().getOrigStmt(), pair.first, tuningGuides);
+            }
         }
     }
 
@@ -1763,6 +1798,11 @@ public class StmtExecutor {
             } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
                 explainString += Tracers.printReasons();
             } else {
+                OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()
+                        .getOptimizedRecord(context.getQueryId());
+                if (optimizedRecord != null) {
+                    explainString += optimizedRecord.getExplainString();
+                }
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }
         }
@@ -2512,6 +2552,13 @@ public class StmtExecutor {
 
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
+    }
+
+    private void handlePlanAdvisorStmt() throws IOException {
+        ShowResultSet resultSet = PlanAdvisorExecutor.execute(parsedStmt, context);
+        if (resultSet != null) {
+            sendShowResult(resultSet);
+        }
     }
 
     public String getOriginStmtInString() {
