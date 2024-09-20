@@ -2601,7 +2601,7 @@ public class StmtExecutor {
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             boolean async = false;
-            if (context.isProfileEnabled()) {
+            if (context.isProfileEnabled() && originStmt != null) {
                 async = tryProcessProfileAsync(plan, 0);
             }
             if (async) {
