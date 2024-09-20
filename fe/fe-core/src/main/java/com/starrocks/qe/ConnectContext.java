@@ -995,7 +995,7 @@ public class ConnectContext {
                 killFlag = true;
 
                 String suggestedMsg = String.format("please increase the '%s' session variable",
-                        isExecLoadType() ? "insert_timeout" : "query_timeout");
+                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT);
                 errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeoutSecond, suggestedMsg);
             }
         }
