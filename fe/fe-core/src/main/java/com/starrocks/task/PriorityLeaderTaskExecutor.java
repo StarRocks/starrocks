@@ -111,21 +111,7 @@ public class PriorityLeaderTaskExecutor {
     }
 
     public void setPoolSize(int poolSize) {
-<<<<<<< HEAD
-        // When the previous poolSize is larger than the poolSize to be set,
-        // you need to setCorePoolSize first and then setMaximumPoolSize, and vice versa.
-        // Otherwise, it will throw IllegalArgumentException
-        int prePoolSize = executor.getCorePoolSize();
-        if (poolSize < prePoolSize) {
-            executor.setCorePoolSize(poolSize);
-            executor.setMaximumPoolSize(poolSize);
-        } else {
-            executor.setMaximumPoolSize(poolSize);
-            executor.setCorePoolSize(poolSize);
-        }
-=======
         ThreadPoolManager.setFixedThreadPoolSize(executor, poolSize);
->>>>>>> 5f3814317e ([BugFix] fix thread pool size adjustment exception (#51191))
     }
 
     private class TaskChecker implements Runnable {
