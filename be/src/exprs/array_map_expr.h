@@ -47,10 +47,7 @@ private:
     StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
         const std::vector<ColumnPtr>& arguments, NullColumnPtr null_column);
 
-    // Status prepare_lambda_arguments(ExprContext* context, Chunk* chunk, std::vector<ColumnPtr>* input_elements);
-
     // use map to make sure the order of execution
-    // std::map<Expr*, Expr*> _outer_common_exprs;
     std::map<SlotId, Expr*> _outer_common_exprs;
 };
 } // namespace starrocks

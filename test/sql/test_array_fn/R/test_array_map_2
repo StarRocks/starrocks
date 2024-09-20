@@ -1,84 +1,3 @@
--- name: test_array_map_1
-
--- Prepare Table and Data.
-CREATE TABLE t1 (
-    k1 bigint,
-    c1 array < varchar(65536) > 
-) ENGINE = OLAP 
-DUPLICATE KEY(k1) PROPERTIES (
-    "replication_num" = "1"
-);
-
-CREATE TABLE t2 (
-    k1 bigint,
-    c1 bigint
-) ENGINE = OLAP 
-DUPLICATE KEY(k1) PROPERTIES (
-    "replication_num" = "1"
-);
-
-insert into t1
-values
-    (1, ["1","2"]        ), 
-    (2, ["0","2","1"]    ), 
-    (3, ["0","2","1"]    ), 
-    (4, ["1","2"]        ), 
-    (5, ["0","2","1"]    ), 
-    (6, ["0","2","1","1"]), 
-    (7, ["0","2","1"]    ), 
-    (8, ["1","2"]        ), 
-    (9, ["L","2","1"]    ), 
-    (10, ["1","2"]       );
-
-
-insert into t2
-values
-    (1, 1),
-    (2, 1),
-    (3, 3),
-    (4, 5);
-
--- Query.
-with w1 as (
-    select
-        k1, c1, array_map (x -> true, c1) as c2
-    from
-        t1
-)
-select
-    w1.*
-from
-    w1
-    join [broadcast] t2 using(k1)
-where
-    array_sum(w1.c1) <= t2.c1
-order by
-    w1.k1;
-
--- union const with array_map won't crash
-INSERT INTO t1 (k1, c1)
-VALUES 
-(1, ARRAY_MAP(
-    x -> CAST(x AS STRING), 
-    ARRAY_GENERATE(1, 1000)
-)),
-(2, ARRAY_MAP(
-    x -> CAST(x AS STRING), 
-    ARRAY_GENERATE(1, 1000)
-)),
-(3, ARRAY_MAP(
-    x -> CAST(x AS STRING), 
-    ARRAY_GENERATE(1, 1000)
-)),
-(4, ARRAY_MAP(
-    x -> CAST(x AS STRING), 
-    ARRAY_GENERATE(1, 1000)
-)),
-(5, ARRAY_MAP(
-    x -> CAST(x AS STRING), 
-    ARRAY_GENERATE(1, 1000)
-));
-
 -- name: test_array_map_2
 CREATE TABLE `array_map_test` (
   `id` tinyint(4) NOT NULL COMMENT "",
@@ -90,19 +9,47 @@ DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "1"
 );
-
+-- result:
+-- !result
 insert into array_map_test values (1, array_repeat("abcdefghasdasdasirnqwrq", 20000), array_repeat(100, 20000));
-
+-- result:
+-- !result
 select count() from array_map_test where array_length(array_map((x,y)->(id+length(x)+y), arr_str, arr_largeint)) > 10 ;
+-- result:
+1
+-- !result
 select count(array_length(array_map((x,y)->(id+length(x)+y), arr_str, arr_largeint))) from array_map_test;
-
+-- result:
+1
+-- !result
 select count() from array_map_test where any_match(x->any_match(x->x<10, arr_largeint), arr_largeint);
+-- result:
+0
+-- !result
 select count(any_match(x->any_match(x->x<10, arr_largeint), arr_largeint)) from array_map_test;
+-- result:
+1
+-- !result
 select count(array_map(x->array_length(array_concat(arr_str,[])), arr_largeint)) from array_map_test;
-
+-- result:
+1
+-- !result
 set @arr=array_repeat("12345",1000000);
+-- result:
+-- !result
 select array_length(array_map((x,y)->x > y, @arr,@arr)) from table(generate_series(1,10,1));
-
+-- result:
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+1000000
+-- !result
 -- name: test_array_map_3
 CREATE TABLE `t` (
   `k` bigint NOT NULL COMMENT "",
@@ -110,31 +57,94 @@ CREATE TABLE `t` (
   `arr_1` array<bigint> NULL COMMENT "",
   `arr_2` array<bigint> NULL COMMENT ""
 ) ENGINE=OLAP
-primary KEY(`k`)
-DISTRIBUTED BY RANDOM BUCKETS 1
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1"
 );
-
+-- result:
+-- !result
 insert into t values (1, [1,2], [1,2],[2,3]), (2, [1,2], null, [2,3]), (3, [1,2],[1,2],null),(4, [1,2],[null,null],[2,3]), (5, [1], [1,2], [3]);
+-- result:
+-- !result
 select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t;
+-- result:
+E: (1064, "Input array element's size is not equal in array_map().")
+-- !result
 select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t where k != 5 order by k;
+-- result:
+[4,7]
+None
+None
+[null,null]
+-- !result
 delete from t where k = 5;
-
+-- result:
+-- !result
 select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t order by k;
+-- result:
+[4,7]
+None
+None
+[null,null]
+-- !result
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1,2]) from t order by k;
+-- result:
+[5,9]
+None
+None
+[null,null]
+-- !result
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1]) from t order by k;
-
+-- result:
+E: (1064, "Input array element's size is not equal in array_map().")
+-- !result
 select array_map(x->x, arr_0) from t order by k;
--- independent expr
+-- result:
+[1,2]
+[1,2]
+[1,2]
+[1,2]
+-- !result
 select array_map((x,y,z)->10, arr_0, arr_1, arr_2) from t;
+-- result:
+[10,10]
+None
+None
+[10,10]
+-- !result
 select array_map((x,y)-> k, arr_0, arr_1) from t order by k;
-
--- independent expr with all const
+-- result:
+[1,1]
+None
+[3,3]
+[4,4]
+-- !result
 select array_map((x,y)->k, [1,2],[2,3]) from t order by k;
-
--- non indepentdent with all const
+-- result:
+[1,1]
+[1,1]
+[1,1]
+[1,1]
+-- !result
 select array_map((x,y,z)->x+y+z, [1,2],[2,3],[3,4]) from t;
+-- result:
+[6,9]
+[6,9]
+[6,9]
+[6,9]
+-- !result
 select array_map((x,y,z)->x+y+z, [1,2],[2,null],[3,4]) from t;
+-- result:
+[6,null]
+[6,null]
+[6,null]
+[6,null]
+-- !result
 select array_map((x,y,z)->x+y+z, [1,2],[2,null],null) from t;
-
+-- result:
+None
+None
+None
+None
+-- !result
