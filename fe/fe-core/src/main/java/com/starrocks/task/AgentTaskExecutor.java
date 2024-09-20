@@ -21,21 +21,27 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 public class AgentTaskExecutor {
 
     public static final ExecutorService EXECUTOR =
-            ThreadPoolManager.newDaemonCacheThreadPool(Config.max_agent_task_threads_num, "agent-task-pool", true);
+            ThreadPoolManager.newDaemonCacheRejectThreadPool(Config.max_agent_task_threads_num, "agent-task-pool", true);
 
     public AgentTaskExecutor() {
 
     }
 
-    public static void submit(AgentBatchTask task) {
+    public static boolean submit(AgentBatchTask task) {
         if (task == null) {
-            return;
+            return false;
         }
-        EXECUTOR.submit(task);
+        try {
+            EXECUTOR.submit(task);
+        } catch (RejectedExecutionException e) {
+            return false;
+        }
+        return true;
     }
 
 }
