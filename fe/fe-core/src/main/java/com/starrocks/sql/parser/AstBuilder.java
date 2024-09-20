@@ -6155,7 +6155,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private static BinaryType getComparisonOperator(Token symbol) {
         switch (symbol.getType()) {
             case StarRocksParser.EQ:
-                return BinaryType.EQ;
+                if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null
+                        && ConnectContext.get().getSessionVariable().isEnableCompareForNull()) {
+                    return BinaryType.EQ_FOR_NULL;
+                } else {
+                    return BinaryType.EQ;
+                }
             case StarRocksParser.NEQ:
                 return BinaryType.NE;
             case StarRocksParser.LT:
