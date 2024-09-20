@@ -131,6 +131,9 @@ public:
     bool is_finished() const;
 
 private:
+    static bool _check_json_schema_equallity(const Chunk* one, const Chunk* two);
+
+private:
     static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75; // 0.75 * chunk_size
 #ifdef BE_TEST
     static constexpr size_t LOW_WATERMARK_BYTES = 64 * 1024; // 64KB.

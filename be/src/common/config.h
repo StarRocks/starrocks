@@ -1355,6 +1355,9 @@ CONF_mDouble(json_flat_sparsity_factor, "0.9");
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
 
+// for whitelist on flat json remain data, max set 1kb
+CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
