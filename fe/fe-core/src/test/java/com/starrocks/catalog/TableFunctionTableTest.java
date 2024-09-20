@@ -183,7 +183,7 @@ public class TableFunctionTableTest {
             properties.put("auto_detect_sample_files", "not_a_number");
             new TableFunctionTable(properties);
         });
-        Assertions.assertThrows(DdlException.class, () -> {
+        Assertions.assertThrows(SemanticException.class, () -> {
             Map<String, String> properties = newProperties();
             properties.put("list_files_only", "not_true_false");
             new TableFunctionTable(properties);

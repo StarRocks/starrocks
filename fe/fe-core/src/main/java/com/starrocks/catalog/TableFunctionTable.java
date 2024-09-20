@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
@@ -89,6 +90,13 @@ public class TableFunctionTable extends Table {
         SUPPORTED_FORMATS.add(ORC);
         SUPPORTED_FORMATS.add(CSV);
     }
+
+    private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
+            .column("PATH", Type.STRING)
+            .column("SIZE", Type.BIGINT)
+            .column("IS_DIR", Type.BOOLEAN)
+            .column("MODIFICATION_TIME", Type.DATETIME)
+            .build();
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
@@ -202,13 +210,7 @@ public class TableFunctionTable extends Table {
     }
 
     private void setSchemaForListFiles() {
-        List<Column> columns = new SchemaBuilder()
-                .column("PATH", Type.STRING)
-                .column("SIZE", Type.BIGINT)
-                .column("IS_DIR", Type.BOOLEAN)
-                .column("MODIFICATION_TIME", Type.DATETIME)
-                .build();
-        setNewFullSchema(columns);
+        setNewFullSchema(LIST_FILES_COLUMNS);
     }
 
     @Override
@@ -217,7 +219,7 @@ public class TableFunctionTable extends Table {
     }
 
     // for load
-    public List<TBrokerFileStatus> brokerFileList() {
+    public List<TBrokerFileStatus> loadFileList() {
         return fileStatuses;
     }
 
@@ -304,14 +306,7 @@ public class TableFunctionTable extends Table {
 
         if (properties.containsKey(PROPERTY_LIST_FILES_ONLY)) {
             String property = properties.get(PROPERTY_LIST_FILES_ONLY);
-            if (property.equalsIgnoreCase("true")) {
-                listFilesOnly = true;
-            } else if (property.equalsIgnoreCase("false")) {
-                listFilesOnly = false;
-            } else {
-                ErrorReport.reportDdlException(
-                        ErrorCode.ERR_INVALID_VALUE, PROPERTY_LIST_FILES_ONLY, property, "true or false (case insensitive)");
-            }
+            listFilesOnly = ParseUtil.parseBooleanValue(property, PROPERTY_LIST_FILES_ONLY);
         }
 
         if (!listFilesOnly) {
