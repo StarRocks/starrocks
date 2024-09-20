@@ -172,7 +172,6 @@ public:
             return *stub_ptr;
         }
         // create
-<<<<<<< HEAD
         brpc::ChannelOptions options;
         options.connect_timeout_ms = config::rpc_connect_timeout_ms;
         options.protocol = "http";
@@ -181,10 +180,6 @@ public:
         options.max_retry = 3;
         std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
         if (channel->Init(endpoint, &options)) {
-=======
-        auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
-        if (!stub->reset_channel("http").ok()) {
->>>>>>> 1766f02e1d ([BugFix] fix tablet writer add chunk when larger than 2GB (#51152))
             return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }
