@@ -288,13 +288,6 @@ public class JournalEntity implements Writable {
                 data = DropPartitionInfo.read(in);
                 break;
             }
-<<<<<<< HEAD
-=======
-            case OperationType.OP_DROP_PARTITIONS: {
-                data = DropPartitionsInfo.read(in);
-                break;
-            }
->>>>>>> 790a2b0b24 ([Enhancement] Support Gson subtype rollback (#50471))
             case OperationType.OP_MODIFY_PARTITION: {
                 data = new ModifyPartitionInfo();
                 ((ModifyPartitionInfo) data).readFields(in);

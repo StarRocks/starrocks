@@ -402,21 +402,11 @@ public class VariableMgr {
         writer.close();
     }
 
-<<<<<<< HEAD
     public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            int sessionVarSize = reader.readInt();
-            for (int i = 0; i < sessionVarSize; ++i) {
-                VariableInfo v = reader.readJson(VariableInfo.class);
-                VarContext varContext = getVarContext(v.name);
-                if (varContext != null) {
-=======
-    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(VariableInfo.class, v -> {
             VarContext varContext = getVarContext(v.name);
             if (varContext != null) {
                 try {
->>>>>>> 790a2b0b24 ([Enhancement] Support Gson subtype rollback (#50471))
                     setValue(varContext.getObj(), varContext.getField(), v.variable);
                 } catch (DdlException e) {
                     throw new IOException(e);

@@ -35,11 +35,7 @@
 package com.starrocks.plugin;
 
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.DataOutputBuffer;
-=======
->>>>>>> 790a2b0b24 ([Enhancement] Support Gson subtype rollback (#50471))
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.server.GlobalStateMgr;
