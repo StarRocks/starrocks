@@ -3265,6 +3265,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to enable Lazy Dyamic Flat JSON when a query misses Flat JSON schema in read process. When this item is set to `true`, StarRocks will postpone the Flat JSON operation to calculation process instead of read process.
 - Introduced in: v3.3.3
 
+##### jit_lru_cache_size
+
+- Default: 0
+- Type: Int
+- Unit: GB
+- Is mutable: Yes
+- Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
+- Introduced in: -
+
 ### Shared-data
 
 ##### starlet_port
@@ -4593,17 +4602,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 ##### olap_string_max_length
 
 - Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### jit_lru_cache_size
-
-- Default: 0
 - Type: Int
 - Unit:
 - Is mutable: Yes
