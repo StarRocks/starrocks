@@ -418,7 +418,7 @@ private:
 private:
     EngineOptions _options;
     std::mutex _store_lock;
-    std::map<std::string, DataDir*> _store_map;
+    std::map<std::string, std::unique_ptr<DataDir>> _store_map;
     uint32_t _available_storage_medium_type_count;
     bool _is_all_cluster_id_exist;
 
