@@ -828,6 +828,7 @@ public class OlapTable extends Table {
             }
             indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
             indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
+            indexIdToMeta.get(newIdxId).setSchemaIdForRestore(newIdxId);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
