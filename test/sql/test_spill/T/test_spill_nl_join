@@ -20,7 +20,7 @@ select l.*, r.* from t0 l join [broadcast] t0 r where l.c0 + r.c0 < 10 order by 
 select count(*) from t0 l join [broadcast] t0 r where r.c0 = 1;
 select count(*) from t0 l join [broadcast] t0 r where r.c0 < 0;
 select count(*) from t0 l join [broadcast] t0 r where l.c0 < 0;
-select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join t0 r) t;
+select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join t0 r where l.c0 < 1000 and r.c0 < 1000) t where d.c0 < 100;
 
 -- test empty table
 ---- build side emtpy
