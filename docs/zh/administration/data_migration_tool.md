@@ -209,7 +209,7 @@ report_interval_seconds=300
 | ddl_job_allow_drop_partition_target_only  | 迁移工具是否自动删除目标集群上在源集群中已删除的分区，保持目标集群与源集群上表的分区一致。默认为 `true`，即删除。此项您可以使用默认值。 |
 | replication_job_interval_seconds          | 迁移工具触发数据同步任务的周期，单位为秒。此项您可以使用默认值。 |
 | replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。 |
-| max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务每次同步数据大小限制，以分区为单位进行限制，默认值为 `-1` 代表无限制，即一个数据同步任务同步一个表的所有分区。如果同步的表的数据量很大，可以配置此参数按分区分批次同步。|
+| max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务的数据大小阈值。单位：GB。如果要迁移的数据大小超过此值，将触发多个数据同步任务。默认值为 `-1`，表示没有限制。如果要迁移的表的数据量较大，可以设置此参数来限制每个任务的数据大小。 |
 | report_interval_seconds                   | 迁移工具打印 Progress 信息的周期。单位：秒。默认值：`300`。此项您可以使用默认值。 |
 
 ### 获取集群 Token
