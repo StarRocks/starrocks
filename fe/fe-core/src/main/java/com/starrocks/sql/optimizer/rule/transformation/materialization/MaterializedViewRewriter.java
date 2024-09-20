@@ -2674,7 +2674,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
     private Map<Table, Set<Integer>> getTableToRelationid(
             OptExpression optExpression, ColumnRefFactory refFactory, List<Table> tableList) {
         Map<Table, Set<Integer>> tableToRelationId = Maps.newHashMap();
-        List<ColumnRefOperator> validColumnRefs = MvUtils.collectScanColumn(optExpression);
+        Set<ColumnRefOperator> validColumnRefs = MvUtils.collectScanColumn(optExpression);
         for (Map.Entry<ColumnRefOperator, Table> entry : refFactory.getColumnRefToTable().entrySet()) {
             if (!tableList.contains(entry.getValue())) {
                 continue;
