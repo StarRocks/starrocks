@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "block_cache/cache_options.h"
+#include "cache/block_cache/cache_options.h"
 
 #include <fmt/format.h>
 

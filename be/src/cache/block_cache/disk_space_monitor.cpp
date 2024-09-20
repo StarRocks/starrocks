@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "block_cache/disk_space_monitor.h"
+#include "cache/block_cache/disk_space_monitor.h"
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "common/config.h"
 #include "util/await.h"
 #include "util/thread.h"

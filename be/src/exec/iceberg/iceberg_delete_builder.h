@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "block_cache/cache_options.h"
+#include "cache/block_cache/cache_options.h"
 #include "common/status.h"
 #include "exec/mor_processor.h"
 #include "exec/parquet_scanner.h"

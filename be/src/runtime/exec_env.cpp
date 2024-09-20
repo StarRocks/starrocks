@@ -40,7 +40,7 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/configbase.h"
@@ -250,7 +250,7 @@ Status GlobalEnv::_init_mem_tracker() {
 
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     ForEach<ColumnPoolList>(op);
-    _init_storage_page_cache(); // TODO: move to StorageEngine
+    //_init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }
 
@@ -260,7 +260,7 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-void GlobalEnv::_init_storage_page_cache() {
+void GlobalEnv::init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
     storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);

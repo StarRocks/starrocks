@@ -20,7 +20,7 @@
 #include <random>
 #include <set>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -3093,7 +3093,9 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file1_path), _mock_datacache_options());
-    file_reader->_cache = cache.get();
+    ObjectCache obj_cache;
+    ASSERT_TRUE(obj_cache.init(cache->starcache_instance()).ok());
+    file_reader->_cache = &obj_cache;
 
     // first init, populcate footer cache
     auto* ctx = _create_file1_base_context();
@@ -3106,7 +3108,7 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
 
     auto file_reader2 = std::make_shared<FileReader>(
             config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path), _mock_datacache_options());
-    file_reader2->_cache = cache.get();
+    file_reader2->_cache = &obj_cache;
 
     // second init, read footer cache
     auto* ctx2 = _create_file1_base_context();

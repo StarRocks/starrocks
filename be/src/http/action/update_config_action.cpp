@@ -43,7 +43,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/status.h"

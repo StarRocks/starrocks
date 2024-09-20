@@ -34,24 +34,46 @@
 
 #include "storage/page_cache.h"
 
+#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
 #include "runtime/mem_tracker.h"
 
+DECLARE_int32(v);
+
 namespace starrocks {
 
-class StoragePageCacheTest : public testing::Test {
+class StoragePageCacheTest : public testing::TestWithParam<bool> {
 public:
     StoragePageCacheTest() { _mem_tracker = std::make_unique<MemTracker>(); }
     ~StoragePageCacheTest() override = default;
 
+    std::shared_ptr<ObjectCache> create_obj_cache(size_t capacity) {
+        bool based_on_datacache = GetParam();
+        ObjectCacheOptions options;
+        options.capacity = capacity;
+        options.module = ObjectCacheModuleType::LRUCACHE;
+#ifdef WITH_STARCACHE
+        if (based_on_datacache) {
+            options.module = ObjectCacheModuleType::STARCACHE;
+        }
+#endif
+        auto obj_cache = std::make_shared<ObjectCache>();
+        (void)obj_cache->init(options);
+        return obj_cache;
+    }  
+
 private:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<ObjectCache> _obj_cache = nullptr;
+    bool _based_on_datacache;
 };
 
 // NOLINTNEXTLINE
-TEST_F(StoragePageCacheTest, normal) {
-    StoragePageCache cache(_mem_tracker.get(), kNumShards * 2048);
+TEST_P(StoragePageCacheTest, normal) {
+    size_t capacity = kNumShards * 2048;
+    auto obj_cache = create_obj_cache(capacity);
+    StoragePageCache cache(_mem_tracker.get(), capacity, obj_cache.get());
 
     StoragePageCache::CacheKey key("abc", 0);
     StoragePageCache::CacheKey memory_key("mem", 0);
@@ -88,7 +110,12 @@ TEST_F(StoragePageCacheTest, normal) {
         StoragePageCache::CacheKey key("bcd", i);
         PageCacheHandle handle;
         Slice data(new char[1024], 1024);
-        cache.insert(key, data, &handle, false);
+        Status st = cache.insert(key, data, &handle, false);
+        if (!st.ok()) {
+            // Some items may be inserted failed in starcache module because the shard distribution.
+            LOG(INFO) << "free data when inserting failed";
+            delete[] data.data;
+        }
     }
 
     // cache miss
@@ -144,10 +171,14 @@ TEST_F(StoragePageCacheTest, normal) {
         cache.set_capacity(0);
         ASSERT_EQ(cache.get_capacity(), 0);
     }
+
+    obj_cache->shutdown();
 }
 
-TEST_F(StoragePageCacheTest, metrics) {
-    StoragePageCache cache(_mem_tracker.get(), kNumShards * 2048);
+TEST_P(StoragePageCacheTest, metrics) {
+    size_t capacity = kNumShards * 2048;
+    auto obj_cache = create_obj_cache(capacity);
+    StoragePageCache cache(_mem_tracker.get(), capacity, obj_cache.get());
 
     // Insert a piece of data, but the application layer does not release it.
     StoragePageCache::CacheKey key1("abc", 0);
@@ -182,6 +213,10 @@ TEST_F(StoragePageCacheTest, metrics) {
     }
     ASSERT_EQ(cache.get_lookup_count(), 2 + 1024);
     ASSERT_EQ(cache.get_hit_count(), 2);
+
+    obj_cache->shutdown();
 }
+
+INSTANTIATE_TEST_SUITE_P(StoragePageCacheTest, StoragePageCacheTest, ::testing::Values(false, true));
 
 } // namespace starrocks

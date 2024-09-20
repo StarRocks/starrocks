@@ -14,7 +14,7 @@
 
 #include <fmt/format.h>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "common/logging.h"
 
 namespace starrocks {
