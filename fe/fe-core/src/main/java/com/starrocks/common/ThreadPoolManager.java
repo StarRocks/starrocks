@@ -235,5 +235,21 @@ public class ThreadPoolManager {
             }
         }
     }
+
+    public static void setFixedThreadPoolSize(ThreadPoolExecutor executor, int poolSize) {
+        int coreSize = executor.getCorePoolSize();
+        if (coreSize == poolSize) { // no change
+            return;
+        }
+        if (coreSize < poolSize) {
+            // increase the pool size, set the `MaximumPoolSize` first and then the `CoreSize`
+            executor.setMaximumPoolSize(poolSize);
+            executor.setCorePoolSize(poolSize);
+        } else {
+            // decrease the pool size, set `CoreSize` first and then the `MaximumPoolSize`
+            executor.setCorePoolSize(poolSize);
+            executor.setMaximumPoolSize(poolSize);
+        }
+    }
 }
 

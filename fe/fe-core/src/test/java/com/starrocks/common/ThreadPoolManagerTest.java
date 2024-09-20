@@ -87,4 +87,35 @@ public class ThreadPoolManagerTest {
         Assert.assertEquals(4, testFixedThreaddPool.getCompletedTaskCount());
 
     }
+
+    @Test
+    public void testSetFixedThreadPoolSize() {
+        int expectedPoolSize = 2;
+        ThreadPoolExecutor testPool =
+                ThreadPoolManager.newDaemonFixedThreadPool(expectedPoolSize, 4096, "testPool", false);
+        Assert.assertEquals(expectedPoolSize, testPool.getCorePoolSize());
+        Assert.assertEquals(expectedPoolSize, testPool.getMaximumPoolSize());
+
+        { // increase the pool size, no problem
+            expectedPoolSize = 10;
+            int poolSize = expectedPoolSize;
+            ExceptionChecker.expectThrowsNoException(
+                    () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, poolSize));
+            Assert.assertEquals(expectedPoolSize, testPool.getCorePoolSize());
+            Assert.assertEquals(expectedPoolSize, testPool.getMaximumPoolSize());
+        }
+
+        { // decrease the pool size, no problem
+            expectedPoolSize = 5;
+            int poolSize = expectedPoolSize;
+            ExceptionChecker.expectThrowsNoException(
+                    () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, poolSize));
+            Assert.assertEquals(expectedPoolSize, testPool.getCorePoolSize());
+            Assert.assertEquals(expectedPoolSize, testPool.getMaximumPoolSize());
+        }
+
+        // can't set to <= 0
+        Assert.assertThrows(IllegalArgumentException.class, () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, 0));
+        Assert.assertThrows(IllegalArgumentException.class, () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, -1));
+    }
 }
