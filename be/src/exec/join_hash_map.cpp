@@ -511,13 +511,9 @@ void JoinHashTable::_init_mor_reader() {
 
 void JoinHashTable::_init_join_keys() {
     for (const auto& key_desc : _table_items->join_keys) {
-        if (key_desc.col_ref) {
-            _table_items->key_columns.emplace_back(nullptr);
-        } else {
-            auto key_column = ColumnHelper::create_column(*key_desc.type, false);
-            key_column->append_default();
-            _table_items->key_columns.emplace_back(key_column);
-        }
+        auto key_column = ColumnHelper::create_column(*key_desc.type, false);
+        key_column->append_default();
+        _table_items->key_columns.emplace_back(key_column);
     }
 }
 
