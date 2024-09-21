@@ -614,18 +614,15 @@ bool ChunkPipelineAccumulator::is_finished() const {
     return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
 }
 
-template <class T>
-inline constexpr bool is_object = false;
-template <>
-inline constexpr bool is_object<ArrayColumn> = true;
-template <>
-inline constexpr bool is_object<StructColumn> = true;
-template <>
-inline constexpr bool is_object<MapColumn> = true;
-template <>
-inline constexpr bool is_object<JsonColumn> = true;
-template <class T>
-inline constexpr bool is_object<ObjectColumn<T>> = true;
+template <class ColumnT>
+inline constexpr bool is_object = std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
+                                  std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
+                                  std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
+
+template <class ColumnT>
+inline constexpr bool is_fixed_or_binary =
+        std::is_base_of_v<FixedLengthColumnBase<typename ColumnT::ValueType>, ColumnT> ||
+        std::is_same_v<ColumnT, BinaryColumn> || std::is_same_v<ColumnT, LargeBinaryColumn>;
 
 // Selective-copy data from SegmentedColumn according to provided index
 class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {
@@ -638,9 +635,8 @@ public:
               _from(from),
               _size(size) {}
 
-    template <class T>
-    Status do_visit(const FixedLengthColumnBase<T>& column) {
-        using ColumnT = FixedLengthColumnBase<T>;
+    template <class ColumnT>
+    typename std::enable_if_t<is_fixed_or_binary<ColumnT>, Status> do_visit(const ColumnT& column) {
         using ContainerT = typename ColumnT::Container*;
 
         _result = column.clone_empty();
@@ -661,28 +657,7 @@ public:
         return {};
     }
 
-    template <class T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
-        using ColumnT = BinaryColumnBase<T>;
-        using ContainerT = typename ColumnT::Container*;
-
-        _result = column.clone_empty();
-        auto output = ColumnHelper::as_column<ColumnT>(_result);
-        auto& columns = _segment_column->columns();
-        std::vector<ContainerT> buffers;
-        for (auto& seg_column : columns) {
-            buffers.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_data());
-        }
-
-        for (uint32_t i = _from; i < _size; i++) {
-            uint32_t idx = _indexes[i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
-            output->append((*buffers[segment_id])[segment_offset]);
-        }
-        return {};
-    }
-
-    // Fallback implementation, it's usually used for Array/Struct/Map/Json
+    // Inefficient fallback implementation, it's usually used for Array/Struct/Map/Json
     template <class ColumnT>
     typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
         _result = column.clone_empty();
