@@ -22,14 +22,21 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.ShowCatalogRecycleBinStmt;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -80,6 +87,15 @@ public class CatalogRecycleBinTest {
             } catch (Exception ignore) {
             }
         }
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+    private VariableMgr variableMgr = new VariableMgr();
+    private SessionVariable defSessionVariable = new SessionVariable();
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
     }
 
     private static String rowsToString(List<List<String>> rows) {
@@ -698,13 +714,6 @@ public class CatalogRecycleBinTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
                 globalStateMgr.getLocalMetastore().onEraseDatabase(anyLong);
                 minTimes = 0;
                 globalStateMgr.getEditLog();
@@ -721,7 +730,29 @@ public class CatalogRecycleBinTest {
         String tz = "Asia/Shanghai";
         new Expectations() {
             {
-                globalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+        new Expectations() {
+            {
+                variableMgr.getDefaultSessionVariable();
+                minTimes = 0;
+                result = defSessionVariable;
+
+                defSessionVariable.getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+        new Expectations() {
+            {
+                ConnectContext.get().getSessionVariable().getTimeZone();
                 minTimes = 0;
                 result = tz;
             }
@@ -738,21 +769,24 @@ public class CatalogRecycleBinTest {
         Assert.assertEquals(recyclebininfo.size(), 1);
         String actual = rowsToString(recyclebininfo);
         Assert.assertTrue(actual.contains("222"));
+
+        String showWithoutDbSQL = "SHOW CATALOG RECYCLE BIN ";
+        try {
+            ShowCatalogRecycleBinStmt stmtWithoutDbFromSql =
+                    (ShowCatalogRecycleBinStmt) UtFrameUtils.parseStmtWithNewParser(showWithoutDbSQL, connectContext);
+            ShowCatalogRecycleBinStmt stmtWithoutIndicateDb = new ShowCatalogRecycleBinStmt(null);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmtWithoutIndicateDb, connectContext);
+        } catch (Exception e) {
+        }
     }
 
     @Test
-    public void testShowCatalogRecycleBinTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+    public void testShowCatalogRecycleBinTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
+            @Mocked VariableMgr variableMgr) {
         Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
         Table table2SameName = new Table(22, "dos", Table.TableType.VIEW, null);
         Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
         new Expectations() {
             {
                 globalStateMgr.getEditLog();
@@ -770,7 +804,29 @@ public class CatalogRecycleBinTest {
         String tz = "Asia/Shanghai";
         new Expectations() {
             {
-                globalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+        new Expectations() {
+            {
+                variableMgr.getDefaultSessionVariable();
+                minTimes = 0;
+                result = defSessionVariable;
+
+                defSessionVariable.getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+        new Expectations() {
+            {
+                ConnectContext.get().getSessionVariable().getTimeZone();
                 minTimes = 0;
                 result = tz;
             }
@@ -814,13 +870,6 @@ public class CatalogRecycleBinTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
                 globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
                 minTimes = 0;
 
@@ -838,7 +887,30 @@ public class CatalogRecycleBinTest {
         String tz = "Asia/Shanghai";
         new Expectations() {
             {
-                globalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+        new Expectations() {
+            {
+                variableMgr.getDefaultSessionVariable();
+                minTimes = 0;
+                result = defSessionVariable;
+
+                defSessionVariable.getTimeZone();
+                minTimes = 0;
+                result = tz;
+            }
+        };
+
+        new Expectations() {
+            {
+                ConnectContext.get().getSessionVariable().getTimeZone();
                 minTimes = 0;
                 result = tz;
             }
@@ -875,5 +947,4 @@ public class CatalogRecycleBinTest {
         String actual = rowsToString(recyclebininfo);
         Assert.assertTrue(actual.contains("222"));          
     }
-
 }
