@@ -571,17 +571,6 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(year_week_with_modeImpl, t, m) {
     date_value.to_date(&year, &month, &day);
     uint to_year = 0;
     int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m | 2), &to_year);
-
-    if (week == 53 && day >= 29 && !(m & 4)) {
-        int monday_first = m & WEEK_MONDAY_FIRST;
-        int daynr_of_last_day = TimeFunctions::compute_daynr(year, 12, 31);
-        int weekday_of_last_day = TimeFunctions::compute_weekday(daynr_of_last_day, !monday_first);
-
-        if (weekday_of_last_day - monday_first < 2) {
-            ++to_year;
-            week = 1;
-        }
-    }
     return to_year * 100 + week;
 }
 DEFINE_TIME_BINARY_FN(year_week_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
