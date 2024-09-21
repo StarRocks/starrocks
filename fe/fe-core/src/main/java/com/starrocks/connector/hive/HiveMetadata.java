@@ -265,9 +265,6 @@ public class HiveMetadata implements ConnectorMetadata {
         List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
 
         boolean useCache = true;
-        if (table instanceof HiveTable) {
-            useCache = ((HiveTable) table).isUseMetadataCache();
-        }
         // if we disable cache explicitly
         if (!params.isUseCache()) {
             useCache = false;
@@ -473,5 +470,17 @@ public class HiveMetadata implements ConnectorMetadata {
         HivePartitionWithStats partitionWithStats =
                 new HivePartitionWithStats(partitionString, hivePartition, HivePartitionStats.empty());
         hmsOps.addPartitions(table.getDbName(), table.getTableName(), Lists.newArrayList(partitionWithStats));
+    }
+
+    public static boolean useMetadataCache() {
+        if (ConnectContext.get() == null) {
+            return true;
+        }
+
+        if (ConnectContext.get().getUseConnectorMetadataCache().isEmpty()) {
+            return true;
+        }
+
+        return ConnectContext.get().getUseConnectorMetadataCache().get();
     }
 }
