@@ -165,12 +165,6 @@ public class Optimizer {
             // prepare for optimizer
             prepare(connectContext, columnRefFactory, logicOperatorTree);
 
-            // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
-            try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
-                logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, mvTransformerContext)
-                        .transform(logicOperatorTree, context).get(0);
-            }
-
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
