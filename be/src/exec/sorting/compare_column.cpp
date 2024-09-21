@@ -238,11 +238,6 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const ArrayViewColumn& column) {
-        DCHECK(false) << "not support array view column sort_and_tie";
-        return Status::NotSupported("not suport array view column");
-    }
-
     size_t get_equal_count() const { return _equal_count; }
 
 private:
@@ -317,7 +312,6 @@ public:
     Status do_visit(const ObjectColumn<T>& column) {
         return Status::NotSupported("not support");
     }
-    Status do_visit(const ArrayViewColumn& column) { return Status::NotSupported("Not support"); }
 
 private:
     const ColumnPtr _column;

@@ -20,7 +20,6 @@
 #include <sstream>
 
 #include "column/array_column.h"
-#include "column/array_view_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"

@@ -180,22 +180,6 @@ public:
         return dest;
     }
 
-    // align columns' offsets
-    // column(1,2)->align_offsets({0,2,5}) -> column(1,_,2,_,_)
-    virtual ColumnPtr align_offsets(const Buffer<uint32_t>& offsets) {
-        auto dest = this->clone_empty();
-        auto dest_size = offsets.size() - 1;
-        DCHECK(this->size() >= dest_size) << "The size of the source column is less when aligning offsets.";
-        dest->reserve(offsets.back());
-        for (size_t i = 0; i < dest_size; i++) {
-            // first value is itself, others append default
-            dest->append_value_multiple_times(*this, i, 1);
-            if (offsets[i + 1] - offsets[i] > 1) {
-                dest->append_default(offsets[i + 1] - offsets[i] - 1);
-            }
-        }
-        return dest;
-    }
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 

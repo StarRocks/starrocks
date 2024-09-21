@@ -17,7 +17,6 @@
 #include <memory>
 
 #include "column/array_column.h"
-#include "column/array_view_column.h"
 #include "column/column_hash.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"

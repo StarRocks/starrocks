@@ -218,11 +218,6 @@ public:
         return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
                                    _build_tie);
     }
-    Status do_visit(const ArrayViewColumn& column) {
-        DCHECK(false) << "not support array view column sort_and_tie";
-
-        return Status::NotSupported("not support array view column sort_and_tie");
-    }
 
 private:
     const std::atomic<bool>& _cancel;
@@ -411,10 +406,6 @@ public:
                                             _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
-    }
-    Status do_visit(const ArrayViewColumn& column) {
-        DCHECK(false) << "not supported";
-        return Status::NotSupported("Not support");
     }
 
 private:
