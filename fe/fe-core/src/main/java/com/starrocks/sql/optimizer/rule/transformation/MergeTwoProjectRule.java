@@ -48,7 +48,7 @@ public class MergeTwoProjectRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : firstProject.getColumnRefMap().entrySet()) {
             ScalarOperator result = rewriter.rewrite(entry.getValue());
-            if (result.isConstant()) {
+            if (!result.isConstant()) {
                 // better to rewrite all expression, but it's unnecessary
                 result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
             }
