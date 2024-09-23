@@ -3200,6 +3200,72 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The size of the query cache in the BE. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### enable_json_flat
+
+- Default: false
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
+- Introduced in: v3.3.0
+
+##### json_flat_null_factor
+
+- Default: 0.3
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_sparsity_factor
+
+- Default: 0.9
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_column_max
+
+- Default: 100
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### enable_compaction_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable compaction for Flat JSON data.
+- Introduced in: v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable Lazy Dyamic Flat JSON when a query misses Flat JSON schema in read process. When this item is set to `true`, StarRocks will postpone the Flat JSON operation to calculation process instead of read process.
+- Introduced in: v3.3.3
+
+##### jit_lru_cache_size
+
+- Default: 0
+- Type: Int
+- Unit: GB
+- Is mutable: Yes
+- Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
+- Introduced in: -
+
+>>>>>>> cf779c7289 ([Doc] Add JIT and Table Prune Doc (#51219))
 ### Shared-data
 
 ##### starlet_port

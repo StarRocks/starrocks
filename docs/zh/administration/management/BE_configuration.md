@@ -3143,6 +3143,72 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：指定 Query Cache 的大小。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### enable_json_flat
+
+- 默认值：false
+- 类型：Boolean
+- 单位：
+- 是否动态：是
+- 描述：是否开启 Flat JSON 特性。开启后新导入的 JSON 数据会自动打平，提升 JSON 数据查询性能。
+- 引入版本：v3.3.0
+
+##### json_flat_null_factor
+
+- 默认值：0.3
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_sparsity_factor
+
+- 默认值：0.9
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_column_max
+
+- 默认值：100
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，最多提取的子列数量。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### enable_compaction_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：控制是否为 Flat Json 数据进行 Compaction。
+- 引入版本：v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当查询在读过程中未命中 Flat JSON Schema 时，是否启用 Lazy Dynamic Flat JSON。当此项设置为 `true` 时，StarRocks 将把 Flat JSON 操作推迟到计算流程，而不是读取流程。
+- 引入版本：v3.3.3
+
+##### jit_lru_cache_size
+
+- 默认值：0
+- 类型：Int
+- 单位：GB
+- 是否动态：是
+- 描述：JIT 编译的 LRU 缓存大小。如果设置为大于 0，则表示实际的缓存大小。如果设置为小于或等于 0，系统将自适应设置缓存大小，使用的公式为 `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` （节点的 `mem_limit` 必须大于或等于 16 GB）。
+- 引入版本：-
+
+>>>>>>> cf779c7289 ([Doc] Add JIT and Table Prune Doc (#51219))
 ### 存算分离
 
 ##### starlet_port
