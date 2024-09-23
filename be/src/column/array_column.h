@@ -196,10 +196,10 @@ public:
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
-    // calculate all non-null elements' size
+    // get the number of all non-null elements
     size_t get_total_elements_num(const NullColumnPtr& null_column) const;
 
-    // check if all of arrays' size is equal
+    // check if the length of each array in two columns is equal
     // v1 and v2 must be one of ArrayColumn or Const(ArrayColumn)
     template <bool IgnoreNull>
     static bool is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);

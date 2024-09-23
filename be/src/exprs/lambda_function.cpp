@@ -32,25 +32,14 @@ namespace starrocks {
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
 Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx) {
-    if (expr->is_slotref()) {
-        return Status::OK();
-    }
-    LOG(INFO) << "extract expr: " << expr->debug_string();
-
-    // @TODO can we remove lambda??
-    //  any_match(array_map(<slot 4> -> any_match(array_map(<slot 5> -> <slot 5> < 10, 3: arr_largeint)), 3: arr_largeint))
-    // -> any_match(array_map(<slot 4> -> <slot 9>, arr_largeint))
-    // slot 8: array_map(<slot 5> -> <slot 5> < 10, arr_largeint)
-    // slot 9: any_match(<slot 8>, arr_largeint)
-    // @OTOD what if expr is LambdaFunction
     int child_num = expr->get_num_children();
     std::vector<SlotId> slot_ids;
 
-    // @TODO we can't replace lambda?
     for (int i = 0; i < child_num; i++) {
         auto child = expr->get_child(i);
 
         RETURN_IF_ERROR(extract_outer_common_exprs(state, child, ctx));
+        // if child is a slotref or a lambda function, we can't replace it.
         if (child->is_slotref() || child->is_lambda_function()) {
             continue;
         }
@@ -59,13 +48,12 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
         bool is_independent = std::all_of(slot_ids.begin(), slot_ids.end(), [ctx](const SlotId& id) {
             return ctx->lambda_arguments.find(id) == ctx->lambda_arguments.end();
         });
-        //
-        // if (is_independent && !child->is_lambda_function()) {
+
         if (is_independent) {
             SlotId slot_id = ctx->next_slot_id++;
             ColumnRef* column_ref = state->obj_pool()->add(new ColumnRef(child->type(), slot_id));
-            LOG(INFO) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
-                      << ", old expr: " << child->debug_string();
+            VLOG(1) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
+                    << ", old expr: " << child->debug_string();
             expr->_children[i] = column_ref;
             ctx->outer_common_exprs.insert({slot_id, child});
         }
@@ -77,9 +65,8 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExtractCo
     RETURN_IF_ERROR(collect_lambda_argument_ids());
     for (auto argument_id : _arguments_ids) {
         ctx->lambda_arguments.insert(argument_id);
-        LOG(INFO) << "lambda arg id: " << argument_id;
     }
-    // @TODO what if lambda_expr is independent?
+
     auto lambda_expr = _children[0];
     RETURN_IF_ERROR(extract_outer_common_exprs(state, lambda_expr, ctx));
     return Status::OK();
@@ -118,11 +105,6 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 
     // common sub expressions include 2 parts in a pair: (slot id, expression)
     const int child_num = get_num_children() - 2 * _common_sub_expr_num;
-    LOG(INFO) << "lambda child num: " << child_num << ", common: " << _common_sub_expr_num;
-    LOG(INFO) << debug_string();
-    for (int i = 0; i < child_num; i++) {
-        LOG(INFO) << "child[" << i << "] = " << get_child(i)->debug_string();
-    }
     RETURN_IF_ERROR(collect_lambda_argument_ids());
 
     // sorted common sub expressions so that the later expressions can reference the previous ones.
@@ -134,13 +116,10 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
                 fmt::format("Lambda common sub expression id's size {} is not equal to expected {}",
                             _common_sub_expr_ids.size(), _common_sub_expr_num));
     }
-    LOG(INFO) << "lambda common_sub_expr_num: " << _common_sub_expr_num;
 
     for (auto i = child_num + _common_sub_expr_num; i < child_num + 2 * _common_sub_expr_num; ++i) {
-        LOG(INFO) << "commom expr: " << i << ", " << get_child(i)->debug_string();
         _common_sub_expr.push_back(get_child(i));
         get_child(i)->get_slot_ids(&_captured_slot_ids);
-        // @TODO why put into captured slot id
     }
     if (_common_sub_expr.size() != _common_sub_expr_num) {
         return Status::InternalError(fmt::format("Lambda common sub expressions' size {} is not equal to expected {}",
@@ -149,22 +128,21 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 
     // get slot ids from the lambda expression
     get_child(0)->get_slot_ids(&_captured_slot_ids);
-    // bool is_lambda_independent = true;
+
     _is_lambda_expr_independent = true;
-    for (auto id : _captured_slot_ids) {
-        LOG(INFO) << "lambda capture id: " << id;
+
+    // if all captured slot ids are not in lambda arguments ids, then lambda expr is independent.
+    // for example,
+    // in array_map(x->id, arg1), the lambda expr `id` is independent.
+    // but in array_map(x->arg1+id, arg1), the lambda expr `arg1+id` is not independent.
+    for (size_t i = 0; i < _captured_slot_ids.size() && _is_lambda_expr_independent; ++i) {
         for (const auto& arguments_id : _arguments_ids) {
-            if (id == arguments_id) {
-                // is_lambda_independent = false;
+            if (_captured_slot_ids[i] == arguments_id) {
                 _is_lambda_expr_independent = false;
                 break;
             }
         }
     }
-    LOG(INFO) << "lambda is independent: " << _is_lambda_expr_independent;
-    // if lambda expr is independent, mark
-
-    // @TODO find all independent capture column, evaluate them first...
 
     // remove current argument ids and duplicated ids from captured_slot_ids
     std::map<int, bool> captured_mask;
@@ -199,11 +177,9 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 }
 
 StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
-    LOG(INFO) << "evaluate LambdaFunction, " << (void*)this;
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
         auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], chunk);
         chunk->append_column(sub_col, _common_sub_expr_ids[i]);
-        LOG(INFO) << "eval common expr: " << _common_sub_expr_ids[i];
     }
     return get_child(0)->evaluate_checked(context, chunk);
 }

@@ -622,11 +622,11 @@ size_t ArrayColumn::get_total_elements_num(const NullColumnPtr& null_column) con
     if (null_column == nullptr) {
         return _elements->size();
     }
-    DCHECK_LE(_offsets->size() -1, null_column->size());
+    DCHECK_LE(_offsets->size() - 1, null_column->size());
     size_t elements_num = 0;
     size_t num_rows = _offsets->size() - 1;
     const auto& null_data = null_column->get_data();
-    for (size_t i = 0;i < num_rows;i++) {
+    for (size_t i = 0; i < num_rows; i++) {
         if (!null_data[i]) {
             elements_num += _offsets->get_data()[i + 1] - _offsets->get_data()[i];
         }
@@ -650,7 +650,6 @@ bool ArrayColumn::compare_lengths_from_offsets(const UInt32Column& v1, const UIn
     bool result = true;
     const auto& offsets_v1 = v1.get_data();
     const auto& offsets_v2 = v2.get_data();
-
 
     for (size_t i = 0; i < num_rows && result; i++) {
         [[maybe_unused]] uint32_t len1 =

@@ -47,7 +47,6 @@ public:
 
     // the slot ids of lambda expression may be originally from the arguments of this lambda function
     // or its parent lambda functions, or captured columns, remove the first one.
-    //  only capture column id,
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
         slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
         return _captured_slot_ids.size();
@@ -59,20 +58,28 @@ public:
     }
 
     bool is_lambda_function() const override { return true; }
-    bool is_lambda_expr_independent() const {
-        return _is_lambda_expr_independent;
-    }
+    bool is_lambda_expr_independent() const { return _is_lambda_expr_independent; }
 
     Expr* get_lambda_expr() const { return _children[0]; }
     std::string debug_string() const override;
+
+    SlotId max_used_slot_id() const;
 
     struct ExtractContext {
         std::unordered_set<SlotId> lambda_arguments;
         SlotId next_slot_id;
         std::map<SlotId, Expr*> outer_common_exprs;
     };
-    SlotId max_used_slot_id() const;
 
+    // Extract the outer common expression in lambda expr.
+    // Outer common expr is an expression that does not depend on lambda arguments at all. Such expressions can be calculated independently.
+    // NOTE: Calling this interface may rewrite Lambda expr, and all outer common expr will be replaced with ColumnRef expr.
+    // Functions using lambda expressions can extract common expressions first and calculate them separately, so as to optimize.
+
+    // take `array_map(x->any_match(array_map(x->x < 10, arr1)), arr1)` as an example,
+    // `any_match(array_map(x->x<10, arr1))` is an outer common expr. it will create 2 column ref exprs to replace them.
+    // 1. slot 1 -> array_map(x->x<10, arr1)
+    // 2. slot 2 -> any_match(slot 1, arr1)
     Status extract_outer_common_exprs(RuntimeState* state, ExtractContext* ctx);
 
 private:

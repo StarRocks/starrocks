@@ -18,11 +18,11 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "column/nullable_column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "column/nullable_column.h"
 #include "glog/logging.h"
 
 namespace starrocks {
@@ -45,7 +45,7 @@ public:
 private:
     template <bool all_const_input, bool independent_lambda_expr>
     StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
-        const std::vector<ColumnPtr>& arguments, NullColumnPtr null_column);
+                                             const std::vector<ColumnPtr>& arguments, NullColumnPtr null_column);
 
     // use map to make sure the order of execution
     std::map<SlotId, Expr*> _outer_common_exprs;
