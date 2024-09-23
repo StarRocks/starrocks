@@ -227,6 +227,10 @@ public class OlapScanNode extends ScanNode {
         this.withoutColocateRequirement = withoutColocateRequirement;
     }
 
+    public boolean isLocalNativeTable() {
+        return olapTable.isOlapTable();
+    }
+
     public boolean getWithoutColocateRequirement() {
         return this.withoutColocateRequirement;
     }

@@ -27,6 +27,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -61,6 +62,7 @@ public class Deployer {
     private boolean enablePlanSerializeConcurrently;
 
     private final FailureHandler failureHandler;
+    private final boolean needDeploy;
 
     private final Set<Long> deployedWorkerIds = Sets.newHashSet();
 
@@ -68,7 +70,8 @@ public class Deployer {
                     JobSpec jobSpec,
                     ExecutionDAG executionDAG,
                     TNetworkAddress coordAddress,
-                    FailureHandler failureHandler) {
+                    FailureHandler failureHandler,
+                    boolean needDeploy) {
         this.jobSpec = jobSpec;
         this.executionDAG = executionDAG;
 
@@ -81,23 +84,26 @@ public class Deployer {
         this.deliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
 
         this.failureHandler = failureHandler;
+        this.needDeploy = needDeploy;
         this.enablePlanSerializeConcurrently = context.getSessionVariable().getEnablePlanSerializeConcurrently();
     }
 
-    public void deployFragments(List<ExecutionFragment> concurrentFragments, boolean needDeploy)
-            throws RpcException, UserException {
-        // Divide requests of fragments in the current group to three stages.
-        // - stage 1, the request with RF coordinator + descTable.
-        // - stage 2, the first request to a host, which need send descTable.
-        // - stage 3, the non-first requests to a host, which needn't send descTable.
-        List<List<FragmentInstanceExecState>> threeStageExecutionsToDeploy =
-                ImmutableList.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+    public DeployState createFragmentExecStates(List<ExecutionFragment> concurrentFragments) {
+        final DeployState deployState = new DeployState();
+        concurrentFragments.forEach(fragment ->
+                this.createFragmentInstanceExecStates(fragment, deployState.getThreeStageExecutionsToDeploy()));
+        return deployState;
+    }
 
-        concurrentFragments.forEach(fragment -> this.createFragmentInstanceExecStates(fragment, threeStageExecutionsToDeploy));
+    public void deployFragments(DeployState deployState)
+            throws RpcException, UserException {
 
         if (!needDeploy) {
             return;
         }
+
+        final List<List<FragmentInstanceExecState>> threeStageExecutionsToDeploy =
+                deployState.getThreeStageExecutionsToDeploy();
 
         if (enablePlanSerializeConcurrently) {
             try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeConcurrencyTime")) {
@@ -200,6 +206,7 @@ public class Deployer {
                         instance.getWorker());
 
                 threeStageExecutionsToDeploy.get(stageIndex).add(execution);
+
                 executionDAG.addExecution(execution);
 
                 if (needCheckExecutionState) {

@@ -374,6 +374,8 @@ struct TPlanFragmentExecParams {
   54: optional bool enable_exchange_perf
 
   70: optional i32 pipeline_sink_dop
+
+  73: optional bool report_when_finish;
 }
 
 // Global query parameters assigned by the coordinator.

@@ -169,6 +169,8 @@ public:
     bool enable_group_execution() const { return _enable_group_execution; }
     void set_enable_group_execution(bool enable_group_execution) { _enable_group_execution = enable_group_execution; }
 
+    void set_report_when_finish(bool report) { _report_when_finish = report; }
+
 private:
     bool _enable_group_execution = false;
     // Id of this query
@@ -227,6 +229,8 @@ private:
 
     RuntimeProfile::Counter* _jit_counter = nullptr;
     RuntimeProfile::Counter* _jit_timer = nullptr;
+
+    bool _report_when_finish{};
 };
 
 class FragmentContextManager {
