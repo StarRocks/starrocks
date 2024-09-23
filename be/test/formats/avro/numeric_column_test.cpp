@@ -191,7 +191,7 @@ TEST_F(AvroAddNumericColumnTest, test_add_int) {
         avro_value_decref(&avro_helper.avro_val);
     });
 
-    avro_value_set_long(&avro_helper.avro_val, 2147483647);
+    avro_value_set_int(&avro_helper.avro_val, 2147483647);
 
     {
         const auto column = FixedLengthColumn<int32_t>::create();
