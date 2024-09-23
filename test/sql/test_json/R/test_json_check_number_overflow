@@ -40,6 +40,8 @@ select * from t1 order by k1;
 15	-32767	-32767
 16	-32768	-32768
 17	-32770	-32770
+18	None	None
+19	None	None
 -- !result
 create table t2(k1 int, d1 double, f1 double) PROPERTIES (
     "replication_num" = "1"
@@ -76,4 +78,6 @@ select * from t2 order by k1;
 15	-32767.0	-32767.0
 16	-32768.0	-32768.0
 17	-32770.0	-32770.0
+18	9.223372036854776e+18	9.223372036854776e+18
+19	9.223372036854776e+18	9.223372036854776e+18
 -- !result
