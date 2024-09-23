@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 50
 sidebar_label: "能力边界"
 ---
 

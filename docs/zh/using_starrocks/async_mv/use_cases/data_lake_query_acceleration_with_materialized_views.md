@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 30
 ---
 
 # 使用物化视图加速数据湖查询

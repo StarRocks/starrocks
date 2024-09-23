@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 100
 ---
 
 # Accelerate COUNT(DISTINCT) and Joins with AUTO INCREMENT and Global Dictionary
