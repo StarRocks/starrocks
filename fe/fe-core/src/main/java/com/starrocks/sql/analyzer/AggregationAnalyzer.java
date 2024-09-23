@@ -38,6 +38,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
@@ -128,6 +129,9 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitExpression(Expr node, Void context) {
+            if (node instanceof Parameter) {
+                return true;
+            }
             throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }
