@@ -17,6 +17,7 @@ package com.starrocks.credential;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.provider.AWSDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
@@ -54,6 +55,12 @@ public class AWSCloudConfigurationTest {
 
         // Make sure two DefaultCredentialsProviders are different instances
         Assert.assertTrue(previousHashCode != currentHashCode);
+    }
+
+    @Test
+    public void testAWSDefaultCredentialsProvider() {
+        AWSDefaultCredentialsProvider provider = new AWSDefaultCredentialsProvider();
+        Assert.assertNull(provider.resolveCredentials());
     }
 
     @Test
