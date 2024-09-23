@@ -566,6 +566,7 @@ public class QueryAnalyzer {
         private ValuesRelation convertFileTableFunctionRelation(TableFunctionTable table) {
             List<Column> columns = table.getFullSchema();
             List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+            List<Type> outputColumnTypes = columns.stream().map(Column::getType).collect(Collectors.toList());
             List<List<Expr>> rows = Lists.newArrayList();
             for (List<String> fileInfo : table.listFilesAndDirs()) {
                 Preconditions.checkState(columns.size() == fileInfo.size());
@@ -579,7 +580,7 @@ public class QueryAnalyzer {
                 }
                 rows.add(row);
             }
-            return new ValuesRelation(rows, columnNames);
+            return new ValuesRelation(rows, columnNames, outputColumnTypes);
         }
 
         @Override
@@ -1117,32 +1118,39 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitValues(ValuesRelation node, Scope scope) {
-            AnalyzeState analyzeState = new AnalyzeState();
-
-            List<Expr> firstRow = node.getRow(0);
-            firstRow.forEach(e -> analyzeExpression(e, analyzeState, scope));
+            Type[] outputTypes;
             List<List<Expr>> rows = node.getRows();
-            Type[] outputTypes = firstRow.stream().map(Expr::getType).toArray(Type[]::new);
-            for (List<Expr> row : rows) {
-                if (row.size() != firstRow.size()) {
-                    throw new SemanticException("Values have unequal number of columns");
-                }
-                for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
-                    analyzeExpression(row.get(fieldIdx), analyzeState, scope);
-                    Type commonType =
-                            TypeManager.getCommonSuperType(outputTypes[fieldIdx], row.get(fieldIdx).getType());
-                    if (!commonType.isValid()) {
-                        throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
-                                outputTypes[fieldIdx], row.get(fieldIdx).getType()));
+            List<Type> outputColumnTypes = node.getOutputColumnTypes();
+            if (!outputColumnTypes.isEmpty()) {
+                outputTypes = outputColumnTypes.toArray(new Type[0]);
+            } else {
+                Preconditions.checkState(!rows.isEmpty());
+                AnalyzeState analyzeState = new AnalyzeState();
+
+                List<Expr> firstRow = node.getRow(0);
+                firstRow.forEach(e -> analyzeExpression(e, analyzeState, scope));
+                outputTypes = firstRow.stream().map(Expr::getType).toArray(Type[]::new);
+                for (List<Expr> row : rows) {
+                    if (row.size() != firstRow.size()) {
+                        throw new SemanticException("Values have unequal number of columns");
                     }
-                    outputTypes[fieldIdx] = commonType;
+                    for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
+                        analyzeExpression(row.get(fieldIdx), analyzeState, scope);
+                        Type commonType =
+                                TypeManager.getCommonSuperType(outputTypes[fieldIdx], row.get(fieldIdx).getType());
+                        if (!commonType.isValid()) {
+                            throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
+                                    outputTypes[fieldIdx], row.get(fieldIdx).getType()));
+                        }
+                        outputTypes[fieldIdx] = commonType;
+                    }
                 }
             }
+
             List<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
                 fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
-                        node.getResolveTableName(),
-                        rows.get(0).get(fieldIdx)));
+                        node.getResolveTableName(), rows.isEmpty() ? null : rows.get(0).get(fieldIdx)));
             }
 
             Scope valuesScope = new Scope(RelationId.of(node), new RelationFields(fields));
