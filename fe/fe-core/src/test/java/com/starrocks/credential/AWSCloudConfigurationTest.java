@@ -55,7 +55,7 @@ public class AWSCloudConfigurationTest {
         fs.close();
 
         // Make sure two DefaultCredentialsProviders are different instances
-        Assert.assertTrue(previousHashCode != currentHashCode);
+        Assert.assertNotEquals(previousHashCode, currentHashCode);
     }
 
     @Test
