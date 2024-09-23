@@ -25,8 +25,8 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
-import com.starrocks.credential.provider.AWSDefaultCredentialsProvider;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
+import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.Constants;
 import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
@@ -83,7 +83,7 @@ public class AWSCloudCredential implements CloudCredential {
 
     private static final Logger LOG = LoggerFactory.getLogger(AWSCloudCredential.class);
 
-    private static final String DEFAULT_CREDENTIAL_PROVIDER = AWSDefaultCredentialsProvider.class.getName();
+    private static final String DEFAULT_CREDENTIAL_PROVIDER = OverwriteAwsDefaultCredentialsProvider.class.getName();
     private static final String IAM_CREDENTIAL_PROVIDER = IAMInstanceCredentialsProvider.class.getName();
     private static final String ASSUME_ROLE_CREDENTIAL_PROVIDER = AssumedRoleCredentialProvider.class.getName();
     private static final String SIMPLE_CREDENTIAL_PROVIDER = SimpleAWSCredentialsProvider.class.getName();

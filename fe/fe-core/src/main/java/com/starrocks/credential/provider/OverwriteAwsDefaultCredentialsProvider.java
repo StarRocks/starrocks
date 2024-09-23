@@ -27,13 +27,25 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 // For the next time we create a new S3AFileSystem, it will reuse previous closed CredentialsProvider, then error will be thrown
 // You can check details in link:
 // https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/troubleshooting.html#faq-connection-pool-shutdown-exception
-public class AWSDefaultCredentialsProvider implements AwsCredentialsProvider {
+public class OverwriteAwsDefaultCredentialsProvider implements AwsCredentialsProvider {
     public static DefaultCredentialsProvider create() {
         return DefaultCredentialsProvider.builder().build();
     }
 
+    // We should not call this function, here will return an anonymous credentials
     @Override
     public AwsCredentials resolveCredentials() {
-        return null;
+        // Defense code, return anonymous credentials
+        return new AwsCredentials() {
+            @Override
+            public String accessKeyId() {
+                return null;
+            }
+
+            @Override
+            public String secretAccessKey() {
+                return null;
+            }
+        };
     }
 }

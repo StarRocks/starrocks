@@ -17,7 +17,7 @@ package com.starrocks.credential;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
-import com.starrocks.credential.provider.AWSDefaultCredentialsProvider;
+import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.s3a.S3AFileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.Assert;
 import org.junit.Test;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -41,7 +42,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("com.starrocks.credential.provider.AWSDefaultCredentialsProvider",
+        Assert.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
                 configuration.get("fs.s3a.aws.credentials.provider"));
         S3AFileSystem fs = (S3AFileSystem) FileSystem.get(new URI("s3://hi/a.parquet"), configuration);
         AWSCredentialProviderList list =  fs.shareCredentials("ut");
@@ -59,8 +60,10 @@ public class AWSCloudConfigurationTest {
 
     @Test
     public void testAWSDefaultCredentialsProvider() {
-        AWSDefaultCredentialsProvider provider = new AWSDefaultCredentialsProvider();
-        Assert.assertNull(provider.resolveCredentials());
+        OverwriteAwsDefaultCredentialsProvider provider = new OverwriteAwsDefaultCredentialsProvider();
+        AwsCredentials credentials = provider.resolveCredentials();
+        Assert.assertNull(credentials.accessKeyId());
+        Assert.assertNull(credentials.secretAccessKey());
     }
 
     @Test
@@ -73,7 +76,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("com.starrocks.credential.provider.AWSDefaultCredentialsProvider",
+        Assert.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
                 configuration.get("fs.s3a.assumed.role.credentials.provider"));
         Assert.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
