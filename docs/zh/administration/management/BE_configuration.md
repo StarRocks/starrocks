@@ -3227,6 +3227,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：当查询在读过程中未命中 Flat JSON Schema 时，是否启用 Lazy Dynamic Flat JSON。当此项设置为 `true` 时，StarRocks 将把 Flat JSON 操作推迟到计算流程，而不是读取流程。
 - 引入版本：v3.3.3
 
+##### jit_lru_cache_size
+
+- 默认值：0
+- 类型：Int
+- 单位：GB
+- 是否动态：是
+- 描述：JIT 编译的 LRU 缓存大小。如果设置为大于 0，则表示实际的缓存大小。如果设置为小于或等于 0，系统将自适应设置缓存大小，使用的公式为 `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` （节点的 `mem_limit` 必须大于或等于 16 GB）。
+- 引入版本：-
+
 ### 存算分离
 
 ##### starlet_port
@@ -4555,17 +4564,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### olap_string_max_length
 
 - 默认值：1048576
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### jit_lru_cache_size
-
-- 默认值：0
 - 类型：Int
 - 单位：
 - 是否动态：是

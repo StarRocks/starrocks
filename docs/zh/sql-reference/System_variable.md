@@ -423,7 +423,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### plan_mode
 
-* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg_catalog.md#附录自适应元数据检索方案)。有效值：
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
   * `auto`：系统自动选择方案。
   * `local`：使用本地缓存方案。
   * `distributed`：使用分布式方案。
@@ -680,6 +680,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：4
 * 类型：Int
 * 引入版本：v2.5
+
+### jit_level
+
+* 描述：表达式 JIT 编译的启用级别。有效值：
+  * `1`：系统为可编译表达式自适应启用 JIT 编译。
+  * `-1`：对所有可编译的非常量表达式启用 JIT 编译。
+  * `0`：禁用 JIT 编译。如果该功能返回任何错误，您可以手动禁用。
+* 默认值：1
+* 数据类型：Int
+* 引入版本：-
 
 ### language (global)
 

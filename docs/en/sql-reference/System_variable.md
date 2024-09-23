@@ -677,6 +677,16 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Int
 * **Introduced in**: v2.5
 
+### jit_level
+
+* **Description**: The level at which JIT compilation for expressions is enabled. Valid values:
+  * `1`: The system adaptively enables JIT compilation for compilable expressions.
+  * `-1`: JIT compilation is enabled for all compilable, non-constant expressions.
+  * `0`: JIT compilation is disabled. You can disable it manually if any error is returned for this feature.
+* **Default**: 1
+* **Data type**: Int
+* **Introduced in**: -
+
 ### language (global)
 
 Used for MySQL client compatibility. No practical usage.

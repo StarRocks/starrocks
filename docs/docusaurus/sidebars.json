@@ -315,7 +315,9 @@
                 },
                 "using_starrocks/sorted_aggregate",
                 "using_starrocks/query_acceleration_with_auto_increment",
-                "using_starrocks/Flat_json"
+                "using_starrocks/Flat_json",
+                "using_starrocks/accelerate-cardinality-preserving-joins",
+                "using_starrocks/jit"
             ]
         },
         {
