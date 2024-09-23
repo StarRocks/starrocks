@@ -96,6 +96,18 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
+    public void updateSendTaskTime() {
+        for (TransactionState state : transactionStates) {
+            state.updateSendTaskTime();
+        }
+    }
+
+    public void updatePublishTaskFinishTime() {
+        for (TransactionState state : transactionStates) {
+            state.updatePublishTaskFinishTime();
+        }
+    }
+
     // a proxy method
     public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
         for (TransactionState transactionState : transactionStates) {

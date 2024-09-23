@@ -384,6 +384,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     continue;
                 }
                 publishingTransactions.add(txnId);
+                txnState.updateSendTaskTime();
                 CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
                 future.thenRun(() -> publishingTransactions.remove(txnId));
             }
@@ -400,12 +401,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 TransactionState state = txnStateBatch.transactionStates.get(0);
                 List<Long> tableIdList = state.getTableIdList();
                 if (publishingLakeTransactionsBatchTableId.addAll(tableIdList)) {
+                    state.updateSendTaskTime();
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> publishingLakeTransactionsBatchTableId.removeAll(tableIdList));
                 }
             } else {
                 long tableId = txnStateBatch.getTableId();
                 if (publishingLakeTransactionsBatchTableId.add(tableId)) {
+                    txnStateBatch.updateSendTaskTime();
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
                     future.thenRun(() -> publishingLakeTransactionsBatchTableId.remove(tableId));
                 }
@@ -446,6 +449,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    txnState.updatePublishTaskFinishTime();
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
@@ -688,6 +692,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    txnStateBatch.updatePublishTaskFinishTime();
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);

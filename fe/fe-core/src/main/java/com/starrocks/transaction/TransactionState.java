@@ -469,6 +469,12 @@ public class TransactionState implements Writable {
         this.publishVersionFinishTime = System.currentTimeMillis();
     }
 
+    // for test
+    public long getPublishTaskFinishTime() {
+        return this.publishVersionFinishTime;
+    }
+
+
     public long getPublishVersionTime() {
         return this.publishVersionTime;
     }

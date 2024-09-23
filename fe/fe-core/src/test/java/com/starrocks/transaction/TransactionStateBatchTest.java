@@ -37,6 +37,28 @@ import java.util.UUID;
 public class TransactionStateBatchTest {
     private static String fileName = "./TransactionStateBatchTest";
 
+    private TransactionStateBatch generateSimpleTransactionStateBatch() {
+        Long dbId = 1000L;
+        Long tableId = 20000L;
+        UUID uuid = UUID.randomUUID();
+        List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
+        TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
+                3000, "label1", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        uuid = UUID.randomUUID();
+        TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
+                3001, "label2", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        transactionStateList.add(transactionState1);
+        transactionStateList.add(transactionState2);
+        TransactionStateBatch stateBatch = new TransactionStateBatch(transactionStateList);
+        return stateBatch;
+    }
+
     @After
     public void tearDown() {
         File file = new File(fileName);
@@ -93,24 +115,7 @@ public class TransactionStateBatchTest {
 
     @Test
     public void testPutBeTablets() {
-        Long dbId = 1000L;
-        Long tableId = 20000L;
-        UUID uuid = UUID.randomUUID();
-        List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
-        TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3000, "label1", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
-        uuid = UUID.randomUUID();
-        TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
-                3001, "label2", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
-        transactionStateList.add(transactionState1);
-        transactionStateList.add(transactionState2);
-        TransactionStateBatch stateBatch = new TransactionStateBatch(transactionStateList);
+        TransactionStateBatch stateBatch = generateSimpleTransactionStateBatch();
 
         long partitionId1 = 1;
         long partitionId2 = 2;
@@ -130,6 +135,23 @@ public class TransactionStateBatchTest {
 
         stateBatch.putBeTablets(partitionId2, nodeToTablets2);
         Assert.assertEquals(2, stateBatch.getPartitionToTablets().size());
+    }
+
+    @Test
+    public void testUpdateSendTaskTime() {
+        TransactionStateBatch stateBatch = generateSimpleTransactionStateBatch();
+        stateBatch.updateSendTaskTime();
+        List<TransactionState> states = stateBatch.getTransactionStates();
+        Assert.assertEquals(2, states.size());
+        Assert.assertEquals(states.get(0).getPublishVersionTime(), states.get(1).getPublishVersionTime());
+    }
+    @Test
+    public void tesUpdatePublishTaskFinishTime() {
+        TransactionStateBatch stateBatch = generateSimpleTransactionStateBatch();
+        stateBatch.updatePublishTaskFinishTime();
+        List<TransactionState> states = stateBatch.getTransactionStates();
+        Assert.assertEquals(2, states.size());
+        Assert.assertEquals(states.get(0).getPublishTaskFinishTime(), states.get(1).getPublishTaskFinishTime());
     }
 
 }
