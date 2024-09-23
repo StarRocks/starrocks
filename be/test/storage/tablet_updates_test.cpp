@@ -3722,4 +3722,11 @@ TEST_F(TabletUpdatesTest, test_get_compaction_status) {
     test_horizontal_compaction(false, true);
 }
 
+TEST_F(TabletUpdatesTest, test_drop_tablet_with_keep_meta_and_files) {
+    _tablet = create_tablet(rand(), rand());
+    ASSERT_FALSE(_tablet->updates()->is_apply_stop());
+    StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), kKeepMetaAndFiles);
+    ASSERT_TRUE(_tablet->updates()->is_apply_stop());
+}
+
 } // namespace starrocks

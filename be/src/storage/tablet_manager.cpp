@@ -438,6 +438,16 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
     } else {
         DCHECK_EQ(kKeepMetaAndFiles, flag);
+        {
+            // If the tablet is the primary key table, there might still be ongoing apply tasks.
+            // We should stop the background apply tasks before deleting it; otherwise, if a new tablet is created,
+            // there could be a scenario where apply tasks are executed simultaneously.
+            // e.g.
+            // 1. drop and clone a new tablet with the same tablet_id.
+            // 2. compact rocksdb meta and reload tablet again.
+            std::unique_lock l(dropped_tablet->get_header_lock());
+            dropped_tablet->on_shutdown();
+        }
     }
     // erase tablet from tablet map
     {
