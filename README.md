@@ -127,6 +127,6 @@ This project is used by the following companies. Learn more about their use case
 - [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)
 - [Coinbase](https://www.youtube.com/watch?v=3Z9jSCaHnYg&list=PL0eWwaesODdhBhKSnvpfIEAB9sgk8rKmy)
 - [Tencent](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
-- [Shopee](https://www.youtube.com/watch?v=FJf6tVFr-20)
+- [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks) 
