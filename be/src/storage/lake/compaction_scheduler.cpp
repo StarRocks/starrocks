@@ -100,6 +100,16 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         _response->add_failed_tablets(context->tablet_id);
     }
 
+    // process compact stat
+    auto compact_stat = _response->add_compact_stats();
+    compact_stat->set_tablet_id(context->tablet_id);
+    compact_stat->set_read_time_remote(context->stats->io_ns_remote);
+    compact_stat->set_read_bytes_remote(context->stats->io_bytes_read_remote);
+    compact_stat->set_read_time_local(context->stats->io_ns_local_disk);
+    compact_stat->set_read_bytes_local(context->stats->io_bytes_read_local_disk);
+    compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
+    compact_stat->set_sub_task_count(_request->tablet_ids_size());
+
     DCHECK(_request != nullptr);
     _status.update(context->status);
 
@@ -201,6 +211,9 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
         // Load "finish_time" with memory_order_acquire and check its value before reading the "status" to avoid
         // the race condition between this thread and the `CompactionScheduler::thread_task` threads.
         info.finish_time = context->finish_time.load(std::memory_order_acquire);
+        if (info.runs > 0) {
+            info.profile = context->stats->to_json_stats();
+        }
         if (info.finish_time > 0) {
             info.status = context->status;
         }
@@ -337,6 +350,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
+    int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
+    context->stats->in_queue_time_sec += in_queue_time_sec;
     context->start_time.store(start_time, std::memory_order_relaxed);
     context->runs.fetch_add(1, std::memory_order_relaxed);
 
