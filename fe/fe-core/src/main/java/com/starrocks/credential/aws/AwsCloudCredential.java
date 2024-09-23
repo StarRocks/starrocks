@@ -79,9 +79,9 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
  *   // If user want to use anonymous credentials, they just don't set cloud credential directly.
  * }
  */
-public class AWSCloudCredential implements CloudCredential {
+public class AwsCloudCredential implements CloudCredential {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AWSCloudCredential.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AwsCloudCredential.class);
 
     private static final String DEFAULT_CREDENTIAL_PROVIDER = OverwriteAwsDefaultCredentialsProvider.class.getName();
     private static final String IAM_CREDENTIAL_PROVIDER = IAMInstanceCredentialsProvider.class.getName();
@@ -111,7 +111,7 @@ public class AWSCloudCredential implements CloudCredential {
 
     private final String endpoint;
 
-    protected AWSCloudCredential(boolean useAWSSDKDefaultBehavior, boolean useInstanceProfile, String accessKey,
+    protected AwsCloudCredential(boolean useAWSSDKDefaultBehavior, boolean useInstanceProfile, String accessKey,
                                  String secretKey, String sessionToken, String iamRoleArn, String stsRegion,
                                  String stsEndpoint, String externalId, String region,
                                  String endpoint) {
