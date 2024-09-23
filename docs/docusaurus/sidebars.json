@@ -280,7 +280,14 @@
                     ]
                 },
                 "using_starrocks/sorted_aggregate",
+<<<<<<< HEAD
                 "using_starrocks/query_acceleration_with_auto_increment"
+=======
+                "using_starrocks/query_acceleration_with_auto_increment",
+                "using_starrocks/Flat_json",
+                "using_starrocks/accelerate-cardinality-preserving-joins",
+                "using_starrocks/jit"
+>>>>>>> cf779c7289 ([Doc] Add JIT and Table Prune Doc (#51219))
             ]
         },
         {
