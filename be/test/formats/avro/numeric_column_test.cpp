@@ -209,7 +209,7 @@ TEST_F(AvroAddNumericColumnTest, test_add_int) {
     }
 
     {
-        const auto column = FixedLengthColumn<int32_t>::create();
+        const auto column = FixedLengthColumn<int64_t>::create();
         const TypeDescriptor desc(TYPE_BIGINT);
         const auto st = add_numeric_column<int64_t>(column.get(), desc, "f_bigint", avro_helper.avro_val);
         ASSERT_TRUE(st.ok());
