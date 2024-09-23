@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 This topic describes how to optimize query performance in your data lake using StarRocks' asynchronous materialized views.
 
-StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../data_source/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
+StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../../../data_source/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
 
 However, when it comes to building complex and efficient reports using data from the lake or further accelerating these queries, you may still encounter performance challenges. With asynchronous materialized views, you can achieve higher concurrency and better query performance for reports and data applications on the lake.
 
@@ -100,7 +100,7 @@ For Hive Catalog, Iceberg Catalog (starting from v3.1.4), JDBC catalog (starting
 
 :::tip
 
-You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
+You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
 :::
 
@@ -136,7 +136,7 @@ FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
 
 For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data.
 
-To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md):
+To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md):
 
 ### Configuration items
 
@@ -180,7 +180,7 @@ In scenarios involving query rewriting, if you use a very complex query statemen
 
 ## Best practices
 
-In real-world business scenarios, you can identify queries with high execution latency and resource consumption by analyzing audit logs or big query logs. You can further use [query profiles](../administration/query_profile_overview.md) to pinpoint the specific stages where the query is slow. The following sections provide instructions and examples on how to boost data lake query performance with materialized views.
+In real-world business scenarios, you can identify queries with high execution latency and resource consumption by analyzing audit logs or big query logs. You can further use [query profiles](../../../administration/query_profile_overview.md) to pinpoint the specific stages where the query is slow. The following sections provide instructions and examples on how to boost data lake query performance with materialized views.
 
 ### Case One: Accelerate join calculation in data lake
 
@@ -224,7 +224,7 @@ By analyzing their query profiles, you may notice that the query execution time 
 
 Here, Q1 and Q2 perform aggregation after joining `lineorder` and `dates`, while Q3 performs aggregation after joining `lineorder`, `dates`, `part`, and `supplier`.
 
-Therefore, you can utilize the [View Delta Join rewrite](./query_rewrite_with_materialized_views.md#view-delta-join-rewrite) capability of StarRocks to build a materialized view that joins `lineorder`, `dates`, `part`, and `supplier`.
+Therefore, you can utilize the [View Delta Join rewrite](query_rewrite_with_materialized_views.md#view-delta-join-rewrite) capability of StarRocks to build a materialized view that joins `lineorder`, `dates`, `part`, and `supplier`.
 
 ```SQL
 CREATE MATERIALIZED VIEW lineorder_flat_mv
@@ -308,7 +308,7 @@ Materialized views can be used to accelerate aggregation queries, whether they a
   GROUP BY lo_orderdate;
   ```
 
-  Please note that, in this context, do not create materialized views with LIMIT and ORDER BY clauses to avoid rewrite failures. For more information on the query rewrite limitations, see [Query rewrite with materialized views - Limitations](./query_rewrite_with_materialized_views.md#limitations).
+  Please note that, in this context, do not create materialized views with LIMIT and ORDER BY clauses to avoid rewrite failures. For more information on the query rewrite limitations, see [Query rewrite with materialized views - Limitations](query_rewrite_with_materialized_views.md#limitations).
 
 - Multi-table aggregation query
 

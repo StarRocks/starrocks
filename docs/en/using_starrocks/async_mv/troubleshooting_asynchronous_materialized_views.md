@@ -16,14 +16,14 @@ To get a whole picture of asynchronous materialized views that you are working w
 
 ### Check the working state of an asynchronous materialized view
 
-You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md). Among all the information returned, you can focus on the following fields:
+You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md). Among all the information returned, you can focus on the following fields:
 
 - `is_active`: Whether the state of the materialized view is active. Only an active materialized view can be used for query acceleration and rewrite.
 - `last_refresh_state`: The state of the last refresh, including PENDING, RUNNING, FAILED, and SUCCESS.
 - `last_refresh_error_message`: The reason why the last refresh failed (if the materialized view state is not active).
 - `rows`: The number of data rows in the materialized view. Please note that this value can be different from the actual row count of the materialized view because the updates can be deferred.
 
-For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md#returns).
+For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md#returns).
 
 Example:
 
@@ -113,7 +113,7 @@ You can monitor and analyze the resource consumed by an asynchronous materialize
 
 #### Monitor resource consumption during refresh
 
-During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md).
+During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md).
 
 Among all the information returned, you can focus on the following fields:
 
@@ -154,11 +154,11 @@ Among all the information returned, you can focus on the following metrics:
 - `QueryMemCost`: Total memory cost of the query.
 - Other metrics for individual operators, such as join operators and aggregate operators.
 
-For detailed information on how to check the query profile and understand other metrics, see [Analyze query profile](../administration/query_profile_overview.md).
+For detailed information on how to check the query profile and understand other metrics, see [Analyze query profile](../../administration/query_profile_overview.md).
 
 ### Verify whether queries are rewritten by an asynchronous materialized view
 
-You can check whether a query can be rewritten with an asynchronous materialized view from its query plan using [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md).
+You can check whether a query can be rewritten with an asynchronous materialized view from its query plan using [EXPLAIN](../../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md).
 
 If the metric `SCAN` in the query plan shows the name of the corresponding materialized view, the query has been rewritten by the materialized view.
 
@@ -287,7 +287,7 @@ Large materialized views may fail to refresh because the refresh task exceeds th
 
 - **Specify a partitioning strategy for the materialized view to achieve fine-grained refresh**
 
-  As described in [Create partitioned materialized views](./create_partitioned_materialized_view.md), by partitioning the materialized view you can achieve incremental building and refresh, thus avoiding the issue of excessive resource consumption during the initial refresh.
+  As described in [Create partitioned materialized views](use_cases/create_partitioned_materialized_view.md), by partitioning the materialized view you can achieve incremental building and refresh, thus avoiding the issue of excessive resource consumption during the initial refresh.
 
 - **Set a longer timeout period**
 
@@ -303,8 +303,8 @@ Large materialized views may fail to refresh because the refresh task exceeds th
 
   - Obtain the `query_id` corresponding to the refresh task by querying `information_schema.task_runs`.
   - Analyze the query profile of the refresh task using the following statements:
-    - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): Retrive the original query profile based on `query_id`.
-    - [ANALYZE PROFILE](../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): Analyze the query profile on a per-fragment basis, and display it in a tree structure.
+    - [GET_QUERY_PROFILE](../../sql-reference/sql-functions/utility-functions/get_query_profile.md): Retrive the original query profile based on `query_id`.
+    - [ANALYZE PROFILE](../../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): Analyze the query profile on a per-fragment basis, and display it in a tree structure.
 
 ### Materialized view state is not active
 
@@ -340,7 +340,7 @@ To stop a refresh task that occupies too many resources, you can:
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-- Terminate the running refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md):
+- Terminate the running refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md):
 
   ```SQL
   CANCEL REFRESH MATERIALIZED VIEW mv1;
@@ -376,7 +376,7 @@ If your materialized view fails to rewrite relevant queries, you can look into t
   - Materialized views can only rewrite SPJG (Select/Projection/Join/Aggregation) type of queries. Queries involving window functions, nested aggregation, or join plus aggregation are not supported.
   - Materialized views cannot rewrite queries that involve complex Join predicates in Outer Joins. For example, in cases like `A LEFT JOIN B ON A.dt > '2023-01-01' AND A.id = B.id`, we recommend you specify the predicate from the `JOIN ON` clause in a `WHERE` clause.
 
-  For more information on the limitations of the materialized view query rewrite, see [Query rewrite with materialized views - Limitations](./query_rewrite_with_materialized_views.md#limitations).
+  For more information on the limitations of the materialized view query rewrite, see [Query rewrite with materialized views - Limitations](use_cases/query_rewrite_with_materialized_views.md#limitations).
 
 - **Check whether the materialized view state is active.**
 

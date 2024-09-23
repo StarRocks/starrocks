@@ -66,12 +66,12 @@ sidebar_label: "能力边界"
 
 | 对齐方式                             | 用例                                                         | 支持版本       |
 | :--------------------------------- | :----------------------------------------------------------- | :------------ |
-| [等比例对齐分区 (日期类型)](./create_partitioned_materialized_view.md#等比例对齐分区)          | 使用相同的分区键创建物化视图，使其分区与基表的分区一一对应。分区键必须为 DATE 或 DATETIME 类型。 | v2.5+              |
-| [等比例对齐分区 (STRING 类型)](./create_partitioned_materialized_view.md#等比例对齐分区)       | 使用相同的分区键创建物化视图，使其分区与基表的分区一一对应。分区键必须为 STRING 类型。 | v3.1.4+<br />v3.2+ |
-| [时间粒度上卷对齐分区 (日期类型)](./create_partitioned_materialized_view.md#时间粒度上卷对齐分区)    | 通过在分区键上使用 `date_trunc` 函数，创建一个分区粒度大于基表的物化视图。分区键必须为 DATE 或 DATETIME 类型。 | v2.5+              |
-| [时间粒度上卷对齐分区 (STRING 类型)](./create_partitioned_materialized_view.md#时间粒度上卷对齐分区) | 通过在分区键上使用 `date_trunc` 函数，创建一个分区粒度大于基表的物化视图。分区键必须为 STRING 类型。 | v3.1.4+<br />v3.2+ |
-| [自定义时间粒度对齐分区](./create_partitioned_materialized_view.md#自定义时间粒度对齐分区)             | 使用 `date_trunc` 函数与 `time_slice` 或 `date_slice` 函数自定义时间粒度来创建物化视图分区。 | v3.2+              |
-| [多基表对齐分区](./create_partitioned_materialized_view.md#多基表对齐分区)                     | 如果多张基表的分区可以互相对齐，即基表使用相同类型的分区键，可以基于多张基表创建分区物化视图。 | v3.3+              |
+| [等比例对齐分区 (日期类型)](use_cases/create_partitioned_materialized_view.md#等比例对齐分区)          | 使用相同的分区键创建物化视图，使其分区与基表的分区一一对应。分区键必须为 DATE 或 DATETIME 类型。 | v2.5+              |
+| [等比例对齐分区 (STRING 类型)](use_cases/create_partitioned_materialized_view.md#等比例对齐分区)       | 使用相同的分区键创建物化视图，使其分区与基表的分区一一对应。分区键必须为 STRING 类型。 | v3.1.4+<br />v3.2+ |
+| [时间粒度上卷对齐分区 (日期类型)](use_cases/create_partitioned_materialized_view.md#时间粒度上卷对齐分区)    | 通过在分区键上使用 `date_trunc` 函数，创建一个分区粒度大于基表的物化视图。分区键必须为 DATE 或 DATETIME 类型。 | v2.5+              |
+| [时间粒度上卷对齐分区 (STRING 类型)](use_cases/create_partitioned_materialized_view.md#时间粒度上卷对齐分区) | 通过在分区键上使用 `date_trunc` 函数，创建一个分区粒度大于基表的物化视图。分区键必须为 STRING 类型。 | v3.1.4+<br />v3.2+ |
+| [自定义时间粒度对齐分区](use_cases/create_partitioned_materialized_view.md#自定义时间粒度对齐分区)             | 使用 `date_trunc` 函数与 `time_slice` 或 `date_slice` 函数自定义时间粒度来创建物化视图分区。 | v3.2+              |
+| [多基表对齐分区](use_cases/create_partitioned_materialized_view.md#多基表对齐分区)                     | 如果多张基表的分区可以互相对齐，即基表使用相同类型的分区键，可以基于多张基表创建分区物化视图。 | v3.3+              |
 
 **不同 Join 方式**
 

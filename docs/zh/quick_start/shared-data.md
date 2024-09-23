@@ -467,7 +467,6 @@ MinIO 端点，包括端口号。
 ## 更多信息
 
 - [StarRocks 表设计](../table_design/StarRocks_table_design.md)
-- [物化视图](../cover_pages/mv_use_cases.mdx)
 - [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 - [纽约市交通事故数据](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，受到以下[使用条款](https://www.nyc.gov/home/terms-of-use.page)和[隐私政策](https://www.nyc.gov/home/privacy-policy.page)的约束。
 - [气象数据](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD)由 NOAA 提供，附带[免责声明](https://www.noaa.gov/disclaimer)和[隐私政策](https://www.noaa.gov/protecting-your-privacy)。

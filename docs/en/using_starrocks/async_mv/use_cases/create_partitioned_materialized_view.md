@@ -48,7 +48,7 @@ Currently, StarRocks supports building partitioned materialized views on tables 
   - Currently, list partitioning and expression partitioning are not supported.
   - The two adjacent partitions of the base table must have consecutive ranges.
 - For multi-level partitioned base tables in external catalogs, only the primary level partitioning path can be used to create a partitioned materialized view. For example,  for a table partitioned in the `yyyyMMdd/hour` format, you can only build the materialized view partitioned by `yyyyMMdd`.
-- From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. For more information, see [Data lake query acceleration with materialized views - Choose a suitable refresh strategy](./data_lake_query_acceleration_with_materialized_views.md#choose-a-suitable-refresh-strategy).
+- From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. For more information, see [Data lake query acceleration with materialized views - Choose a suitabledata_lake_query_acceleration_with_materialized_views.mdterialized_views.md#choose-a-suitable-refresh-strategy).
 
 :::
 
@@ -98,7 +98,7 @@ DISTRIBUTED BY HASH(k1);
 
 You can create a materialized view whose partitions correspond to the partitions of the base table one-to-one by using the same Partitioning Key.
 
-![Partitioned Materialized View-1](../_assets/partitioned_mv-1.png)
+![Partitioned Materialized View-1](../../../_assets/partitioned_mv-1.png)
 
 - If the Partitioning Key of the base table is the DATE or DATETIME type, you can directly specify the same Partitioning Key for the materialized view.
 
@@ -121,7 +121,7 @@ You can create a materialized view whose partitions correspond to the partitions
   GROUP BY datekey, k1;
   ```
 
-- If the Partitioning Key of the base table is the STRING type, you can use the [str2date](../sql-reference/sql-functions/date-time-functions/str2date.md) function to convert the date string into the DATE or DATETIME type.
+- If the Partitioning Key of the base table is the STRING type, you can use the [str2date](../../../sql-reference/sql-functions/date-time-functions/str2date.md) function to convert the date string into the DATE or DATETIME type.
 
   ```SQL
   PARTITION BY str2date(<base_table_partitioning_column>, <format>)
@@ -144,9 +144,9 @@ You can create a materialized view whose partitions correspond to the partitions
 
 ### Align partitions with time granularity rollup
 
-You can create a materialized view whose partitioning granularity is larger than that of the base table by using the [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) function on the Partitioning Key. When data changes are detected in the partitions of the base table, StarRocks refreshes the corresponding rollup partitions in the materialized view.
+You can create a materialized view whose partitioning granularity is larger than that of the base table by using the [date_trunc](../../../sql-reference/sql-functions/date-time-functions/date_trunc.md) function on the Partitioning Key. When data changes are detected in the partitions of the base table, StarRocks refreshes the corresponding rollup partitions in the materialized view.
 
-![Partitioned Materialized View-2](../_assets/partitioned_mv-2.png)
+![Partitioned Materialized View-2](../../../_assets/partitioned_mv-2.png)
 
 - If the Partitioning Key of the base table is the DATE or DATETIME type, you can directly use the date_trunc function on the Partitioning Key of the base table.
 
@@ -197,7 +197,7 @@ You can create a materialized view whose partitioning granularity is larger than
 
 ### Align partitions at a customized time granularity
 
-The partition rollup method mentioned above only allows partitioning the materialized view based on specific time granularities and does not permit customizing the partition time range. If your business scenario requires partitioning using a customized time granularity, you can create a materialized view and define the time granularity for its partitions by using the date_trunc function with the [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)  function, which can convert a given time into the beginning or end of a time interval based on the specified time granularity.
+The partition rollup method mentioned above only allows partitioning the materialized view based on specific time granularities and does not permit customizing the partition time range. If your business scenario requires partitioning using a customized time granularity, you can create a materialized view and define the time granularity for its partitions by using the date_trunc function with the [time_slice](../../../sql-reference/sql-functions/date-time-functions/time_slice.md)  function, which can convert a given time into the beginning or end of a time interval based on the specified time granularity.
 
 You need to define the new time granularity (interval) by using the time_slice function on the Partitioning Key of the base table in the SELECT list, set an alias for it, and use it in the date_trunc function to specify the Partitioning Key of the materialized view.
 
@@ -227,7 +227,7 @@ GROUP BY datekey, k1;
 
 ### Align partitions with multiple base tables
 
-![Partitioned Materialized View-3](../_assets/partitioned_mv-3.png)
+![Partitioned Materialized View-3](../../../_assets/partitioned_mv-3.png)
 
 You can create a materialized view whose partitions are aligned with those of multiple base tables, as long as the partitions of the base tables can align with each other, that is, the base tables use the same type of Partitioning Key. You can use JOIN to connect the base tables, and set the Partition Key as the common column. Alternatively, you can connect them with UNION. The base tables with aligned partitions are called reference tables. Data changes in any of the reference tables will trigger the refresh task on the corresponding partitions of the materialized view.
 
@@ -359,4 +359,4 @@ WHERE datekey='2021-01-01'
 GROUP BY datekey, k1;
 ```
 
-![Partitioned Materialized View-4](../_assets/partitioned_mv-4.png)
+![Partitioned Materialized View-4](../../../_assets/partitioned_mv-4.png)

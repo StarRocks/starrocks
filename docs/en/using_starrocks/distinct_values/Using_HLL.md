@@ -64,7 +64,7 @@ This is the core idea of the HLL algorithm. Please refer to the [HyperLogLog pap
 
 #### Example
 
-First, create a table with **HLL** columns, where uv is an aggregated column, the column type is `HLL`, and the aggregation function is [HLL_UNION](../sql-reference/sql-functions/aggregate-functions/hll_union.md).
+First, create a table with **HLL** columns, where uv is an aggregated column, the column type is `HLL`, and the aggregation function is [HLL_UNION](../../sql-reference/sql-functions/aggregate-functions/hll_union.md).
 
 ~~~sql
 CREATE TABLE test(
@@ -77,7 +77,7 @@ DISTRIBUTED BY HASH(ID);
 
 > * Note: When the data volume is large, it is better to create a corresponding rollup table for high frequency HLL queries
 
-Load data using [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md):
+Load data using [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md):
 
 ~~~bash
 curl --location-trusted -u <username>:<password> -H "label:label_1600997542287" \
@@ -119,7 +119,7 @@ LOAD LABEL test_db.label
 
 Querying data
 
-* The HLL column does not allow direct query of its original value, use the function [HLL_UNION_AGG](../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) to query.
+* The HLL column does not allow direct query of its original value, use the function [HLL_UNION_AGG](../../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) to query.
 * To find the total uv,
 
 `SELECT HLL_UNION_AGG(uv) FROM test;`

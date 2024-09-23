@@ -25,7 +25,7 @@ StarRocks 是基于 MPP 架构实现的，在使用 count distinct 做精确去�
 
 StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 user_id 列 group by，最后再 count。
 
-![alter](../_assets/6.1.2-2.png)
+![alter](../../_assets/6.1.2-2.png)
 
 > 注：图中是 6 行数据在 2 个 BE 节点上计算的示意图。
 
@@ -52,8 +52,8 @@ select page, count(distinct user_id) as uv from table group by page;
 ## 使用说明
 
 - Bitmap index 和 Bitmap 去重二者虽然都使用 Bitmap 技术，但引入原因和解决的问题完全不同。前者用于低基数的枚举型列的等值条件过滤，后者则用于计算一组数据行的指标列的不重复元素的个数。
-- 从 StarRocks 2.3 版本开始，所有类型的表均支持设置指标列为 BITMAP 类型，但是所有类型的表不支持设置[排序键](../table_design/indexes/Prefix_index_sort_key.md)为 BITMAP 类型。
-- 建表时，指定指标列类型为 BITMAP，使用 [BITMAP_UNION](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md) 函数进行聚合。
+- 从 StarRocks 2.3 版本开始，所有类型的表均支持设置指标列为 BITMAP 类型，但是所有类型的表不支持设置[排序键](../../table_design/indexes/Prefix_index_sort_key.md)为 BITMAP 类型。
+- 建表时，指定指标列类型为 BITMAP，使用 [BITMAP_UNION](../../sql-reference/sql-functions/bitmap-functions/bitmap_union.md) 函数进行聚合。
 - StarRocks 的 bitmap 去重是基于 Roaring Bitmap 实现的，roaring bitmap 只能对 TINYINT，SMALLINT，INT 和 BIGINT 类型的数据去重。如想要使用 Roaring Bitmap 对其他类型的数据去重，则需要构建全局字典。
 
 ## Bitmap 去重使用示例

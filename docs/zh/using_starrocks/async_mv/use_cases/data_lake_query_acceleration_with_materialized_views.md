@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 本文描述了如何使用 StarRocks 的异步物化视图来优化数据湖中的查询性能。
 
-StarRocks 提供了开箱即用的数据湖查询功能，非常适用于对湖中的数据进行探查式查询分析。在大多数情况下，[Data Cache](../data_source/data_cache.md) 可以提供 Block 级文件缓存，避免由远程存储抖动和大量I/O操作引起的性能下降。
+StarRocks 提供了开箱即用的数据湖查询功能，非常适用于对湖中的数据进行探查式查询分析。在大多数情况下，[Data Cache](../../../data_source/data_cache.md) 可以提供 Block 级文件缓存，避免由远程存储抖动和大量I/O操作引起的性能下降。
 
 然而，当涉及到使用湖中数据构建复杂和高效的报表，或进一步加速这些查询时，您可能仍然会遇到性能挑战。通过使用异步物化视图，您可以为数据湖中的报表和应用实现更高的并发，以及更好的性能。
 
@@ -101,7 +101,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
   > **说明**
   >
-  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
+  > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
 
 请注意，如需按照分区刷新，物化视图的分区键必须包含在基表的分区键中。
 
@@ -135,7 +135,7 @@ FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
 
 对于 Hive Catalog，您可以启用 Hive 元数据缓存刷新功能，允许 StarRocks 在分区级别检测数据更改。启用此功能后，StarRocks 定期访问 Hive 元数据存储服务（HMS）或 AWS Glue，以检查最近查询的热数据的元数据信息。
 
-要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
+要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
 
 ### 配置名称                                           
 
@@ -178,7 +178,7 @@ where empid < 5;
 
 ## 最佳实践
 
-在实际业务场景中，您可以通过分析 Audit Log 或[大查询日志](../administration/management/monitor_manage_big_queries.md)来识别执行较慢、资源消耗较高的查询。您还可以使用 [Query Profile](../administration/query_profile_overview.md) 来精确定位查询缓慢的特定阶段。以下各小节提供了如何通过物化视图提高数据湖查询性能的说明和示例。
+在实际业务场景中，您可以通过分析 Audit Log 或[大查询日志](../../../administration/management/monitor_manage_big_queries.md)来识别执行较慢、资源消耗较高的查询。您还可以使用 [Query Profile](../../../administration/query_profile_overview.md) 来精确定位查询缓慢的特定阶段。以下各小节提供了如何通过物化视图提高数据湖查询性能的说明和示例。
 
 ### 案例一：加速数据湖中的 Join 计算
 
@@ -222,7 +222,7 @@ ORDER BY d_year, p_brand;
 
 此处，Q1 和 Q2 在 Join `lineorder` 和 `dates` 后执行聚合，而 Q3 在 Join `lineorder`、`dates`、`part` 和 `supplier` 后执行聚合。
 
-因此，您可以利用 StarRocks 的 [View Delta Join 改写](./query_rewrite_with_materialized_views.md#view-delta-join-改写) 能力来构建物化视图，对 `lineorder`、`dates`、`part` 和 `supplier` 进行 Join。
+因此，您可以利用 StarRocks 的 [View Delta Join 改写](query_rewrite_with_materialized_views.md#view-delta-join-改写) 能力来构建物化视图，对 `lineorder`、`dates`、`part` 和 `supplier` 进行 Join。
 
 ```SQL
 CREATE MATERIALIZED VIEW lineorder_flat_mv
@@ -304,7 +304,7 @@ AS SELECT
   GROUP BY lo_orderdate;
   ```
 
-  请注意，此处不要创建带有 LIMIT 和 ORDER BY 子句的物化视图，以避免改写失败。有关查询改写限制的更多信息，请参阅[物化视图查询改写 - 限制](./query_rewrite_with_materialized_views.md#限制)。
+  请注意，此处不要创建带有 LIMIT 和 ORDER BY 子句的物化视图，以避免改写失败。有关查询改写限制的更多信息，请参阅[物化视图查询改写 - 限制](query_rewrite_with_materialized_views.md#限制)。
 
 - 多表聚合查询
 

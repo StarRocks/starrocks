@@ -2,51 +2,53 @@
 displayed_sidebar: docs
 ---
 
-# 物化视图查询改写
+# Query rewrite with materialized views
 
-本文描述了如何利用 StarRocks 的异步物化视图来改写并加速查询。
+This topic describes how to leverage StarRocks' asynchronous materialized views to rewrite and accelerate queries.
 
-## 概述
+## Overview
 
-StarRocks 的异步物化视图采用了主流的基于 SPJG（select-project-join-group-by）模式透明查询改写算法。在不修改查询语句的前提下，StarRocks 可以自动将在基表上的查询改写为在物化视图上的查询。通过其中包含的预计算结果，物化视图可以帮助您显著降低计算成本，并大幅加速查询执行。
+StarRocks' asynchronous materialized view uses a widely adopted transparent query rewrite algorithm based on the SPJG (select-project-join-group-by) form. Without the need to modify the query statement, StarRocks can automatically rewrite queries against the base tables into queries against the corresponding materialized view that contains the pre-computed results. As a result, materialized views can help you significantly reduce computational costs, and substantially accelerate query execution.
 
-基于异步物化视图的查询改写功能，在以下场景下特别有用：
+The query rewrite feature based on asynchronous materialized views is particularly useful in the following scenarios:
 
-- **指标预聚合**
+- **Pre-aggregation of metrics**
 
-  如果您需要处理高维度数据，可以使用物化视图来创建预聚合指标层。
+  You can use materialized views to create a pre-aggregated metric layer if you are dealing with a high dimensionality of data.
 
-- **宽表 Join**
+- **Joins of wide tables**
 
-  物化视图允许您在复杂场景下下透明加速包含大宽表 Join 的查询。
+  Materialized views allow you to transparently accelerate queries with joins of multiple large wide tables in complex scenarios.
 
-- **湖仓加速**
+- **Query acceleration in the data lake**
 
-  构建基于 External Catalog 的物化视图可以轻松加速针对数据湖中数据的查询。
+  Building an external catalog-based materialized view can easily accelerate queries against data in your data lake.
 
-> **说明**
->
-> 基于 JDBC Catalog 表构建的异步物化视图暂不支持查询改写。
+  > **NOTE**
+  >
+  > Asynchronous materialized views created on base tables in a JDBC catalog do not support query rewrite.
 
-### 功能特点
+### Features
 
-StarRocks 的异步物化视图自动查询改写功能具有以下特点：
+StarRocks' asynchronous materialized view-based automatic query rewrite features the following attributes:
 
-- **强数据一致性**：如果基表是 StarRocks 内表，StarRocks 可以保证通过物化视图查询改写获得的结果与直接查询基表的结果一致。
-- **Staleness rewrite**：StarRocks 支持 Staleness rewrite，即允许容忍一定程度的数据过期，以应对数据变更频繁的情况。
-- **多表 Join**：StarRocks 的异步物化视图支持各种类型的 Join，包括一些复杂的 Join 场景，如 View Delta Join 和 Join 派生改写，可用于加速涉及大宽表的查询场景。
-- **聚合改写**：StarRocks 可以改写带有聚合操作的查询，以提高报表性能。
-- **嵌套物化视图**：StarRocks 支持基于嵌套物化视图改写复杂查询，扩展了可改写的查询范围。
-- **Union 改写**：您可以将 Union 改写特性与物化视图分区的生存时间（TTL）相结合，实现冷热数据的分离，允许您从物化视图查询热数据，从基表查询历史数据。
-- **基于视图构建物化视图**：您可以在基于视图建模的情景下加速查询。
-- **基于 External Catalog 构建物化视图**：您可以通过该特性加速数据湖中的查询。
-- **复杂表达式改写**：支持在表达式中调用函数和算术运算，满足复杂分析和计算需求。
+- **Strong data consistency**: If the base tables are native tables, StarRocks ensures that the results obtained through the materialized view-based query rewrite are consistent with the results returned from the direct query against the base tables.
+- **Staleness rewrite**: StarRocks supports staleness rewrite, allowing you to tolerate a certain level of data expiration to cope with scenarios with frequent data changes.
+- **Multi-table joins**: StarRocks' asynchronous materialized view supports various types of joins, including some complex join scenarios like View Delta Joins and Derivable Joins, allowing you to accelerate queries in scenarios involving large wide tables.
+- **Aggregation rewrite**: StarRocks can rewrite queries with aggregations to improve report performance.
+- **Nested materialized view**: StarRocks supports rewriting complex queries based on nested materialized views, expanding the scope of queries that can be rewritten.
+- **Union rewrite**: You can combine the Union rewrite feature with the TTL (Time-to-Live) of the materialized view's partitions to achieve the separation of the hot and cold data, which allows you to query hot data from materialized views and historical data from the base table.
+- **Materialized views on views**: You can accelerate the queries in scenarios with data modeling based on views.
+- **Materialized views on external catalogs**: You can accelerate queries in data lakes.
+- **Complex expression rewrite**: It can handle complex expressions, including function calls and arithmetic operations, catering to advanced analytical and calculation requirements.
 
-这些特点将在以下各节中详细说明。
+These features will be elaborated in the following sections.
 
-## Join 改写
+## Join rewrite
 
-StarRocks 支持改写具有各种类型 Join 的查询，包括 Inner Join、Cross Join、Left Outer Join、Full Outer Join、Right Outer Join、Semi Join 和 Anti Join。 以下示例展示 Join 查询的改写。创建以下基表：
+StarRocks supports rewriting queries with various types of joins, including Inner Join, Cross Join, Left Outer Join, Full Outer Join, Right Outer Join, Semi Join, and Anti Join.
+
+The following is an example of rewriting queries with joins. Create two base tables as follows:
 
 ```SQL
 CREATE TABLE customer (
@@ -85,7 +87,7 @@ DUPLICATE KEY(lo_orderkey)
 DISTRIBUTED BY HASH(lo_orderkey) BUCKETS 48;
 ```
 
-基于上述基表，创建以下物化视图：
+With the above base tables, you can create a materialized view as follows:
 
 ```SQL
 CREATE MATERIALIZED VIEW join_mv1
@@ -96,7 +98,7 @@ FROM lineorder INNER JOIN customer
 ON lo_custkey = c_custkey;
 ```
 
-该物化视图可以改写以下查询：
+Such a materialized view can rewrite the following query:
 
 ```SQL
 SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address
@@ -104,11 +106,9 @@ FROM lineorder INNER JOIN customer
 ON lo_custkey = c_custkey;
 ```
 
-其原始查询计划和改写后的计划如下：
+![Rewrite-1](../../../_assets/Rewrite-1.png)
 
-![Rewrite-1](../_assets/Rewrite-1.png)
-
-StarRocks 支持改写具有复杂表达式的 Join 查询，如算术运算、字符串函数、日期函数、CASE WHEN 表达式和谓词 OR 等。例如，上述物化视图可以改写以下查询：
+StarRocks supports rewriting join queries with complex expressions, such as arithmetic operations, string functions, date functions, CASE WHEN expressions, and OR predicates. For example, the above materialized view can rewrite the following query:
 
 ```SQL
 SELECT 
@@ -121,13 +121,13 @@ FROM lineorder INNER JOIN customer
 ON lo_custkey = c_custkey;
 ```
 
-除了常规场景，StarRocks还支持在更复杂的情景下改写 Join 查询。
+In addition to the conventional scenario, StarRocks further supports rewriting join queries in more complicated scenarios.
 
-### Query Delta Join 改写
+### Query Delta Join rewrite
 
-Query Delta Join 是指查询中 Join 的表是物化视图中 Join 的表的超集的情况。例如，以下查询 Join 了表 `lineorder`、表 `customer` 和 表 `part`。如果物化视图 `join_mv1` 仅包含 `lineorder` 和 `customer` 的 Join，StarRocks 可以使用 `join_mv1` 来改写查询。
+Query Delta Join refers to a scenario in which the tables joined in a query are a superset of the tables joined in a materialized view. For instance, consider the following query that involves joins of three tables: `lineorder`, `customer`, and `part`. If the materialized view `join_mv1` contains only the join of `lineorder` and `customer`, StarRocks can rewrite the query using `join_mv1`.
 
-示例：
+Example:
 
 ```SQL
 SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address, p_name
@@ -136,19 +136,19 @@ FROM
     INNER JOIN part ON lo_partkey = p_partkey;
 ```
 
-其原始查询计划和改写后的计划如下：
+Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-2](../_assets/Rewrite-2.png)
+![Rewrite-2](../../../_assets/Rewrite-2.png)
 
-### View Delta Join 改写
+### View Delta Join rewrite
 
-View Delta Join 指的是查询中 Join 的表是物化视图中 Join 的表的子集的情况。通常在涉及大宽表的情景中使用此功能。例如，在 Star Schema Benchmark (SSB) 的背景下，您可以通过创建物化视图，Join 所有表以提高查询性能。测试发现在通过物化视图透明改写查询后，多表 Join 的查询性能可以达到与查询相应大宽表相同的性能水平。
+View Delta Join refers to a scenario in which the tables joined in a query are a subset of the tables joined in a materialized view. This feature is typically used in scenarios involving large wide tables. For example, in the context of the Star Schema Benchmark (SSB), you can create a materialized view that joins all tables to improve query performance. Through testing, it has been found that query performance for multi-table joins can achieve the same level of performance as querying the corresponding large wide table after transparently rewriting the queries through the materialized view.
 
-要启用 View Delta Join 改写，必须保证物化视图中包含在查询中不存在的 1:1 的 Cardinality Preservation Join。满足以下约束条件的九种 Join 都被视为 Cardinality Preservation Join，可以用于启用 View Delta Join 改写：
+To perform a View Delta Join rewrite, the materialized view must contain the 1:1 cardinality preservation join that does not exist in the query. Here are the nine types of joins that are considered cardinality preservation joins, and satisfying any one of them enables View Delta Join rewriting:
 
-![Rewrite-3](../_assets/Rewrite-3.png)
+![Rewrite-3](../../../_assets/Rewrite-3.png)
 
-以 SSB 测试为例，创建以下基表：
+Take SSB tests as an example, create the following base tables:
 
 ```SQL
 CREATE TABLE customer (
@@ -164,7 +164,7 @@ CREATE TABLE customer (
 DUPLICATE KEY(c_custkey)
 DISTRIBUTED BY HASH(c_custkey) BUCKETS 12
 PROPERTIES (
-"unique_constraints" = "c_custkey"   -- 指定唯一键。
+"unique_constraints" = "c_custkey"   -- Specify the unique constraints.
 );
 
 CREATE TABLE dates (
@@ -189,7 +189,7 @@ CREATE TABLE dates (
 DUPLICATE KEY(d_datekey)
 DISTRIBUTED BY HASH(d_datekey) BUCKETS 1
 PROPERTIES (
-"unique_constraints" = "d_datekey"   -- 指定唯一键。
+"unique_constraints" = "d_datekey"   -- Specify the unique constraints.
 );
 
 CREATE TABLE supplier (
@@ -204,7 +204,7 @@ CREATE TABLE supplier (
 DUPLICATE KEY(s_suppkey)
 DISTRIBUTED BY HASH(s_suppkey) BUCKETS 12
 PROPERTIES (
-"unique_constraints" = "s_suppkey"   -- 指定唯一键。
+"unique_constraints" = "s_suppkey"   -- Specify the unique constraints.
 );
 
 CREATE TABLE part (
@@ -221,16 +221,16 @@ CREATE TABLE part (
 DUPLICATE KEY(p_partkey)
 DISTRIBUTED BY HASH(p_partkey) BUCKETS 12
 PROPERTIES (
-"unique_constraints" = "p_partkey"   -- 指定唯一键。
+"unique_constraints" = "p_partkey"   -- Specify the unique constraints.
 );
 
 CREATE TABLE lineorder (
-  lo_orderdate       DATE          NOT NULL, -- 指定为 NOT NULL。
+  lo_orderdate       DATE          NOT NULL, -- Specify it as NOT NULL.
   lo_orderkey        INT(11)       NOT NULL,
   lo_linenumber      TINYINT       NOT NULL,
-  lo_custkey         INT(11)       NOT NULL, -- 指定为 NOT NULL。
-  lo_partkey         INT(11)       NOT NULL, -- 指定为 NOT NULL。
-  lo_suppkey         INT(11)       NOT NULL, -- 指定为 NOT NULL。
+  lo_custkey         INT(11)       NOT NULL, -- Specify it as NOT NULL.
+  lo_partkey         INT(11)       NOT NULL, -- Specify it as NOT NULL.
+  lo_suppkey         INT(11)       NOT NULL, -- Specify it as NOT NULL.
   lo_orderpriority   VARCHAR(100)  NOT NULL,
   lo_shippriority    TINYINT       NOT NULL,
   lo_quantity        TINYINT       NOT NULL,
@@ -257,11 +257,11 @@ PROPERTIES (
 "foreign_key_constraints" = "
     (lo_custkey) REFERENCES customer(c_custkey);
     (lo_partkey) REFERENCES part(p_partkey);
-    (lo_suppkey) REFERENCES supplier(s_suppkey)" -- 指定外键约束。
+    (lo_suppkey) REFERENCES supplier(s_suppkey)" -- Specify the Foreign Keys.
 );
 ```
 
-创建 Join 表 `lineorder`、表 `customer`、表 `supplier`、表 `part` 和表 `dates` 的物化视图 `lineorder_flat_mv`：
+Create the materialized view `lineorder_flat_mv` that joins `lineorder`, `customer`, `supplier`, `part`, and `dates`:
 
 ```SQL
 CREATE MATERIALIZED VIEW lineorder_flat_mv
@@ -271,7 +271,7 @@ REFRESH MANUAL
 PROPERTIES (
     "partition_refresh_number"="1"
 )
-AS SELECT /*+ SET_VAR(query_timeout = 7200) */     -- 设置刷新超时时间。
+AS SELECT /*+ SET_VAR(query_timeout = 7200) */     -- Set timeout for the refresh operation.
        l.LO_ORDERDATE        AS LO_ORDERDATE,
        l.LO_ORDERKEY         AS LO_ORDERKEY,
        l.LO_LINENUMBER       AS LO_LINENUMBER,
@@ -333,9 +333,9 @@ AS SELECT /*+ SET_VAR(query_timeout = 7200) */     -- 设置刷新超时时间�
        INNER JOIN dates      AS d ON l.LO_ORDERDATE = d.D_DATEKEY;    
 ```
 
-SSB Q2.1 涉及四个表的 Join，但与物化视图 `lineorder_flat_mv` 相比，缺少了 `customer` 表。在 `lineorder_flat_mv` 中，`lineorder INNER JOIN customer` 本质上是一个 Cardinality Preservation Join。因此逻辑上，可以消除该 Join 而不影响查询结果。因此，Q2.1 可以使用 `lineorder_flat_mv` 进行改写。
+SSB Q2.1 involves joining four tables, but it lacks the `customer` table compared to the materialized view `lineorder_flat_mv`. In `lineorder_flat_mv`, `lineorder INNER JOIN customer` is essentially a cardinality preservation join. Therefore, logically, this join can be eliminated without affecting the query results. As a result, Q2.1 can be rewritten using `lineorder_flat_mv`.
 
-SSB Q2.1：
+SSB Q2.1:
 
 ```SQL
 SELECT sum(lo_revenue) AS lo_revenue, d_year, p_brand
@@ -348,27 +348,27 @@ GROUP BY d_year, p_brand
 ORDER BY d_year, p_brand;
 ```
 
-其原始查询计划和改写后的计划如下：
+Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-4](../_assets/Rewrite-4.png)
+![Rewrite-4](../../../_assets/Rewrite-4.png)
 
-同样，SSB 中的其他查询也可以通过使用 `lineorder_flat_mv` 进行透明改写，从而优化查询性能。
+Similarly, other queries in the SSB can also be transparently rewritten using `lineorder_flat_mv`, thus optimizing query performance.
 
-### Join 派生改写
+### Join Derivability rewrite
 
-Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视图的 Join 结果包含查询 Join 结果的情况。目前支持两种情景：三表或以上 Join 和两表 Join 的情景。
+Join Derivability refers to a scenario in which the join types in the materialized view and the query are not consistent, but the materialized view's join results contain the results of the query's join. Currently, it supports two scenarios - joining three or more tables, and  joining two tables.
 
-- **情景一：三表或以上 Join**
+- **Scenario one: Joining three or more tables**
 
-  假设物化视图包含表 `t1` 和表 `t2` 之间的 Left Outer Join，以及表 `t2` 和表 `t3` 之间的 Inner Join。两个 Join 的条件都包括来自表 `t2` 的列。
+  Suppose the materialized view contains a Left Outer Join between tables `t1` and `t2` and an Inner Join between tables `t2` and `t3`. In both joins, the join condition includes columns from `t2`.
 
-  而查询则包含 `t1` 和 `t2` 之间的 Inner Join，以及 `t2` 和 `t3` 之间的 Inner Join。两个 Join 的条件都包括来自表 `t2` 的列。
+  The query, on the other hand, contains an Inner Join between t1 and t2, and an Inner Join between t2 and t3. In both joins, the join condition includes columns from t2.
 
-  在这种情况下，上述查询可以通过物化视图改写。这是因为在物化视图中，首先执行 Left Outer Join，然后执行 Inner Join。Left Outer Join 生成的右表没有匹配结果（即右表中的列为 NULL）。这些结果在执行 Inner Join 期间被过滤掉。因此，物化视图和查询的逻辑是等效的，可以对查询进行改写。
+  In this case, the query can be rewritten using the materialized view. This is because in the materialized view, the Left Outer Join is executed first, followed by the Inner Join. The right table generated by the Left Outer Join has no results for the matching (that is, columns in the right table are NULL). These results are subsequently filtered out during the Inner Join. Therefore, the logic of the materialized view and the query is equivalent, and the query can be rewritten.
 
-  示例：
+  Example:
 
-  创建物化视图 `join_mv5`：
+  Create the materialized view `join_mv5`:
 
   ```SQL
   CREATE MATERIALIZED VIEW join_mv5
@@ -385,7 +385,7 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
   ON p_partkey = lo_partkey;
   ```
 
-  `join_mv5` 可改写以下查询：
+  `join_mv5` can rewrite the following query:
 
   ```SQL
   SELECT lo_orderkey, lo_orderdate, lo_linenumber, lo_revenue, c_custkey, c_address, p_name
@@ -395,19 +395,19 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
   ON p_partkey = lo_partkey;
   ```
 
-  其原始查询计划和改写后的计划如下：
+  Its original query plan and the one after the rewrite are as follows:
 
-  ![Rewrite-5](../_assets/Rewrite-5.png)
+  ![Rewrite-5](../../../_assets/Rewrite-5.png)
 
-  同样，如果物化视图定义为 `t1 INNER JOIN t2 INNER JOIN t3`，而查询为 `LEFT OUTER JOIN t2 INNER JOIN t3`，那么查询也可以被改写。而且，在涉及超过三个表的情况下，也具备上述的改写能力。
+  Similarly, if the materialized view is defined as `t1 INNER JOIN t2 INNER JOIN t3`, and the query is `LEFT OUTER JOIN t2 INNER JOIN t3`, the query can also be rewritten. Furthermore, this rewriting capability extends to scenarios involving more than three tables.
 
-- **情景二：两表 Join**
+- **Scenario two: Joining two tables**
 
-  两表 Join 的派生改写支持以下几种细分场景：
+  The Join Derivability Rewrite feature involving two tables supports the following specific cases:
 
-  ![Rewrite-6](../_assets/Rewrite-6.png)
+  ![Rewrite-6](../../../_assets/Rewrite-6.png)
 
-  在场景一至九中，需要向改写结果补偿过滤谓词，以确保语义等效性。例如，创建以下物化视图：
+  In cases 1 to 9, filtering predicates must be added to the rewritten result to ensure semantic equivalence. For example, create a materialized view as follows:
 
   ```SQL
   CREATE MATERIALIZED VIEW join_mv3
@@ -418,7 +418,7 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
   ON lo_custkey = c_custkey;
   ```
 
-  则 `join_mv3` 可以改写以下查询，其查询结果需补偿谓词 `c_custkey IS NOT NULL`：
+  The following query can be rewritten using `join_mv3`, and the predicate `c_custkey IS NOT NULL` is added to the rewritten result:
 
   ```SQL
   SELECT lo_orderkey, lo_linenumber, lo_revenue, c_custkey, c_address
@@ -426,11 +426,11 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
   ON lo_custkey = c_custkey;
   ```
 
-  其原始查询计划和改写后的计划如下：
+  Its original query plan and the one after the rewrite are as follows:
 
-  ![Rewrite-7](../_assets/Rewrite-7.png)
+  ![Rewrite-7](../../../_assets/Rewrite-7.png)
 
-  在场景十中， 需要 Left Outer Join 查询中包含右表中 `IS NOT NULL` 的过滤谓词，如 `=`、`<>`、`>`、`<`、`<=`、`>=`、`LIKE`、`IN`、`NOT LIKE` 或 `NOT IN`。例如，创建以下物化视图：
+  In case 10, the Left Outer Join query must include the filtering predicate `IS NOT NULL` in the right table, for example, `=`, `<>`, `>`, `<`, `<=`, `>=`, `LIKE`, `IN`, `NOT LIKE`, or `NOT IN`. For example, create a materialized view as follows:
 
   ```SQL
   CREATE MATERIALIZED VIEW join_mv4
@@ -441,7 +441,7 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
   ON lo_custkey = c_custkey;
   ```
 
-  则 `join_mv4` 可以改写以下查询，其中 `customer.c_address = "Sb4gxKs7"` 为 `IS NOT NULL` 谓词：
+  `join_mv4` can rewrite the following query, where `customer.c_address = "Sb4gxKs7"` is the filtering predicate `IS NOT NULL`:
 
   ```SQL
   SELECT lo_orderkey, lo_linenumber, lo_revenue, c_custkey, c_address
@@ -450,13 +450,13 @@ Join 派生是指物化视图和查询中的 Join 类型不一致，但物化视
   WHERE customer.c_address = "Sb4gxKs7";
   ```
 
-  其原始查询计划和改写后的计划如下：
+  Its original query plan and the one after the rewrite are as follows:
 
-  ![Rewrite-8](../_assets/Rewrite-8.png)
+  ![Rewrite-8](../../../_assets/Rewrite-8.png)
 
-## 聚合改写
+## Aggregation rewrite
 
-StarRocks 异步物化视图的多表聚合查询改写支持所有聚合函数，包括 bitmap_union、hll_union 和 percentile_union 等。例如，创建以下物化视图：
+StarRocks' asynchronous materialized view supports rewriting multi-table aggregate queries with all available aggregate functions, including bitmap_union, hll_union, and percentile_union. For example, create a materialized view as follows:
 
 ```SQL
 CREATE MATERIALIZED VIEW agg_mv1
@@ -473,7 +473,7 @@ ON lo_custkey = c_custkey
 GROUP BY lo_orderkey, lo_linenumber, c_name;
 ```
 
-该物化视图可以改写以下查询：
+It can rewrite the following query:
 
 ```SQL
 SELECT 
@@ -487,15 +487,15 @@ ON lo_custkey = c_custkey
 GROUP BY lo_orderkey, lo_linenumber, c_name;
 ```
 
-其原始查询计划和改写后的计划如下：
+Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-9](../_assets/Rewrite-9.png)
+![Rewrite-9](../../../_assets/Rewrite-9.png)
 
-以下各节详细阐述了聚合改写功能可用的场景。
+The following sections expound on the scenarios where the Aggregation Rewrite feature can be useful.
 
-### 聚合上卷改写
+### Aggregation Rollup rewrite
 
-StarRocks 支持通过聚合上卷改写查询，即 StarRocks 可以使用通过 `GROUP BY a,b` 子句创建的异步物化视图改写带有 `GROUP BY a` 子句的聚合查询。例如，`agg_mv1` 可以改写以下查询：
+StarRocks supports rewriting queries with Aggregation Rollup, that is, StarRocks can rewrite aggregate queries with a `GROUP BY a` clause using an asynchronous materialized view created with a `GROUP BY a,b` clause. For example, the following query can be rewritten using `agg_mv1`:
 
 ```SQL
 SELECT 
@@ -508,17 +508,19 @@ ON lo_custkey = c_custkey
 GROUP BY lo_orderkey, c_name;
 ```
 
-其原始查询计划和改写后的计划如下：
+Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-10](../_assets/Rewrite-10.png)
+![Rewrite-10](../../../_assets/Rewrite-10.png)
 
-> **说明**
+> **NOTE**
 >
-> 当前暂不支持 grouping set、grouping set with rollup 以及 grouping set with cube 的改写。
+> Currently, rewriting the grouping set, grouping set with rollup, or grouping set with cube is not supported.
 
-仅有部分聚合函数支持聚合上卷查询改写。下表展示了原始查询中的聚合函数与用于构建物化视图的聚合函数之间的对应关系。您可以根据自己的业务场景，选择相应的聚合函数构建物化视图。
+Only certain aggregate functions support query rewrite with Aggregate Rollup. In the preceding example, if the materialized view `order_agg_mv` uses `count(distinct client_id)` instead of `bitmap_union(to_bitmap(client_id))`, StarRocks cannot rewrite the queries with Aggregate Rollup.
 
-| **原始查询聚合函数**                                      | **支持 Aggregate Rollup 的物化视图构建聚合函数**                 |
+The following table shows the correspondence between the aggregate functions in the original query and the aggregate function used to build the materialized view. You can select the corresponding aggregate functions to build a materialized view according to your business scenario.
+
+| **Aggregate function suppprted in original queries**   | **Function supported Aggregate Rollup in materialized view** |
 | ------------------------------------------------------ | ------------------------------------------------------------ |
 | sum                                                    | sum                                                          |
 | count                                                  | count                                                        |
@@ -529,9 +531,9 @@ GROUP BY lo_orderkey, c_name;
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
 | percentile_approx, percentile_union                    | percentile_union                                             |
 
-没有相应 GROUP BY 列的 DISTINCT 聚合无法使用聚合上卷查询改写。但是，从 StarRocks v3.1 开始，如果聚合上卷对应 DISTINCT 聚合函数的查询没有 GROUP BY 列，但有等价的谓词，该查询也可以被相关物化视图改写，因为 StarRocks 可以将等价谓词转换为 GROUP BY 常量表达式。
+DISTINCT aggregates without the corresponding GROUP BY column cannot be rewritten with Aggregate Rollup. However, from StarRocks v3.1 onwards, if a query with an Aggregate Rollup DISTINCT aggregate function does not have a GROUP BY column but an equal predicate, it can also be rewritten by the relevant materialized view because StarRocks can convert the equal predicates into a GROUP BY constant expression.
 
-在以下示例中，StarRocks 可以使用物化视图 `order_agg_mv1` 改写对应查询 Query：
+In the following example, StarRocks can rewrite the query with the materialized view `order_agg_mv1`.
 
 ```SQL
 CREATE MATERIALIZED VIEW order_agg_mv1
@@ -552,13 +554,13 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
-### 聚合下推
+### Aggregation pushdown
 
-从 v3.3.0 版本开始，StarRocks 支持物化视图查询改写的聚合下推功能。启用此功能后，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。
+From v3.3.0, StarRocks supports aggregation pushdown for materialized view query rewrite. When this feature is enabled, aggregate functions will be pushed down to the Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance.
 
-系统默认禁用该功能。要启用此功能，必须将系统变量 `enable_materialized_view_agg_pushdown_rewrite` 设置为 `true`。
+This feature is disabled by default, To enable this feature, you must set the system variable `enable_materialized_view_agg_pushdown_rewrite` to `true`.
 
-假设需要加速以下基于 SSB 的查询 `SQL1`：
+Suppose you want to accelerate the following SSB-based query `SQL1`:
 
 ```sql
 -- SQL1
@@ -570,7 +572,7 @@ GROUP BY LO_ORDERDATE
 ORDER BY LO_ORDERDATE;
 ```
 
-`SQL1` 包含 `lineorder` 表内的聚合以及 `lineorder` 和 `dates` 表之间的 Join。聚合发生在 `lineorder` 内部，与 `dates` 的 Join 仅用于数据过滤。所以 `SQL1` 在逻辑上等同于以下 `SQL2`：
+`SQL1` consists of aggregations on the table `lineorder` and a Join of `lineorder` and `dates`. Because aggregations happen within `lineorder` and the Join with `dates` is only used for data filtering, `SQL1` is logically equivalent to the following `SQL2`:
 
 ```sql
 -- SQL2
@@ -586,10 +588,10 @@ GROUP BY LO_ORDERDATE
 ORDER BY LO_ORDERDATE;
 ```
 
-`SQL2` 将聚合提前，大量减少 Join 的数据量。您可以基于 `SQL2` 的子查询创建物化视图，并启用聚合下推以改写和加速聚合：
+`SQL2` brings aggregations forward, thus shrinking the data size of Join. You can create a materialized view based on the sub-query of `SQL2`, and enable aggregation pushdown to rewrite and accelerate the aggregations:
 
 ```sql
--- 创建物化视图 mv0
+-- Create the materialized view mv0
 CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
 SELECT
   LO_ORDERDATE, 
@@ -599,11 +601,11 @@ SELECT
 FROM lineorder 
 GROUP BY LO_ORDERDATE;
 
--- 启用聚合下推
+-- Enable aggregation pushdown for materialized view query rewrite
 SET enable_materialized_view_agg_pushdown_rewrite=true;
 ```
 
-此时，`SQL1` 将通过物化视图进行改写和加速。改写后的查询如下：
+Then, `SQL1` will be rewritten and accelerated by the materialized view. It is rewritten to the following query:
 
 ```sql
 SELECT 
@@ -615,7 +617,7 @@ GROUP BY LO_ORDERDATE
 ORDER BY LO_ORDERDATE;
 ```
 
-请注意，只有部分支持聚合上卷改写的聚合函数可以下推。目前支持下推的聚合函数有：
+Please note that only certain aggregate functions that support Aggregate Rollup rewrite are eligible for pushdown. They are:
 
 - MIN
 - MAX
@@ -629,15 +631,15 @@ ORDER BY LO_ORDERDATE;
 - ARRAY_AGG_DISTINCT
 
 :::note
-- 下推后的聚合函数需要进行上卷才能对齐原始语义。有关聚合上卷的更多说明，请参阅 [聚合上卷改写](#聚合上卷改写)。
-- 聚合下推支持基于 Bitmap 或 HLL 函数的 Count Distinct 上卷改写。
-- 聚合下推仅支持将查询中的聚合函数下推至 Join/Filter/Where Operator 之下的 Scan Operator 之上。
-- 聚合下推仅支持基于单张表构建的物化视图进行查询改写和加速。
+- After pushdown, the aggregate functions need to be rolled up to align with the original semantics. For more instructions on Aggregation Rollup, Please refer to [Aggregation Rollup Rewrite](#aggregation-rollup-rewrite).
+- Aggregation pushdown supports Rollup rewrite of Count Distinct based on Bitmap or HLL functions.
+- Aggregation pushdown only supports pushing aggregate functions down to the Scan Operator before Join, Filter, or Where operators.
+- Aggregation pushdown only supports query rewrite and acceleration based on materialized view built on a single table.
 :::
 
-### COUNT DISTINCT 改写
+### COUNT DISTINCT rewrite
 
-StarRocks 支持将 COUNT DISTINCT 计算改写为 BITMAP 类型的计算，从而使用物化视图实现高性能、精确的去重。例如，创建以下物化视图：
+StarRocks supports rewriting COUNT DISTINCT calculations into bitmap-based calculations, enabling high-performance, precise deduplication using materialized views. For example, create a materialized view as follows:
 
 ```SQL
 CREATE MATERIALIZED VIEW distinct_mv
@@ -648,7 +650,7 @@ FROM lineorder
 GROUP BY lo_orderkey;
 ```
 
-该物化视图可以改写以下查询：
+It can rewrite the following query:
 
 ```SQL
 SELECT lo_orderkey, count(distinct lo_custkey) 
@@ -656,9 +658,9 @@ FROM lineorder
 GROUP BY lo_orderkey;
 ```
 
-## 嵌套物化视图改写
+## Nested materialized view rewrite
 
-StarRocks 支持使用嵌套物化视图改写查询。例如，创建以下物化视图 `join_mv2`、`agg_mv2` 和 `agg_mv3`：
+StarRocks supports rewriting queries using nested materialized view. For example, create the materialized views `join_mv2`, `agg_mv2`, and `agg_mv3` as follows:
 
 ```SQL
 CREATE MATERIALIZED VIEW join_mv2
@@ -692,11 +694,11 @@ FROM agg_mv2
 GROUP BY lo_orderkey;
 ```
 
-其关系如下：
+Their relationship is as follows:
 
-![Rewrite-11](../_assets/Rewrite-11.png)
+![Rewrite-11](../../../_assets/Rewrite-11.png)
 
-`agg_mv3` 可改写以下查询：
+`agg_mv3` can rewrite the following query:
 
 ```SQL
 SELECT 
@@ -708,17 +710,17 @@ ON lo_custkey = c_custkey
 GROUP BY lo_orderkey;
 ```
 
-其原始查询计划和改写后的计划如下：
+Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-12](../_assets/Rewrite-12.png)
+![Rewrite-12](../../../_assets/Rewrite-12.png)
 
-## Union 改写
+## Union rewrite
 
-### 谓词 Union 改写
+### Predicate Union rewrite
 
-当物化视图的谓词范围是查询的谓词范围的子集时，可以使用 UNION 操作改写查询。
+When the predicate scope of a materialized view is a subset of the predicate scope of a query, the query can be rewritten using a UNION operation.
 
-例如，创建以下物化视图：
+For example, create a materialized view as follows:
 
 ```SQL
 CREATE MATERIALIZED VIEW agg_mv4
@@ -733,7 +735,7 @@ WHERE lo_orderkey < 300000000
 GROUP BY lo_orderkey;
 ```
 
-该物化视图可以改写以下查询：
+It can rewrite the following query:
 
 ```SQL
 select 
@@ -744,17 +746,17 @@ FROM lineorder
 GROUP BY lo_orderkey;
 ```
 
-其原始查询计划和改写后的计划如下：
+Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-13](../_assets/Rewrite-13.png)
+![Rewrite-13](../../../_assets/Rewrite-13.png)
 
-其中，`agg_mv5` 包含`lo_orderkey < 300000000` 的数据，`lo_orderkey >= 300000000` 的数据通过直接查询表 `lineorder` 得到，最终通过 Union 操作之后再聚合，获取最终结果。
+In this context, `agg_mv5` contains data where `lo_orderkey < 300000000`. Data where `lo_orderkey >= 300000000` is directly obtained from the base table `lineorder`. Finally, these two sets of data are combined using a UNION operation and then aggregated to obtain the final result.
 
-### 分区 Union 改写
+### Partition Union rewrite
 
-假设基于分区表创建了一个分区物化视图。当查询扫描的分区范围是物化视图最新分区范围的超集时，查询可被 UNION 改写。
+Suppose you created a partitioned materialized view based on a partitioned table. When the partition range that a rewritable query scanned is a superset of the most recent partition range of the materialized view, the query will be rewritten using a UNION operation.
 
-例如，有如下的物化视图 `agg_mv4`。基表 `lineorder` 当前包含分区 `p1` 至 `p7`，物化视图也包含分区 `p1` 至 `p7`。
+For example, consider the following materialized view `agg_mv4`. Its base table `lineorder` currently contains partitions from `p1` to `p7`, and the materialized view also contains partitions from `p1` to `p7`.
 
 ```SQL
 CREATE MATERIALIZED VIEW agg_mv5
@@ -771,7 +773,7 @@ FROM lineorder
 GROUP BY lo_orderkey;
 ```
 
-如果 `lineorder` 新增分区 `p8`，其范围为 `[("19990101"), ("20000101"))`，则以下查询可被 UNION 改写：
+If a new partition `p8`, with a partition range of `[("19990101"), ("20000101"))`,  is added to `lineorder`, the following query can be rewritten using a UNION operation:
 
 ```SQL
 SELECT 
@@ -783,28 +785,28 @@ FROM lineorder
 GROUP BY lo_orderkey;
 ```
 
-其原始查询计划和改写后的计划如下：
+Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-14](../_assets/Rewrite-14.png)
+![Rewrite-14](../../../_assets/Rewrite-14.png)
 
-如上所示，`agg_mv5` 包含来自分区 `p1` 到 `p7` 的数据，而分区 `p8` 的数据来源于 `lineorder`。最后，这两组数据使用 UNION 操作合并。
+As shown above, `agg_mv5` contains the data from partitions `p1` to `p7`, and the data from partition `p8` is directly queried from `lineorder`. Finally, these two sets of data are combined using a UNION operation.
 
-## 基于视图的物化视图查询改写
+## View-based materialized view rewrite
 
-自 v3.1.0 起，StarRocks 支持基于视图创建物化视图。如果基于视图的查询为 SPJG 类型，StarRocks 将会内联展开查询，然后进行改写。默认情况下，对视图的查询会自动展开为对视图的基表的查询，然后进行透明匹配和改写。
+From v3.1.0 onwards, StarRocks supports creating materialized views based on views. Subsequent queries against the views can be rewritten if they are of the SPJG pattern. By default, queries against views are automatically transcribed into queries against the base tables of the views and then transparently matched and rewritten.
 
-然而，在实际场景中，数据分析师可能会基于复杂的嵌套视图进行数据建模，这些视图无法直接展开。因此，基于这些视图创建的物化视图无法改写查询。为了改进在上述情况下的能力，从 v3.3.0 开始，StarRock 优化了基于视图的物化视图查询改写逻辑。
+However, in real-world scenarios, data analysts may perform data modeling upon complex, nested views, which cannot be directly transcribed. As a result, materialized views created based on such views cannot rewrite queries. To improve its capability in the preceding scenario, StarRocks optimizes the view-based materialized view query rewrite logic from v3.3.0 onwards.
 
-### 基本原理
+### Fundamentals
 
-在先前的查询改写逻辑中，StarRocks 会将基于视图的查询展开为针对视图基表的查询。如果展开后查询的执行计划与 SPJG 模式不匹配，物化视图将无法改写查询。
+In the previous query rewrite logic, StarRocks will transcribe queries against a view into queries against the base tables of the view. Query rewrite will encounter failures if the execution plan of the transcribed query mismatches the SPJG pattern.
 
-为了解决这个问题，StarRocks 引入了一个新的算子 - LogicalViewScanOperator，该算子用于简化执行计划树的结构，且无需展开查询，使查询执行计划树尽量满足 SPJG 模式，从而优化查询改写。
+To solve this problem, StarRocks introduces a new operator - LogicalViewScanOperator, to simplify the structure of the execution plan tree without transcribing the query. This operator seeks to match the execution plan tree with the SPJG pattern, therefore facilitating query rewrite.
 
-以下示例展示了一个包含聚合子查询的查询，一个建立在子查询之上的视图，基于视图展开之后的查询，以及建立在视图之上的物化视图：
+The following example lists a query with an AGGREGATE sub-query, a view built upon the sub-query, the transcribed query based on the view, and the materialized view built upon the view:
 
 ```SQL
--- 原始查询：
+-- Original query:
 SELECT 
   v1.a,
   t2.b,
@@ -818,7 +820,7 @@ FROM(
 ) v1
 INNER JOIN t2 ON v1.a = t2.a;
 
--- 视图：
+-- View: 
 CREATE VIEW view_1 AS
 SELECT 
   t1.a,
@@ -826,7 +828,7 @@ SELECT
 FROM t1
 GROUP BY t1.a;
     
--- 展开后的查询
+-- Transcribed query:
 SELECT 
   v1.a,
   t2.b,
@@ -834,7 +836,7 @@ SELECT
 FROM view_1 v1
 JOIN t2 ON v1.a = t2.a;
     
--- 物化视图：
+-- Materialized view:
 CREATE MATERIALIZED VIEW mv1
 DISTRIBUTED BY hash(a)
 REFRESH MANUAL
@@ -847,27 +849,27 @@ FROM view_1 v1
 JOIN t2 ON v1.a = t2.a;
 ```
 
-原始查询的执行计划如下图左侧所示。由于 JOIN 内的 LogicalAggregateOperator 与 SPJG 模式不匹配，StarRocks 不支持这种情况下的查询改写。然而，如果将子查询定义为一个视图，原始查询可以展开为针对该视图的查询。通过 LogicalViewScanOperator，StarRocks 可以将不匹配的部分转换为 SPJG 模式，从而允许改写查询。
+The execution plan of the original query, as shown on the left of the following diagram, mismatches the SPJG pattern due to the LogicalAggregateOperator within the JOIN. StarRocks does not support query rewrite for such cases. However, by defining a view based on the sub-query, the original query can be transcribed into a query against the view. With the LogicalViewScanOperator, StarRocks can transfer the mismatched part into the SPJG pattern, therefore allowing query rewrite under this circumstance.
 
-![img](../_assets/Rewrite-view-based.png)
+![img](../../../_assets/Rewrite-view-based.png)
 
-### 使用
+### Usage
 
-StarRocks 默认禁用基于视图的物化视图查询改写。
+View-based materialized view query rewrite is disabled by default.
 
-要启用此功能，您必须设置以下变量：
+To enable this feature, you must set the following variable:
 
 ```SQL
 SET enable_view_based_mv_rewrite = true;
 ```
 
-### 使用场景
+### Use cases
 
-#### 基于单个视图的物化视图查询改写
+#### Rewrite queries using single-view-based materialized views
 
-StarRocks 支持通过基于单个视图的物化视图进行查询改写，包括聚合查询。
+StarRocks supports rewriting queries with a materialized view built upon a single view, including queries with aggregations.
 
-例如，您可以为 TPC-H Query 18 构建以下视图和物化视图：
+For example, you can build the following view and materialized view for the TPC-H Query 18:
 
 ```SQL
 CREATE VIEW q18_view
@@ -909,7 +911,7 @@ AS
 SELECT * FROM q18_view;
 ```
 
-物化视图可以改写以下两个查询：
+The materialized view can rewrite both the following queries:
 
 ```Plain
 mysql> EXPLAIN LOGICAL SELECT * FROM q18_view;
@@ -957,11 +959,11 @@ mysql> EXPLAIN LOGICAL SELECT c_name, sum(`sum(l_quantity)`) FROM q18_view GROUP
 +-----------------------------------------------------------------------------------------------------+
 ```
 
-#### 基于视图的物化视图改写 JOIN 查询
+#### Rewrite queries with JOIN using view-based materialized views
 
-StarRocks 支持对包含视图之间或视图与表之间的 JOIN 的查询进行改写，包括在 JOIN 上进行聚合。
+StarRocks supports rewriting queries with JOINs between views or between views and tables, including aggregations upon JOINs.
 
-例如，您可以创建以下视图和物化视图：
+For example, you can create the following views and materialized view:
 
 ```SQL
 CREATE VIEW view_1 AS
@@ -999,7 +1001,7 @@ JOIN view_2 v2 ON v1.l_partkey = v2.l_partkey
 AND v1.l_suppkey = v2.l_suppkey;
 ```
 
-物化视图可以改写以下两个查询：
+The materialized view can rewrite both the following queries:
 
 ```Plain
 mysql>  EXPLAIN LOGICAL
@@ -1062,55 +1064,55 @@ mysql> EXPLAIN LOGICAL
 +--------------------------------------------------------------------------------------------------------------------+
 ```
 
-#### 基于视图的物化视图改写外表查询
+#### Rewrite queries using materialized views built upon external table-based views
 
-您可以在 External Catalog 中的外表上构建视图，然后基于这些视图构建物化视图来改写查询。其使用方式类似于内部表。
+You can build views upon tables in external catalogs and then materialized views upon the views to rewrite queries. The usage is similar to that for internal tables.
 
-## 基于 External Catalog 构建物化视图
+## External catalog-based materialized view rewrite
 
-StarRocks 支持基于 Hive Catalog、Hudi Catalog、Iceberg Catalog 和 Paimon Catalog 的外部数据源上构建异步物化视图，并支持透明地改写查询。基于 External Catalog 的物化视图支持大多数查询改写功能，但存在以下限制：
+StarRocks supports building asynchronous materialized views on Hive catalogs, Hudi catalogs, Iceberg catalogs, and Paimon catalogs, and transparently rewriting queries with them. External catalog-based materialized views support most of the query rewrite capabilities, but there are some limitations:
 
-- 基于 Hudi、Paimon 和 JDBC Catalog 创建的物化视图不支持 Union 改写。
-- 基于 Hudi、Paimon 和 JDBC Catalog 创建的物化视图不支持 View Delta Join 改写。
-- 基于 Hudi 和 JDBC Catalog 创建的物化视图不支持分区增量刷新。
+- Hudi, Paimon, or JDBC catalog-based materialized views do not support Union rewrite.
+- Hudi, Paimon, or JDBC catalog-based materialized views do not support View Delta Join rewrite.
+- Hudi or JDBC catalog-based materialized views do not support the incremental refresh of partitions.
 
-## 基于文本的物化视图改写
+## Text-based materialized view rewrite
 
-自 v3.3.0 起，StarRocks 支持基于文本的物化视图改写，极大地拓展了自身的查询改写能力。
+From v3.3.0 onwards, StarRocks supports text-based materialized view rewrite, which significantly extends its query rewrite capability.
 
-### 基本原理
+### Fundamentals
 
-为实现基于文本的物化视图改写，StarRocks 将对查询（或其子查询）的抽象语法树与物化视图定义的抽象语法树进行比较。当双方匹配时，StarRocks 就可以基于物化视图改写该查询。基于文本的物化视图改写简单高效，与常规的 SPJG 类型物化视图查询改写相比限制更少。正确使用此功能可显著增强查询性能。
+To achieve text-based materialized view rewrite, StarRocks compares the abstract syntax tree of the query (or its sub-queries) with that of the materialized view's definition. When they match each other, StarRocks will rewrite the query based on the materialized view. Text-based materialized view rewrite is simple, efficient, and has fewer limitations than regular SPJG-type materialized view query rewrite. When used correctly, this feature can significantly accelerate query performance.
 
-基于文本的物化视图改写不仅支持 SPJG 类型算子，还支持 Union、Window、Order、Limit 和 CTE 等算子。
+Text-based materialized view rewrite is not limited to the SPJG-type operators. It also supports operators such as Union, Window, Order, Limit, and CTE.
 
-### 使用
+### Usage
 
-StarRocks 默认启用基于文本的物化视图改写。您可以通过将变量 `enable_materialized_view_text_match_rewrite` 设置为 `false` 来手动禁用此功能。
+Text-based materialized view rewrite is enabled by default. You can manually disable this feature by setting the variable `enable_materialized_view_text_match_rewrite` to `false`.
 
-FE 配置项 `enable_materialized_view_text_based_rewrite` 用于控制是否在创建异步物化视图时构建抽象语法树。此功能默认启用。将此项设置为 `false` 将在系统级别禁用基于文本的物化视图改写。
+The FE configuration item `enable_materialized_view_text_based_rewrite` controls whether to build the abstract syntax tree while creating an asynchronous materialized view. This feature is also enabled by default. Setting this item to `false` will disable text-based materialized view rewrite on the system level.
 
-变量 `materialized_view_subuqery_text_match_max_count` 用于控制系统比对子查询是否与物化视图定义匹配的最大次数。默认值为 `4`。增加此值同时也会增加优化器的耗时。
+The variable `materialized_view_subuqery_text_match_max_count` controls the maximum number of times to compare the abstract syntax trees of the materialized view and the sub-queries. The default value is `4`. Increasing this value will also increase the time consumption of the optimizer.
 
-请注意，只有当物化视图满足时效性（数据一致性）要求时，才能用于基于文本的查询改写。您可以在创建物化视图时通过属性 `query_rewrite_consistency`手动设置一致性检查规则。更多信息，请参考 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
+Please note that, only when the materialized view meets the timeliness (data consistency) requirement can it be used for text-based query rewrite. You can manually set the consistency check rule using the property `query_rewrite_consistency` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
-### **使用场景**
+### Use cases
 
-符合以下情况的查询可以被改写：
+Queries are eligible for text-based materialized view rewrite in the following scenarios:
 
-- 原始查询与物化视图的定义一致。
-- 原始查询的子查询与物化视图的定义一致。
+- The original query matches the definition of the materialized view.
+- The original query's sub-query matches the definition of the materialized view.
 
-与常规的 SPJG 类型物化视图查询改写相比，基于文本的物化视图改写支持更复杂的查询，例如多层聚合。
+Compared to the regular SPJG-type materialized view query rewrite, text-based materialized view rewrite supports more complex queries, for example, multi-layer aggregations.
 
 :::info
 
-- 建议您将需要匹配的查询封装至原始查询的子查询中。
-- 请不要在物化视图的定义或原始查询的子查询中封装 ORDER BY 子句，否则查询将无法被改写。这是由于子查询中的 ORDER BY 子句会默认被消除。
+- It is recommended to encapsulate the query to match in the sub-query of the original query.
+- Please do not encapsulate ORDER BY clauses in the definition of the materialized view or the sub-query of the original query. Otherwise, the query cannot be rewritten because the ORDER BY clauses in the sub-query are eliminated by default.
 
 :::
 
-例如，您可以构建以下物化视图：
+For example, you can create the following materialized view:
 
 ```SQL
 CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS
@@ -1129,7 +1131,7 @@ FROM (
 GROUP BY user_id;
 ```
 
-该物化视图可以改写以下两个查询：
+The materialized view can rewrite both the following queries:
 
 ```SQL
 SELECT 
@@ -1164,7 +1166,7 @@ FROM
 ）m;
 ```
 
-但是该物化视图无法改写以下包含 ORDER BY 子句的查询：
+However, the materialized view cannot rewrite the following query because the original query contains an ORDER BY clause:
 
 ```SQL
 SELECT 
@@ -1183,19 +1185,19 @@ GROUP BY user_id
 ORDER BY user_id;
 ```
 
-## 设置物化视图查询改写
+## Configure query rewrite
 
-您可以通过以下 Session 变量设置异步物化视图查询改写。
+You can configure the asynchronous materialized view query rewrite through the following session variables:
 
-| **变量**                                    | **默认值** | **描述**                                                     |
-| ------------------------------------------- | ---------- | ------------------------------------------------------------ |
-| enable_materialized_view_union_rewrite | true | 是否开启物化视图 Union 改写。  |
-| enable_rule_based_materialized_view_rewrite | true | 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。 |
-| nested_mv_rewrite_max_level | 3 | 可用于查询改写的嵌套物化视图的最大层数。类型：INT。取值范围：[1, +∞)。取值为 `1` 表示只可使用基于基表创建的物化视图来进行查询改写。 |
+| **Variable**                                | **Default** | **Description**                                              |
+| ------------------------------------------- | ----------- | ------------------------------------------------------------ |
+| enable_materialized_view_union_rewrite      | true        | Boolean value to control if to enable materialized view Union query rewrite. |
+| enable_rule_based_materialized_view_rewrite | true        | Boolean value to control if to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. |
+| nested_mv_rewrite_max_level                 | 3           | The maximum levels of nested materialized views that can be used for query rewrite. Type: INT. Range: [1, +∞). The value of `1` indicates that materialized views created on other materialized views will not be used for query rewrite. |
 
-## 验证查询改写是否生效
+## Check if a query is rewritten
 
-您可以使用 EXPLAIN 语句查看对应 Query Plan。如果其中 `OlapScanNode` 项目下的 `TABLE` 为对应异步物化视图名称，则表示该查询已基于异步物化视图改写。
+You can check if your query is rewritten by viewing its query plan using the EXPLAIN statement. If the field `TABLE` under the section `OlapScanNode` shows the name of the corresponding materialized view, it means that the query has been rewritten based on the materialized view.
 
 ```Plain
 mysql> EXPLAIN SELECT 
@@ -1230,28 +1232,28 @@ mysql> EXPLAIN SELECT
 20 rows in set (0.01 sec)
 ```
 
-## 禁用查询改写
+## Disable query rewrite
 
-StarRocks 默认开启基于 Default Catalog 创建的异步物化视图查询改写。您可以通过将 Session 变量 `enable_materialized_view_rewrite` 设置为 `false` 禁用该功能。
+By default, StarRocks enables query rewrite for asynchronous materialized views created based on the default catalog. You can disable this feature by setting the session variable `enable_materialized_view_rewrite` to `false`.
 
-对于基于 External Catalog 创建的异步物化视图，你可以通过 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md) 将物化视图 Property `force_external_table_query_rewrite` 设置为 `false` 来禁用此功能。
+For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using [ALTER MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md).
 
-## 限制
+## Limitations
 
-单就物化视图查询改写能力，StarRocks 目前存在以下限制：
+In terms of materialized view query rewrite, StarRocks currently has the following limitations:
 
-- StarRocks 不支持非确定性函数的改写，包括 rand、random、uuid 以及 sleep。
-- StarRocks 不支持窗口函数的改写。
-- 如果物化视图定义语句中包含 LIMIT、ORDER BY、UNION、EXCEPT、INTERSECT、MINUS、GROUPING SETS、WITH CUBE 或 WITH ROLLUP，则无法用于改写。
-- 基于 External Catalog 的物化视图不保证查询结果强一致。
-- 基于 JDBC Catalog 表构建的异步物化视图暂不支持查询改写。
+- StarRocks does not support rewriting queries with non-deterministic functions, including rand, random, uuid, and sleep.
+- StarRocks does not support rewriting queries with window functions.
+- Materialized views defined with statements containing LIMIT, ORDER BY, UNION, EXCEPT, INTERSECT, MINUS, GROUPING SETS, WITH CUBE, or WITH ROLLUP cannot be used for query rewrite.
+- Strong consistency of query results is not guaranteed between base tables and materialized views built on external catalogs.
+- Asynchronous materialized views created on base tables in a JDBC catalog do not support query rewrite.
 
-针对基于视图的物化视图查询改写，StarRocks 目前存在以下限制：
+In terms of view-based materialized view query rewrite, StarRocks currently has the following limitations:
 
-- 目前，StarRocks 不支持分区 Union 改写。
-- 如果视图包含随机函数，则不支持查询改写，包括 rand()、random()、uuid() 和 sleep()。
-- 如果视图包含具有相同名称的列，则不支持查询改写。您必须为具有相同名称的列设置不同的别名。
-- 用于创建物化视图的视图必须至少包含以下数据类型之一的列：整数类型、日期类型和字符串类型。以下示例中，因为 `total_cost` 为 DOUBLE 类型的列，所以无法创建查询该视图的物化视图。
+- Currently, StarRocks does not support Partition Union rewrite.
+- Query rewrite is not supported if the view contains random functions, including rand(), random(), uuid(), and sleep().
+- Query rewrite is not supported if the view contains columns with same names. You must assign different aliases for columns with the same names.
+- Views that are used to create a materialized view must contain at least one column of the following data types: integer types, date types, and string types. For example, you cannot create a materialized that queries the view, because `total_cost` is a DOUBLE-type column.
 
   ```SQL
   CREATE VIEW v1 

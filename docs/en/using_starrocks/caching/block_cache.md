@@ -37,9 +37,9 @@ starlet_use_star_cache = true
 
 You can configure Data Cache using the following CN(BE) configuration items:
 
-- [storage_root_path](../administration/management/BE_configuration.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
-- [starlet_use_star_cache](../administration/management/BE_configuration.md#starlet_use_star_cache)
-- [starlet_star_cache_disk_size_percent](../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
+- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
+- [starlet_use_star_cache](../../administration/management/BE_configuration.md#starlet_use_star_cache)
+- [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
 
 :::note
 

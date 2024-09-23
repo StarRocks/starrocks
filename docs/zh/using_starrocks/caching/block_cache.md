@@ -37,9 +37,9 @@ starlet_use_star_cache = true
 
 您可以通过以下 CN（BE）配置项配置 Data Cache：
 
-- [storage_root_path](../administration/management/BE_configuration.md#storage_root_path)（在存算分离集群中，此项用于指定用于缓存数据的根路径。）
-- [starlet_use_star_cache](../administration/management/BE_configuration.md#starlet_use_star_cache)
-- [starlet_star_cache_disk_size_percent](../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
+- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path)（在存算分离集群中，此项用于指定用于缓存数据的根路径。）
+- [starlet_use_star_cache](../../administration/management/BE_configuration.md#starlet_use_star_cache)
+- [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
 
 :::note
 
@@ -83,7 +83,7 @@ StarRocks 提供了多种监控 Data Cache 的指标。
 - [虚拟机部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-vm.json)
 - [Kubernetes 部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-k8s.json)
 
-有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../administration/management/monitoring/Monitor_and_Alert.md)。
+有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../../administration/management/monitoring/Monitor_and_Alert.md)。
 
 ### 重要指标
 

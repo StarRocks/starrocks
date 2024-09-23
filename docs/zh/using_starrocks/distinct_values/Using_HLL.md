@@ -53,13 +53,13 @@ DISTRIBUTED BY HASH(ID);
 
 您可以通过 Stream Load 或者 Broker Load 模式导入 **test.csv**。
 
-* [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 模式:
+* [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 模式:
 
 ~~~bash
 curl --location-trusted -u <username>:<password> -H "label:987654321" -H "column_separator:," -H "columns:dt,id,uv=hll_hash(id)" -T test.csv http://fe_host:http_port/api/db_name/test/_stream_load
 ~~~
 
-* [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 模式:
+* [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 模式:
 
 ~~~sql
 LOAD LABEL test_db.label
@@ -124,7 +124,7 @@ SELECT HLL_UNION_AGG(uv) FROM test;
 +---------------------+
 ~~~
 
-当在 HLL 类型列上使用 `count distinct` 时，StarRocks 会自动将其转化为 [HLL_UNION_AGG(hll)](../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) 计算。所以以上查询等价于以下查询。
+当在 HLL 类型列上使用 `count distinct` 时，StarRocks 会自动将其转化为 [HLL_UNION_AGG(hll)](../../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) 计算。所以以上查询等价于以下查询。
 
 ~~~sql
 SELECT COUNT(DISTINCT uv) FROM test;
@@ -152,8 +152,8 @@ Bitmap 类型仅支持 TINYINT，SMALLINT，INT，BIGINT（注意不支持 LARGE
 
 ## 相关函数
 
-* **[HLL_UNION_AGG(hll)](../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)**：此函数为聚合函数，用于计算满足条件的所有数据的基数估算。此函数还可用于分析函数，只支持默认窗口，不支持窗口子句。
-* **[HLL_RAW_AGG(hll)](../sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)**：此函数为聚合函数，用于聚合 HLL 类型字段，返回 HLL 类型。
-* **[HLL_CARDINALITY(hll)](../sql-reference/sql-functions/scalar-functions/hll_cardinality.md)**：此函数用于估算单条 HLL 列的基数。
-* **[HLL_HASH(column_name)](../sql-reference/sql-functions/scalar-functions/hll_hash.md)**：生成 HLL 列类型，用于 `insert` 或导入 HLL 类型。
-* **[HLL_EMPTY()](../sql-reference/sql-functions/scalar-functions/hll_empty.md)**：生成空 HLL 列，用于 `insert` 或导入数据时补充默认值。
+* **[HLL_UNION_AGG(hll)](../../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)**：此函数为聚合函数，用于计算满足条件的所有数据的基数估算。此函数还可用于分析函数，只支持默认窗口，不支持窗口子句。
+* **[HLL_RAW_AGG(hll)](../../sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)**：此函数为聚合函数，用于聚合 HLL 类型字段，返回 HLL 类型。
+* **[HLL_CARDINALITY(hll)](../../sql-reference/sql-functions/scalar-functions/hll_cardinality.md)**：此函数用于估算单条 HLL 列的基数。
+* **[HLL_HASH(column_name)](../../sql-reference/sql-functions/scalar-functions/hll_hash.md)**：生成 HLL 列类型，用于 `insert` 或导入 HLL 类型。
+* **[HLL_EMPTY()](../../sql-reference/sql-functions/scalar-functions/hll_empty.md)**：生成空 HLL 列，用于 `insert` 或导入数据时补充默认值。
