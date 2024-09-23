@@ -4008,6 +4008,33 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The minimum effective capacity for Data Cache Automatic Scaling. If the system tries to adjust the cache capacity to less than this value, the cache capacity will be directly set to `0` to prevent suboptimal performance caused by frequent cache fills and evictions due to insufficient cache capacity.
 - Introduced in: v3.3.0
 
+##### datacache_block_buffer_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable block buffer to optimize datacache efficiency. When it is enabled, read the whole block data from the datacache every time and cache it in a temporary buffer to reduce the additional overhead caused by frequent cache reads.
+- Introduced in: v3.2.0
+
+##### datacache_tiered_cache_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the tiered cache mode. When it is enabled, a tiered cache system is composed of memory layer and disk layer. The hot data on the disk will automatically be promoted to the memory layer, and the cold data in the memory layer will automatically sink to the disk. And when it is disabled, the memory and disk of datacache serve as two independent cache areas, storing different types of data without any data movement between them.
+- Introduced in: v3.2.5
+
+##### query_max_memory_limit_percent
+
+- Default: 90
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum memory limit that the query pool can use, expressed as a percentage of process memory limit.
+- Introduced in: v3.1.0
+
 <!--
 ##### datacache_block_size
 
