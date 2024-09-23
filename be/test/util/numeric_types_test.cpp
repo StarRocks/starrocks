@@ -249,4 +249,23 @@ TEST(TestNumericTypes, test_check_signed_number_overflow_integral_narrow_convers
                                                              2)));
 }
 
+// JSON will use check_signed_number_overflow to check whether an uint64_t converted to a signed number type will overflow.
+// Se checked_cast in formats/json/numeric_column.cpp for details.
+TEST(TestNumericTypes, test_check_signed_number_overflow_from_uint64_t) {
+    EXPECT_TRUE((check_signed_number_overflow<uint64_t, int8_t>(
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)));
+    EXPECT_TRUE((check_signed_number_overflow<uint64_t, int16_t>(
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)));
+    EXPECT_TRUE((check_signed_number_overflow<uint64_t, int32_t>(
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)));
+    EXPECT_TRUE((check_signed_number_overflow<uint64_t, int64_t>(
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)));
+
+    EXPECT_FALSE((check_signed_number_overflow<uint64_t, int128_t>(
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1)));
+    EXPECT_FALSE((check_signed_number_overflow<uint64_t, int128_t>(std::numeric_limits<uint64_t>::max())));
+    EXPECT_FALSE((check_signed_number_overflow<uint64_t, float>(std::numeric_limits<uint64_t>::max())));
+    EXPECT_FALSE((check_signed_number_overflow<uint64_t, double>(std::numeric_limits<uint64_t>::max())));
+}
+
 } // namespace starrocks
