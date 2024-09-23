@@ -4182,20 +4182,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<<<<<<< HEAD
-=======
-<!--
-##### olap_string_max_length
-
-- 默认值：1048576
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
->>>>>>> cf779c7289 ([Doc] Add JIT and Table Prune Doc (#51219))
 ### 其他
 
 ##### user_function_dir
