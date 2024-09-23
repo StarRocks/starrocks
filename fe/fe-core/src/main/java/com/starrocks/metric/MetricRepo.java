@@ -801,7 +801,7 @@ public final class MetricRepo {
         HttpMetricRegistry.getInstance().visit(visitor);
 
 
-        //collcat connections for per user
+        //collect connections for per user
         collectUserConnMetrics(visitor);
 
         // collect starmgr related metrics as well
