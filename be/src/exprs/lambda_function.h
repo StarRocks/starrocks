@@ -79,10 +79,6 @@ private:
     Status collect_lambda_argument_ids();
     Status collect_capture_slot_ids();
     Status extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx);
-    // void extract_outer_common_exprs(RuntimeState* state);
-    // static const SlotId kIndependentStartId = 10000;
-    // void find_all_independent_capture_column(Expr* expr, std::vector<SlotId>* ids);
-    // void try_to_replace_commom_expr(RuntimeState* state, Expr* expr);
 
     std::vector<SlotId> _captured_slot_ids;
     // @TODO change to set
@@ -90,7 +86,6 @@ private:
     std::vector<SlotId> _common_sub_expr_ids;
     std::vector<Expr*> _common_sub_expr;
 
-    // std::unordered_map<Expr*, Expr*> _outer_common_exprs;
     int _common_sub_expr_num;
     bool _is_prepared = false;
     bool _is_lambda_expr_independent = false;

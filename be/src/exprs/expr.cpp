@@ -607,7 +607,7 @@ std::string Expr::debug_string(const std::vector<Expr*>& exprs) {
     out << "[";
 
     for (int i = 0; i < exprs.size(); ++i) {
-        out << (i == 0 ? "" : "\n") << exprs[i]->debug_string();
+        out << (i == 0 ? "" : " ") << exprs[i]->debug_string();
     }
 
     out << "]";

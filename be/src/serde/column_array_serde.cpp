@@ -31,8 +31,6 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
-#include "column/vectorized_fwd.h"
-#include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
