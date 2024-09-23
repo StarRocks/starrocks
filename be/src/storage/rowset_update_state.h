@@ -189,7 +189,7 @@ private:
     std::vector<PartialUpdateState> _partial_update_states;
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
-    std::map<string, string> _column_to_expr_value;
+    std::map<std::string, std::string> _column_to_expr_value;
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
