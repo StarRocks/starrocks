@@ -215,11 +215,15 @@ public class StreamLoadManagerTest {
 
         TransactionState state = new TransactionState();
         task.afterCommitted(state, true);
-        Assert.assertNotEquals(-1, task.endTimeMs());
+        Assert.assertNotEquals(-1, task.commitTimeMs());
 
-        state.setCommitTime(task.endTimeMs());
-        task.replayOnCommitted(state);
-        Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
+        Assert.assertTrue(task.isUnreversibleState());
+        Assert.assertFalse(task.isFinalState());
 
+<<<<<<< HEAD
+=======
+        streamLoadManager.cleanSyncStreamLoadTasks();
+        Assert.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
+>>>>>>> 49ef20f904 ([BugFix] Fix stream load load_finish_time updated unexpected after transaction committed (#51174))
     }
 }
