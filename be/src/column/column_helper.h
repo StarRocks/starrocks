@@ -81,7 +81,7 @@ public:
     // Find the first non-null value in [start, end), return end if all null
     static size_t find_nonnull(const Column* col, size_t start, size_t end);
 
-    // Find the non-null value in reversed order in [start, end), return start if all null
+    // Find the non-null value in reversed order in [start, end), return end if all null
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
     // Find first value in range [start, end) that not equal to target
