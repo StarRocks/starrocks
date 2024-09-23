@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+release_status: PREVIEW
 ---
 
 # [Preview] Continuously load data from Apache® Pulsar™
