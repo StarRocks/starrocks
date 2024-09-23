@@ -357,6 +357,20 @@ public:
             to->deserialize_and_append(this->data(state).buffer_result.data());
     }
 
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        for (size_t i = start; i < end; i++) {
+            if (this->data(state).buffer_result.empty()) {
+                std::cout << "EMPTY" << std::endl;
+                dst->append_default();
+            } else {
+                std::cout << "HAS_VALUES" << std::endl;
+                dst->deserialize_and_append(this->data(state).buffer_result.data());
+            }
+        }
+        std::cout << "DEST: " << dst->get_name() << std::endl;
+    }
+
     std::string get_name() const override { return "maxmin_by"; }
 };
 
@@ -370,6 +384,8 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
+        std::cout << "COLUMN_TYPE_0: " << columns[0]->get_name() << std::endl;
+        std::cout << "COLUMN_TYPE_1: " << columns[1]->get_name() << std::endl;
         Slice column1_value;
         if (columns[1]->is_nullable()) {
             if (columns[1]->is_null(row_num)) {
@@ -509,6 +525,19 @@ public:
             to->append_default();
         else
             to->deserialize_and_append(this->data(state).buffer_result.data());
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        for (size_t i = start; i < end; i++) {
+            if (this->data(state).buffer_result.empty()) {
+                std::cout << "EMPTY" << std::endl;
+                dst->append_default();
+            } else {
+                std::cout << "HAS VALUES" << std::endl;
+                dst->deserialize_and_append(this->data(state).buffer_result.data());
+            }
+        }
     }
 
     std::string get_name() const override { return "maxmin_by"; }

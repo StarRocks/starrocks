@@ -190,7 +190,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _agg_intput_columns[i].resize(1);
         } else {
             const TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
-            const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
+            LogicalType arg_type;
+            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by") {
+                arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]).type;
+            } else {
+                arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]).type;
+            }
 
             auto return_typedesc = AnyValUtil::column_type_to_type_desc(return_type);
             // Collect arg_typedescs for aggregate function.
@@ -215,16 +220,17 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 real_fn_name += "_in";
                 _need_partition_materializing = true;
             }
-            func = get_window_function(real_fn_name, arg_type.type, return_type.type, is_input_nullable, fn.binary_type,
+            func = get_window_function(real_fn_name, arg_type, return_type.type, is_input_nullable, fn.binary_type,
                                        state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
-                        "Invalid window function plan: ($0, $1, $2, $3, $4, $5)", real_fn_name, arg_type.type,
+                        "Invalid window function plan: ($0, $1, $2, $3, $4, $5)", real_fn_name, arg_type,
                         return_type.type, is_input_nullable, fn.binary_type, state->func_version()));
             }
             _agg_functions[i] = func;
             _agg_fn_types[i] = {return_type, is_input_nullable, desc.nodes[0].is_nullable};
         }
+        std::cout << "FUNC_TYPE: " << i << ": " << _agg_fn_types[i].result_type.type << std::endl;
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
             // We always treat first argument as non const, because most window function has only one args
@@ -1195,8 +1201,14 @@ void Analytor::_get_window_function_result(size_t frame_start, size_t frame_end)
     DCHECK_GT(frame_end, frame_start);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         Column* agg_column = _result_window_columns[i].get();
+        std::cout << "BEFORE_1: " << agg_column->size() << std::endl;
+        agg_column->check_or_die();
+        std::cout << "BEFORE_2: " << agg_column->size() << std::endl;
         _agg_functions[i]->get_values(_agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i],
                                       agg_column, frame_start, frame_end);
+        std::cout << "FUNC: " << _agg_functions[i]->get_name() << std::endl;
+        std::cout << "RESULT: " << agg_column->get_name() << std::endl;
+        agg_column->check_or_die();
     }
 }
 
