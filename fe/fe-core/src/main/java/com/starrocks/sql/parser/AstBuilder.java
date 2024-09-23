@@ -5770,6 +5770,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_USER)) {
+            return new InformationFunction(FunctionSet.SESSION_USER.toUpperCase());
+        }
+
         if (functionName.equals(FunctionSet.MAP)) {
             List<Expr> exprs;
             if (context.expression() != null) {
