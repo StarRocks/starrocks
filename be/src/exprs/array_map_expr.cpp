@@ -49,14 +49,13 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
     auto lambda_expr = down_cast<LambdaFunction*>(_children[0]);
 
     LambdaFunction::ExtractContext extract_ctx;
+    // assign slot ids to outer common exprs starting with max_used_slot_id + 1
     extract_ctx.next_slot_id = lambda_expr->max_used_slot_id() + 1;
 
-    LOG(INFO) << "ArrayMap::prepare, next slot id: " << extract_ctx.next_slot_id << ", this: " << (void*)this;
     RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, &extract_ctx));
     _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
 
     for (auto [_, expr] : _outer_common_exprs) {
-        LOG(INFO) << "prepare common expr: " << expr->debug_string();
         RETURN_IF_ERROR(expr->prepare(state, context));
     }
     RETURN_IF_ERROR(lambda_expr->prepare(state, context));
@@ -71,7 +70,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
 
-    // 1. evaluate all outer common expressions
+    // 1. evaluate outer common expressions
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
         ASSIGN_OR_RETURN(auto col, context->evaluate(expr, chunk));
         chunk->append_column(col, slot_id);
@@ -81,7 +80,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     std::vector<SlotId> capture_slot_ids;
     lambda_func->get_slot_ids(&capture_slot_ids);
 
-    // 2. check captured columnss size
+    // 2. check captured columns' size
     for (auto slot_id : capture_slot_ids) {
         DCHECK(slot_id > 0);
         auto captured_column = chunk->get_column_by_slot_id(slot_id);
@@ -91,15 +90,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         }
     }
 
-    // 3. prepare lambda arguments:
-    //  3.1 put all elements column into cur_chunk
-    //  3.2 get aligned_offset
-
     UInt32Column::Ptr aligned_offsets = nullptr;
     size_t null_rows = result_null_column ? SIMD::count_nonzero(result_null_column->get_data()) : 0;
 
     std::vector<SlotId> arguments_ids;
     int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
+
+    // 3. prepare arguments of lambda expr, put all arguments into cur_chunk
     for (int i = 0; i < argument_num; ++i) {
         auto data_column = FunctionHelper::get_data_column_of_const(input_elements[i]);
         auto array_column = down_cast<const ArrayColumn*>(data_column.get());
@@ -133,13 +130,12 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
         // if lambda expr doesn't rely on argument, we don't need to put it into cur_chunk
         if constexpr (!independent_lambda_expr) {
-            // @TODO what if it is a const
             cur_chunk->append_column(elements_column, arguments_ids[i]);
         }
     }
     DCHECK(aligned_offsets != nullptr);
 
-    // 4. prepare outer common expr
+    // 4. prepare outer common exprs
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
         auto column = chunk->get_column_by_slot_id(slot_id);
         column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
@@ -150,7 +146,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             cur_chunk->append_column(column->replicate(aligned_offsets->get_data()), slot_id);
         }
     }
-    // 5. append capture column
+
+    // 5. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
         if (cur_chunk->is_slot_exist(slot_id)) {
             continue;
