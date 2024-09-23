@@ -17,7 +17,14 @@
 #include <limits>
 #include <type_traits>
 
+#include "common/compiler_util.h"
+
 namespace starrocks {
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
+#endif
 
 template <typename FromType, typename ToType>
 static constexpr FromType floating_to_integral_lower_bound =
@@ -59,5 +66,7 @@ bool check_signed_number_overflow(FromType value) {
         }
     }
 }
+
+DIAGNOSTIC_POP
 
 } // namespace starrocks
