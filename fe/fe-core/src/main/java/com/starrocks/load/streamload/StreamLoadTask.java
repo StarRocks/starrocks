@@ -134,6 +134,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long startPreparingTimeMs;
     @SerializedName(value = "finishPreparingTimeMs")
     private long finishPreparingTimeMs;
+    @SerializedName(value = "commitTimeMs")
+    private long commitTimeMs;
     @SerializedName(value = "endTimeMs")
     private long endTimeMs;
     @SerializedName(value = "txnId")
@@ -596,7 +598,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         boolean exception = false;
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
                     resp.setOKMsg("txn could not be prepared because task state is: " + state
                             + ", error_msg: " + errorMsg);
@@ -668,7 +670,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         boolean exception = false;
         readLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
                     resp.setOKMsg("txn could not be committed because task state is: " + state
                             + ", error_msg: " + errorMsg);
@@ -848,7 +850,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
         readLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
                     return "cur task state is: " + state
                             + ", error_msg: " + errorMsg;
@@ -936,7 +938,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public void beforePrepared(TransactionState txnState) throws TransactionException {
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 throw new TransactionException("txn could not be prepared because task state is: " + state);
             }
         } finally {
@@ -980,7 +982,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public void beforeCommitted(TransactionState txnState) throws TransactionException {
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 throw new TransactionException("txn could not be commited because task state is: " + state);
             }
             isCommitting = true;
@@ -1006,8 +1008,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.channels.set(i, State.COMMITED);
             }
             this.state = State.COMMITED;
+            commitTimeMs = System.currentTimeMillis();
             isCommitting = false;
-            endTimeMs = System.currentTimeMillis();
         } finally {
             writeUnlock();
             // sync stream load related query info should unregister here
@@ -1090,8 +1092,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.channels.set(i, State.COMMITED);
             }
             this.state = State.COMMITED;
+            commitTimeMs = txnState.getCommitTime();
             this.preparedChannelNum = this.channelNum;
-            this.endTimeMs = txnState.getCommitTime();
         } finally {
             writeUnlock();
         }
@@ -1106,7 +1108,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 return;
             }
             if (coord != null && !isSyncStreamLoad) {
@@ -1247,11 +1249,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return createTimeMs;
     }
 
+    public long commitTimeMs() {
+        return commitTimeMs;
+    }
+
     public long endTimeMs() {
         return endTimeMs;
     }
 
     public boolean isFinalState() {
+        return state == State.CANCELLED || state == State.FINISHED;
+    }
+
+    public boolean isUnreversibleState() {
         return state == State.CANCELLED || state == State.COMMITED || state == State.FINISHED;
     }
 
@@ -1430,7 +1440,80 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         loadIdLo = loadId.getLo();
     }
 
+<<<<<<< HEAD
     public TStreamLoadInfo toThrift() {
+=======
+    public String toRuntimeDetails() {
+        TreeMap<String, Object> runtimeDetails = Maps.newTreeMap();
+        if (!clientIp.equals("")) {
+            runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_CLIENT_IP, clientIp);
+        }
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, DebugUtil.printId(loadId));
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ID, txnId);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_BEGIN_TXN_TIME_MS, beginTxnTimeMs);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_RECEIVE_DATA_TIME_MS, receiveDataTimeMs);
+        runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_PLAN_TIME_MS, planTimeMs);
+        Gson gson = new Gson();
+        return gson.toJson(runtimeDetails);
+    }
+
+    public String toProperties() {
+        TreeMap<String, Object> properties = Maps.newTreeMap();
+        properties.put(LoadConstants.PROPERTIES_TIMEOUT, timeoutMs / 1000);
+        Gson gson = new Gson();
+        return gson.toJson(properties);
+    }
+
+    public TLoadInfo toThrift() {
+        readLock();
+        try {
+            TLoadInfo info = new TLoadInfo();
+            info.setJob_id(id);
+            info.setLabel(label);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            info.setDb(dbName);
+            info.setTable(tableName);
+            info.setUser(user);
+            info.setState(state.name());
+            info.setError_msg(errorMsg);
+            info.setRuntime_details(toRuntimeDetails());
+            info.setProperties(toProperties());
+            if (state == State.FINISHED) {
+                info.setProgress("100%");
+            } else {
+                info.setProgress("0%");
+            }
+            if (ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
+                info.setProfile_id(DebugUtil.printId(loadId));
+            }
+            // tracking url
+            if (trackingUrl != null) {
+                info.setUrl(trackingUrl);
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            info.setPriority(LoadPriority.NORMAL);
+
+            info.setNum_sink_rows(numRowsNormal);
+            info.setNum_filtered_rows(numRowsAbnormal);
+            info.setNum_unselected_rows(numRowsUnselected);
+            info.setNum_scan_bytes(numLoadBytesTotal);
+
+            info.setCreate_time(TimeUtils.longToTimeString(createTimeMs));
+            info.setLoad_start_time(TimeUtils.longToTimeString(startLoadingTimeMs));
+            info.setLoad_commit_time(TimeUtils.longToTimeString(commitTimeMs));
+            info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
+
+            info.setType(getStringByType());
+            return info;
+        } finally {
+            readUnlock();
+        }
+
+    }
+
+    public TStreamLoadInfo toStreamLoadThrift() {
+>>>>>>> 49ef20f904 ([BugFix] Fix stream load load_finish_time updated unexpected after transaction committed (#51174))
         readLock();
         try {
             TStreamLoadInfo info = new TStreamLoadInfo();
