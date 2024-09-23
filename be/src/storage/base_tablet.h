@@ -101,9 +101,9 @@ public:
     // properties encapsulated in TabletSchema
     const TabletSchema& tablet_schema() const;
 
-protected:
     virtual void on_shutdown() {}
 
+protected:
     void _gen_tablet_path();
 
     TabletState _state;
