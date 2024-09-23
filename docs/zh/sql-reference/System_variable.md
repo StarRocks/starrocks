@@ -335,36 +335,6 @@ SELECT /*+ SET_VAR
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
-<<<<<<< HEAD
-=======
-### enable_iceberg_metadata_cache
-
-* 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
-* 引入版本：v3.2.1
-
-### enable_metadata_profile
-
-* 描述：是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
-* 默认值：true
-* 引入版本：v3.3.3
-
-### plan_mode
-
-* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
-  * `auto`：系统自动选择方案。
-  * `local`：使用本地缓存方案。
-  * `distributed`：使用分布式方案。
-* 默认值：auto
-* 引入版本：v3.3.3
-
-### metadata_collect_query_timeout
-
-* 描述：Iceberg Catalog 元数据收集阶段的超时时间。
-* 单位： 秒
-* 默认值：60
-* 引入版本：v3.3.3
-
->>>>>>> cf779c7289 ([Doc] Add JIT and Table Prune Doc (#51219))
 ### enable_insert_strict
 
 * 描述：用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。
@@ -576,16 +546,6 @@ SELECT /*+ SET_VAR
 * 默认值：4
 * 类型：Int
 * 引入版本：v2.5
-
-### jit_level
-
-* 描述：表达式 JIT 编译的启用级别。有效值：
-  * `1`：系统为可编译表达式自适应启用 JIT 编译。
-  * `-1`：对所有可编译的非常量表达式启用 JIT 编译。
-  * `0`：禁用 JIT 编译。如果该功能返回任何错误，您可以手动禁用。
-* 默认值：1
-* 数据类型：Int
-* 引入版本：-
 
 ### language (global)
 
