@@ -1629,24 +1629,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append(StringEscapeUtils.escapeJava(String.valueOf(getEscape()))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.LOG_REJECTED_RECORD_NUM_PROPERTY).append("\"=\"");
-<<<<<<< HEAD
-        sb.append(String.valueOf(getLogRejectedRecordNum())).append("\"\n");
-=======
-        sb.append(getLogRejectedRecordNum());
-
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            sb.append("\",\n");
-            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_WAREHOUSE).append("\"=\"");
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            if (warehouse != null) {
-                sb.append(warehouse.getName()).append("\"\n");
-            } else {
-                sb.append("NULL").append("\"\n");
-            }
-        } else {
-            sb.append("\"\n");
-        }
->>>>>>> 5bc037dadd ([BugFix] Fix the npe of show routine load (#50963))
+        sb.append(getLogRejectedRecordNum()).append("\"\n");
 
         sb.append(")\n");
         return sb.toString();
