@@ -33,6 +33,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -156,6 +157,15 @@ public class FailoverGroup implements Writable {
 
     public ReplicatedObjectMap getObjectMap() {
         return objectMap;
+    }
+
+    public long getReplicatedJournalId() {
+        try {
+            return new Storage(getFailoverImageDir()).getImageJournalId();
+        } catch (Exception e) {
+            LOG.warn("Failed to get failover image journal id in failover group {}", name);
+        }
+        return 0;
     }
 
     public FailoverGroup() {
@@ -331,7 +341,7 @@ public class FailoverGroup implements Writable {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FAILOVER_GROUP_STATEMENT, "Failover group is not ready");
         }
 
-        FailoverGroupMember newLocalMember = FailoverGroupMember.getLocalMember("", FailoverGroupRole.PRIMARY);
+        FailoverGroupMember newLocalMember = FailoverGroupMember.getLocalMember(null, FailoverGroupRole.PRIMARY);
         if (newLocalMember == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FAILOVER_GROUP_STATEMENT, "Cannot get local member");
         }
@@ -393,6 +403,7 @@ public class FailoverGroup implements Writable {
             }
         } catch (Exception e) {
             LOG.warn("Failover group {} run failed ", name, e);
+            addErrorMessage(e.getMessage());
         }
     }
 
@@ -533,6 +544,7 @@ public class FailoverGroup implements Writable {
             }
         }
         if (secondaryMembers.isEmpty()) {
+            errorMessages.clear();
             return;
         }
 
@@ -566,6 +578,7 @@ public class FailoverGroup implements Writable {
         }
 
         state = FailoverGroupState.RUNNING;
+        errorMessages.clear();
         GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
     }
 
@@ -582,7 +595,7 @@ public class FailoverGroup implements Writable {
             return;
         }
 
-        FailoverGroupMember localMember = FailoverGroupMember.getLocalMember("", role);
+        FailoverGroupMember localMember = FailoverGroupMember.getLocalMember(null, role);
         if (localMember == null) {
             return;
         }
@@ -605,6 +618,7 @@ public class FailoverGroup implements Writable {
 
         if (!SecondaryHelper.pullImage(response.getPrimary_token(), address.getHost(), response.getPrimary_http_port(),
                 response.getMeta_version(), getFailoverImageSubDir())) {
+            addErrorMessage("Failed to pull image from primary");
             return;
         }
 
@@ -618,6 +632,7 @@ public class FailoverGroup implements Writable {
             objectMeta = globalStateMgr.getFailoverGroupMgr().getFailoverGroup(name)
                     .getIncludeMgr().toObjectMeta(response.getPrimary_token()); // Token is not saved in image
         } catch (Exception e) {
+            addErrorMessage("Failed to load image: " + e.getMessage());
             LOG.warn("Failover group {} load image {} failed: ",
                     name, response.getMeta_version(), e);
             return;
@@ -790,11 +805,11 @@ public class FailoverGroup implements Writable {
     }
 
     public byte[] toByteArray() {
-        return GsonUtils.GSON.toJson(this).getBytes();
+        return GsonUtils.GSON.toJson(this).getBytes(StandardCharsets.UTF_8);
     }
 
     public static FailoverGroup fromByteArray(byte[] data) {
-        return GsonUtils.GSON.fromJson(new String(data), FailoverGroup.class);
+        return GsonUtils.GSON.fromJson(new String(data, StandardCharsets.UTF_8), FailoverGroup.class);
     }
 
     @Override

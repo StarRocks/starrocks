@@ -16,6 +16,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.failover.FailoverGroup;
@@ -57,18 +58,31 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             }
 
             if (!localTable.isOlapTable()) {
-                DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                        remoteTable, localDatabase, localTable, isIncludeObject, true);
-                job.start();
+                LOG.warn("Local table {}.{} with type {} is not olap table in failover group {}",
+                        localDatabase.getFullName(), localTable.getName(), localTable.getType(),
+                        failoverGroup.getName());
+                if (Config.failover_group_allow_drop_inconsistent_table) {
+                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                            remoteTable, localDatabase, localTable, isIncludeObject, true);
+                    job.start();
+                } else {
+                    LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_table = false",
+                            localDatabase.getFullName(), localTable.getName());
+                }
                 return;
             }
 
             OlapTable localOlapTable = (OlapTable) localTable;
             OlapTable remoteOlapTable = remoteTable;
             if (!checkTableConsistency(localOlapTable)) {
-                DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                        remoteTable, localDatabase, localTable, isIncludeObject, true);
-                job.start();
+                if (Config.failover_group_allow_drop_inconsistent_table) {
+                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                            remoteTable, localDatabase, localTable, isIncludeObject, true);
+                    job.start();
+                } else {
+                    LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_table = false",
+                            localDatabase.getFullName(), localTable.getName());
+                }
                 return;
             }
 
@@ -106,7 +120,11 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
                 }
             }
 
-            // Drop deleted partitions
+            if (!Config.failover_group_allow_drop_extra_partition) {
+                return;
+            }
+
+            // Drop extra partitions
             for (Partition localPartition : localOlapTable.getPartitions()) {
                 if (remoteOlapTable.getPartition(localPartition.getName(), false) == null) {
                     DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup, null,
@@ -129,15 +147,20 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         }
 
         if (!checkPartitionConsistency(localTable, localPartition, remotePartition)) {
-            if (localTable.getPartitionInfo().isPartitioned()) {
-                DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
-                        remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
-                        isIncludeObject, true);
-                job.start();
+            if (Config.failover_group_allow_drop_inconsistent_partition) {
+                if (localTable.getPartitionInfo().isPartitioned()) {
+                    DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
+                            remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
+                            isIncludeObject, true);
+                    job.start();
+                } else {
+                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                            remoteTable, localDatabase, localTable, isIncludeObject, true);
+                    job.start();
+                }
             } else {
-                DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                        remoteTable, localDatabase, localTable, isIncludeObject, true);
-                job.start();
+                LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_partition = false",
+                        localDatabase.getFullName(), localTable.getName());
             }
             return null;
         }

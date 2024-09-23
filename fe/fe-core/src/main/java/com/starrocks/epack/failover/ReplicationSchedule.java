@@ -25,6 +25,9 @@ public class ReplicationSchedule {
     @SerializedName(value = "lastScheduledTimeMs")
     private volatile long lastScheduledTimeMs; // Last replication started time
 
+    @SerializedName(value = "lastFinishedTimeMs")
+    private volatile long lastFinishedTimeMs; // Last replication finished time
+
     @SerializedName(value = "roundScheduledTimeMs")
     private volatile long roundScheduledTimeMs; // A replication may try multiple times, one time called a round
 
@@ -45,6 +48,7 @@ public class ReplicationSchedule {
         this.scheduledTimeMs = 0;
         this.finishedTimeMs = 0;
         this.lastScheduledTimeMs = 0;
+        this.lastFinishedTimeMs = 0;
         this.roundScheduledTimeMs = 0;
         this.roundFinishedTimeMs = 0;
         this.roundFinishedTimes = 0;
@@ -58,6 +62,7 @@ public class ReplicationSchedule {
         this.scheduledTimeMs = 0;
         this.finishedTimeMs = 0;
         this.lastScheduledTimeMs = 0;
+        this.lastFinishedTimeMs = 0;
         this.roundScheduledTimeMs = 0;
         this.roundFinishedTimeMs = 0;
         this.roundFinishedTimes = 0;
@@ -71,6 +76,7 @@ public class ReplicationSchedule {
         this.scheduledTimeMs = other.scheduledTimeMs;
         this.finishedTimeMs = other.finishedTimeMs;
         this.lastScheduledTimeMs = other.lastScheduledTimeMs;
+        this.lastFinishedTimeMs = other.lastFinishedTimeMs;
         this.roundScheduledTimeMs = other.roundScheduledTimeMs;
         this.roundFinishedTimeMs = other.roundFinishedTimeMs;
         this.roundFinishedTimes = other.roundFinishedTimes;
@@ -88,6 +94,14 @@ public class ReplicationSchedule {
 
     public long getFinishedTimeMs() {
         return finishedTimeMs;
+    }
+
+    public long getLastScheduledTimeMs() {
+        return lastScheduledTimeMs;
+    }
+
+    public long getLastFinishedTimeMs() {
+        return lastFinishedTimeMs;
     }
 
     public int getRoundFinishedTimes() {
@@ -168,7 +182,7 @@ public class ReplicationSchedule {
             return true; // Round finished, but need retry
         }
 
-        return System.currentTimeMillis() >= lastScheduledTimeMs + minSchedulePeriodMs;
+        return System.currentTimeMillis() >= scheduledTimeMs + minSchedulePeriodMs;
     }
 
     public void startSchedule() {
@@ -176,6 +190,8 @@ public class ReplicationSchedule {
         roundScheduledTimeMs = System.currentTimeMillis();
         roundFinishedTimeMs = 0;
         if (!isPending()) {
+            lastScheduledTimeMs = scheduledTimeMs;
+            lastFinishedTimeMs = finishedTimeMs;
             scheduledTimeMs = roundScheduledTimeMs;
             finishedTimeMs = 0;
             roundFinishedTimes = 0;
@@ -187,7 +203,6 @@ public class ReplicationSchedule {
         roundFinishedTimeMs = System.currentTimeMillis();
         if (!needRetry) {
             finishedTimeMs = roundFinishedTimeMs;
-            lastScheduledTimeMs = scheduledTimeMs;
         }
         ++roundFinishedTimes;
         forceSchedule = false;
@@ -197,6 +212,7 @@ public class ReplicationSchedule {
         this.scheduledTimeMs = 0;
         this.finishedTimeMs = 0;
         this.lastScheduledTimeMs = 0;
+        this.lastFinishedTimeMs = 0;
         this.roundScheduledTimeMs = 0;
         this.roundFinishedTimeMs = 0;
         this.roundFinishedTimes = 0;
@@ -207,7 +223,7 @@ public class ReplicationSchedule {
     private long getNextScheduleTimeMs() {
         try {
             long periodMs = parseSchedule(schedule);
-            return lastScheduledTimeMs + periodMs;
+            return scheduledTimeMs + periodMs;
         } catch (DdlException e) {
             throw new RuntimeException(e);
         }

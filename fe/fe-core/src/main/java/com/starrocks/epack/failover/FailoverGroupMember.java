@@ -30,6 +30,14 @@ public class FailoverGroupMember {
     @SerializedName(value = "role")
     private volatile FailoverGroupRole role;
 
+    public FailoverGroupMember(String name, Set<NetworkAddress> addresses, NetworkAddress leader,
+            FailoverGroupRole role) {
+        this.name = name;
+        this.addresses = addresses;
+        this.leader = leader;
+        this.role = role;
+    }
+
     public String getName() {
         return name;
     }
@@ -74,16 +82,13 @@ public class FailoverGroupMember {
     }
 
     public static FailoverGroupMember fromThrift(TFailoverGroupMember thriftMember) {
-        FailoverGroupMember member = new FailoverGroupMember();
-        member.setName(thriftMember.getName());
         Set<NetworkAddress> addresses = new HashSet<>();
         for (TNetworkAddress thirftAddress : thriftMember.getAddresses()) {
             addresses.add(NetworkAddress.fromThrift(thirftAddress));
         }
-        member.setAddresses(addresses);
-        member.setLeader(NetworkAddress.fromThrift(thriftMember.getLeader()));
-        member.setRole(FailoverGroupRole.fromThrift(thriftMember.getRole()));
-        return member;
+        return new FailoverGroupMember(thriftMember.getName(), addresses,
+                NetworkAddress.fromThrift(thriftMember.getLeader()),
+                FailoverGroupRole.fromThrift(thriftMember.getRole()));
     }
 
     @Override
@@ -142,12 +147,6 @@ public class FailoverGroupMember {
             return null;
         }
 
-        FailoverGroupMember member = new FailoverGroupMember();
-        member.setName(name);
-        member.setAddresses(addresses);
-        member.setLeader(leaderAddress);
-        member.setRole(role);
-
-        return member;
+        return new FailoverGroupMember(name, addresses, leaderAddress, role);
     }
 }

@@ -55,6 +55,10 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
 
     @Override
     protected void runAfterCatalogReady() {
+        if (!GlobalStateMgr.getServingState().isLeader()) {
+            return;
+        }
+
         for (FailoverGroup failoverGroup : idToFailoverGroup.values()) {
             failoverGroup.run();
         }

@@ -34,9 +34,6 @@ public class UpdateRoutineLoadMgrJob extends FailoverGroupJob {
         }
 
         for (RoutineLoadJob routineLoadJob : routineLoadJobs) {
-            if (routineLoadJob.getState() == RoutineLoadJob.JobState.NEED_SCHEDULE) {
-                continue;
-            }
             Long localDbId = failoverGroup.getObjectMap().getLocalDatabaseId(routineLoadJob.getDbId());
             if (localDbId == null) {
                 continue;
@@ -51,7 +48,7 @@ public class UpdateRoutineLoadMgrJob extends FailoverGroupJob {
             RoutineLoadJob.setTableId(routineLoadJob, localTableId);
             routineLoadJob.setWarehouseId(
                     GlobalStateMgr.getServingState().getWarehouseMgr().getBackgroundWarehouse().getId());
-            if (routineLoadJob.getState() == RoutineLoadJob.JobState.RUNNING) {
+            if (!routineLoadJob.isFinal() && routineLoadJob.getState() != RoutineLoadJob.JobState.PAUSED) {
                 try {
                     routineLoadJob.updateState(RoutineLoadJob.JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.MANUAL_PAUSE_ERR,

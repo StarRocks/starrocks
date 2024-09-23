@@ -13,14 +13,10 @@ import java.util.Set;
 public class FailoverGroupMemberTest {
     @Test
     public void testSerialization() throws IOException {
-        FailoverGroupMember member = new FailoverGroupMember();
-        member.setName("test_member");
         Set<NetworkAddress> addresses = Sets.newHashSet();
         NetworkAddress address = new NetworkAddress("192.168.0.1", 8888);
         addresses.add(address);
-        member.setAddresses(addresses);
-        member.setLeader(address);
-        member.setRole(FailoverGroupRole.PRIMARY);
+        FailoverGroupMember member = new FailoverGroupMember("test_member", addresses, address, FailoverGroupRole.PRIMARY);
 
         String json = GsonUtils.GSON.toJson(member);
 

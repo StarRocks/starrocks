@@ -3526,10 +3526,12 @@ public class PrivilegeCheckerTest {
                 @Mock
                 public FailoverGroup getFailoverGroup(String name) {
                     CreateSecondaryFailoverGroupStmt stmt = new CreateSecondaryFailoverGroupStmt(
-                            false, name, "127.0.0.1:9020", null);
+                            false, name, "127.0.0.1:19020", null);
                     try {
                         return new FailoverGroup(1, stmt);
                     } catch (DdlException e) {
+                        e.printStackTrace();
+                        Assert.fail();
                         return null;
                     }
                 }

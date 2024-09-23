@@ -33,7 +33,7 @@ public class RoutineLoadMgrEPack extends RoutineLoadMgr {
             unprotectedAddJob(job);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(job);
         } finally {
-            readUnlock();
+            writeUnlock();
         }
     }
 }

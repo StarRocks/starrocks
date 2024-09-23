@@ -8,6 +8,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import org.apache.logging.log4j.LogManager;
@@ -60,7 +61,11 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
 
             failoverGroup.getIncludeMgr().addIncludeCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID);
 
-            // Drop deleted databases in catalog
+            if (!Config.failover_group_allow_drop_extra_table) {
+                continue;
+            }
+
+            // Drop extra databases in catalog
             for (Database localDatabase : failoverGroup.getIncludeMgr().getIncludeCatalogs().get(null).values()) {
                 if (failoverGroup.getExcludeMgr().isExcludeDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         localDatabase.getFullName())) {
@@ -103,7 +108,11 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
             databaseNames.add(databaseMeta.getDatabase().getFullName());
         }
 
-        // Drop deleted databases
+        if (!Config.failover_group_allow_drop_extra_table) {
+            return;
+        }
+
+        // Drop extra databases
         for (Database localDatabase : failoverGroup.getIncludeMgr().getIncludeDatabases().values()) {
             if (failoverGroup.getExcludeMgr().isExcludeDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     localDatabase.getFullName())) {
@@ -145,7 +154,11 @@ public class CheckReplicatedObjectMetaJob extends FailoverGroupJob {
             job.start();
         }
 
-        // Drop deleted tables
+        if (!Config.failover_group_allow_drop_extra_table) {
+            return;
+        }
+
+        // Drop extra tables
         for (Map.Entry<Database, Map<Long, Table>> entry : failoverGroup.getIncludeMgr().getIncludeTables()
                 .entrySet()) {
             Set<String> tableNames = databaseToTableNames.get(entry.getKey().getFullName());

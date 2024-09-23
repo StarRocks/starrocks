@@ -6,6 +6,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -35,7 +36,8 @@ public class CheckReplicatedDatabaseJob extends FailoverGroupJob {
 
     @Override
     public void execute() {
-        Database localDatabase = GlobalStateMgr.getServingState().getLocalMetastore().getDb(remoteDatabase.getFullName());
+        Database localDatabase = GlobalStateMgr.getServingState().getLocalMetastore()
+                .getDb(remoteDatabase.getFullName());
         if (localDatabase == null) {
             CreateReplicatedDatabaseJob job = new CreateReplicatedDatabaseJob(failoverGroup,
                     remoteDatabase, remoteTables, isIncludeObject);
@@ -69,18 +71,26 @@ public class CheckReplicatedDatabaseJob extends FailoverGroupJob {
         if (isIncludeObject) {
             failoverGroup.getIncludeMgr().addIncludeDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID,
                     localDatabase.getId());
+        }
 
-            // Drop deleted tables in database
-            for (Table localTable : localDatabase.getTables()) {
-                if (failoverGroup.getExcludeMgr().isExcludeTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        localDatabase.getFullName(), localTable.getName())) {
-                    continue;
-                }
-                if (remoteDatabase.getTable(localTable.getName()) == null) {
-                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, null,
-                            null, localDatabase, localTable, false, false);
-                    job.start();
-                }
+        if (isTableIncludeObject) {
+            return;
+        }
+
+        if (!Config.failover_group_allow_drop_extra_table) {
+            return;
+        }
+
+        // Drop extra tables in database
+        for (Table localTable : localDatabase.getTables()) {
+            if (failoverGroup.getExcludeMgr().isExcludeTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    localDatabase.getFullName(), localTable.getName())) {
+                continue;
+            }
+            if (remoteDatabase.getTable(localTable.getName()) == null) {
+                DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, null,
+                        null, localDatabase, localTable, false, false);
+                job.start();
             }
         }
     }

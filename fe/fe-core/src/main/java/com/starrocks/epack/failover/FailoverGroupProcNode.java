@@ -17,12 +17,14 @@ public class FailoverGroupProcNode implements ProcNodeInterface {
             .add("Name")
             .add("Role")
             .add("State")
-            .add("Members")
             .add("Schedule")
             .add("IsSuspended")
             .add("ScheduledTime")
             .add("FinishedTime")
             .add("FinishedRound")
+            .add("ReplicatedJournalId")
+            .add("LastScheduledTime")
+            .add("LastFinishedTime")
             .add("Errors")
             .build();
 
@@ -47,12 +49,14 @@ public class FailoverGroupProcNode implements ProcNodeInterface {
                 failoverGroup.getName(),
                 failoverGroup.getRole().toString(),
                 failoverGroup.getState().toString(),
-                failoverGroup.getMembers().values().toString(),
                 failoverGroup.getSchedule().getSchedule(),
                 String.valueOf(failoverGroup.getSchedule().isSuspended()),
                 TimeUtils.longToTimeString(failoverGroup.getSchedule().getScheduledTimeMs()),
                 TimeUtils.longToTimeString(failoverGroup.getSchedule().getFinishedTimeMs()),
                 String.valueOf(failoverGroup.getSchedule().getRoundFinishedTimes()),
+                String.valueOf(failoverGroup.getReplicatedJournalId()),
+                TimeUtils.longToTimeString(failoverGroup.getSchedule().getLastScheduledTimeMs()),
+                TimeUtils.longToTimeString(failoverGroup.getSchedule().getLastFinishedTimeMs()),
                 failoverGroup.getErrorMessages().isEmpty() ? "" : failoverGroup.getErrorMessages().toString()));
 
         return result;

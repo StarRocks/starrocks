@@ -30,12 +30,14 @@ public class ShowFailoverGroupsStmt extends ShowStmt {
             .addColumn(new Column("Name", ScalarType.createVarchar(20)))
             .addColumn(new Column("Role", ScalarType.createVarchar(20)))
             .addColumn(new Column("State", ScalarType.createVarchar(20)))
-            .addColumn(new Column("Members", ScalarType.createVarchar(256)))
             .addColumn(new Column("Schedule", ScalarType.createVarchar(32)))
             .addColumn(new Column("IsSuspended", ScalarType.createVarchar(20)))
             .addColumn(new Column("ScheduledTime", ScalarType.createVarchar(20)))
             .addColumn(new Column("FinishedTime", ScalarType.createVarchar(20)))
             .addColumn(new Column("FinishedRound", ScalarType.createVarchar(20)))
+            .addColumn(new Column("ReplicatedJournalId", ScalarType.createVarchar(20)))
+            .addColumn(new Column("LastScheduledTime", ScalarType.createVarchar(20)))
+            .addColumn(new Column("LastFinishedTime", ScalarType.createVarchar(20)))
             .addColumn(new Column("Errors", ScalarType.createVarchar(1024)))
             .build();
 

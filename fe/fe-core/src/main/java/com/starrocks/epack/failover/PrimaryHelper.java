@@ -26,8 +26,12 @@ public class PrimaryHelper {
     public static FailoverGroupMember initPrimaryMembers(List<String> memberStrings,
             Map<String, FailoverGroupMember> members)
             throws DdlException {
+        FailoverGroupMember localMember = FailoverGroupMember.getLocalMember(null, FailoverGroupRole.PRIMARY);
+        if (localMember == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_ERROR, "Cannot get local member");
+        }
+        Set<NetworkAddress> allAddresses = new HashSet<>(localMember.getAddresses());
         FailoverGroupMember primary = null;
-        NetworkAddress primaryLeaderAddress = NetworkAddress.getLocalLeaderAddress();
         for (String membeString : memberStrings) {
             String[] splitStrings = membeString.split(":");
             if (splitStrings.length == 2) {
@@ -37,8 +41,7 @@ public class PrimaryHelper {
                     ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
                 }
 
-                FailoverGroupMember localMember = FailoverGroupMember.getLocalMember(
-                        splitStrings[0], FailoverGroupRole.PRIMARY);
+                localMember.setName(splitStrings[0]);
                 FailoverGroupMember previous = members.putIfAbsent(localMember.getName(), localMember);
                 if (previous != null || primary != null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
@@ -52,22 +55,26 @@ public class PrimaryHelper {
                     ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
                 }
                 NetworkAddress leaderAddress = new NetworkAddress(splitStrings[1], port);
-                Set<NetworkAddress> addresses = new HashSet<>();
-                addresses.add(leaderAddress);
-                FailoverGroupMember member = new FailoverGroupMember();
-                member.setName(splitStrings[0]);
-                member.setAddresses(addresses);
-                member.setLeader(leaderAddress);
-                member.setRole(FailoverGroupRole.NONE);
-                FailoverGroupMember previous = members.putIfAbsent(member.getName(), member);
-                if (previous != null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
-                }
-                if (addresses.contains(primaryLeaderAddress)) {
-                    if (primary != null) {
+                if (localMember.getAddresses().contains(leaderAddress)) {
+                    localMember.setName(splitStrings[0]);
+                    FailoverGroupMember previous = members.putIfAbsent(localMember.getName(), localMember);
+                    if (previous != null || primary != null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
                     }
-                    primary = member;
+                    primary = localMember;
+                } else {
+                    if (allAddresses.contains(leaderAddress)) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
+                    }
+                    allAddresses.add(leaderAddress);
+                    Set<NetworkAddress> addresses = new HashSet<>();
+                    addresses.add(leaderAddress);
+                    FailoverGroupMember member = new FailoverGroupMember(splitStrings[0], addresses,
+                            leaderAddress, FailoverGroupRole.NONE);
+                    FailoverGroupMember previous = members.putIfAbsent(member.getName(), member);
+                    if (previous != null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
+                    }
                 }
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
@@ -82,6 +89,7 @@ public class PrimaryHelper {
 
     public static Map<String, FailoverGroupMember> initMembers(List<String> memberStrings) throws DdlException {
         Map<String, FailoverGroupMember> members = new HashMap<>(memberStrings.size());
+        Set<NetworkAddress> allAddresses = new HashSet<>();
         for (String membeString : memberStrings) {
             String[] splitStrings = membeString.split(":");
             if (splitStrings.length == 3) {
@@ -92,13 +100,14 @@ public class PrimaryHelper {
                     ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
                 }
                 NetworkAddress leaderAddress = new NetworkAddress(splitStrings[1], port);
+                if (allAddresses.contains(leaderAddress)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
+                }
+                allAddresses.add(leaderAddress);
                 Set<NetworkAddress> addresses = new HashSet<>();
                 addresses.add(leaderAddress);
-                FailoverGroupMember member = new FailoverGroupMember();
-                member.setName(splitStrings[0]);
-                member.setAddresses(addresses);
-                member.setLeader(leaderAddress);
-                member.setRole(FailoverGroupRole.NONE);
+                FailoverGroupMember member = new FailoverGroupMember(splitStrings[0], addresses,
+                        leaderAddress, FailoverGroupRole.NONE);
                 FailoverGroupMember previous = members.putIfAbsent(member.getName(), member);
                 if (previous != null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);

@@ -3248,7 +3248,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int failover_group_pull_image_timeout_sec = 30;
     @ConfField(mutable = true)
-    public static int failover_group_trigger_new_image_interval_sec = 10;
+    public static int failover_group_trigger_new_image_interval_sec = 600;
+    @ConfField(mutable = true)
+    public static boolean failover_group_allow_drop_extra_table = false;
+    @ConfField(mutable = true)
+    public static boolean failover_group_allow_drop_extra_partition = true;
+    @ConfField(mutable = true)
+    public static boolean failover_group_allow_drop_inconsistent_table = true;
+    @ConfField(mutable = true)
+    public static boolean failover_group_allow_drop_inconsistent_partition = true;
+    @ConfField
     public static int failover_group_error_message_keep_max_num = 10;
 
 

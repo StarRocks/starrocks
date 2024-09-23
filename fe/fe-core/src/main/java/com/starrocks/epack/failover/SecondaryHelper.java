@@ -34,7 +34,10 @@ public class SecondaryHelper {
     public static FailoverGroupMember initSecondaryMembers(String primaryMemberString,
             Map<String, FailoverGroupMember> members)
             throws DdlException {
-        FailoverGroupMember primary = null;
+        FailoverGroupMember localMember = FailoverGroupMember.getLocalMember(null, FailoverGroupRole.SECONDARY);
+        if (localMember == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_ERROR, "Cannot get local member");
+        }
         String[] splitStrings = primaryMemberString.split(":");
         if (splitStrings.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, primaryMemberString);
@@ -46,17 +49,14 @@ public class SecondaryHelper {
             ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, primaryMemberString);
         }
         NetworkAddress leaderAddress = new NetworkAddress(splitStrings[0], port);
+        if (localMember.getAddresses().contains(leaderAddress)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, primaryMemberString);
+        }
         Set<NetworkAddress> addresses = new HashSet<>();
         addresses.add(leaderAddress);
-        FailoverGroupMember member = new FailoverGroupMember();
-        member.setName("");
-        member.setAddresses(addresses);
-        member.setLeader(leaderAddress);
-        member.setRole(FailoverGroupRole.PRIMARY);
-
+        FailoverGroupMember member = new FailoverGroupMember("", addresses, leaderAddress, FailoverGroupRole.PRIMARY);
         members.put(member.getName(), member);
-        primary = member;
-        return primary;
+        return member;
     }
 
     public static TFailoverGroupRequestMetaResponse sendRequestMetaTo(NetworkAddress address,
@@ -71,13 +71,15 @@ public class SecondaryHelper {
             if (response.getStatus().getStatus_code() == TStatusCode.OK) {
                 return response;
             }
-            if (response.getStatus().getStatus_code() != TStatusCode.REMOTE_FILE_NOT_FOUND) {
-                LOG.warn("Send request meta to {} returns error: {}", address, response.getStatus());
+            if (response.getStatus().getStatus_code() == TStatusCode.REMOTE_FILE_NOT_FOUND) {
+                return null;
             }
+            LOG.warn("Send request meta to {} returns error: {}", address, response.getStatus());
+            throw new RuntimeException("Failed to request meta from " + address + ": " + response.getStatus());
         } catch (Exception e) {
             LOG.warn("Failed to send request meta to {} ", address, e);
+            throw new RuntimeException("Failed to send request meta to " + address + ": " + e);
         }
-        return null;
     }
 
     public static boolean pullImage(String token, String httpHost, int httpPort, long imageVersion,
