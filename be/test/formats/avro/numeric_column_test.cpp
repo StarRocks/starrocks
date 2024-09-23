@@ -202,7 +202,7 @@ TEST_F(AvroAddNumericColumnTest, test_add_int) {
     }
 
     {
-        const auto column = FixedLengthColumn<int32_t>::create();
+        const auto column = FixedLengthColumn<int16_t>::create();
         const TypeDescriptor desc(TYPE_SMALLINT);
         const auto st = add_numeric_column<int16_t>(column.get(), desc, "f_smallint", avro_helper.avro_val);
         ASSERT_TRUE(st.is_invalid_argument());
@@ -217,14 +217,14 @@ TEST_F(AvroAddNumericColumnTest, test_add_int) {
     }
 
     {
-        const auto column = FixedLengthColumn<int32_t>::create();
+        const auto column = FixedLengthColumn<double>::create();
         const TypeDescriptor desc(TYPE_DOUBLE);
         const auto st = add_numeric_column<double>(column.get(), desc, "f_double", avro_helper.avro_val);
         ASSERT_TRUE(st.ok());
     }
 
     {
-        const auto column = FixedLengthColumn<int32_t>::create();
+        const auto column = FixedLengthColumn<float>::create();
         const TypeDescriptor desc(TYPE_FLOAT);
         const auto st = add_numeric_column<float>(column.get(), desc, "f_float", avro_helper.avro_val);
         ASSERT_TRUE(st.ok());
