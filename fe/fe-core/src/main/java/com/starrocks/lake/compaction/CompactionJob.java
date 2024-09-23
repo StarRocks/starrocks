@@ -18,8 +18,11 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.proto.CompactStat;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class CompactionJob {
+    private static final Logger LOG = LogManager.getLogger(CompactionJob.class);
     private final Database db;
     private final Table table;
     private final PhysicalPartition partition;
@@ -46,6 +50,8 @@ public class CompactionJob {
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.txnId = txnId;
         this.startTs = System.currentTimeMillis();
+        this.commitTs = 0L;
+        this.finishTs = 0L;
         this.allowPartialSuccess = allowPartialSuccess;
     }
 
@@ -157,5 +163,47 @@ public class CompactionJob {
 
     public boolean getAllowPartialSuccess() {
         return allowPartialSuccess;
+    }
+
+    public String getExecutionProfile() {
+        if (tasks.isEmpty() || finishTs == 0L) {
+            return "";
+        }
+        CompactStat stat = new CompactStat();
+        stat.subTaskCount = 0;
+        stat.readTimeRemote = 0L;
+        stat.readBytesRemote = 0L;
+        stat.readTimeLocal = 0L;
+        stat.readBytesLocal = 0L;
+        stat.inQueueTimeSec = 0;
+        for (CompactionTask task : tasks) {
+            List<CompactStat> subStats = task.getCompactStats();
+            if (subStats == null) {
+                continue;
+            }
+            int subTaskCount = 0;
+            for (CompactStat subStat : subStats) {
+                if (subStat.subTaskCount != null) {
+                    subTaskCount = subStat.subTaskCount;
+                }
+                if (subStat.readTimeRemote != null) {
+                    stat.readTimeRemote += subStat.readTimeRemote;
+                }
+                if (subStat.readBytesRemote != null) {
+                    stat.readBytesRemote += subStat.readBytesRemote;
+                }
+                if (subStat.readTimeLocal != null) {
+                    stat.readTimeLocal += subStat.readTimeLocal;
+                }
+                if (subStat.readBytesLocal != null) {
+                    stat.readBytesLocal += subStat.readBytesLocal;
+                }
+                if (subStat.inQueueTimeSec != null) {
+                    stat.inQueueTimeSec += subStat.inQueueTimeSec;
+                }
+            }
+            stat.subTaskCount += subTaskCount;
+        }
+        return new CompactionProfile(stat).toString();
     }
 }
