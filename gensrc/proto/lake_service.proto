@@ -89,6 +89,24 @@ message CompactRequest {
     optional bytes encryption_meta = 6;
 }
 
+message CompactStat {
+    // basic
+    optional int64 tablet_id = 1;
+
+    // read
+    optional int64 read_time_remote = 11; // ns
+    optional int64 read_bytes_remote = 12;
+    optional int64 read_time_local = 13; // ns
+    optional int64 read_bytes_local = 14;
+
+    // write
+    // TODO
+
+    // other
+    optional int32 sub_task_count = 51; // tablet count in this compaction request
+    optional int32 in_queue_time_sec = 52;
+}
+
 message CompactResponse {
     repeated int64 failed_tablets = 1;
     // optional int64 execution_time = 2; // ms
@@ -97,6 +115,7 @@ message CompactResponse {
     // optional int64 num_output_bytes = 5;
     // optional int64 num_output_rows = 6;
     optional StatusPB status = 7;
+    repeated CompactStat compact_stats = 8;
 }
 
 message DropTableRequest {

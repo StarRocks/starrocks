@@ -14,6 +14,8 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.base.Strings;
+
 import java.util.Objects;
 import java.util.Optional;
 
@@ -25,6 +27,7 @@ public class CompactionRecord {
     private final String partitionName;
     private final String errorMessage;
     private final String warehouse;
+    private final String executionProfile;
 
     private CompactionRecord(CompactionJob context, String errorMessage) {
         Objects.requireNonNull(context.getFullPartitionName());
@@ -35,6 +38,7 @@ public class CompactionRecord {
         this.partitionName = context.getFullPartitionName();
         this.errorMessage = errorMessage;
         this.warehouse = context.getWarehouse();
+        this.executionProfile = context.getExecutionProfile();
     }
 
     static CompactionRecord build(CompactionJob context) {
@@ -71,5 +75,9 @@ public class CompactionRecord {
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    public Optional<String> getExecutionProfile() {
+        return Strings.isNullOrEmpty(executionProfile) ? Optional.empty() : Optional.of(executionProfile);
     }
 }
