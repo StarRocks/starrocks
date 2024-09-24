@@ -957,7 +957,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
             } else if (child->op == JsonFlatPath::OP_ROOT) {
                 _merge_json_with_remain<true>(child, &v, builder, index);
             } else {
-                DCHECK(child->op == JsonFlatPath::OP_INCLUDE);
+                DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_NEW_LEVEL);
                 builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
                 _merge_json_with_remain<true>(child, &v, builder, index);
                 builder->close();
@@ -976,7 +976,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         // json: {"b": {}}
         // we can't output: {"b": {}} to {"b": {"b2": {}}}
         // must direct relation when has REMAIN
-        if (child->children.empty()) {
+        if (child->children.empty() && child->op != JsonFlatPath::OP_NEW_LEVEL) {
             DCHECK(child->op == JsonFlatPath::OP_INCLUDE);
             auto col = _src_columns[child->index];
             if (!col->is_null(index)) {

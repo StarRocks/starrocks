@@ -1419,4 +1419,57 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactPaths3) {
     EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
+
+TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactRemainLevel) {
+    config::json_flat_sparsity_factor = 0.6;
+    // clang-format off
+    Columns jsons = {
+        more_flat_json({
+            R"({"a": 11, "b": "abc1", "c": {"d": 21, "e": 211}, "f4": {"m": 141, "n": 341}})",
+            R"({"a": 12, "b": "abc2", "c": {"d": 22, "e": 221}, "f4": {"m": 142, "n": 342}})",
+            R"({"a": 13, "b": "abc3", "c": {"d": 23, "e": 231}, "f4": {"m": 143, "n": 343}})",
+        }, true),
+        more_flat_json({
+            R"({"a": 14, "b": "xwy4", "c": {"d": 24, "e": 241}, "g4": {"x": 143, "y": 434}})",
+            R"({"a": 15, "b": "xwy5", "c": {"d": 25, "e": 251}, "g5": {"x": 153, "y": 435}})",
+            R"({"a": 16, "b": "xwy6", "c": {"d": 26, "e": 261}, "g6": {"x": 163, "y": 436}})",
+            R"({"a": 17, "b": "xwy7", "c": {"d": 27, "e": 271}, "g7": {"x": 173, "y": 437}})",
+            R"({"a": 18, "b": "xwy8", "c": {"d": 28, "e": 281}, "g8": {"x": 183, "y": 438}})",
+            R"({"a": 19, "b": "xwy9", "c": {"d": 29, "e": 291}, "g9": {"x": 193, "y": 439}})",
+            R"({"a": 10, "b": "xwy0", "c": {"d": 20, "e": 201}, "g0": {"x": 103, "y": 430}})",
+        }, true),
+        more_flat_json({
+             R"({"a": 20, "b": "qwe1", "c": {"d": 30, "e": 301}, "f4": {"m": 540, "n": 240}})",
+             R"({"a": 21, "b": "efg1", "c": {"d": 31, "e": 311}, "f4": {"m": 541, "n": 241}})",
+             R"({"a": 22, "b": "efg2", "c": {"d": 32, "e": 321}, "f4": {"m": 542, "n": 242}})",
+             R"({"a": 23, "b": "efg3", "c": {"d": 33, "e": 331}, "f4": {"m": 543, "n": 243}})",
+             R"({"a": 24, "b": "efg4", "c": {"d": 34, "e": 341}, "f4": {"m": 544, "n": 244}})",
+             R"({"a": 25, "b": "efg5", "c": {"d": 35, "e": 351}, "f4": {"m": 545, "n": 245}})",
+             R"({"a": 26, "b": "efg6", "c": {"d": 36, "e": 361}, "f4": {"m": 546, "n": 246}})",
+             R"({"a": 27, "b": "efg7", "c": {"d": 37, "e": 371}, "f4": {"m": 547, "n": 247}})",
+             R"({"a": 28, "b": "efg8", "c": {"d": 38, "e": 381}, "f4": {"m": 548, "n": 248}})",
+             R"({"a": 29, "b": "efg9", "c": {"d": 39, "e": 391}, "f4": {"m": 549, "n": 249}})",
+        }, true),
+    };
+    // clang-format on
+
+    JsonPathDeriver deriver;
+    test_compact_path(jsons, &deriver);
+
+    EXPECT_EQ(4, deriver.flat_paths().size());
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR), c.d(BIGINT), c.e(BIGINT)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
+
+    ColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col, nullptr);
+
+    EXPECT_EQ(R"({"a": 11, "b": "abc1", "c": {"d": 21, "e": 211}, "f4": {"m": 141, "n": 341}})",
+              read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 18, "b": "xwy8", "c": {"d": 28, "e": 281}, "g8": {"x": 183, "y": 438}})",
+              read_col->debug_item(7));
+    EXPECT_EQ(R"({"a": 28, "b": "efg8", "c": {"d": 38, "e": 381}, "f4": {"m": 548, "n": 248}})",
+              read_col->debug_item(18));
+}
 } // namespace starrocks
