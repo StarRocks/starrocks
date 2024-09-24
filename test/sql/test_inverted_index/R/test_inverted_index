@@ -498,7 +498,7 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" A
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
 -- result:
@@ -542,7 +542,7 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
 -- result:
@@ -1260,7 +1260,7 @@ SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY 
 -- !result
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
 -- result:
@@ -1268,7 +1268,7 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
 -- !result
 SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 DROP TABLE t_disable_global_dict_rewrite;
 -- result:
@@ -1393,7 +1393,7 @@ SET enable_gin_filter = false;
 -- !result
 SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 SET enable_gin_filter = true;
 -- result:
@@ -1594,43 +1594,43 @@ insert into duplicate_table_demo_datatype_not_replicated_all_varchar values ('19
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 DROP VIEW test_view;
 -- result:

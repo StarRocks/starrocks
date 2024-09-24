@@ -257,7 +257,7 @@ SELECT * FROM TABLE(generate_series(9223372036854775807, 9223372036854775807, 92
 -- name: test44
 SELECT * FROM TABLE(generate_series(1, 2, 0));
 -- result:
-E: (1064, 'step size cannot equal zero')
+[REGEX].*step size cannot equal zero.*
 -- !result
 -- name: test47
 SELECT * FROM TABLE(generate_series(-2147483640, -2147483647, -3));
@@ -293,7 +293,7 @@ INSERT INTO t1 VALUES(1, 2, 0);
 -- !result
 SELECT * FROM t1, LATERAL generate_series(c0, c1, c2);
 -- result:
-E: (1064, 'step size cannot equal zero')
+[REGEX].*step size cannot equal zero.*
 -- !result
 -- name: test49
 SELECT * FROM TABLE(generate_series(-128, -128, -3));

@@ -374,7 +374,7 @@ select c0,c1 = (select c1 from t1 where c0 = 10) from (select l.c0, r.c1 from t0
 -- !result
 select c0,c1 = (select c1 from t1 where c0 != 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
 -- result:
-E: (1064, 'Expected LE 1 to be returned by expression ')
+[REGEX].*Expected LE 1 to be returned by expression.*
 -- !result
 select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
 -- result:

@@ -126,7 +126,7 @@ INSERT INTO t VALUES (1, NULL);
 -- !result
 SELECT dict_mapping("dict", col_1, col_2) FROM t;
 -- result:
-E: (1064, 'invalid parameter : get NULL paramenter')
+[REGEX].*invalid parameter : get NULL paramenter.*
 -- !result
 DROP DATABASE test_dictmapping_null_column;
 -- result:
@@ -291,11 +291,11 @@ insert into t_dictmapping_null_if_not_found values (1,default);
 -- !result
 select dict_mapping("t_dictmapping_null_if_not_found", 2);
 -- result:
-E: (1064, 'query failed if record not exist in dict table.')
+[REGEX].*query failed if record not exist in dict table.*
 -- !result
 select dict_mapping("t_dictmapping_null_if_not_found", 2, false);
 -- result:
-E: (1064, 'query failed if record not exist in dict table.')
+[REGEX].*query failed if record not exist in dict table.*
 -- !result
 select dict_mapping("t_dictmapping_null_if_not_found", 2, true);
 -- result:

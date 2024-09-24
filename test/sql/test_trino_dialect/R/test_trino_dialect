@@ -50,11 +50,11 @@ None	None
 -- !result
 select c2['not-existed'] from map_array_tbl order by c1;
 -- result:
-E: (1064, "Key not present in map: 'not-existed'")
+[REGEX].*Key not present in map: 'not-existed'.*
 -- !result
 select c3[100] from map_array_tbl order by c1;
 -- result:
-E: (1064, 'Array subscript must be less than or equal to array length: 100 > 1')
+[REGEX].*Array subscript must be less than or equal to array length: 100 > 1.*
 -- !result
 select element_at(c2, 'not-existed'), element_at(c3, 100) from map_array_tbl order by c1;
 -- result:

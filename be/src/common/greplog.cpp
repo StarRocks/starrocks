@@ -24,6 +24,7 @@
 #include "gutil/strings/substitute.h"
 #include "hs/hs_compile.h"
 #include "hs/hs_runtime.h"
+#include "service/backend_options.h"
 #include "util/defer_op.h"
 
 using namespace std;
@@ -33,16 +34,18 @@ namespace starrocks {
 static std::vector<string> list_log_files_in_dir(const string& log_dir, char level) {
     std::vector<string> files;
     // if level in WARNING, ERROR, FATAL, use logging logs, else use info logs
-    const std::string pattern = string("WEF").find(level) == string::npos ? "be.INFO.log." : "be.WARNING.log.";
+    const std::string process = BackendOptions::is_cn() ? "cn" : "be";
+    const std::string pattern = process + (string("WEF").find(level) == string::npos ? ".INFO.log." : ".WARNING.log.");
     for (const auto& entry : filesystem::directory_iterator(log_dir)) {
         if (entry.is_regular_file()) {
             auto name = entry.path().filename().string();
-            if (name.length() > pattern.length() && name.substr(0, pattern.length()) == pattern) {
+            if (name.length() > pattern.length() && name.find(pattern) != string::npos) {
                 files.push_back(entry.path().string());
             }
         }
     }
     std::sort(files.begin(), files.end(), std::greater<string>());
+    LOG_IF(WARNING, files.empty()) << "list_log_files_in_dir failed, no log files in " << log_dir;
     return files;
 }
 
@@ -180,7 +183,7 @@ Status grep_log_single_file(const string& path, int64_t start_ts, int64_t end_ts
         ctx.line_len = read;
         if (database == nullptr) {
             // no pattern, add all lines
-            scan_by_line_handler(0, 0, 0, 0, &ctx);
+            scan_by_line_handler(0, 0, read, 0, &ctx);
         } else {
             if (hs_scan(database, line, read, 0, scratch, scan_by_line_handler, &ctx) != HS_SUCCESS) {
                 break;
@@ -195,6 +198,7 @@ Status grep_log_single_file(const string& path, int64_t start_ts, int64_t end_ts
 
 Status grep_log(int64_t start_ts, int64_t end_ts, char level, const std::string& pattern, size_t limit,
                 std::deque<GrepLogEntry>& entries) {
+    level = std::toupper(level);
     const string log_dir = config::sys_log_dir;
     if (log_dir.empty()) {
         return Status::InternalError(strings::Substitute("grep log failed $0 is empty", log_dir));
@@ -206,7 +210,8 @@ Status grep_log(int64_t start_ts, int64_t end_ts, char level, const std::string&
     hs_database_t* database = nullptr;
     if (!pattern.empty()) {
         hs_compile_error_t* compile_err;
-        if (hs_compile(pattern.c_str(), 0, HS_MODE_BLOCK, nullptr, &database, &compile_err) != HS_SUCCESS) {
+        if (hs_compile(pattern.c_str(), HS_FLAG_SINGLEMATCH, HS_MODE_BLOCK, nullptr, &database, &compile_err) !=
+            HS_SUCCESS) {
             hs_free_compile_error(compile_err);
             return Status::InternalError(
                     strings::Substitute("grep log failed compile pattern $0 failed $1", pattern, compile_err->message));
@@ -253,10 +258,11 @@ Status grep_log(int64_t start_ts, int64_t end_ts, char level, const std::string&
     return Status::OK();
 }
 
-std::string grep_log_as_string(int64_t start_ts, int64_t end_ts, char level, const std::string& pattern, size_t limit) {
+std::string grep_log_as_string(int64_t start_ts, int64_t end_ts, const std::string& level, const std::string& pattern,
+                               size_t limit) {
     std::ostringstream ss;
     std::deque<GrepLogEntry> entries;
-    auto st = grep_log(start_ts, end_ts, level, pattern, limit, entries);
+    auto st = grep_log(start_ts, end_ts, level[0], pattern, limit, entries);
     if (!st.ok()) {
         ss << strings::Substitute("grep log failed $0 start_ts:$1 end_ts:$2 level:$3 pattern:$4 limit:$5\n",
                                   st.to_string(), start_ts, end_ts, level, pattern, limit);

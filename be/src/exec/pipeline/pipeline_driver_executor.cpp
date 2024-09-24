@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "agent/master_info.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
@@ -167,6 +168,9 @@ void GlobalDriverExecutor::_worker_thread() {
             }
 
             if (!status.ok()) {
+                auto o_id = get_backend_id();
+                int64_t be_id = o_id.has_value() ? o_id.value() : -1;
+                status = status.clone_and_append(fmt::format("BE:{}", be_id));
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
