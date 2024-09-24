@@ -244,7 +244,8 @@ std::string append_read_name(const ColumnReader* col_reader) {
         for (const auto& sub_reader : *col_reader->sub_readers()) {
             stream << fmt::format("{}({}), ", sub_reader->name(), type_to_string(sub_reader->column_type()));
         }
-        return stream.str().substr(0, stream.view().size() - 2);
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
     }
     if (col_reader->column_type() == LogicalType::TYPE_ARRAY) {
         auto child = append_read_name((*col_reader->sub_readers())[0].get());
@@ -263,7 +264,8 @@ std::string append_read_name(const ColumnReader* col_reader) {
                 stream << sub_reader->name() << "(" << child << "), ";
             }
         }
-        return stream.str().substr(0, stream.view().size() - 2);
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
     }
     return stream.str();
 }
