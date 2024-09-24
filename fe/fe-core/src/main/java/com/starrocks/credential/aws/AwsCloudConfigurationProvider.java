@@ -21,6 +21,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 
 import java.util.Map;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/credential/aws/AWSCloudConfigurationProvider.java
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID;
@@ -55,8 +56,39 @@ public class AWSCloudConfigurationProvider implements CloudConfigurationProvider
     public static final String DEFAULT_AWS_REGION = "us-east-1";
 
     public AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_STS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_STS_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_SSL;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_STS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_STS_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.DEFAULT_AWS_REGION;
+
+public class AwsCloudConfigurationProvider implements CloudConfigurationProvider {
+
+    public AwsCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+>>>>>>> 9222444c45 ([BugFix] Fix "Connection pool shut down" in S3AFileSystem (#50816)):fe/fe-core/src/main/java/com/starrocks/credential/aws/AwsCloudConfigurationProvider.java
         Preconditions.checkNotNull(hiveConf);
-        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
+        AwsCloudCredential awsCloudCredential = new AwsCloudCredential(
                 hiveConf.getBoolean(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
                 hiveConf.getBoolean(AWS_GLUE_USE_INSTANCE_PROFILE, false),
                 hiveConf.get(AWS_GLUE_ACCESS_KEY, ""),
@@ -78,7 +110,7 @@ public class AWSCloudConfigurationProvider implements CloudConfigurationProvider
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
-        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
+        AwsCloudCredential awsCloudCredential = new AwsCloudCredential(
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false")),
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false")),
                 properties.getOrDefault(AWS_S3_ACCESS_KEY, ""),
@@ -95,7 +127,7 @@ public class AWSCloudConfigurationProvider implements CloudConfigurationProvider
             return null;
         }
 
-        AWSCloudConfiguration awsCloudConfiguration = new AWSCloudConfiguration(awsCloudCredential);
+        AwsCloudConfiguration awsCloudConfiguration = new AwsCloudConfiguration(awsCloudCredential);
         // put cloud configuration
         if (properties.containsKey(AWS_S3_ENABLE_PATH_STYLE_ACCESS)) {
             awsCloudConfiguration.setEnablePathStyleAccess(

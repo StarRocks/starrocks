@@ -14,7 +14,12 @@
 
 package com.starrocks.credential;
 
+<<<<<<< HEAD
 import com.starrocks.credential.aws.AWSCloudCredential;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.aws.AwsCloudCredential;
+>>>>>>> 9222444c45 ([BugFix] Fix "Connection pool shut down" in S3AFileSystem (#50816))
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -281,7 +286,7 @@ public class CloudConfigurationFactoryTest {
     public void testGlueCredential() {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+        AwsCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         Assert.assertNotNull(cred);
         Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
                         "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +

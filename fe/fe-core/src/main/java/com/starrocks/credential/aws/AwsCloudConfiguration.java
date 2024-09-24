@@ -26,11 +26,11 @@ import org.apache.hadoop.fs.s3a.S3AFileSystem;
 
 import java.util.Map;
 
-public class AWSCloudConfiguration extends CloudConfiguration {
+public class AwsCloudConfiguration extends CloudConfiguration {
 
     private static final int DEFAULT_NUM_OF_PARTITIONED_PREFIX = 256;
 
-    private final AWSCloudCredential awsCloudCredential;
+    private final AwsCloudCredential awsCloudCredential;
 
     private boolean enablePathStyleAccess = false;
 
@@ -40,7 +40,7 @@ public class AWSCloudConfiguration extends CloudConfiguration {
 
     private int numOfPartitionedPrefix = 0;
 
-    public AWSCloudConfiguration(AWSCloudCredential awsCloudCredential) {
+    public AwsCloudConfiguration(AwsCloudCredential awsCloudCredential) {
         this.awsCloudCredential = awsCloudCredential;
     }
 
@@ -60,7 +60,7 @@ public class AWSCloudConfiguration extends CloudConfiguration {
         return this.enableSSL;
     }
 
-    public AWSCloudCredential getAWSCloudCredential() {
+    public AwsCloudCredential getAwsCloudCredential() {
         return this.awsCloudCredential;
     }
 
