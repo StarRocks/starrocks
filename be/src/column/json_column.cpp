@@ -74,6 +74,9 @@ std::string JsonColumn::debug_item(size_t idx) const {
         }
         ss << _flat_column_paths[i] << ": ";
         ss << get_flat_field(i)->debug_item(idx);
+        if (has_remain()) {
+            ss << ", remain: " << get_remain()->debug_item(idx);
+        }
         ss << "}";
         return ss.str();
     } else {
