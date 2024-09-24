@@ -4014,7 +4014,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to enable block buffer to optimize datacache efficiency. When it is enabled, read the whole block data from the datacache every time and cache it in a temporary buffer to reduce the additional overhead caused by frequent cache reads.
+- Description: Whether to enable Block Buffer to optimize Data Cache efficiency. When Block Buffer is enabled, the system reads the Block data from the Data Cache and caches it in a temporary buffer, thus reducing the extra overhead caused by frequent cache reads.
 - Introduced in: v3.2.0
 
 ##### datacache_tiered_cache_enable
@@ -4023,7 +4023,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to enable the tiered cache mode. When it is enabled, a tiered cache system is composed of memory layer and disk layer. The hot data on the disk will automatically be promoted to the memory layer, and the cold data in the memory layer will automatically sink to the disk. And when it is disabled, the memory and disk of datacache serve as two independent cache areas, storing different types of data without any data movement between them.
+- Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
 - Introduced in: v3.2.5
 
 ##### query_max_memory_limit_percent
@@ -4032,7 +4032,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum memory limit that the query pool can use, expressed as a percentage of process memory limit.
+- Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
 - Introduced in: v3.1.0
 
 <!--
