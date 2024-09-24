@@ -33,7 +33,7 @@ import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
-import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.qe.ConnectContext;
@@ -100,9 +100,9 @@ public class StorageVolumeTest {
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
         Assert.assertTrue(s3FileStoreInfo.getCredential().hasDefaultCredential());
-        Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
     }
 
@@ -127,9 +127,9 @@ public class StorageVolumeTest {
         AwsSimpleCredentialInfo simpleCredentialInfo = s3FileStoreInfo.getCredential().getSimpleCredential();
         Assert.assertEquals("access_key", simpleCredentialInfo.getAccessKey());
         Assert.assertEquals("secret_key", simpleCredentialInfo.getAccessKeySecret());
-        Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
     }
 
@@ -150,9 +150,9 @@ public class StorageVolumeTest {
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
         Assert.assertTrue(s3FileStoreInfo.getCredential().hasProfileCredential());
-        Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
     }
 
@@ -179,9 +179,9 @@ public class StorageVolumeTest {
                 .getAssumeRoleCredential();
         Assert.assertEquals("iam_role_arn", assumeIamRoleCredentialInfo.getIamRoleArn());
         Assert.assertEquals("iam_role_arn", assumeIamRoleCredentialInfo.getIamRoleArn());
-        Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
     }
 
