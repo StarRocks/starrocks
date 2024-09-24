@@ -253,17 +253,7 @@ Status TabletManager::delete_tablet_metadata(int64_t tablet_id, int64_t version)
     return fs::delete_file(location);
 }
 
-<<<<<<< HEAD
-StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id, bool filter_tablet) {
-=======
 Status TabletManager::tablet_metadata_exists(int64_t tablet_id, int64_t version) {
-    if (version <= kInitialVersion) {
-        // Handle tablet initial metadata
-        auto status = tablet_metadata_exists(tablet_initial_metadata_location(tablet_id));
-        if (status.ok()) {
-            return status;
-        }
-    }
     return tablet_metadata_exists(tablet_metadata_location(tablet_id, version));
 }
 
@@ -276,8 +266,7 @@ Status TabletManager::tablet_metadata_exists(const std::string& path) {
     return fs->path_exists(path);
 }
 
-StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id) {
->>>>>>> 801b191e99 ([Enhancement] Add tablet_metadata_exists to avoid not found exception (#51122))
+StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id, bool filter_tablet) {
     std::vector<std::string> objects{};
     // TODO: construct prefix in LocationProvider
     std::string prefix;
