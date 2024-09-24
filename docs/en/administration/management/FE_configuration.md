@@ -3165,6 +3165,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
 - Introduced in: v3.1.11
 
+##### lake_enable_balance_tablets_between_workers
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: (Shared-Data only) Consider balancing between compute nodes during tablet migration in shared data mode.
+- Introduced in: v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- Default: 0.15
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: (Shared-Data only) Threshold when considering the balancing between workers in shared-data mode, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`, if `f > lake_balance_tablets_threshold`, the tablet balance will be triggered if `lake_enable_balance_tablets_between_workers = true`
+- Introduced in: v3.3.4
+
 ### Other
 
 ##### tmp_dir

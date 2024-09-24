@@ -3171,6 +3171,24 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
 - 引入版本：v3.1.11
 
+##### lake_enable_balance_tablets_between_workers
+
+- 默认值：false
+- 类型：Boolean
+- Unit: -
+- 是否动态：是
+- 描述：存算分离内表tablet调度时，是否考虑节点间tablet数量均衡。
+- 引入版本：v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- 默认值：0.15
+- 类型：Double
+- Unit: -
+- 是否动态：是
+- 描述：存算分离内表tablet分布不均衡因子。当集群不均衡因子值小于此阈值时，不启动节点间调度均衡. 不均衡因子计算公式：`f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。此配置项只在`lake_enable_balance_tablets_between_workers = true`时生效。
+- 引入版本：v3.3.4
+
 ### 其他
 
 ##### tmp_dir
