@@ -451,6 +451,7 @@ set(EXEC_FILES
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/bit_packing_test.cpp
+        ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp

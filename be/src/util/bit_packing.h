@@ -62,7 +62,6 @@ public:
     static const uint8_t* UnpackUpTo31Values(const uint8_t* __restrict__ in, int64_t in_bytes, int num_values,
                                              OutType* __restrict__ out);
 
-private:
     /// Compute the number of values with the given bit width that can be unpacked from
     /// an input buffer of 'in_bytes' into an output buffer with space for 'num_values'.
     static int64_t NumValuesToUnpack(int bit_width, int64_t in_bytes, int64_t num_values);

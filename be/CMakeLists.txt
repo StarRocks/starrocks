@@ -91,6 +91,8 @@ option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 option(USE_SSE4_2 "Build with SSE4.2 instruction" ON)
 
+option(USE_BMI_2 "Build with BMI2 instruction" ON)
+
 option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
@@ -664,6 +666,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         # the compiler will define __AVX2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
     endif()
+    if (${USE_BMI_2})
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mbmi2")
+    endif()
     if (${USE_AVX512})
         # the compiler will define __AVX512F__ __AVX512BW__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
@@ -1060,7 +1065,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
