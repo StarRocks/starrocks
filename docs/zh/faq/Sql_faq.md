@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## StarRocks 会缓存查询结果吗？
 
-StarRocks 不直接缓存最终查询结果。从 2.5 版本开始，StarRocks 会将多阶段聚合查询的第一阶段聚合的中间结果缓存在 Query Cache 里，后续查询可以复用之前缓存的结果，加速计算。Query Cache 占用所在 BE 的内存。更多信息，参见 [Query Cache](../using_starrocks/query_cache.md)。
+StarRocks 不直接缓存最终查询结果。从 2.5 版本开始，StarRocks 会将多阶段聚合查询的第一阶段聚合的中间结果缓存在 Query Cache 里，后续查询可以复用之前缓存的结果，加速计算。Query Cache 占用所在 BE 的内存。更多信息，参见 [Query Cache](../using_starrocks/caching/query_cache.md)。
 <!-- StarRocks 不直接缓存查询结果。而是使用 Page Cache 将原始数据分成 page 缓存在 BE 内存上，后续查询同一个 page 时，可以直接使用 cache 中的数据。2.4 版本及以后默认开启 Page Cache。您可以通过设置 `be.conf` 中的 `storage_page_cache_limit` 来限制 page cache 的大小，默认为系统内存的 20%。修改完成后，需重启 BE 使配置生效。-->
 
 ## 当字段为NULL时，除了is null， 其他所有的计算结果都是false

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # Synchronous materialized view
@@ -10,7 +11,7 @@ For a synchronous materialized view, all changes in the base table are simultane
 
 Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration rather than a physical table like asynchronous materialized views.
 
-From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
+From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](async_mv/Materialized_view.md).
 
 :::note
 - Synchronous materialized views support WHERE clauses from v3.1.8 onwards.
