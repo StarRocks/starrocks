@@ -115,12 +115,6 @@ public:
         return flag;
     }
 
-<<<<<<< HEAD
-protected:
-=======
-    virtual size_t num_rows() const = 0;
-
->>>>>>> 9dba8da03d ([BugFix] fix pk concurrent apply issue (#51225))
     virtual void on_shutdown() {}
 
 protected:
