@@ -69,8 +69,8 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
                                              std::unordered_set<std::string>& existed_column_names) const {
     if (!_logical_name_2_pysical_field.empty()) {
         for (auto& materialized_column : materialized_columns) {
-            auto physical_field_it = _logical_name_2_pysical_field.find(
-                    Utils::format_name(materialized_column.name(), _case_sensitive));
+            auto physical_field_it =
+                    _logical_name_2_pysical_field.find(Utils::format_name(materialized_column.name(), _case_sensitive));
             if (physical_field_it == _logical_name_2_pysical_field.end()) {
                 continue;
             }
