@@ -44,7 +44,7 @@ public class ExportMgrTest {
 
     @Test
     public void testExpiredJob() throws Exception {
-        Config.history_job_keep_max_second = 10;
+        Config.history_job_keep_max_second = 100;
         ExportMgr mgr = new ExportMgr();
 
         // 1. create job 1
