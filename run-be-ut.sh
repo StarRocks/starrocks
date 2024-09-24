@@ -142,6 +142,9 @@ CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -177,7 +180,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
