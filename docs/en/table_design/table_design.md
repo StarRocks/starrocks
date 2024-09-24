@@ -41,7 +41,7 @@ An internal table adopts a two-tier data distribution strategy, that is partitio
 
 External tables are maintained in external catalogs. The data of external tables is actually stored in external data sources. StarRocks only stores the metadata of these external tables, and you can use these tables to query data from external data sources.
 
-## [Materialized views](../using_starrocks/Materialized_view.md)
+## [Materialized views](../using_starrocks/async_mv/Materialized_view.md)
 
 Materialized views are special physical tables that hold precomputed query results from one or more base tables. Materialized views are categorized as synchronous and asynchronous materialized views. Asynchronous materialized views are more powerful because they can store precomputed results from multiple base tables (internal and external tables) and support various aggregation operators. When complex queries are executed on base tables, StarRocks can automatically reuse precomputed results stored in materialized views, to achieve transparent query acceleration, accelerate queries in data lakes and establish data modeling.
 

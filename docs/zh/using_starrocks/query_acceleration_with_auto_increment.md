@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 100
 ---
 
 # 使用 AUTO INCREMENT 列构建全局字典以加速精确去重计算和 Join
@@ -8,7 +9,7 @@ displayed_sidebar: docs
 
 - **场景一**：您需要对海量订单数据（零售订单、快递订单等）计算精确去重。但是去重计数的列为 STRING 类型，此时直接计数，性能会不够理想。例如订单表 `orders` 中表示订单编号的`order_uuid` 列为 STRING 类型，大小通常为 32 ~ 36 字节，由 `UUID()` 或其他类似函数生成。直接基于 STRING 列 `order_uuid` 精确去重计数 `SELECT count(DISTINCT order_uuid) FROM orders WHERE create_date >= CURDATE();`，查询性能可能无法满足您的需要。
   如果能使用 INTEGER 列做精确去重计数，性能则会显著提升。
-- **场景二**：您需要[借助bitmap函数进一步加速多维分析中对订单计算精确去重](../using_starrocks/Using_bitmap.md)。然而，`bitmap_count()` 函数要求输入值为 INTEGER 类型，如果业务场景中去重计数的列为 STRING 类型，则需要使用 `bitmap_hash()` 函数，但是这样可能导致最终返回的是近似且值小一点的去重计数。并且，相对于连续分配的 INTEGER 值，`bitmap_hash()` 产生的 INTEGER 值更分散，会导致查询性能下降、存储数据量变大。
+- **场景二**：您需要[借助bitmap函数进一步加速多维分析中对订单计算精确去重](distinct_values/Using_bitmap.md)。然而，`bitmap_count()` 函数要求输入值为 INTEGER 类型，如果业务场景中去重计数的列为 STRING 类型，则需要使用 `bitmap_hash()` 函数，但是这样可能导致最终返回的是近似且值小一点的去重计数。并且，相对于连续分配的 INTEGER 值，`bitmap_hash()` 产生的 INTEGER 值更分散，会导致查询性能下降、存储数据量变大。
 - **场景三**：您需要查询从下单到支付的时间相对较短的订单数量，而下单时间和支付时间可能存储在两张表里，由不同的业务团队维护。则您可能需要基于订单编号关联两张表，然后对订单计算精确去重。例如如下语句：
 
     ```SQL

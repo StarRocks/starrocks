@@ -197,7 +197,7 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 
 During a BACKUP or a RESTORE job of a table, StarRocks automatically backs up or restores its [Synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md).
 
-From v3.2.3, StarRocks supports backing up and restoring [asynchronous materialized views](../../using_starrocks/Materialized_view.md) when you back up and restore the database they reside in.
+From v3.2.3, StarRocks supports backing up and restoring [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) when you back up and restore the database they reside in.
 
 During BACKUP and RESTORE of a database, StarRocks does as follows:
 

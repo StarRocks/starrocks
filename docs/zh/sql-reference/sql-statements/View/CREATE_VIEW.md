@@ -11,7 +11,7 @@ keywords: ['shitu']
 
 视图（或逻辑视图）是一种虚拟表，其中的数据来自于对其他现有实体表的查询结果。因此，视图无需占用物理存储空间。所有针对视图的查询相当于该视图对应查询语句之上的子查询。
 
-关于 StarRocks 支持的物化视图，请参阅[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/Materialized_view.md)。
+关于 StarRocks 支持的物化视图，请参阅[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/async_mv/Materialized_view.md)。
 
 > **注意**
 >

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # CBO 统计信息

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # 同步物化视图
@@ -10,7 +11,7 @@ displayed_sidebar: docs
 
 StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/catalog/default_catalog.md) 中的单个基表创建，是一种特殊的查询加速索引。
 
-自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合函数。详细信息，请参阅 [异步物化视图](../using_starrocks/Materialized_view.md)。
+自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合函数。详细信息，请参阅 [异步物化视图](async_mv/Materialized_view.md)。
 
 :::note
 - 同步物化视图自 v3.1.8 起支持 WHERE 子句。

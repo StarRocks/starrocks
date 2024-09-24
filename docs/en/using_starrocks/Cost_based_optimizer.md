@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Gather statistics for CBO
