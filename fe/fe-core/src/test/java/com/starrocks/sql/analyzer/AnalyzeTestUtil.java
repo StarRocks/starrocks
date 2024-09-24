@@ -71,6 +71,30 @@ public class AnalyzeTestUtil {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
+                "  `v10` bigint NULL COMMENT \"\",\n" +
+                "  `v11` bigint NULL COMMENT \"\",\n" +
+                "  `v12` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v10`, `v11`, v12)\n" +
+                "DISTRIBUTED BY HASH(`v10`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `T3` (\n" +
+                "  `v10` bigint NULL COMMENT \"\",\n" +
+                "  `v11` bigint NULL COMMENT \"\",\n" +
+                "  `v12` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v10`, `v11`, v12)\n" +
+                "DISTRIBUTED BY HASH(`v10`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tall` (\n" +
                 "  `ta` varchar(20) NULL COMMENT \"\",\n" +
                 "  `tb` smallint(6) NULL COMMENT \"\",\n" +
