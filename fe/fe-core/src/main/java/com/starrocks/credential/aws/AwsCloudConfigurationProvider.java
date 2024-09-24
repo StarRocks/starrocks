@@ -47,11 +47,11 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.DEFAULT_AWS_REGION;
 
-public class AWSCloudConfigurationProvider implements CloudConfigurationProvider {
+public class AwsCloudConfigurationProvider implements CloudConfigurationProvider {
 
-    public AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+    public AwsCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
         Preconditions.checkNotNull(hiveConf);
-        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
+        AwsCloudCredential awsCloudCredential = new AwsCloudCredential(
                 hiveConf.getBoolean(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
                 hiveConf.getBoolean(AWS_GLUE_USE_INSTANCE_PROFILE, false),
                 hiveConf.get(AWS_GLUE_ACCESS_KEY, ""),
@@ -73,7 +73,7 @@ public class AWSCloudConfigurationProvider implements CloudConfigurationProvider
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
-        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
+        AwsCloudCredential awsCloudCredential = new AwsCloudCredential(
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false")),
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false")),
                 properties.getOrDefault(AWS_S3_ACCESS_KEY, ""),
@@ -90,7 +90,7 @@ public class AWSCloudConfigurationProvider implements CloudConfigurationProvider
             return null;
         }
 
-        AWSCloudConfiguration awsCloudConfiguration = new AWSCloudConfiguration(awsCloudCredential);
+        AwsCloudConfiguration awsCloudConfiguration = new AwsCloudConfiguration(awsCloudCredential);
         // put cloud configuration
         if (properties.containsKey(AWS_S3_ENABLE_PATH_STYLE_ACCESS)) {
             awsCloudConfiguration.setEnablePathStyleAccess(
