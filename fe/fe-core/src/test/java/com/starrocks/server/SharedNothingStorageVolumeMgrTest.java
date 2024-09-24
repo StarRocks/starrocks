@@ -18,7 +18,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -82,9 +82,9 @@ public class SharedNothingStorageVolumeMgrTest {
         StorageVolume sv = svm.getStorageVolumeByName(svName);
         Assert.assertEquals(sv.getId(), svm.getStorageVolume(storageVolumeId).getId());
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
-        Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
         try {
             svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
@@ -110,9 +110,9 @@ public class SharedNothingStorageVolumeMgrTest {
         svm.updateStorageVolume(svName, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svName);
         cloudConfiguration = sv.getCloudConfiguration();
-        Assert.assertEquals("region1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
         Assert.assertEquals("test update", sv.getComment());
         Assert.assertEquals(true, sv.getEnabled());
