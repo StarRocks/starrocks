@@ -87,7 +87,7 @@ public class FilePipeSource implements GsonPostProcessable {
         if (CollectionUtils.isEmpty(fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 1))) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
             try {
-                List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc);
+                List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc, true);
                 List<PipeFileRecord> records =
                         ListUtils.emptyIfNull(files).stream()
                                 .map(PipeFileRecord::fromHdfsFile)
