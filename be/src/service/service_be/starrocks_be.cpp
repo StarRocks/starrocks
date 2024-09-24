@@ -119,7 +119,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << "BE start step " << start_step++ << ": jdbc driver manager init successfully";
 
     // init network option
-    if (!BackendOptions::init()) {
+    if (!BackendOptions::init(as_cn)) {
         exit(-1);
     }
     LOG(INFO) << "BE start step " << start_step++ << ": backend network options init successfully";

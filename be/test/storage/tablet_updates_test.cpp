@@ -27,6 +27,7 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "script/script.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
@@ -1061,6 +1062,12 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     auto rs0 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
     ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    string o;
+    ASSERT_TRUE(execute_script(fmt::format("StorageEngine.reset_delvec({}, {}, 2)", _tablet->tablet_id(), 0), o).ok());
+    ASSERT_TRUE(execute_script("System.print(ExecEnv.grep_log_as_string(0,0,\"I\",\"tablet_manager\",1))", o).ok());
+    LOG(INFO) << "grep log: " << o;
+
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
