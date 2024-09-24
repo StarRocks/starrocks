@@ -1,4 +1,4 @@
--- name: test_update_starlet_config
+-- name: test_update_starlet_config @cloud
 
 update information_schema.be_configs set value = "32" where name = "starlet_cache_thread_num";
 -- result:
