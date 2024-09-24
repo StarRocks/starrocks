@@ -23,6 +23,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.naming.NamingEnumeration;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.SearchControls;
@@ -68,16 +71,39 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
             SearchControls searchControls = new SearchControls();
             searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
             String searchFilter = "(" + securityIntegration.getLdapUserSearchAttr() + "=" + username + ")";
-            results = rootCtx.search(securityIntegration.getLdapBindBaseDn(), searchFilter, searchControls);
+            // In case of PartialResultException, we support multi base dn to search from,
+            // i.e. the base dn property of security integration can be configured with
+            // multi specific DNs, separated by ';'.
+            String baseDnPropVal = securityIntegration.getLdapBindBaseDn();
+            Set<String> baseDnSet = Arrays.stream(baseDnPropVal.split(";"))
+                    .map(String::trim)
+                    .collect(Collectors.toSet());
+            String currentBaseDn = null;
+            for (String baseDn : baseDnSet) {
+                LOG.debug("searching user {} with baseDn {}", searchFilter, baseDn);
+                currentBaseDn = baseDn;
+                try {
+                    results = rootCtx.search(baseDn, searchFilter, searchControls);
+                } catch (Exception e) {
+                    LOG.info("searching user {} from {} failed with exception, error: {}",
+                            searchFilter, baseDn, e.getMessage());
+                    continue;
+                }
+                // If we find the user from this base dn, loop ends.
+                if (results.hasMore()) {
+                    break;
+                }
+            }
 
             String userDn;
             SearchResult searchResult = null;
-            while (results.hasMore()) {
+            while (results != null && results.hasMore()) {
                 if (searchResult != null) {
                     throw new Exception(
                             String.format("Got more than one search entry from ldap server for user %s" +
-                                            " with filter %s, previous: %s, current: %s, security integration: %s",
-                                    username, searchFilter, searchResult, results.next().toString(), securityIntegration));
+                                            " with filter %s, previous: %s, current: %s, security integration: %s," +
+                                            " current using baseDn: %s", username, searchFilter, searchResult,
+                                    results.next().toString(), securityIntegration, currentBaseDn));
                 } else {
                     searchResult = results.next();
                 }

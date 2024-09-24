@@ -56,7 +56,7 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
                         return authenticatedUser;
                     }
                 } catch (AuthenticationException e) {
-                    LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
+                    LOG.info("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
                             remoteUser, remoteHost, securityIntegration, e.getMessage());
                 }
             } else {
