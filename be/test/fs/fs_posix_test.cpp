@@ -321,6 +321,7 @@ TEST_F(PosixFileSystemTest, create_dir_recursive) {
     // Clean.
     ASSERT_OK(FileSystem::Default()->delete_dir_recursive(dir_path));
     ASSERT_TRUE(FileSystem::Default()->path_exists(dir_path).is_not_found());
+    ASSERT_TRUE(std::filesystem::remove("./ut_dir/fs_posix/soft_link_to_d"));
 }
 
 TEST_F(PosixFileSystemTest, iterate_dir2) {
