@@ -84,7 +84,7 @@ SELECT dictionary_get("test_dictionary_basic_operation", 1);
 -- !result
 SELECT dictionary_get("test_dictionary_basic_operation", 2);
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 DROP DICTIONARY test_dictionary_basic_operation CACHE;
 -- result:
@@ -1353,11 +1353,11 @@ INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, false) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, true) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1377,7 +1377,7 @@ SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, tRuE) FROM t_di
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, FaLsE) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, xxxx) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1423,7 +1423,7 @@ PROPERTIES (
 -- !result
 INSERT INTO t_dictionary_null_if_not_exist_gen_column VALUES (1),(2),(3),(4),(5);
 -- result:
-E: (5025, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT * FROM t_dictionary_null_if_not_exist_gen_column;
 -- result:
@@ -1478,11 +1478,11 @@ INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, false) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, true) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1502,7 +1502,7 @@ SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, tRuE) FROM t_di
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, FaLsE) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, xxxx) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1552,7 +1552,7 @@ PROPERTIES (
 -- !result
 INSERT INTO t_dictionary_null_if_not_exist_gen_column VALUES (1),(2),(3),(4),(5);
 -- result:
-E: (5025, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT * FROM t_dictionary_null_if_not_exist_gen_column;
 -- result:

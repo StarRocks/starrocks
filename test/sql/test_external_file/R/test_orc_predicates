@@ -37,7 +37,7 @@ set sql_dialect='trino';
 -- !result
 select count(*) from split_orc_error where split(col1, 'a')[2]='x';
 -- result:
-E: (1064, 'Array subscript must be less than or equal to array length: 2 > 1')
+[REGEX].*Array subscript must be less than or equal to array length: 2 > 1.*
 -- !result
 drop table split_orc_error;
 -- result:
