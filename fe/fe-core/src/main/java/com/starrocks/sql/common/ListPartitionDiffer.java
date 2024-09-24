@@ -29,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
@@ -60,15 +61,29 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      */
     public static Map<String, PListCell> diffList(Map<String, PListCell> srcListMap,
                                                   Map<String, PListCell> dstListMap) {
-
         Map<String, PListCell> result = Maps.newTreeMap();
+        // PListCell may contain multi values, we need to ensure they are not duplicated from each other
+        Map<PListAtom, PListCell> dstAtomMaps = Maps.newHashMap();
+        dstListMap.values().stream()
+                .forEach(l -> l.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, l)));
         for (Map.Entry<String, PListCell> srcEntry : srcListMap.entrySet()) {
             String key = srcEntry.getKey();
             PListCell srcItem = srcEntry.getValue();
             if (srcItem.equals(dstListMap.get(key))) {
                 continue;
             }
-            result.put(key, srcEntry.getValue());
+            // distinct atoms
+            Set<PListAtom> srcAtoms = srcItem.toAtoms();
+            List<PListAtom> srcDistinctAtoms = srcAtoms.stream()
+                            .filter(x -> !dstAtomMaps.containsKey(x))
+                                    .collect(Collectors.toList());
+            if (srcDistinctAtoms.isEmpty()) {
+                continue;
+            }
+            dstAtomMaps.putAll(srcDistinctAtoms.stream().collect(Collectors.toMap(x -> x, x -> srcItem)));
+            PListCell newValue =
+                    new PListCell(srcDistinctAtoms.stream().map(x -> x.getPartitionItem()).collect(Collectors.toList()));
+            result.put(key, newValue);
         }
         return result;
     }

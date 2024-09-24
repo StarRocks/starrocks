@@ -80,6 +80,16 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
                 .map(item -> new PListCell(ImmutableList.of(item)))
                 .collect(Collectors.toSet());
     }
+
+    public Set<PListAtom> toAtoms() {
+        if (partitionItems == null) {
+            return Sets.newHashSet();
+        }
+        return partitionItems.stream()
+                .map(item -> new PListAtom(item))
+                .collect(Collectors.toSet());
+    }
+
     /**
      * Add a list of partition items as the partition values
      * @param items new partition items

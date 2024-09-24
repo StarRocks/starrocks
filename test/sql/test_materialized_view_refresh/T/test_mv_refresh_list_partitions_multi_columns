@@ -1,0 +1,60 @@
+-- name: test_mv_refresh_list_partitions_multi_columns
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+    dt varchar(20),
+    province string,
+    num int
+)
+DUPLICATE KEY(dt)
+PARTITION BY LIST(`dt`, `province`)
+(
+    PARTITION `p1` VALUES IN (("2020-07-01", "beijing"), ("2020-07-02", "beijing")),
+    PARTITION `p2` VALUES IN (("2020-07-01", "chengdu"), ("2020-07-03", "chengdu")),
+    PARTITION `p3` VALUES IN (("2020-07-02", "hangzhou"), ("2020-07-04", "hangzhou"))
+);
+INSERT INTO t1 VALUES 
+    ("2020-07-01", "beijing",  1), ("2020-07-01", "chengdu",  2),
+    ("2020-07-02", "beijing",  3), ("2020-07-02", "hangzhou", 4),
+    ("2020-07-03", "chengdu",  1),
+    ("2020-07-04", "hangzhou", 1);
+
+-- test list partition with multi columns & duplicate single values
+CREATE MATERIALIZED VIEW mv1 
+    PARTITION BY dt
+    REFRESH DEFERRED MANUAL 
+    PROPERTIES (
+        'partition_refresh_number' = '-1',
+        "replication_num" = "1"
+    )
+    AS SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province;
+;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+select * from mv1 order by dt, province;
+function: print_hit_materialized_view("SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province order by dt, province;", "mv1")
+SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province order by dt, province;
+
+INSERT INTO t1 VALUES 
+    ("2020-07-01", "beijing",  1), ("2020-07-01", "chengdu",  2),
+    ("2020-07-02", "beijing",  3), ("2020-07-02", "hangzhou", 4);
+SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province order by dt, province;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by dt, province;
+
+function: print_hit_materialized_view("SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province order by dt, province;", "mv1")
+SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province order by dt, province;
+ALTER TABLE t1 ADD PARTITION p4 VALUES in (('2020-07-02', 'shenzhen'));
+ALTER TABLE t1 ADD PARTITION p5 VALUES in (('2020-07-05', 'shenzhen'));
+
+INSERT INTO t1 VALUES 
+    ("2020-07-02", "shenzhen",  3), ("2020-07-05", "shenzhen", 4);
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+select * from mv1 order by dt, province;
+function: print_hit_materialized_view("SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province order by dt, province;", "mv1")
+SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province order by dt, province;
+
+drop materialized view mv1;
+drop table t1;
