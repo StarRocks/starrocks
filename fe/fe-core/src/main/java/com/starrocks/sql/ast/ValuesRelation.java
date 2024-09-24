@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Type;
@@ -26,6 +27,10 @@ import java.util.List;
 
 public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
+
+    // for list files
+    // rows may be empty, and can not get output column type from rows.
+    private final List<Type> outputColumnTypes;
 
     /*
         isNullValues means a statement without from or from dual, add a single row of null values here,
@@ -57,6 +62,14 @@ public class ValuesRelation extends QueryRelation {
         super(pos);
         this.rows = new ArrayList<>(rows);
         this.explicitColumnNames = explicitColumnNames;
+        this.outputColumnTypes = Lists.newArrayList();
+    }
+
+    public ValuesRelation(List<List<Expr>> rows, List<String> explicitColumnNames, List<Type> outputColumnTypes) {
+        super(NodePosition.ZERO);
+        this.rows = new ArrayList<>(rows);
+        this.explicitColumnNames = explicitColumnNames;
+        this.outputColumnTypes = outputColumnTypes;
     }
 
     public void addRow(ArrayList<Expr> row) {
@@ -74,6 +87,10 @@ public class ValuesRelation extends QueryRelation {
     @Override
     public List<Expr> getOutputExpression() {
         return rows.get(0);
+    }
+
+    public List<Type> getOutputColumnTypes() {
+        return outputColumnTypes;
     }
 
     public void setNullValues(boolean nullValues) {
