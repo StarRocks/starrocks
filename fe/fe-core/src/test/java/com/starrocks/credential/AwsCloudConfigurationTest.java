@@ -15,20 +15,27 @@
 package com.starrocks.credential;
 
 import com.staros.proto.FileStoreInfo;
-import com.starrocks.credential.aws.AWSCloudConfiguration;
-import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudCredential;
+import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.Assert;
 import org.junit.Test;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
-public class AWSCloudConfigurationTest {
+public class AwsCloudConfigurationTest {
 
     @Test
-    public void testUseAWSSDKDefaultBehavior() {
+    public void testUseAwsSDKDefaultBehavior() throws Exception {
         // Test hadoop configuration
         Map<String, String>  properties = new HashMap<>();
         properties.put("aws.s3.use_aws_sdk_default_behavior", "true");
@@ -36,12 +43,38 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider",
+        Assert.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
                 configuration.get("fs.s3a.aws.credentials.provider"));
+        S3AFileSystem fs = (S3AFileSystem) FileSystem.get(new URI("s3://hi/a.parquet"), configuration);
+        AWSCredentialProviderList list =  fs.shareCredentials("ut");
+        String previousProviderName = list.getProviders().get(0).getClass().getName();
+        int previousHashCode = list.getProviders().get(0).hashCode();
+        fs.close();
+
+        fs = (S3AFileSystem) FileSystem.get(new URI("s3://hi/a.parquet"), configuration);
+        list =  fs.shareCredentials("ut");
+        String currentProviderName = list.getProviders().get(0).getClass().getName();
+        int currentHashCode = list.getProviders().get(0).hashCode();
+        fs.close();
+
+        // Make sure two DefaultCredentialsProviders are the same class
+        Assert.assertEquals(previousProviderName, currentProviderName);
+        // Make sure the provider is DefaultCredentialsProvider
+        Assert.assertEquals(DefaultCredentialsProvider.class.getName(), previousProviderName);
+        // Make sure two DefaultCredentialsProviders are different instances
+        Assert.assertNotEquals(previousHashCode, currentHashCode);
     }
 
     @Test
-    public void testUseAWSSDKDefaultBehaviorPlusAssumeRole() {
+    public void testAwsDefaultCredentialsProvider() {
+        OverwriteAwsDefaultCredentialsProvider provider = new OverwriteAwsDefaultCredentialsProvider();
+        AwsCredentials credentials = provider.resolveCredentials();
+        Assert.assertNull(credentials.accessKeyId());
+        Assert.assertNull(credentials.secretAccessKey());
+    }
+
+    @Test
+    public void testUseAwsSDKDefaultBehaviorPlusAssumeRole() {
         // Test hadoop configuration
         Map<String, String>  properties = new HashMap<>();
         properties.put("aws.s3.use_aws_sdk_default_behavior", "true");
@@ -50,7 +83,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider",
+        Assert.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
                 configuration.get("fs.s3a.assumed.role.credentials.provider"));
         Assert.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
@@ -63,7 +96,7 @@ public class AWSCloudConfigurationTest {
         hiveConf.set("aws.glue.access_key", "ak");
         hiveConf.set("aws.glue.secret_key", "sk");
         hiveConf.set("aws.glue.region", "us-west-1");
-        AWSCloudCredential awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
+        AwsCloudCredential awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
         Assert.assertNotNull(awsCloudCredential);
         Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                 "useInstanceProfile=false, accessKey='ak', secretKey='sk', sessionToken='', iamRoleArn='', " +
@@ -76,7 +109,7 @@ public class AWSCloudConfigurationTest {
     }
 
     @Test
-    public void testForAWSRegion() {
+    public void testForAwsRegion() {
         Map<String, String>  properties = new HashMap<>();
         properties.put("aws.s3.access_key", "ak");
         properties.put("aws.s3.secret_key", "sk");
@@ -124,14 +157,14 @@ public class AWSCloudConfigurationTest {
         hiveConf.set("aws.glue.iam_role_arn", "arn");
         hiveConf.set("aws.glue.sts.endpoint", "endpoint");
         {
-            AWSCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
+            AwsCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assert.assertNotNull(credential);
             Assert.assertThrows(NullPointerException.class, credential::generateAWSCredentialsProvider);
         }
 
         hiveConf.set("aws.glue.sts.region", "region");
         {
-            AWSCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
+            AwsCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assert.assertNotNull(credential);
         }
     }
@@ -148,7 +181,7 @@ public class AWSCloudConfigurationTest {
             CloudConfiguration cloudConfiguration =
                     CloudConfigurationFactory.buildCloudConfigurationForStorage(properties, true);
             Assert.assertNotNull(cloudConfiguration);
-            Assert.assertTrue(cloudConfiguration instanceof AWSCloudConfiguration);
+            Assert.assertTrue(cloudConfiguration instanceof AwsCloudConfiguration);
             FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
             Assert.assertFalse(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
             Assert.assertEquals(0, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
@@ -158,7 +191,7 @@ public class AWSCloudConfigurationTest {
         {
             CloudConfiguration cloudConfiguration =
                     CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
-            Assert.assertTrue(cloudConfiguration instanceof AWSCloudConfiguration);
+            Assert.assertTrue(cloudConfiguration instanceof AwsCloudConfiguration);
             FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
             Assert.assertTrue(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
             // set default to 256
@@ -182,7 +215,7 @@ public class AWSCloudConfigurationTest {
         {
             CloudConfiguration cloudConfiguration =
                     CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
-            Assert.assertTrue(cloudConfiguration instanceof AWSCloudConfiguration);
+            Assert.assertTrue(cloudConfiguration instanceof AwsCloudConfiguration);
             FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
             Assert.assertTrue(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
             Assert.assertEquals(1024, fsInfo.getS3FsInfo().getNumPartitionedPrefix());

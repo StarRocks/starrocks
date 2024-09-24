@@ -17,8 +17,8 @@ package com.starrocks.credential;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
-import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
-import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.aws.AwsCloudConfigurationProvider;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
@@ -34,7 +34,7 @@ import java.util.Map;
 public class CloudConfigurationFactory {
 
     static ImmutableList<CloudConfigurationProvider> cloudConfigurationFactoryChain = ImmutableList.of(
-            new AWSCloudConfigurationProvider(),
+            new AwsCloudConfigurationProvider(),
             new AzureCloudConfigurationProvider(),
             new GCPCloudConfigurationProvoder(),
             new AliyunCloudConfigurationProvider(),
@@ -43,7 +43,7 @@ public class CloudConfigurationFactory {
             (Map<String, String> properties) -> new CloudConfiguration());
 
     static ImmutableList<CloudConfigurationProvider> strictCloudConfigurationFactoryChain = ImmutableList.of(
-            new AWSCloudConfigurationProvider(),
+            new AwsCloudConfigurationProvider(),
             new AzureCloudConfigurationProvider(),
             new GCPCloudConfigurationProvoder(),
             new AliyunCloudConfigurationProvider(),
@@ -72,10 +72,10 @@ public class CloudConfigurationFactory {
         return null;
     }
 
-    public static AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+    public static AwsCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
         for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
-            if (factory instanceof AWSCloudConfigurationProvider) {
-                AWSCloudConfigurationProvider provider = ((AWSCloudConfigurationProvider) factory);
+            if (factory instanceof AwsCloudConfigurationProvider) {
+                AwsCloudConfigurationProvider provider = ((AwsCloudConfigurationProvider) factory);
                 return provider.buildGlueCloudCredential(hiveConf);
             }
         }
