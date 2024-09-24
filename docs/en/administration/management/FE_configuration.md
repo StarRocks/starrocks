@@ -1313,7 +1313,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether or not to strictly check the datatype length consistency when activating an invalid materialized view. When set to False, the activation of the materialized view is not affected if the length of the datatype of the base table has changed.
+- Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
 - Introduced in: v3.3.4
 
 <!--
