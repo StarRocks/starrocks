@@ -714,7 +714,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### 为 View Delta Join 查询改写定义 Unique Key 和外键约束
 
-要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
+要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
 
 ```SQL
 PROPERTIES (

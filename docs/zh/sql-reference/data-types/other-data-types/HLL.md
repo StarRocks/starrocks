@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 描述
 
-HyperLogLog 类型，用于近似去重。详细的使用方法请参考 [使用 HyperLogLog 实现近似去重](../../../using_starrocks/Using_HLL.md)。
+HyperLogLog 类型，用于近似去重。详细的使用方法请参考 [使用 HyperLogLog 实现近似去重](../../../using_starrocks/distinct_values/Using_HLL.md)。
 
 HLL 是基于 HyperLogLog 算法的工程实现，用于保存 HyperLogLog 计算过程的中间结果，HLL 类型的列只能作为表的 value 列类型，通过聚合来不断的减少数据量，以此来实现加快查询的目的。基于 HLL 到的是一个估算结果，误差大概在 1% 左右。
 

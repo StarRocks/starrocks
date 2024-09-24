@@ -606,7 +606,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### Define Unique Key constraints and Foreign Key constraints for View Delta Join query rewrite
 
-To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) for further information.
+To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) for further information.
 
 ```SQL
 PROPERTIES (

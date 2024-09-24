@@ -17,7 +17,7 @@ This function has three variations:
 
 - `COUNT(DISTINCT expr)` counts the number of distinct non-NULL values in a column.
 
-`COUNT(DISTINCT expr)` is used for exact count distinct. If you require higher count distinct performance, see [Use bitmap for exact count discount](../../../using_starrocks/Using_bitmap.md).
+`COUNT(DISTINCT expr)` is used for exact count distinct. If you require higher count distinct performance, see [Use bitmap for exact count discount](../../../using_starrocks/distinct_values/Using_bitmap.md).
 
 From StarRocks 2.4 onwards, you can use multiple COUNT(DISTINCT) in one statement.
 

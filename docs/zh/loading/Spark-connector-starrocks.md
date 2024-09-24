@@ -536,7 +536,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### 导入至 BITMAP 列
 
-`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/Using_bitmap.md)。
+`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/distinct_values/Using_bitmap.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `BITMAP` 列中。**自版本 1.1.1 起支持导入至 `BITMAP` 列**。
 
@@ -605,7 +605,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### 导入至 HLL 列
 
-`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../using_starrocks/Using_HLL.md)。
+`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../using_starrocks/distinct_values/Using_HLL.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `HLL` 列中。**自版本 1.1.1 起支持导入至 `HLL` 列**。
 
