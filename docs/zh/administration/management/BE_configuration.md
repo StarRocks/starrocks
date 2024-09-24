@@ -3974,27 +3974,27 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值：true
 - 类型：Boolean
-- 单位：
+- 单位：-
 - 是否动态：否
-- 描述：是否使用block buffer来优化datacache效率。当启用block buffer时，通过每次从datacache中读取完整的block数据并缓存在临时buffer中，从而减少频繁读取缓存带来的额外开销。
+- 描述：是否启用 Block Buffer 优化 Data Cache 效率。当启用 Block Buffer 时，系统会从 Data Cache 中读取完整的 Block 数据并缓存在临时 Buffer 中，从而减少频繁读取缓存带来的额外开销。
 - 引入版本：v3.2.0
 
 ##### datacache_tiered_cache_enable
 
 - 默认值：true
 - 类型：Boolean
-- 单位：
+- 单位：-
 - 是否动态：否
-- 描述：datacache是否使用分层模式。当启用分层模式时，datacache配置的的内存和磁盘构成两级缓存，磁盘的数据变热时会自动提升到内存缓存，内存缓存中的数据变冷时自动下沉的磁盘。当不启用分层模式时，datacache配置的内存和磁盘构成两个独立的缓存空间，并分别缓存不同类型数据，两者之间不进行数据流动。
+- 描述：是否为 Data Cache 启用分层模式。当启用分层模式时，Data Cache 配置的的内存和磁盘构成两级缓存，磁盘数据变为热数据时会自动载入到内存缓存，内存缓存中的数据变冷时自动落至磁盘。当不启用分层模式时，为 Data Cache 配置的内存和磁盘构成两个独立的缓存空间，并分别缓存不同类型数据，两者之间不进行数据流动。
 - 引入版本：v3.2.5
 
 ##### query_max_memory_limit_percent
 
 - 默认值：90
 - 类型：Int
-- 单位：
+- 单位：-
 - 是否动态：否
-- 描述：query pool能够使用的最大内存上限，以Process内存上限的百分比来表示。
+- 描述：Query Pool 能够使用的最大内存上限。以 Process 内存上限的百分比来表示。
 - 引入版本：v3.1.0
 
 <!--
