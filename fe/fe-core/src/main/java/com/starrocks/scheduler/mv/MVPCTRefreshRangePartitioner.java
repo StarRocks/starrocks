@@ -229,7 +229,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             }
         }
 
-        // check related partition table
+        // check the related partition table
         Set<String> needRefreshMvPartitionNames = getMvPartitionNamesToRefresh(mvRangePartitionNames);
         if (needRefreshMvPartitionNames.isEmpty()) {
             LOG.info("No need to refresh materialized view partitions, mv: {}", mv.getName());
