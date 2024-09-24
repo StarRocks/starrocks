@@ -22,7 +22,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.ListUtils;
@@ -38,7 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class BasicStatsMeta implements Writable, GsonPostProcessable {
+public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
     private long dbId;
 
@@ -70,8 +69,14 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
     @SerializedName("deltaRows")
     private long deltaRows;
 
+    // TODO: use ColumnId
     @SerializedName("columnStats")
     private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
+
+    // Used for deserialization
+    public BasicStatsMeta() {
+        columnStatsMetaMap = Maps.newConcurrentMap();
+    }
 
     public BasicStatsMeta(long dbId, long tableId, List<String> columns,
                           StatsConstants.AnalyzeType type,
@@ -238,13 +243,6 @@ public class BasicStatsMeta implements Writable, GsonPostProcessable {
 
     public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        if (columnStatsMetaMap == null) {
-            columnStatsMetaMap = Maps.newConcurrentMap();
-        }
     }
 
     public BasicStatsMeta clone() {
