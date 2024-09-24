@@ -181,4 +181,54 @@ TEST_F(AvroAddNumericColumnTest, test_add_int64_lowerbound) {
     ASSERT_EQ("[-9223372036854775808]", column->debug_string());
 }
 
+TEST_F(AvroAddNumericColumnTest, test_add_int) {
+    std::string schema_path = "./be/test/formats/test_data/avro/single_int_schema.json";
+    AvroHelper avro_helper;
+    init_avro_value(schema_path, avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_set_int(&avro_helper.avro_val, 2147483647);
+
+    {
+        const auto column = FixedLengthColumn<int32_t>::create();
+        const TypeDescriptor desc(TYPE_INT);
+        const auto st = add_numeric_column<int32_t>(column.get(), desc, "f_int", avro_helper.avro_val);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ("[2147483647]", column->debug_string());
+    }
+
+    {
+        const auto column = FixedLengthColumn<int16_t>::create();
+        const TypeDescriptor desc(TYPE_SMALLINT);
+        const auto st = add_numeric_column<int16_t>(column.get(), desc, "f_smallint", avro_helper.avro_val);
+        ASSERT_TRUE(st.is_invalid_argument());
+    }
+
+    {
+        const auto column = FixedLengthColumn<int64_t>::create();
+        const TypeDescriptor desc(TYPE_BIGINT);
+        const auto st = add_numeric_column<int64_t>(column.get(), desc, "f_bigint", avro_helper.avro_val);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ("[2147483647]", column->debug_string());
+    }
+
+    {
+        const auto column = FixedLengthColumn<double>::create();
+        const TypeDescriptor desc(TYPE_DOUBLE);
+        const auto st = add_numeric_column<double>(column.get(), desc, "f_double", avro_helper.avro_val);
+        ASSERT_TRUE(st.ok());
+    }
+
+    {
+        const auto column = FixedLengthColumn<float>::create();
+        const TypeDescriptor desc(TYPE_FLOAT);
+        const auto st = add_numeric_column<float>(column.get(), desc, "f_float", avro_helper.avro_val);
+        ASSERT_TRUE(st.ok());
+    }
+}
+
 } // namespace starrocks
