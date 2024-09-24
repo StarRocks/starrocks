@@ -86,6 +86,12 @@ public:
 
     Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
 
+    // Use this function instead of get_tablet_metadata where you just need to check if tablet metadata exists
+    Status tablet_metadata_exists(int64_t tablet_id, int64_t version);
+
+    // Do not use this function except in a list dir
+    Status tablet_metadata_exists(const std::string& path);
+
     Status put_txn_log(const TxnLog& log);
 
     Status put_txn_log(const TxnLogPtr& log);
