@@ -1606,7 +1606,7 @@ void PrimaryIndex::reset_cancel_major_compaction() {
 Status PrimaryIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
     if (_persistent_index != nullptr) {
         RETURN_IF_ERROR(_persistent_index->pk_dump(dump, dump_pb));
-    } else {
+    } else if (_pkey_to_rssid_rowid != nullptr) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
         level->set_filename("memory primary index");
         RETURN_IF_ERROR(_pkey_to_rssid_rowid->pk_dump(dump, level));
