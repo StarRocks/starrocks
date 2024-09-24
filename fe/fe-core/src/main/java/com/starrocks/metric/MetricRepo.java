@@ -89,6 +89,7 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public final class MetricRepo {
@@ -230,16 +231,6 @@ public final class MetricRepo {
 
         // capacity
         generateBackendsTabletMetrics();
-
-        // connections
-        GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
-                "connection_total", MetricUnit.CONNECTIONS, "total connections") {
-            @Override
-            public Integer getValue() {
-                return ExecuteEnv.getInstance().getScheduler().getConnectionNum();
-            }
-        };
-        STARROCKS_METRIC_REGISTER.addMetric(connections);
 
         // journal id
         GaugeMetric<Long> maxJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
@@ -927,6 +918,10 @@ public final class MetricRepo {
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
+
+        //collect connections for per user
+        collectUserConnMetrics(visitor);
+
         // collect starmgr related metrics as well
         StarMgrServer.getCurrentState().visitMetrics(visitor);
 
@@ -997,6 +992,33 @@ public final class MetricRepo {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static void collectMemoryUsageMetrics(MetricVisitor visitor) {
+        for (GaugeMetricImpl<Long> metric : GAUGE_MEMORY_USAGE_STATS) {
+            visitor.visit(metric);
+        }
+        for (GaugeMetricImpl<Long> metric : GAUGE_OBJECT_COUNT_STATS) {
+            visitor.visit(metric);
+        }
+    }
+
+    // collect connections of per user
+    private static void collectUserConnMetrics(MetricVisitor visitor) {
+
+        Map<String, AtomicInteger> userConnectionMap = ExecuteEnv.getInstance().getScheduler().getUserConnectionMap();
+
+        userConnectionMap.forEach((username, connValue) -> {
+            GaugeMetricImpl<Integer> metricConnect =
+                    new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
+                        "total connection");
+            metricConnect.addLabel(new MetricLabel("user", username));
+            metricConnect.setValue(connValue.get());
+            visitor.visit(metricConnect);
+        });
+    }
+
+>>>>>>> 62d2eeaf6a ([Enhancement] add metrics for user connections (#51226))
     public static synchronized List<Metric> getMetricsByName(String name) {
         return STARROCKS_METRIC_REGISTER.getMetricsByName(name);
     }

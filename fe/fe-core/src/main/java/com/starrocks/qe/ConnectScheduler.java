@@ -203,6 +203,10 @@ public class ConnectScheduler {
     public int getConnectionNum() {
         return numberConnection.get();
     }
+    
+    public Map<String, AtomicInteger> getUserConnectionMap() {
+        return connCountByUser;
+    }
 
     private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext,
                                                                        String currUser,
