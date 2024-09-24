@@ -4029,11 +4029,11 @@ None	None
 -- !result
 select d_6, d_5, all_match(d_6,d_5, (x,y)->x >y) from array_test order by pk;
 -- result:
-E: (1064, "Input array element's size is not equal in array_map().")
+[REGEX].*Input array element's size is not equal in array_map().*
 -- !result
 select d_6, d_5, any_match(d_6,d_5, (x,y)->x >y) from array_test order by pk;
 -- result:
-E: (1064, "Input array element's size is not equal in array_map().")
+[REGEX].*Input array element's size is not equal in array_map().*
 -- !result
 select all_match((x,y) -> x < y, []);
 -- result:

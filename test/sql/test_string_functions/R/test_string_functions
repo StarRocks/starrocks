@@ -498,11 +498,11 @@ E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 67. D
 -- !result
 select ngram_search("chi","chi",0);
 -- result:
-E: (1064, "ngram search's third parameter must be a positive number")
+[REGEX].*ngram search's third parameter must be a positive number.*
 -- !result
 select ngram_search("chi","chi",-1);
 -- result:
-E: (1064, "ngram search's third parameter must be a positive number")
+[REGEX].*ngram search's third parameter must be a positive number.*
 -- !result
 select ngram_search(date('2020-06-23'), "2020", 4);
 -- result:
