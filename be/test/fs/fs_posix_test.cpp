@@ -35,6 +35,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <filesystem>
 
 #include "common/logging.h"
 #include "fs/encrypt_file.h"
@@ -312,8 +313,15 @@ TEST_F(PosixFileSystemTest, create_dir_recursive) {
     ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b/c").value());
     ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b/c/d").value());
 
+    // Create soft link ./ut_dir/fs_posix/soft_link_to_d -> ./ut_dir/fs_posix/a/b/c/d.
+    std::filesystem::create_directory_symlink(std::filesystem::absolute("./ut_dir/fs_posix/a/b/c/d"),
+                                              "./ut_dir/fs_posix/soft_link_to_d");
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive("./ut_dir/fs_posix/soft_link_to_d"));
+
+    // Clean.
     ASSERT_OK(FileSystem::Default()->delete_dir_recursive(dir_path));
     ASSERT_TRUE(FileSystem::Default()->path_exists(dir_path).is_not_found());
+    ASSERT_TRUE(std::filesystem::remove("./ut_dir/fs_posix/soft_link_to_d"));
 }
 
 TEST_F(PosixFileSystemTest, iterate_dir2) {
