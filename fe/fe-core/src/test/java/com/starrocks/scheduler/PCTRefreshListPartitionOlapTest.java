@@ -18,8 +18,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
@@ -1209,5 +1211,77 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                 "     partitions=2/4");
                     });
         });
+    }
+
+    @Test
+    public void testRefreshWithDuplicatedPartitions() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (\n" +
+                "    dt varchar(20),\n" +
+                "    province string,\n" +
+                "    num int\n" +
+                ")\n" +
+                "DUPLICATE KEY(dt)\n" +
+                "PARTITION BY LIST(`dt`, `province`)\n" +
+                "(\n" +
+                "    PARTITION `p1` VALUES IN ((\"2020-07-01\", \"beijing\"), (\"2020-07-02\", \"beijing\")),\n" +
+                "    PARTITION `p2` VALUES IN ((\"2020-07-01\", \"chengdu\"), (\"2020-07-03\", \"chengdu\")),\n" +
+                "    PARTITION `p3` VALUES IN ((\"2020-07-02\", \"hangzhou\"), (\"2020-07-04\", \"hangzhou\"))\n" +
+                ");");
+        executeInsertSql("INSERT INTO t1 VALUES \n" +
+                "    (\"2020-07-01\", \"beijing\",  1), (\"2020-07-01\", \"chengdu\",  2),\n" +
+                "    (\"2020-07-02\", \"beijing\",  3), (\"2020-07-02\", \"hangzhou\", 4),\n" +
+                "    (\"2020-07-03\", \"chengdu\",  1),\n" +
+                "    (\"2020-07-04\", \"hangzhou\", 1)\n" +
+                ";");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
+                "    PARTITION BY dt\n" +
+                "    REFRESH DEFERRED MANUAL \n" +
+                "    PROPERTIES (\n" +
+                "        'partition_refresh_number' = '-1',\n" +
+                "        \"replication_num\" = \"1\"\n" +
+                "    )\n" +
+                "    AS SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province;\n");
+        try {
+            starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;");
+            MaterializedView mv =
+                    ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable("test", "mv1"));
+            Assert.assertEquals(3, mv.getPartitions().size());
+            PartitionInfo partitionInfo = mv.getPartitionInfo();
+            Assert.assertTrue(partitionInfo instanceof ListPartitionInfo);
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            Map<Long, List<List<String>>> idToMultiValues = listPartitionInfo.getIdToMultiValues();
+            Assert.assertEquals(3, idToMultiValues.size());
+            Partition p1 = mv.getPartition("p1");
+            Partition p2 = mv.getPartition("p2");
+            Partition p3 = mv.getPartition("p3");
+            List<List<String>> p1Values = ImmutableList.of(ImmutableList.of("2020-07-01"), ImmutableList.of("2020-07-02"));
+            List<List<String>> p2Values = ImmutableList.of(ImmutableList.of("2020-07-03"));
+            List<List<String>> p3Values = ImmutableList.of(ImmutableList.of("2020-07-04"));
+            Assert.assertEquals(p1Values, idToMultiValues.get(p1.getId()));
+            Assert.assertEquals(p2Values, idToMultiValues.get(p2.getId()));
+            Assert.assertEquals(p3Values, idToMultiValues.get(p3.getId()));
+
+            // should not have any partitions to refresh after complete refresh
+            Task task = TaskBuilder.buildMvTask(mv, "test");
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            ExecPlan execPlan = getExecPlan(taskRun);
+            Assert.assertEquals(null, execPlan);
+
+            // update old partitions of base table
+            executeInsertSql("INSERT INTO t1 VALUES \n" +
+                    "    (\"2020-07-01\", \"beijing\",  1), (\"2020-07-01\", \"chengdu\",  2),\n" +
+                    "    (\"2020-07-02\", \"beijing\",  3), (\"2020-07-02\", \"hangzhou\", 4);\n");
+            PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
+            MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+            Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
+            MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
+            Assert.assertEquals("p1,p2,p3", message.getMvPartitionsToRefreshString());
+            Assert.assertEquals("{t1=[p1, p2, p3]}", message.getBasePartitionsToRefreshMapString());
+            starRocksAssert.dropTable("t1");
+            starRocksAssert.dropMaterializedView("mv1");
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
     }
 }
