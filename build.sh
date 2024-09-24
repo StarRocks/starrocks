@@ -173,6 +173,9 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
 if [[ -z ${JEMALLOC_DEBUG} ]]; then
     JEMALLOC_DEBUG=OFF
 fi
@@ -194,6 +197,9 @@ if [ -e /proc/cpuinfo ] ; then
     fi
     if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
+    fi
+    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
+        USE_BMI_2=OFF
     fi
 fi
 
@@ -285,6 +291,7 @@ echo "Get params:
     USE_AVX2                    -- $USE_AVX2
     USE_AVX512                  -- $USE_AVX512
     USE_SSE4_2                  -- $USE_SSE4_2
+    USE_BMI_2                   -- $USE_BMI_2
     JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
     PARALLEL                    -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
@@ -383,7 +390,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
-                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
+                  -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
