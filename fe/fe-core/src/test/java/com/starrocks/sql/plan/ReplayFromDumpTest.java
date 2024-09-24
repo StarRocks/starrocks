@@ -40,6 +40,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -174,6 +175,19 @@ public class ReplayFromDumpTest {
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
+=======
+import java.util.stream.Stream;
+
+public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
+    @Test
+    public void testForceRuleBasedRewrite() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"));
+>>>>>>> 61ebfc79f8 ([BugFix] Operator's statistics not be estimated during JoinReorder of table-pruning phase (#51304))
     }
 
     @Test
@@ -997,6 +1011,23 @@ public class ReplayFromDumpTest {
             Assert.assertTrue(execPlan.getFragments().stream().noneMatch(frag -> frag.getCacheParam() != null));
             Assert.assertTrue(
                     execPlan.getFragments().stream().anyMatch(frag -> !frag.getProbeRuntimeFilters().isEmpty()));
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
+    }
+
+    @Test
+    public void testPruneTableNPE() throws Exception {
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableCboTablePrune(true);
+            connectContext.getSessionVariable().setEnableRboTablePrune(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/prune_table_npe"),
+                            null, TExplainLevel.NORMAL);
+            long numHashJoins = Stream.of(replayPair.second.split("\n"))
+                    .filter(ln -> ln.contains("HASH JOIN")).count();
+            Assert.assertEquals(numHashJoins, 2);
         } finally {
             connectContext.getSessionVariable().replayFromJson(savedSv);
         }
