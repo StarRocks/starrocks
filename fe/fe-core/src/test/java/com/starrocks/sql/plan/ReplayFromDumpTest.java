@@ -33,6 +33,8 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.stream.Stream;
+
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testForceRuleBasedRewrite() throws Exception {
@@ -970,6 +972,23 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             Assert.assertTrue(execPlan.getFragments().stream().noneMatch(frag -> frag.getCacheParam() != null));
             Assert.assertTrue(
                     execPlan.getFragments().stream().anyMatch(frag -> !frag.getProbeRuntimeFilters().isEmpty()));
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
+    }
+
+    @Test
+    public void testPruneTableNPE() throws Exception {
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableCboTablePrune(true);
+            connectContext.getSessionVariable().setEnableRboTablePrune(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/prune_table_npe"),
+                            null, TExplainLevel.NORMAL);
+            long numHashJoins = Stream.of(replayPair.second.split("\n"))
+                    .filter(ln -> ln.contains("HASH JOIN")).count();
+            Assert.assertEquals(numHashJoins, 2);
         } finally {
             connectContext.getSessionVariable().replayFromJson(savedSv);
         }
