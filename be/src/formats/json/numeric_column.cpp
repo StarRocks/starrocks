@@ -31,7 +31,11 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
 #if defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
-    return check_number_overflow<FromType, ToType>(from);
+    // When the value is in the range [2^63, 2^64), FromType is uint64_t. In this case, using check_signed_number_overflow is fine:
+    // - If ToType is int8_t~int64_t, check_signed_number_overflow will return true.
+    // - If ToType is float, double or int128_t, check_signed_number_overflow will return false,
+    //   because the widening conversion branch is hit.
+    return check_signed_number_overflow<FromType, ToType>(from);
     DIAGNOSTIC_POP
 }
 

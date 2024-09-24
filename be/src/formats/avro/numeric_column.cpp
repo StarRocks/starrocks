@@ -30,7 +30,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
 #if defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
-    return check_number_overflow<FromType, ToType>(from);
+    return check_signed_number_overflow<FromType, ToType>(from);
     DIAGNOSTIC_POP
 }
 
