@@ -18,11 +18,10 @@ namespace starrocks {
 
 bool GlobalVariables::_is_init = false;
 
-Status GlobalVariables::init() {
+GlobalVariables::GlobalVariables() {
     _one_size_not_null_column = NullColumn::create(1, 0);
     _one_size_null_column = NullColumn::create(1, 1);
     _is_init = true;
-    return Status::OK();
 }
 
 } // namespace starrocks

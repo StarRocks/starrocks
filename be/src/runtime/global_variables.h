@@ -26,10 +26,10 @@ public:
         return &s_global_vars;
     }
 
-    GlobalVariables() = default;
+    GlobalVariables();
     ~GlobalVariables() { _is_init = false; }
 
-    Status init();
+    bool is_init() const { return _is_init; }
 
     const NullColumnPtr& one_size_not_null_column() const {
         DCHECK(_is_init);
@@ -42,7 +42,6 @@ public:
 
 private:
     static bool _is_init;
-
     NullColumnPtr _one_size_not_null_column;
     NullColumnPtr _one_size_null_column;
 };
