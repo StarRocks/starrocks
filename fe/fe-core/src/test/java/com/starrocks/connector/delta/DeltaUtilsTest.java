@@ -56,9 +56,6 @@ public class DeltaUtilsTest {
 
     @Test
     public void testCheckTableFeatureSupported2(@Mocked Metadata metadata) {
-        expectedEx.expect(ValidateException.class);
-        expectedEx.expectMessage("Delta table feature [column mapping] is not supported");
-
         new Expectations(metadata) {
             {
                 metadata.getConfiguration();

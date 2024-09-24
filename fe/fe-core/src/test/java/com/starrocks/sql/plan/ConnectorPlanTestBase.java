@@ -298,7 +298,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                     .build();
 
             StructType structType = new StructType(List.of(new StructField("col1",
-                            BasePrimitiveType.createPrimitive("int"), false),
+                            BasePrimitiveType.createPrimitive("integer"), false),
                     new StructField("col2", BasePrimitiveType.createPrimitive("string"), false)));
 
             List<String> partitionNames = new ArrayList<>();
