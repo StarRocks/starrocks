@@ -66,6 +66,8 @@ public:
 
     Status delete_metadata(int64_t version);
 
+    Status metadata_exists(int64_t version);
+
     Status put_txn_log(const TxnLog& log);
 
     Status put_txn_log(const TxnLogPtr& log);
