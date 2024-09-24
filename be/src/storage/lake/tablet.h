@@ -71,7 +71,13 @@ public:
 
     [[nodiscard]] Status delete_metadata(int64_t version);
 
+<<<<<<< HEAD
     [[nodiscard]] Status put_txn_log(const TxnLog& log);
+=======
+    Status metadata_exists(int64_t version);
+
+    Status put_txn_log(const TxnLog& log);
+>>>>>>> 801b191e99 ([Enhancement] Add tablet_metadata_exists to avoid not found exception (#51122))
 
     [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
