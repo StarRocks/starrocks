@@ -117,9 +117,9 @@ public:
 
     virtual size_t num_rows() const = 0;
 
-protected:
     virtual void on_shutdown() {}
 
+protected:
     void _gen_tablet_path();
 
     TabletState _state;
