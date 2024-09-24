@@ -3754,11 +3754,11 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
-            files.add(table.fileList());
+            files.add(table.loadFileList());
 
             long warehouseId = context.getConnectContext().getCurrentWarehouseId();
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
-                    "FileScanNode", files, table.fileList().size(), warehouseId);
+                    "FileScanNode", files, table.loadFileList().size(), warehouseId);
             List<BrokerFileGroup> fileGroups = new ArrayList<>();
 
             try {
