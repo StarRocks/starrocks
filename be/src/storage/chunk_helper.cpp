@@ -641,6 +641,7 @@ public:
 
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
+
         auto& columns = _segment_column->columns();
         size_t segment_size = _segment_column->segment_size();
         std::vector<ContainerT> buffers;
@@ -648,10 +649,27 @@ public:
             buffers.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_data());
         }
 
-        for (uint32_t i = _from; i < _size; i++) {
-            uint32_t idx = _indexes[i];
+        // reserve memory to avoid frequent allocation
+        if constexpr (std::is_same_v<ColumnT, BinaryColumn> || std::is_same_v<ColumnT, LargeBinaryColumn>) {
+            size_t bytes = 0;
+            for (uint32_t i = 0; i < _size; i++) {
+                uint32_t idx = _indexes[_from + i];
+                auto [segment_id, segment_offset] = _segment_address(idx);
+                Slice slice = (*buffers[segment_id])[segment_offset];
+                bytes += slice.get_size();
+            }
+            output->reserve(_size, bytes);
+        } else {
+            output->reserve(_size);
+        }
+
+        for (uint32_t i = 0; i < _size; i++) {
+            uint32_t idx = _indexes[_from + i];
             int segment_id = idx / segment_size;
             int segment_offset = idx % segment_size;
+            // It is supposed to call the non-virtual append
+            // void BinaryColumnBase::append(const Slice& str);
+            // void FixedLengthColumnBase::append(const T& value);
             output->append((*buffers[segment_id])[segment_offset]);
         }
         return {};
@@ -662,9 +680,11 @@ public:
     typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
+        output->reserve(_size);
+
         auto& columns = _segment_column->columns();
-        for (uint32_t i = _from; i < _size; i++) {
-            uint32_t idx = _indexes[i];
+        for (uint32_t i = 0; i < _size; i++) {
+            uint32_t idx = _indexes[_from + i];
             auto [segment_id, segment_offset] = _segment_address(idx);
             output->append(*columns[segment_id], segment_offset, 1);
         }
