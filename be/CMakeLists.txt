@@ -91,6 +91,8 @@ option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 option(USE_SSE4_2 "Build with SSE4.2 instruction" ON)
 
+option(USE_BMI_2 "Build with BMI2 instruction" ON)
+
 option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
@@ -244,6 +246,10 @@ foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
 endforeach()
 find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
+
+set(Poco_ROOT_DIR ${THIRDPARTY_DIR})
+find_package(Poco REQUIRED COMPONENTS Net NetSSL)
+include_directories(${Poco_INCLUDE_DIRS})
 
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
@@ -493,7 +499,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
 endif()
 
 # LLVM
-# TODO(yueyang): Adjust libraries during the implementation of JIT.
 set (LLVM_LIBRARIES
     LLVMRuntimeDyld
     LLVMBitstreamReader
@@ -553,6 +558,7 @@ foreach(lib IN ITEMS ${LLVM_LIBRARIES})
     add_library(${lib} STATIC IMPORTED GLOBAL)
     set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
 endforeach()
+
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
@@ -660,6 +666,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         # the compiler will define __AVX2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
     endif()
+    if (${USE_BMI_2})
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mbmi2")
+    endif()
     if (${USE_AVX512})
         # the compiler will define __AVX512F__ __AVX512BW__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
@@ -671,6 +680,11 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
+endif()
+
+if (STARROCKS_JIT_ENABLE)
+    message(STATUS "Enable JIT")
+    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -DSTARROCKS_JIT_ENABLE")
 endif()
 
 # For any gcc builds:
@@ -833,13 +847,19 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
 )
 set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::aws-crt-cpp)
 
+if (STARROCKS_JIT_ENABLE)
+    set(STARROCKS_DEPENDENCIES 
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        ${LLVM_LIBRARIES}
+        ${WL_END_GROUP}
+    )
+endif()
+
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     build_version
-    ${WL_START_GROUP}
-    ${LLVM_LIBRARIES}
-    ${WL_END_GROUP}
     ${WL_START_GROUP}
     clucene-core
     clucene-shared
@@ -858,6 +878,7 @@ set(STARROCKS_DEPENDENCIES
     lz4
     libevent
     curl
+    ${Poco_LIBRARIES}
     libz
     libbz2
     gflags
@@ -989,8 +1010,18 @@ set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
 
-if (NOT $ENV{STARROCKS_LINKER} STREQUAL "")
-    add_link_options("-fuse-ld=$ENV{STARROCKS_LINKER}")
+set (STARROCKS_LINKER "$ENV{STARROCKS_LINKER}")
+include(cmake_modules/FindGlibcVersion.cmake)
+
+if (GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
+    if (NOT DEFINED ${STARROCKS_LINKER} OR ${STARROCKS_LINKER} STREQUAL "")
+        set(STARROCKS_LINKER "gold")
+    endif()
+endif()
+message("using linker: ${STARROCKS_LINKER}")
+
+if (NOT STARROCKS_LINKER STREQUAL "")
+    add_link_options("-fuse-ld=${STARROCKS_LINKER}")
 endif ()
 
 if (${MAKE_TEST} STREQUAL "ON")
@@ -1034,7 +1065,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})

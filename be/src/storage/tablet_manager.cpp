@@ -438,6 +438,16 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
     } else {
         DCHECK_EQ(kKeepMetaAndFiles, flag);
+        {
+            // If the tablet is the primary key table, there might still be ongoing apply tasks.
+            // We should stop the background apply tasks before deleting it; otherwise, if a new tablet is created,
+            // there could be a scenario where apply tasks are executed simultaneously.
+            // e.g.
+            // 1. drop and clone a new tablet with the same tablet_id.
+            // 2. compact rocksdb meta and reload tablet again.
+            std::unique_lock l(dropped_tablet->get_header_lock());
+            dropped_tablet->on_shutdown();
+        }
     }
     // erase tablet from tablet map
     {
@@ -1006,6 +1016,69 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
     return Status::OK();
 }
 
+void TabletManager::sweep_shutdown_tablet(const DroppedTabletInfo& info,
+                                          std::vector<DroppedTabletInfo>& finished_tablets) {
+    auto& tablet = info.tablet;
+    // The current thread has two references: _shutdown_tablets[i] and tablets_to_checks[i], check
+    // if there is another thread has reference to the tablet, and if so, does not remove the tablet for now.
+    if (tablet.use_count() > 2) {
+        return;
+    }
+
+    if (tablet->updates() != nullptr) {
+        Status st = tablet->updates()->check_and_remove_rowset();
+        if (!st.ok()) {
+            LOG(WARNING) << "there are some rowsets still been referenced, drop tablet: " << tablet->tablet_id()
+                         << " later";
+            return;
+        }
+    }
+
+    bool remove_meta = false;
+    TabletMeta tablet_meta;
+    Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash(),
+                                                   &tablet_meta);
+    if (st.ok()) {
+        if (tablet_meta.tablet_uid() != tablet->tablet_uid()) {
+            finished_tablets.push_back(info);
+            LOG(INFO) << "Skipped remove tablet " << tablet_meta.tablet_id() << ": uid mismatch";
+            return;
+        }
+        if (tablet_meta.tablet_state() != TABLET_SHUTDOWN) { // This should not happen.
+            finished_tablets.push_back(info);
+            LOG(ERROR) << "Cannot remove normal state tablet " << tablet_meta.tablet_id();
+            return;
+        }
+        remove_meta = true;
+    } else if (!st.is_not_found()) {
+        LOG(ERROR) << "Fail to get tablet meta: " << st;
+        return;
+    }
+
+    if (info.flag == kMoveFilesToTrash) {
+        st = _move_tablet_directories_to_trash(tablet);
+    } else if (info.flag == kDeleteFiles) {
+        st = _remove_tablet_directories(tablet);
+    } else {
+        finished_tablets.push_back(info);
+        LOG(WARNING) << "Invalid flag " << info.flag;
+        return;
+    }
+
+    if (st.ok() || st.is_not_found()) {
+        finished_tablets.push_back(info);
+        LOG(INFO) << ((info.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
+    } else {
+        remove_meta = false;
+        LOG(WARNING) << "Fail to remove or move " << tablet->tablet_id_path() << " :" << st;
+    }
+
+    if (remove_meta) {
+        st = _remove_tablet_meta(tablet);
+        LOG_IF(ERROR, !st.ok()) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ": " << st;
+    }
+}
+
 Status TabletManager::start_trash_sweep() {
     {
         // we use this vector to save all tablet ptr for saving lock time.
@@ -1028,83 +1101,42 @@ Status TabletManager::start_trash_sweep() {
     }
 
     std::vector<DroppedTabletInfo> tablets_to_check;
+    std::vector<DroppedTabletInfo> tablets_redundant_to_check;
     {
         std::shared_lock l(_shutdown_tablets_lock);
         tablets_to_check.reserve(_shutdown_tablets.size());
         for (auto& [tablet_id, info] : _shutdown_tablets) {
             tablets_to_check.emplace_back(info);
         }
+
+        tablets_redundant_to_check.reserve(_shutdown_tablets_redundant_map.size());
+        for (auto& [tablet_uid, info] : _shutdown_tablets_redundant_map) {
+            tablets_redundant_to_check.emplace_back(info);
+        }
     }
 
-    std::vector<TTabletId> finished_tablets;
+    std::vector<DroppedTabletInfo> finished_tablets;
+    std::vector<DroppedTabletInfo> finished_tablets_redundant;
     finished_tablets.reserve(tablets_to_check.size());
+    finished_tablets_redundant.reserve(tablets_redundant_to_check.size());
 
     for (const auto& info : tablets_to_check) {
-        auto& tablet = info.tablet;
-        // The current thread has two references: _shutdown_tablets[i] and tablets_to_checks[i], check
-        // if there is another thread has reference to the tablet, and if so, does not remove the tablet for now.
-        if (tablet.use_count() > 2) {
-            continue;
-        }
-
-        if (tablet->updates() != nullptr) {
-            Status st = tablet->updates()->check_and_remove_rowset();
-            if (!st.ok()) {
-                LOG(WARNING) << "there are some rowsets still been referenced, drop tablet: " << tablet->tablet_id()
-                             << " later";
-                continue;
-            }
-        }
-
-        bool remove_meta = false;
-        TabletMeta tablet_meta;
-        Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash(),
-                                                       &tablet_meta);
-        if (st.ok()) {
-            if (tablet_meta.tablet_uid() != tablet->tablet_uid()) {
-                finished_tablets.push_back(tablet->tablet_id());
-                LOG(INFO) << "Skipped remove tablet " << tablet_meta.tablet_id() << ": uid mismatch";
-                continue;
-            }
-            if (tablet_meta.tablet_state() != TABLET_SHUTDOWN) { // This should not happen.
-                finished_tablets.push_back(tablet->tablet_id());
-                LOG(ERROR) << "Cannot remove normal state tablet " << tablet_meta.tablet_id();
-                continue;
-            }
-            remove_meta = true;
-        } else if (!st.is_not_found()) {
-            LOG(ERROR) << "Fail to get tablet meta: " << st;
-            break;
-        }
-
-        if (info.flag == kMoveFilesToTrash) {
-            st = _move_tablet_directories_to_trash(tablet);
-        } else if (info.flag == kDeleteFiles) {
-            st = _remove_tablet_directories(tablet);
-        } else {
-            finished_tablets.push_back(tablet->tablet_id());
-            LOG(WARNING) << "Invalid flag " << info.flag;
-            continue;
-        }
-
-        if (st.ok() || st.is_not_found()) {
-            finished_tablets.push_back(tablet->tablet_id());
-            LOG(INFO) << ((info.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
-        } else {
-            remove_meta = false;
-            LOG(WARNING) << "Fail to remove or move " << tablet->tablet_id_path() << " :" << st;
-        }
-
-        if (remove_meta) {
-            st = _remove_tablet_meta(tablet);
-            LOG_IF(ERROR, !st.ok()) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ": " << st;
-        }
+        sweep_shutdown_tablet(info, finished_tablets);
+    }
+    for (const auto& info : tablets_redundant_to_check) {
+        sweep_shutdown_tablet(info, finished_tablets_redundant);
     }
 
-    if (!finished_tablets.empty()) {
+    if (!finished_tablets.empty() || !finished_tablets_redundant.empty()) {
         std::unique_lock l(_shutdown_tablets_lock);
-        for (auto tablet_id : finished_tablets) {
-            _shutdown_tablets.erase(tablet_id);
+        for (const auto& tablet_info_finished : finished_tablets) {
+            auto& tablet_finished = tablet_info_finished.tablet;
+            _shutdown_tablets.erase(tablet_finished->tablet_id());
+        }
+
+        for (const auto& tablet_info_finished : finished_tablets_redundant) {
+            auto& tablet_finished = tablet_info_finished.tablet;
+            _shutdown_tablets_redundant_map.erase(tablet_finished->tablet_uid());
         }
     }
     return Status::OK();
@@ -1791,7 +1823,10 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
                 LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
             }
         }
+        auto drop_info_redundant = iter->second;
+        auto tablet_uid = (drop_info_redundant.tablet)->tablet_uid();
         _shutdown_tablets.erase(iter);
+        _shutdown_tablets_redundant_map.emplace(tablet_uid, std::move(drop_info_redundant));
     }
     _shutdown_tablets.emplace(tablet_id, drop_info);
 }

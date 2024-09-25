@@ -32,6 +32,7 @@ class SnmpMetrics;
 class QueryCacheMetrics;
 class VectorIndexCacheMetrics;
 class RuntimeFilterMetrics;
+class VectorIndexCacheMetrics;
 
 class MemoryMetrics {
 public:
@@ -61,7 +62,6 @@ public:
     METRIC_DEFINE_INT_GAUGE(short_key_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
@@ -69,23 +69,6 @@ public:
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
-
-    // column pool metrics.
-    METRIC_DEFINE_INT_GAUGE(column_pool_total_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_local_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_central_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_binary_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_uint8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int16_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int32_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int64_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int128_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_float_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_double_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_decimal_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_date_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_datetime_bytes, MetricUnit::BYTES);
 };
 
 class SystemMetrics {

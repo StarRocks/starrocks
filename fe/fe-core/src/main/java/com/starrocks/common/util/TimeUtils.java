@@ -44,7 +44,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -89,6 +89,13 @@ public class TimeUtils {
                     + "[\\-\\/\\s]?((0?[1-9])|([1-2][0-9])|(3[01])))|(((0?[469])|(11))[\\-\\/\\s]?"
                     + "((0?[1-9])|([1-2][0-9])|(30)))|(0?2[\\-\\/\\s]?((0?[1-9])|(1[0-9])|(2[0-8]))))))"
                     + "(\\s(((0?[0-9])|([1][0-9])|([2][0-3]))\\:([0-5]?[0-9])((\\s)|(\\:([0-5]?[0-9])))))?$");
+    
+    // A regular expressions that will support the pattern like ('Date/DateTime TimeZone').
+    // For example ('2024-09-09 11:40:40.123 Asia/Shanghai'), ('2024-09-09 Asia/Shanghai').
+    public static final Pattern DATETIME_WITH_TIME_ZONE_PATTERN =
+            Pattern.compile("(?<year>[-+]?\\d{4,})-(?<month>\\d{1,2})-(?<day>\\d{1,2})"
+                    + "( (?:(?<hour>\\d{1,2}):(?<minute>\\d{1,2})(?::(?<second>\\d{1,2})(?:\\.(?<fraction>\\d+))?)?)?"
+                    + "\\s*(?<timezone>.+)?)?");
 
     private static final Pattern TIMEZONE_OFFSET_FORMAT_REG = Pattern.compile("^[+-]{0,1}\\d{1,2}\\:\\d{2}$");
 
@@ -144,7 +151,7 @@ public class TimeUtils {
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
         } else {
-            timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
+            timezone = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
         }
         return TimeZone.getTimeZone(ZoneId.of(timezone, TIME_ZONE_ALIAS_MAP));
     }
@@ -353,8 +360,43 @@ public class TimeUtils {
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
         } else {
-            timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
+            timezone = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
         }
         return timezone;
+    }
+    
+    /**
+     * Parse the time zone of the given timestampLiteral
+     * using DATETIME_WITH_TIME_ZONE_PATTERN regular expressions
+     *
+     * @param value the value of the timestampLiteral
+     * @return `null` or zone id of the parsed timezone
+     */
+    public static ZoneId parseTimeZoneFromString(String value) {
+        Matcher matcher = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value);
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("Invalid TIMESTAMP:" + value);
+        }
+        String timeZone = matcher.group("timezone");
+        return timeZone == null ? null : ZoneId.of(timeZone);
+    }
+    
+    /**
+     * Parse the date or dateTime string of the given timestampLiteral
+     * using DATETIME_WITH_TIME_ZONE_PATTERN regular expressions
+     *
+     * @param value the value of the timestampLiteral
+     * @return the date or dateTime string
+     */
+    public static String parseDateTimeFromString(String value) {
+        Matcher matcher = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value);
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("Invalid TIMESTAMP:" + value);
+        }
+        int timezoneStart = matcher.start("timezone");
+        if (timezoneStart != -1) {
+            return value.substring(0, timezoneStart).trim();
+        }
+        return value;
     }
 }

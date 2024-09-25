@@ -272,13 +272,13 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 ### partition_desc
 
-支持三种分区方式，[表达式分区](../../../table_design/expression_partitioning.md)（推荐）、[Range 分区](../../../table_design/Data_distribution.md#range-分区) 和 [List 分区](../../../table_design/list_partitioning.md)。
+支持三种分区方式，[表达式分区](../../../table_design/data_distribution/expression_partitioning.md)（推荐）、[Range 分区](../../../table_design/data_distribution/Data_distribution.md#range-分区) 和 [List 分区](../../../table_design/data_distribution/list_partitioning.md)。
 
 使用 Range 分区时，提供三种创建方式，其语法、说明和示例如下：
 
 - **动态创建分区**
 
-    [动态分区](../../../table_design/dynamic_partitioning.md)提供了分区生命周期管理（TTL）。StarRocks 会自动提前创建新的分区，并删除过期的分区，以确保数据时效性。要启用这个功能，您可以在创建表时配置与动态分区相关的属性。
+    [动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)提供了分区生命周期管理（TTL）。StarRocks 会自动提前创建新的分区，并删除过期的分区，以确保数据时效性。要启用这个功能，您可以在创建表时配置与动态分区相关的属性。
 
 - **手动创建分区**
 
@@ -300,7 +300,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     使用指定的 key 列和指定的数值范围进行分区。
 
     - 分区名称的命名要求，参见[系统限制](../../System_limit.md)。
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
+    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
     - 分区为左闭右开区间，首个分区的左边界为最小值。
     - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
@@ -424,12 +424,12 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     说明：
     用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
 
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
+    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
     - 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
     - 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     - 仅支持指定一列作为分区列。
 
-    更多信息，请参见[批量创建分区](../../../table_design/Data_distribution.md#range-分区)。
+    更多信息，请参见[批量创建分区](../../../table_design/data_distribution/Data_distribution.md#range-分区)。
 
     示例：
 
@@ -468,9 +468,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   - 不支持主键表、更新表和聚合表。
   - 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
   - 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
-  更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
+  更多随机分桶的信息，请参见[随机分桶](../../../table_design/data_distribution/Data_distribution.md#随机分桶自-v31)。
 
 - 哈希分桶
 
@@ -487,14 +487,14 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   - 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
   - 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
   并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
-  更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/Data_distribution.md#哈希分桶).
+  更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/data_distribution/Data_distribution.md#哈希分桶).
 
   **注意事项**
 
   - **建表时，必须指定分桶键**。
   - 作为分桶键的列，该列的值不支持更新。
   - 分桶键指定后不支持修改。
-  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 ### ORDER BY
 
@@ -714,7 +714,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### 为 View Delta Join 查询改写定义 Unique Key 和外键约束
 
-要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
+要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
 
 ```SQL
 PROPERTIES (

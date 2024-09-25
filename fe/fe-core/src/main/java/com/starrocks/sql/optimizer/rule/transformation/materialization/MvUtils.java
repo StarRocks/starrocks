@@ -871,14 +871,14 @@ public class MvUtils {
         return columnRefMap;
     }
 
-    public static List<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
+    public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
         return collectScanColumn(optExpression, Predicates.alwaysTrue());
     }
 
-    public static List<ColumnRefOperator> collectScanColumn(OptExpression optExpression,
+    public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression,
                                                             Predicate<LogicalScanOperator> predicate) {
 
-        List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
+        Set<ColumnRefOperator> columnRefOperators = Sets.newHashSet();
         OptExpressionVisitor visitor = new OptExpressionVisitor<Void, Void>() {
             @Override
             public Void visit(OptExpression optExpression, Void context) {
@@ -1164,7 +1164,7 @@ public class MvUtils {
                 for (MvPlanContext mvPlanContext : mvPlanContexts) {
                     if (mvPlanContext != null) {
                         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-                        List<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
+                        Set<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
                             if (scan == null) {
                                 return false;
                             }
@@ -1541,5 +1541,17 @@ public class MvUtils {
         OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
                 new PhysicalPropertySet(), requiredColumns, columnRefFactory);
         return optimizedViewPlan;
+    }
+
+    /*
+     * Trim the input string if its length is larger than maxLength.
+     * @param input the input string
+     * @param maxLength the max length
+     */
+    public static String shrinkToSize(String input, int maxLength) {
+        if (input == null) {
+            return "";
+        }
+        return input.length() > maxLength ? input.substring(0, maxLength) : input;
     }
 }

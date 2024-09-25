@@ -41,7 +41,6 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "block_cache/block_cache.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -53,7 +52,6 @@
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
-#include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -100,6 +98,10 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -231,7 +233,6 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
     _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", _process_mem_tracker.get());
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
-    _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
     _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
     _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
@@ -245,8 +246,6 @@ Status GlobalEnv::_init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
-    ForEach<ColumnPoolList>(op);
     _init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }
@@ -436,6 +435,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     // Disable bind cpus when cgroup has cpu quota but no cpuset.
     const bool enable_bind_cpus = config::enable_resource_group_bind_cpus &&
                                   (!CpuInfo::is_cgroup_with_cpu_quota() || CpuInfo::is_cgroup_with_cpuset());
+    config::enable_resource_group_bind_cpus = enable_bind_cpus;
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing);
@@ -549,11 +549,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
+#ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
     if (!status.ok()) {
         LOG(WARNING) << "Failed to init JIT engine: " << status.message();
     }
+#endif
 
     RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
     PythonEnvManager::getInstance().start_background_cleanup_thread();
@@ -820,7 +822,7 @@ void ExecEnv::try_release_resource_before_core_dump() {
         storage_page_cache->set_capacity(0);
         LOG(INFO) << "release storage page cache memory";
     }
-    if (_block_cache != nullptr && need_release("data_cache")) {
+    if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
         // TODO: Currently, block cache don't support shutdown now,
         //  so here will temporary use update_mem_quota instead to release memory.
         (void)_block_cache->update_mem_quota(0, false);

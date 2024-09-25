@@ -49,13 +49,18 @@ PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
 
-Status PInternalService_RecoverableStub::reset_channel() {
+Status PInternalService_RecoverableStub::reset_channel(const std::string& protocol) {
     std::lock_guard<std::mutex> l(_mutex);
     brpc::ChannelOptions options;
     options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+    if (protocol == "http") {
+        options.protocol = protocol;
+    } else {
+        // http does not support these.
+        options.connection_type = config::brpc_connection_type;
+        options.connection_group = std::to_string(_connection_group++);
+    }
     options.max_retry = 3;
-    options.connection_type = config::brpc_connection_type;
-    options.connection_group = std::to_string(_connection_group++);
     std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
     if (channel->Init(_endpoint, &options)) {
         LOG(WARNING) << "Fail to init channel " << _endpoint;

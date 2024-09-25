@@ -636,7 +636,8 @@ public class Utils {
                 }
             }
         } catch (Throwable e) {
-            LOG.warn("Failed to eliminate null: {}", DebugUtil.getStackTrace(e));
+            LOG.warn("[query_id={}] Failed to eliminate null: {}",
+                    DebugUtil.getSessionQueryId(), DebugUtil.getStackTrace(e));
             return false;
         }
         return false;
@@ -810,7 +811,8 @@ public class Utils {
         try {
             statisticsCalculator.estimatorStats();
         } catch (Exception e) {
-            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            LOG.warn("[query={}] Failed to calculate statistics for expression: {}",
+                    DebugUtil.getSessionQueryId(), expr, e);
             return;
         }
 

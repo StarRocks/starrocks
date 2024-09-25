@@ -142,6 +142,10 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
 
+    if (request.common().__isset.exec_stats_node_ids) {
+        _query_ctx->init_node_exec_stats(request.common().exec_stats_node_ids);
+    }
+
     return Status::OK();
 }
 
@@ -851,6 +855,36 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
         }
         _query_ctx->count_down_fragments();
     }
+}
+
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+    DCHECK(!request.__isset.fragment);
+    DCHECK(request.__isset.params);
+    const TPlanFragmentExecParams& params = request.params;
+    const TUniqueId& query_id = params.query_id;
+    const TUniqueId& instance_id = params.fragment_instance_id;
+
+    QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
+    if (query_ctx == nullptr) return Status::OK();
+    FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
+    if (fragment_ctx == nullptr) return Status::OK();
+
+    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+        auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
+        if (iter == fragment_ctx->morsel_queue_factories().end()) {
+            continue;
+        }
+        MorselQueueFactory* morsel_queue_factory = iter->second.get();
+        if (morsel_queue_factory == nullptr) {
+            continue;
+        }
+
+        pipeline::Morsels morsels;
+        bool has_more_morsel = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        RETURN_IF_ERROR(morsel_queue_factory->append_morsels(std::move(morsels), has_more_morsel));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

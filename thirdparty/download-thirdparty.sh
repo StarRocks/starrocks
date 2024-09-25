@@ -409,8 +409,8 @@ if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; 
     touch $PATCHED_MARK
     echo "Finished patching $MARIADB_SOURCE"
 fi
-if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.4" ]; then
-    patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.1.4-gcc14.patch
+if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.14" ]; then
+    patch -p1 < $TP_PATCH_DIR/mariadb-connector-c-3.1.14-gcc14.patch
     touch $PATCHED_MARK
     echo "Finished patching $MARIADB_SOURCE"
 fi
@@ -463,9 +463,11 @@ cd -
 echo "Finished patching $VPACK_SOURCE"
 
 # patch avro-c
-cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
 if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
+    touch $PATCHED_MARK
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE
     cp $TP_PATCH_DIR/avro-1.10.2.c.findjansson.patch $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c/Findjansson.cmake
     patch -p1 < $TP_PATCH_DIR/avro-1.10.2.c.gcc14.patch
     touch $PATCHED_MARK
@@ -490,6 +492,14 @@ if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
     touch $PATCHED_MARK
 fi
 echo "Finished patching $SASL_SOURCE"
+cd -
+
+cd $TP_SOURCE_DIR/$RAPIDJSON_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $RAPIDJSON_SOURCE = "rapidjson-1.1.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/rapidjson-gcc14.patch
+    touch $PATCHED_MARK
+fi
+echo "Finished patching $RAPIDJSON_SOURCE"
 cd -
 
 # patch arrow
@@ -534,6 +544,17 @@ if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     echo "Finished patching $BITSHUFFLE_SOURCE"
 fi
 
+#patch clucene
+if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CLUCENE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] ; then
+        patch -p1 < "$TP_PATCH_DIR/clucene-gcc14.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CLUCENE_SOURCE"
+fi
+
 #patch poco
 if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$POCO_SOURCE
@@ -550,8 +571,8 @@ fi
 
 if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
-    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2022.07.02" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.02.patch"
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2022.07.12" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
         touch "$PATCHED_MARK"
     fi
     cd -

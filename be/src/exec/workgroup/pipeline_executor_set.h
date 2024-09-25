@@ -33,9 +33,9 @@ struct PipelineExecutorSetConfig {
     const uint32_t num_total_scan_threads;
     uint32_t num_total_connector_scan_threads;
 
-    CpuUtil::CpuIds total_cpuids;
+    const CpuUtil::CpuIds total_cpuids;
 
-    bool enable_bind_cpus;
+    const bool enable_bind_cpus;
     bool enable_cpu_borrowing;
 };
 

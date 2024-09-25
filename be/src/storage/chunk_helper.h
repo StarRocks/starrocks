@@ -69,7 +69,7 @@ public:
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
 
-    static Chunk* new_chunk_pooled(const Schema& schema, size_t n, bool force);
+    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
@@ -129,6 +129,9 @@ public:
     bool has_output() const;
     bool need_input() const;
     bool is_finished() const;
+
+private:
+    static bool _check_json_schema_equallity(const Chunk* one, const Chunk* two);
 
 private:
     static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75; // 0.75 * chunk_size

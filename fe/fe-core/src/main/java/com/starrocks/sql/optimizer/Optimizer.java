@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -85,6 +86,7 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
+import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
@@ -168,7 +170,7 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         return optimize(connectContext, logicOperatorTree, null, null, requiredProperty,
-                requiredColumns, columnRefFactory);
+                requiredColumns, columnRefFactory, new VectorSearchOptions());
     }
 
     public OptExpression optimize(ConnectContext connectContext,
@@ -177,10 +179,13 @@ public class Optimizer {
                                   StatementBase stmt,
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory) {
+                                  ColumnRefFactory columnRefFactory,
+                                  VectorSearchOptions vectorSearchOptions) {
         try {
             // prepare for optimizer
             prepare(connectContext, columnRefFactory, logicOperatorTree);
+
+            context.setVectorSearchOptions(vectorSearchOptions);
 
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
@@ -658,6 +663,8 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
+
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
         return tree.getInputs().get(0);
@@ -915,6 +922,7 @@ public class Optimizer {
         // update the existRequiredDistribution value in optExpression. The next rules need it to determine
         // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
+        result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
         return result;
     }
 

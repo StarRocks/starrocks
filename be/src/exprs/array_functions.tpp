@@ -36,16 +36,10 @@ public:
     using CppType = RunTimeCppType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        static_assert(lt_is_largeint<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>);
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (lt_is_largeint<LT>) {
-            return _array_distinct<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
-        } else if constexpr (lt_is_fixedlength<LT>) {
-            return _array_distinct<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (lt_is_string<LT>) {
-            return _array_distinct<phmap::flat_hash_set<CppType, SliceHash>>(columns);
-        } else {
-            assert(false);
-        }
+
+        return _array_distinct<phmap::flat_hash_set<CppType, PhmapDefaultHashFunc<LT, PhmapSeed1>>>(columns);
     }
 
 private:
@@ -264,16 +258,10 @@ public:
     using CppType = RunTimeCppType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        static_assert(lt_is_largeint<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>);
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
-            return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
-        } else if constexpr (lt_is_fixedlength<LT>) {
-            return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (lt_is_string<LT>) {
-            return _array_overlap<phmap::flat_hash_set<CppType, SliceHash>>(columns);
-        } else {
-            assert(false);
-        }
+
+        return _array_overlap<phmap::flat_hash_set<CppType, PhmapDefaultHashFunc<LT, PhmapSeed1>>>(columns);
     }
 
 private:
@@ -375,16 +363,7 @@ public:
     template <LogicalType type>
     struct CppTypeWithOverlapTimesHash {
         std::size_t operator()(const CppTypeWithOverlapTimes& cpp_type_value) const {
-            if constexpr (lt_is_largeint<LT>) {
-                return phmap_mix_with_seed<sizeof(size_t), PhmapSeed1>()(hash_128(PhmapSeed1, cpp_type_value.value));
-            } else if constexpr (lt_is_fixedlength<LT>) {
-                return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(cpp_type_value.value));
-            } else if constexpr (lt_is_string<LT>) {
-                return crc_hash_64(cpp_type_value.value.data, static_cast<int32_t>(cpp_type_value.value.size),
-                                   CRC_HASH_SEED1);
-            } else {
-                assert(false);
-            }
+            return PhmapDefaultHashFunc<LT, PhmapSeed1>()(cpp_type_value.value);
         }
     };
 
@@ -395,18 +374,10 @@ public:
     };
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
-        if constexpr (lt_is_largeint<LT>) {
-            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<LT>,
-                                                         CppTypeWithOverlapTimesEqual>>(columns);
-        } else if constexpr (lt_is_fixedlength<LT>) {
-            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<LT>,
-                                                         CppTypeWithOverlapTimesEqual>>(columns);
-        } else if constexpr (lt_is_string<LT>) {
-            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<LT>,
-                                                         CppTypeWithOverlapTimesEqual>>(columns);
-        } else {
-            assert(false);
-        }
+        static_assert(lt_is_largeint<LT> || lt_is_fixedlength<LT> || lt_is_string<LT>);
+
+        return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<LT>,
+                                                     CppTypeWithOverlapTimesEqual>>(columns);
     }
 
 private:

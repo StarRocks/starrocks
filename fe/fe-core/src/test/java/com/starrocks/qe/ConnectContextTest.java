@@ -66,6 +66,8 @@ public class ConnectContextTest {
     @Mocked
     private ConnectScheduler connectScheduler;
 
+    private VariableMgr variableMgr = new VariableMgr();
+
     @Before
     public void setUp() throws Exception {
         new Expectations() {
@@ -83,6 +85,10 @@ public class ConnectContextTest {
 
                 executor.cancel("set up");
                 minTimes = 0;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
     }

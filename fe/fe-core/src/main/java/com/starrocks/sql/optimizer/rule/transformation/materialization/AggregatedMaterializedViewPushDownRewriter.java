@@ -639,6 +639,13 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 logMVRewrite(mvRewriteContext, "Table scan node is invalid for push down");
                 return AggRewriteInfo.NOT_REWRITE;
             }
+            List<Table> queryTables = MvUtils.getAllTables(optExpression);
+
+            final List<Table> mvTables = MvUtils.getAllTables(materializationContext.getMvExpression());
+            MatchMode matchMode = MaterializedViewRewriter.getMatchMode(queryTables, mvTables);
+            if (matchMode == MatchMode.NOT_MATCH && mvTables.stream().noneMatch(queryTables::contains)) {
+                return AggRewriteInfo.NOT_REWRITE;
+            }
 
             // build group bys
             List<ColumnRefOperator> groupBys = ctx.groupBys.values().stream()
@@ -679,9 +686,10 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             OptExpression optAggOp = OptExpression.create(newAggOp, optExpression);
 
             // rewrite by mv.
-            OptExpression rewritten = doRewritePushDownAgg(ctx, optAggOp);
+            OptExpression rewritten = doRewritePushDownAgg(ctx, optAggOp, queryTables);
             if (rewritten == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite table scan node by mv failed");
+                logMVRewrite(mvRewriteContext,
+                        "Rewrite table " + scanOp.getTable().getTableIdentifier() + " scan node by mv failed");
                 return AggRewriteInfo.NOT_REWRITE;
             }
             // Generate the push down aggregate function for the given call operator.
@@ -717,8 +725,8 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
          * @return: rewritten query plan if rewrite success, otherwise return null
          */
         private OptExpression doRewritePushDownAgg(AggregatePushDownContext ctx,
-                                                   OptExpression optExpression) {
-            List<Table> queryTables = MvUtils.getAllTables(optExpression);
+                                                   OptExpression optExpression,
+                                                   List<Table> queryTables) {
             final ReplaceColumnRefRewriter queryColumnRefRewriter =
                     MvUtils.getReplaceColumnRefWriter(optExpression, queryColumnRefFactory);
 

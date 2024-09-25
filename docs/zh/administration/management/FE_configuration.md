@@ -2391,7 +2391,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：是否开启自动设置分桶功能。
-  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/Data_distribution.md#设置分桶数量)。
+  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
   - 设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。
   - 新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。
 - 引入版本：v2.5.7
@@ -3170,6 +3170,24 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
 - 引入版本：v3.1.11
+
+##### lake_enable_balance_tablets_between_workers
+
+- 默认值：false
+- 类型：Boolean
+- Unit: -
+- 是否动态：是
+- 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
+- 引入版本：v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- 默认值：0.15
+- 类型：Double
+- Unit: -
+- 是否动态：是
+- 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
+- 引入版本：v3.3.4
 
 ### 其他
 

@@ -320,7 +320,6 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     char* p = static_cast<char*>(out);
     char* pe = p + count;
 
-    const int64_t _block_size = _cache->block_size();
     const int64_t start_block_id = offset / _block_size;
     const int64_t end_block_id = (end_offset - 1) / _block_size;
 

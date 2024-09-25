@@ -234,7 +234,7 @@ public class HDFSBackendSelector implements BackendSelector {
             boolean hasMore = scanNode.hasMoreScanRanges();
             TScanRangeParams end = new TScanRangeParams();
             end.setScan_range(new TScanRange());
-            end.setPlaceholder(true);
+            end.setEmpty(true);
             end.setHas_more(hasMore);
             for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
                 assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
@@ -335,16 +335,18 @@ public class HDFSBackendSelector implements BackendSelector {
 
     private void recordScanRangeStatistic() {
         // record scan range size for each backend
-        StringBuilder sb = new StringBuilder();
         for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
-            sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
+            String host = entry.getKey().getAddress().hostname.replace('.', '_');
+            long value = entry.getValue();
+            String key = String.format("Placement.%s.assign.%s", scanNode.getTableName(), host);
+            Tracers.count(Tracers.Module.EXTERNAL, key, value);
         }
-        Tracers.record(Tracers.Module.EXTERNAL, scanNode.getTableName() + " scan_range_bytes", sb.toString());
         // record re-balance bytes for each backend
-        sb = new StringBuilder();
         for (Map.Entry<ComputeNode, Long> entry : reBalanceBytesPerComputeNode.entrySet()) {
-            sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
+            String host = entry.getKey().getAddress().hostname.replace('.', '_');
+            long value = entry.getValue();
+            String key = String.format("Placement.%s.balance.%s", scanNode.getTableName(), host);
+            Tracers.count(Tracers.Module.EXTERNAL, key, value);
         }
-        Tracers.record(Tracers.Module.EXTERNAL, scanNode.getTableName() + " rebalance_bytes", sb.toString());
     }
 }

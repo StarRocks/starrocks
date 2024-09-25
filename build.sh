@@ -98,8 +98,8 @@ Usage: $0 <options>
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
-     --with-tenann
-                        build with vector index tenann library
+     --without-tenann
+                        build without vector index tenann library
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      -h,--help          Show this help message
@@ -133,7 +133,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
-  -l 'with-tenann' \
+  -l 'without-tenann' \
   -l 'with-compress-debug-symbol:' \
   -l 'help' \
   -- "$@")
@@ -158,7 +158,7 @@ WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-WITH_TENANN=OFF
+WITH_TENANN=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -173,15 +173,18 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
 if [[ -z ${JEMALLOC_DEBUG} ]]; then
     JEMALLOC_DEBUG=OFF
 fi
-if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
-    CCACHE=ccache
+if [[ -z ${ENABLE_JIT} ]]; then
+    ENABLE_JIT=ON
 fi
 
-if [[ -z ${WITH_TENANN} ]]; then
-  WITH_TENANN=ON
+if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
+    CCACHE=ccache
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -194,6 +197,9 @@ if [ -e /proc/cpuinfo ] ; then
     fi
     if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
+    fi
+    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
+        USE_BMI_2=OFF
     fi
 fi
 
@@ -246,7 +252,7 @@ else
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
-            --with-tenann) WITH_TENANN=ON; shift ;;
+            --without-tenann) WITH_TENANN=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
@@ -285,6 +291,7 @@ echo "Get params:
     USE_AVX2                    -- $USE_AVX2
     USE_AVX512                  -- $USE_AVX512
     USE_SSE4_2                  -- $USE_SSE4_2
+    USE_BMI_2                   -- $USE_BMI_2
     JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
     PARALLEL                    -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
@@ -383,7 +390,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
-                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
+                  -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
@@ -393,6 +401,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DWITH_TENANN=${WITH_TENANN}                          \
+                  -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}

@@ -44,6 +44,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -106,6 +107,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The optional values are "compute_nodes_only" and "all_nodes".
     public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
+    public static final String VECTOR_DISTANCE_COLUMN_NAME = "vector_distance_column_name";
 
     /**
      * configure the mem limit of load process on BE.
@@ -323,6 +325,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
     public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
+    public static final String VECTOR_SEARCH_OPTIONS = "vector_search_options";
 
     // --------------------------- Limitations for Materialized View ------------------------------------ //
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
@@ -418,6 +421,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
+    public static final String ENABLE_QUERY_TRIGGER_ANALYZE = "enable_query_trigger_analyze";
+
     public static final String PLAN_MODE = "plan_mode";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
@@ -760,6 +765,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String JIT_LEVEL = "jit_level";
 
+    // ann params like: nprobe
+    public static final String ANN_PARAMS = "ann_params";
+
+    public static final String PQ_REFINE_FACTOR = "pq_refine_factor";
+
+    public static final String K_FACTOR = "k_factor";
+
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
      */
@@ -786,6 +798,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
+
+    public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
+
+    public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1538,6 +1554,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
+    @VarAttr(name = ENABLE_PLAN_ANALYZER, flag = VariableMgr.INVISIBLE)
+    private boolean enablePlanAnalyzer = false;
+
+    @VarAttr(name = ENABLE_PLAN_ADVISOR)
+    private boolean enablePlanAdvisor = true;
+
+
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
     }
@@ -2048,6 +2071,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
 
+    // To set ANN tuning parameters for user.
+    // Since the session variables does not support map variables,
+    // it needs to be passed in the form of a JSON string.
+    @VarAttr(name = ANN_PARAMS)
+    private String annParams = "";
+
+    @VarAttr(name = PQ_REFINE_FACTOR)
+    private double pqRefineFactor = 1;
+
+    @VarAttr(name = K_FACTOR)
+    private double kFactor = 1;
+
     public int getPrepareMetadataPoolSize() {
         return prepareMetadataPoolSize;
     }
@@ -2088,6 +2123,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
+
+    @VarAttr(name = ENABLE_QUERY_TRIGGER_ANALYZE)
+    private boolean enableQueryTriggerAnalyze = true;
 
     @VarAttr(name = PLAN_MODE)
     private String planMode = PlanMode.AUTO.modeName();
@@ -2141,7 +2179,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableConnectorIncrementalScanRanges = false;
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
-    private int connectorIncrementalScanRangeSize = 1000;
+    private int connectorIncrementalScanRangeSize = 500;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -2201,6 +2239,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
         this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public boolean isEnableQueryTriggerAnalyze() {
+        return enableQueryTriggerAnalyze;
     }
 
     public String getPlanMode() {
@@ -2415,6 +2457,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCacheSelect(boolean enableCacheSelect) {
         this.enableCacheSelect = enableCacheSelect;
+    }
+
+    public void setConnectorIoTasksPerScanOperator(int connectorIoTasksPerScanOperator) {
+        this.connectorIoTasksPerScanOperator = connectorIoTasksPerScanOperator;
     }
 
     public boolean isCboUseDBLock() {
@@ -4142,6 +4188,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorRemoteFileAsyncTaskSize;
     }
 
+    public boolean isEnablePlanAnalyzer() {
+        return enablePlanAnalyzer;
+    }
+
+    public void setEnablePlanAnalyzer(boolean enablePlanAnalyzer) {
+        this.enablePlanAnalyzer = enablePlanAnalyzer;
+    }
+
+    public boolean isEnablePlanAdvisor() {
+        return enablePlanAdvisor;
+    }
+
+    public void setEnablePlanAdvisor(boolean enablePlanAdvisor) {
+        this.enablePlanAdvisor = enablePlanAdvisor;
+    }
+
     public int getConnectorIncrementalScanRangeNumber() {
         return connectorIncrementalScanRangeSize;
     }
@@ -4293,6 +4355,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
+        tResult.setAnn_params(VectorSearchOptions.readAnnParams(annParams));
+        tResult.setPq_refine_factor(pqRefineFactor);
+        tResult.setK_factor(kFactor);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);

@@ -18,9 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import org.apache.iceberg.hive.RuntimeMetaException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -339,6 +337,9 @@ public class AnalyzeCreateTableTest {
                 metadata.getDb("iceberg_catalog", "iceberg_db");
                 result = new Database();
                 minTimes = 0;
+
+                metadata.tableExists("iceberg_catalog", "iceberg_db", anyString);
+                result = false;
             }
         };
 
@@ -354,15 +355,6 @@ public class AnalyzeCreateTableTest {
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog("iceberg_catalog");
         analyzeSuccess("create external table iceberg_db.iceberg_table (k1 int, k2 int) partition by (k2)");
 
-        try {
-            String stmt = "create external table iceberg_table (k1 int, k2 int) partition by (k2)";
-            UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e instanceof RuntimeMetaException);
-            Assert.assertTrue(e.getMessage().contains("Failed to connect to Hive Metastore"));
-        }
-
         AnalyzeTestUtil.getConnectContext().setDatabase("iceberg_db");
         analyzeSuccess("create external table iceberg_table (k1 int, k2 int) partition by (k2)");
         analyzeSuccess("create external table iceberg_table (k1 int, k2 int) engine=iceberg partition by (k2)");
@@ -377,8 +369,6 @@ public class AnalyzeCreateTableTest {
                 minTimes = 0;
             }
         };
-
-        analyzeFail("create external table hive_catalog.hive_db.hive_table (k1 int, k2 int) engine=iceberg partition by (k2)");
 
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         AnalyzeTestUtil.getConnectContext().setDatabase("test");

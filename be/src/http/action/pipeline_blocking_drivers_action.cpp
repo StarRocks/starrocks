@@ -161,11 +161,8 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
         };
 
         QueryMap query_map_in_wg;
-        _exec_env->workgroup_manager()->for_each_workgroup([&](const workgroup::WorkGroup& wg) {
-            if (wg.exclusive_executors() != nullptr) {
-                wg.exclusive_executors()->driver_executor()->iterate_immutable_blocking_driver(
-                        iterate_func_generator(query_map_in_wg));
-            }
+        _exec_env->workgroup_manager()->for_each_executors([&](const workgroup::PipelineExecutorSet& executor) {
+            executor.driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_in_wg));
         });
         rapidjson::Document queries_in_wg_obj = query_map_to_doc_func(query_map_in_wg);
 

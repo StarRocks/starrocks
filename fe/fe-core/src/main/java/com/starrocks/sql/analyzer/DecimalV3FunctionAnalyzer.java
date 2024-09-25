@@ -54,16 +54,25 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.LEAST).add(FunctionSet.GREATEST).add(FunctionSet.NULLIF)
                     .add(FunctionSet.IFNULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD).build();
 
+    // For array agg functions, its return type should be arrayed of input type.
+    public static final Set<String> DECIMAL_ARRAY_AGG_FUNCTION_SAME_TYPE =
+            new ImmutableSortedSet.Builder<>(String::compareTo)
+                    .add(FunctionSet.ARRAY_AGG)
+                    .add(FunctionSet.ARRAY_AGG_DISTINCT)
+                    .build();
+
     public static final Set<String> DECIMAL_AGG_FUNCTION_SAME_TYPE =
             new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
-                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).add(FunctionSet.ARRAY_AGG_DISTINCT)
-                    .add(FunctionSet.ARRAY_UNIQUE_AGG)
+                    .add(FunctionSet.ANY_VALUE)
                     .add(FunctionSet.ANY_VALUE)
                     .add(FunctionSet.APPROX_TOP_K)
-                    .add(FunctionSet.HISTOGRAM).build();
+                    .add(FunctionSet.HISTOGRAM)
+                    .add(FunctionSet.ARRAY_UNIQUE_AGG) // array_unique_agg(array<decimal>) -> array<decimal>
+                    .addAll(DECIMAL_ARRAY_AGG_FUNCTION_SAME_TYPE)
+                    .build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String::compareTo)
@@ -223,6 +232,9 @@ public class DecimalV3FunctionAnalyzer {
                     argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
                     returnType = argType;
                 }
+            } else if (DECIMAL_ARRAY_AGG_FUNCTION_SAME_TYPE.contains(fn.functionName())) {
+                // array_agg and array_agg_distinct return type is the same as the input type
+                returnType = new ArrayType(argType);
             }
         }
 
@@ -417,7 +429,7 @@ public class DecimalV3FunctionAnalyzer {
             newFn = fn.copy();
             newFn.setArgsType(argTypes);
             newFn.setRetType(returnType);
-            ((AggregateFunction) newFn).setIntermediateType(Type.VARCHAR);
+            ((AggregateFunction) newFn).setIntermediateType(Type.VARBINARY);
         } else if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
             Type commonType = argumentTypes[0];
             Type returnType = fn.getReturnType();

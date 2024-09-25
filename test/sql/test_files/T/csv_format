@@ -16,6 +16,22 @@ select * from files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}
 
 -- check schema
 desc t1;
+desc files('path' = 'oss://${oss_bucket}/test_files/csv_format/${uuid0}/*', 'format'='csv', "csv.column_separator"=",","csv.row_delimiter"="\n");
+
+-- list files
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "list_files_only" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*/*",
+    "list_files_only" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
 
 -- clean
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

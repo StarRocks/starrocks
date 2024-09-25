@@ -553,11 +553,7 @@ public class SmallFileMgr implements Writable {
     }
 
     public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
-        int size = reader.readInt();
-        while (size-- > 0) {
-            SmallFile smallFile = reader.readJson(SmallFile.class);
-            putToFiles(smallFile);
-        }
+        reader.readCollection(SmallFile.class, this::putToFiles);
     }
 
     private void putToFiles(SmallFile smallFile) {

@@ -25,5 +25,5 @@ ADD_BE_BENCH(${SRC_DIR}/bench/orc_column_reader_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hash_functions_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/binary_column_copy_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hyperscan_vec_bench)
-
 ADD_BE_BENCH(${SRC_DIR}/bench/mem_equal_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/bit_unpack_bench)

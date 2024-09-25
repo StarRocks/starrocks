@@ -86,6 +86,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
@@ -965,7 +966,8 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
                         CaseSensibility.VARIABLES.getCaseSensibility());
             }
-            List<List<String>> rows = VariableMgr.dump(statement.getType(), context.getSessionVariable(), matcher);
+            List<List<String>> rows = GlobalStateMgr.getCurrentState().getVariableMgr().dump(statement.getType(),
+                    context.getSessionVariable(), matcher);
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
@@ -1002,8 +1004,8 @@ public class ShowExecutor {
                     }
                     final String columnName = col.getName();
                     final String columnType = col.getType().canonicalName().toLowerCase();
-                    final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
-                    final String isKey = col.isKey() ? "YES" : "NO";
+                    final String isAllowNull = col.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO;
+                    final String isKey = col.isKey() ? SchemaConstants.YES : SchemaConstants.NO;
                     String defaultValue = null;
                     if (!col.getType().isOnlyMetricType()) {
                         defaultValue = col.getMetaDefaultValue(Lists.newArrayList());

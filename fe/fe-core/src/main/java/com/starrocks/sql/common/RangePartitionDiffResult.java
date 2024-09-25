@@ -24,14 +24,11 @@ import java.util.Set;
 /**
  * The result of diffing between materialized view and the base tables.
  */
-public class RangePartitionDiffResult {
+public class RangePartitionDiffResult extends PartitionDiffResult {
     // The partition range of the materialized view: <mv partition name, mv partition range>
     public final Map<String, Range<PartitionKey>> mvRangePartitionMap;
     // The partition range of the base tables: <base table, <base table partition name, base table partition range>>
     public final Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap;
-    // For external table, the mapping of base table partition to mv partition:
-    // <base table, <base table partition name, mv partition name>>
-    public final Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap;
     // The diff result of partition range between materialized view and base tables
     public final RangePartitionDiff rangePartitionDiff;
 
@@ -39,9 +36,9 @@ public class RangePartitionDiffResult {
                                     Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap,
                                     Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap,
                                     RangePartitionDiff rangePartitionDiff) {
+        super(refBaseTableMVPartitionMap);
         this.mvRangePartitionMap = mvRangePartitionMap;
         this.refBaseTablePartitionMap = refBaseTablePartitionMap;
-        this.refBaseTableMVPartitionMap = refBaseTableMVPartitionMap;
         this.rangePartitionDiff = rangePartitionDiff;
     }
 }

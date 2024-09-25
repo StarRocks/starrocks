@@ -105,6 +105,8 @@ public class ListPartitionDesc extends PartitionDesc {
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
         this.analyzeMultiListPartition(tableProperties, columnDefList);
+        // list partition values should not contain NULL partition value if this column is not nullable.
+        this.postAnalyzePartitionColumns(columnDefList);
     }
 
     public List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
@@ -139,6 +141,39 @@ public class ListPartitionDesc extends PartitionDesc {
             }
         }
         return partitionColumns;
+    }
+
+    private void postAnalyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
+        // list partition values should not contain NULL partition value if this column is not nullable.
+        int partitionColSize = columnDefs.size();
+        for (int i = 0; i < columnDefs.size(); i++) {
+            ColumnDef columnDef = columnDefs.get(i);
+            if (columnDef.isAllowNull()) {
+                continue;
+            }
+            String partitionCol = columnDef.getName();
+            for (SingleItemListPartitionDesc desc : singleListPartitionDescs) {
+                for (LiteralExpr literalExpr : desc.getLiteralExprValues()) {
+                    if (literalExpr.isNullable()) {
+                        throw new AnalysisException("Partition column[" + partitionCol + "] could not be null but " +
+                                "contains null value in partition[" + desc.getPartitionName() + "]");
+                    }
+                }
+            }
+            for (MultiItemListPartitionDesc desc : multiListPartitionDescs) {
+                for (List<LiteralExpr> literalExprs : desc.getMultiLiteralExprValues()) {
+                    if (literalExprs.size() != partitionColSize) {
+                        throw new AnalysisException("Partition column[" + partitionCol + "] size should be equal to " +
+                                "partition column size but contains " + literalExprs.size() + " values in partition[" +
+                                desc.getPartitionName() + "]");
+                    }
+                    if (literalExprs.get(i).isNullable()) {
+                        throw new AnalysisException("Partition column[" + partitionCol + "] could not be null but " +
+                                "contains null value in partition[" + desc.getPartitionName() + "]");
+                    }
+                }
+            }
+        }
     }
 
     public void analyzeExternalPartitionColumns(List<ColumnDef> columnDefs, String engineName) {

@@ -457,6 +457,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return new ArrayList<>(nameToColumn.values());
     }
 
+    public void addColumn(Column column) {
+        fullSchema.add(column);
+        nameToColumn.put(column.getName(), column);
+    }
+
     public long getCreateTime() {
         return createTime;
     }

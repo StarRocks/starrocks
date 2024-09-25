@@ -249,11 +249,15 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                                             tablet_info.tablet_id, partition_version.version, transaction_id);
             } else {
                 const int64_t max_continuous_version =
-                        enable_sync_publish ? tablet->max_continuous_version() : tablet->max_readable_version();
+                        enable_sync_publish ? tablet->max_readable_version() : tablet->max_continuous_version();
                 if (max_continuous_version > 0) {
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);
                     pair.__set_version(max_continuous_version);
+                }
+
+                if (enable_sync_publish && tablet_tasks.empty() && max_continuous_version < partition_version.version) {
+                    error_tablet_ids.push_back(tablet_info.tablet_id);
                 }
             }
         }

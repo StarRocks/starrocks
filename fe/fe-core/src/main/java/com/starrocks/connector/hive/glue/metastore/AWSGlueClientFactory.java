@@ -16,7 +16,7 @@ package com.starrocks.connector.hive.glue.metastore;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.logging.log4j.LogManager;
@@ -40,7 +40,7 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
 
     @Override
     public GlueClient newClient() throws MetaException {
-        AWSCloudCredential glueCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+        AwsCloudCredential glueCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         try {
             GlueClientBuilder glueClientBuilder = GlueClient.builder();
             if (glueCloudCredential != null) {

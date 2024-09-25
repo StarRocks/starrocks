@@ -148,6 +148,8 @@ public class ResourceGroupMgr implements Writable {
                 dropResourceGroupUnlocked(wg.getName());
             }
 
+            wg.normalizeCpuWeight();
+
             if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
                 wg.setId(ResourceGroup.DEFAULT_WG_ID);
             } else if (ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME.equals(wg.getName())) {
@@ -346,9 +348,9 @@ public class ResourceGroupMgr implements Writable {
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 ResourceGroup changedProperties = stmt.getChangedProperties();
 
-                Integer cpuWeight = changedProperties.getCpuWeight();
+                Integer cpuWeight = changedProperties.getRawCpuWeight();
                 if (cpuWeight == null) {
-                    cpuWeight = wg.getCpuWeight();
+                    cpuWeight = wg.geNormalizedCpuWeight();
                 }
                 Integer exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
                 if (exclusiveCpuCores == null) {
@@ -359,10 +361,10 @@ public class ResourceGroupMgr implements Writable {
 
                 if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
                     if (sumExclusiveCpuCores + exclusiveCpuCores - wg.getNormalizedExclusiveCpuCores() >=
-                            BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe()) {
+                            BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe()) {
                         throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
                                 ResourceGroup.EXCLUSIVE_CPU_CORES,
-                                BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() - 1));
+                                BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe() - 1));
                     }
                     if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
                         throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
@@ -373,6 +375,7 @@ public class ResourceGroupMgr implements Writable {
                 if (cpuWeight != null) {
                     wg.setCpuWeight(cpuWeight);
                 }
+                wg.normalizeCpuWeight();
 
                 if (exclusiveCpuCores != null) {
                     sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
@@ -675,12 +678,8 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
         List<ResourceGroup> resourceGroups = new ArrayList<>();
-        for (int i = 0; i < numJson; ++i) {
-            ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
-            resourceGroups.add(resourceGroup);
-        }
+        reader.readCollection(ResourceGroup.class, resourceGroups::add);
         resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
         resourceGroups.forEach(this::replayAddResourceGroup);
     }

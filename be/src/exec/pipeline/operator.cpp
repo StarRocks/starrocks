@@ -291,6 +291,24 @@ void Operator::_init_conjuct_counters() {
     }
 }
 
+void Operator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (!_is_subordinate && ctx != nullptr && ctx->need_record_exec_stats(_plan_node_id)) {
+        ctx->update_push_rows_stats(_plan_node_id, _push_row_num_counter->value());
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr &&
+            _bloom_filter_eval_context.join_runtime_filter_output_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
+}
+
 OperatorFactory::OperatorFactory(int32_t id, std::string name, int32_t plan_node_id)
         : _id(id), _name(std::move(name)), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);

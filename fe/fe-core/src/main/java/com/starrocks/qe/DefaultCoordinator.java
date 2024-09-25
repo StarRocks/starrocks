@@ -41,6 +41,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -605,14 +606,6 @@ public class DefaultCoordinator extends Coordinator {
         setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcIpAddress());
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
-            // TODO (by satanson): Other DataSink except ResultSink can not support global
-            //  runtime filter merging at present, we should support it in future.
-            // pipeline-level runtime filter needs to derive RuntimeFilterLayout, so we collect
-            // RuntimeFilterDescription
-            for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
-                PlanFragment fragment = execFragment.getPlanFragment();
-                fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            }
             return;
         }
 
@@ -768,8 +761,6 @@ public class DefaultCoordinator extends Coordinator {
 
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             PlanFragment fragment = execFragment.getPlanFragment();
-            fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
                 for (final FragmentInstance instance : execFragment.getInstances()) {
@@ -1285,6 +1276,12 @@ public class DefaultCoordinator extends Coordinator {
             return "";
         }
         return connectContext.getSessionVariable().getWarehouseName();
+    }
+
+    @Override
+    public String getResourceGroupName() {
+        return jobSpec.getResourceGroup() == null ? ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME :
+                jobSpec.getResourceGroup().getName();
     }
 
     private void execShortCircuit() throws Exception {

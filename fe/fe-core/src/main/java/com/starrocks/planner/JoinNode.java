@@ -599,4 +599,9 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public void setOutputSlots(List<Integer> outputSlots) {
         this.outputSlots = outputSlots;
     }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
 }

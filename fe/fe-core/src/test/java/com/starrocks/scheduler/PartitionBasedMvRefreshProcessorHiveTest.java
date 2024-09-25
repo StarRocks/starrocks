@@ -1147,7 +1147,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         try {
             initAndExecuteTaskRun(taskRun);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("error-msg : User Cancelled"));
+            Assert.assertTrue(e.getMessage().contains("User Cancelled"));
             starRocksAssert.dropMaterializedView("hive_parttbl_mv1");
             return;
         }

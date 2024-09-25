@@ -45,6 +45,8 @@ struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangeOption;
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 class SegmentReadOptions {
 public:
@@ -104,6 +106,10 @@ public:
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
     bool has_preaggregation = true;
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

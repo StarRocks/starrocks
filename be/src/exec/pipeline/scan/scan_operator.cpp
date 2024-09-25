@@ -203,7 +203,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
-    if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
         return false;
     }
 
@@ -225,6 +225,16 @@ bool ScanOperator::is_finished() const {
 void ScanOperator::_detach_chunk_sources() {
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         detach_chunk_source(i);
+    }
+}
+
+void ScanOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+    if (ctx != nullptr && _bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+        int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+        ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
     }
 }
 
@@ -373,6 +383,7 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+            _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;
@@ -395,7 +406,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
-    task.workgroup = _workgroup.get();
+    task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();

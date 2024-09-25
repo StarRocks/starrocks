@@ -29,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
@@ -60,15 +61,29 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      */
     public static Map<String, PListCell> diffList(Map<String, PListCell> srcListMap,
                                                   Map<String, PListCell> dstListMap) {
-
         Map<String, PListCell> result = Maps.newTreeMap();
+        // PListCell may contain multi values, we need to ensure they are not duplicated from each other
+        Map<PListAtom, PListCell> dstAtomMaps = Maps.newHashMap();
+        dstListMap.values().stream()
+                .forEach(l -> l.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, l)));
         for (Map.Entry<String, PListCell> srcEntry : srcListMap.entrySet()) {
             String key = srcEntry.getKey();
             PListCell srcItem = srcEntry.getValue();
             if (srcItem.equals(dstListMap.get(key))) {
                 continue;
             }
-            result.put(key, srcEntry.getValue());
+            // distinct atoms
+            Set<PListAtom> srcAtoms = srcItem.toAtoms();
+            List<PListAtom> srcDistinctAtoms = srcAtoms.stream()
+                            .filter(x -> !dstAtomMaps.containsKey(x))
+                                    .collect(Collectors.toList());
+            if (srcDistinctAtoms.isEmpty()) {
+                continue;
+            }
+            dstAtomMaps.putAll(srcDistinctAtoms.stream().collect(Collectors.toMap(x -> x, x -> srcItem)));
+            PListCell newValue =
+                    new PListCell(srcDistinctAtoms.stream().map(x -> x.getPartitionItem()).collect(Collectors.toList()));
+            result.put(key, newValue);
         }
         return result;
     }
@@ -255,7 +270,8 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return true;
     }
 
-    public static ListPartitionDiffResult computeListPartitionDiff(MaterializedView mv) {
+    public static ListPartitionDiffResult computeListPartitionDiff(MaterializedView mv,
+                                                                   boolean isQueryRewrite) {
         // table -> map<partition name -> partition cell>
         Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
         // merge all base table partition cells
@@ -265,19 +281,33 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             logMVPrepare(mv, "Partitioned mv collect base table infos failed");
             return null;
         }
-        return computeListPartitionDiff(mv, refBaseTablePartitionMap, allBasePartitionItems, tableRefIdxes);
+        return computeListPartitionDiff(mv, refBaseTablePartitionMap, allBasePartitionItems, tableRefIdxes, isQueryRewrite);
     }
 
     public static ListPartitionDiffResult computeListPartitionDiff(
             MaterializedView mv,
             Map<Table, Map<String, PListCell>> refBaseTablePartitionMap,
             Map<String, PListCell> allBasePartitionItems,
-            Map<Table, List<Integer>> tableRefIdxes) {
+            Map<Table, List<Integer>> tableRefIdxes,
+            boolean isQueryRewrite) {
+        // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
         Map<String, PListCell> mvPartitionNameToListMap = mv.getListPartitionItems();
         ListPartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(
                 allBasePartitionItems, mvPartitionNameToListMap);
-        return new ListPartitionDiffResult(mvPartitionNameToListMap, refBaseTablePartitionMap, diff, tableRefIdxes);
+
+        // collect external partition column mapping
+        Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();
+        if (!isQueryRewrite) {
+            try {
+                collectExternalPartitionNameMapping(mv.getRefBaseTablePartitionColumns(), externalPartitionMaps);
+            } catch (Exception e) {
+                LOG.warn("Get external partition column mapping failed.", DebugUtil.getStackTrace(e));
+                return null;
+            }
+        }
+        return new ListPartitionDiffResult(mvPartitionNameToListMap, refBaseTablePartitionMap, diff, tableRefIdxes,
+                externalPartitionMaps);
     }
 
     /**
