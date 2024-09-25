@@ -3171,7 +3171,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: (Shared-Data only) Consider balancing between compute nodes during tablet migration in shared data mode.
+- Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
 - Introduced in: v3.3.4
 
 ##### lake_balance_tablets_threshold
@@ -3180,7 +3180,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: (Shared-Data only) Threshold when considering the balancing between workers in shared-data mode, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`, if `f > lake_balance_tablets_threshold`, the tablet balance will be triggered if `lake_enable_balance_tablets_between_workers = true`
+- Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
 
 ### Other
