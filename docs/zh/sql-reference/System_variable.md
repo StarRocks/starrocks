@@ -477,7 +477,7 @@ SELECT /*+ SET_VAR
 
 ### enable_query_cache
 
-* 描述：是否开启 Query Cache。取值范围：true 和 false。true 表示开启，false 表示关闭（默认值）。开启该功能后，只有当查询满足[Query Cache](../using_starrocks/query_cache.md#应用场景) 所述条件时，才会启用 Query Cache。
+* 描述：是否开启 Query Cache。取值范围：true 和 false。true 表示开启，false 表示关闭（默认值）。开启该功能后，只有当查询满足[Query Cache](../using_starrocks/caching/query_cache.md#应用场景) 所述条件时，才会启用 Query Cache。
 * 默认值：false
 * 引入版本：v2.5
 
