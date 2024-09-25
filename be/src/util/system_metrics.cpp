@@ -318,11 +318,15 @@ void SystemMetrics::_update_memory_metrics() {
     }
 #endif
 
+    // update the jemalloc tracker
+    GlobalEnv::GetInstance()->jemalloc_metadata_traker()->set(_memory_metrics->jemalloc_metadata_bytes.value());
+
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                  \
     if (GlobalEnv::GetInstance()->tracker() != nullptr) {                                   \
         _memory_metrics->key.set_value(GlobalEnv::GetInstance()->tracker()->consumption()); \
     }
 
+    // update the metrics according to tracker value
     SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)
     SET_MEM_METRIC_VALUE(query_pool_mem_tracker, query_mem_bytes)
     SET_MEM_METRIC_VALUE(load_mem_tracker, load_mem_bytes)
