@@ -66,20 +66,11 @@ public class UniqueConstraint extends Constraint {
         Table targetTable;
         if (referencedTable != null) {
             targetTable = referencedTable;
-<<<<<<< HEAD
-        } else {
-            targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
-=======
-
         // The dbName and tableName may be null if upgraded from older version.
         } else if (!Strings.isNullOrEmpty(dbName) && !Strings.isNullOrEmpty(tableName)) {
-            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-            if (targetTable == null) {
-                throw new SemanticException("Table %s is not found", tableName);
-            }
+            targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
         } else {
             targetTable = selfTable;
->>>>>>> 29924633ed ([BugFix] Fix NPE when getting column names from UniqueConstraint (#51405))
         }
         List<String> result = new ArrayList<>(uniqueColumns.size());
         for (ColumnId columnId : uniqueColumns) {
