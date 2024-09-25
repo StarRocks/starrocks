@@ -97,7 +97,7 @@ StarRocks 中支持多种函数，包括：[日期函数](../sql-reference/sql-f
 
 ### 视图
 
-StarRocks 支持创建 [逻辑视图](../sql-reference/sql-statements/View/CREATE_VIEW.md#功能) 和 [物化视图](../using_starrocks/Materialized_view.md)。具体使用方式详见对应章节。
+StarRocks 支持创建 [逻辑视图](../sql-reference/sql-statements/View/CREATE_VIEW.md#功能) 和 [物化视图](../using_starrocks/async_mv/Materialized_view.md)。具体使用方式详见对应章节。
 
 ### 外部表
 
