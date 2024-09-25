@@ -69,7 +69,7 @@ public class StarManagerHttpServiceAction extends RestBaseAction {
 
         controller.registerHandler(HttpMethod.POST,
                 "/api/v1/starmgr/service/{" + SERVICE + "}/shardgroup/{" + ID + "}/removereplicas", action);
-        // rebalance all replicas
+        // balance all replicas
         controller.registerHandler(HttpMethod.POST,
                 "/api/v1/starmgr/service/{" + SERVICE + "}/rebalance", action);
     }
@@ -87,7 +87,7 @@ public class StarManagerHttpServiceAction extends RestBaseAction {
             response.setContentType(httpResponse.headers().get(HttpHeaderNames.CONTENT_TYPE));
             writeResponse(request, response, httpResponse.status());
         } else {
-            throw new DdlException("Internal Error");
+            throw new DdlException("Failed to access star manager's http service");
         }
     }
 }

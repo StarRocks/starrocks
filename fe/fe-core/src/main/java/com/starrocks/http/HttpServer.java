@@ -97,6 +97,7 @@ import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
+import com.starrocks.server.RunMode;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -199,8 +200,9 @@ public class HttpServer {
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);
-        StarManagerHttpServiceAction.registerAction(controller);
-
+        if (RunMode.isSharedDataMode()) {
+            StarManagerHttpServiceAction.registerAction(controller);
+        }
         // meta service action
         File imageDir = MetaHelper.getLeaderImageDir();
         ImageAction.registerAction(controller, imageDir);
