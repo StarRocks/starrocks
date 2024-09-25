@@ -197,6 +197,13 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return false;
         }
 
+        if (localTable.getKeysType() != remoteTable.getKeysType()) {
+            LOG.warn("Local table {}.{} has different keys type {} with remote table type {}",
+                    localDatabase.getFullName(), localTable.getName(), localTable.getKeysType(),
+                    remoteTable.getKeysType());
+            return false;
+        }
+
         List<Column> localColumns = localTable.getBaseSchema();
         List<Column> remoteColumns = remoteTable.getBaseSchema();
         if (localColumns.size() != remoteColumns.size()) {

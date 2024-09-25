@@ -20,6 +20,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
@@ -100,17 +101,11 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         PartitionDesc partitionDesc = getPartitionDesc(table);
         DistributionDesc distributionDesc = table.getDefaultDistributionInfo()
                 .toDistributionDesc(table.getIdToColumn());
-        List<String> sortKeysColumnNames = null;
-        MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
-        if (baseIndexMeta.getSortKeyIdxes() != null) {
-            sortKeysColumnNames = Lists.newArrayListWithCapacity(baseIndexMeta.getSortKeyIdxes().size());
-            for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
-                sortKeysColumnNames.add(table.getBaseSchema().get(i).getName());
-            }
-        }
+        Map<String, String> properties = getProperties(table);
+        List<String> sortKeysColumnNames = getSortKeysColumnNames(table);
 
         CreateTableStmt createTableStmt = new CreateTableStmt(true, false, tableName, columnDefs, indexDefs,
-                engine, "utf8", keysDesc, partitionDesc, distributionDesc, table.getProperties(), null,
+                engine, "utf8", keysDesc, partitionDesc, distributionDesc, properties, null,
                 table.getComment(), null, sortKeysColumnNames, NodePosition.ZERO);
 
         createTableStmt.setColumns(columns);
@@ -278,5 +273,24 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
 
         expressionPartitionDesc.setSystem(true);
         return expressionPartitionDesc;
+    }
+
+    private static Map<String, String> getProperties(OlapTable table) {
+        Map<String, String> properties = table.getProperties();
+        // labels.location is not supported now
+        properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+        return properties;
+    }
+
+    private static List<String> getSortKeysColumnNames(OlapTable table) {
+        List<String> sortKeysColumnNames = null;
+        MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        if (baseIndexMeta.getSortKeyIdxes() != null) {
+            sortKeysColumnNames = Lists.newArrayListWithCapacity(baseIndexMeta.getSortKeyIdxes().size());
+            for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
+                sortKeysColumnNames.add(table.getBaseSchema().get(i).getName());
+            }
+        }
+        return sortKeysColumnNames;
     }
 }
