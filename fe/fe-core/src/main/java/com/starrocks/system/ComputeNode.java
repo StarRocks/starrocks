@@ -139,7 +139,7 @@ public class ComputeNode implements IComputable, Writable {
      * - HeartbeatResponse.AliveStatus: {ALIVE, NOT_ALIVE}
      * - Backend.BackendState: {using, offline, free}
      * NOTE: The status will be serialized along with the ComputeNode object,
-     *   so be cautious changing the enum name.
+     * so be cautious changing the enum name.
      */
     public enum Status {
         CONNECTING,         // New added node, no heartbeat probing yet
@@ -588,6 +588,10 @@ public class ComputeNode implements IComputable, Writable {
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
                     BackendResourceStat.getInstance().setNumHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+
+                    if (hbResponse.getCpuCores() > 0) {
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
+                    }
                 }
             }
 

@@ -631,6 +631,11 @@ public class ResourceGroupMgr implements Writable {
 
     public void createBuiltinResourceGroupsIfNotExist() {
         try {
+
+            if (BackendResourceStat.getInstance().getNumBes() <= 0) {
+                return;
+            }
+
             ResourceGroup defaultWg = getResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
             if (defaultWg != null) {
                 return;
