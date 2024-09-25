@@ -3177,7 +3177,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Boolean
 - Unit: -
 - 是否动态：是
-- 描述：存算分离内表tablet调度时，是否考虑节点间tablet数量均衡。
+- 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
 - 引入版本：v3.3.4
 
 ##### lake_balance_tablets_threshold
@@ -3186,7 +3186,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Double
 - Unit: -
 - 是否动态：是
-- 描述：存算分离内表tablet分布不均衡因子。当集群不均衡因子值小于此阈值时，不启动节点间调度均衡. 不均衡因子计算公式：`f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。此配置项只在`lake_enable_balance_tablets_between_workers = true`时生效。
+- 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
 
 ### 其他
