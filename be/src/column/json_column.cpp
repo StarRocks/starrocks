@@ -2,11 +2,21 @@
 
 #include "column/json_column.h"
 
+#include <stdexcept>
+
+#include "common/compiler_util.h"
 #include "glog/logging.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks::vectorized {
+
+// throw exception for NPE
+void JsonColumn::_npe_check(JsonValue* obj) const {
+    if (UNLIKELY(!obj)) {
+        throw std::runtime_error("unexpected nullptr of JSON");
+    }
+}
 
 void JsonColumn::append_datum(const Datum& datum) {
     append(datum.get<JsonValue*>());
@@ -30,6 +40,8 @@ void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
 void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
     JsonValue* value = get_object(idx);
     DCHECK(value != nullptr);
+    _npe_check(value);
+
     auto json_str = value->to_string();
     if (!json_str.ok()) {
         buf->push_null();

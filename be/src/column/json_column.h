@@ -33,6 +33,9 @@ public:
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const override;
     std::string debug_item(uint32_t idx) const override;
     std::string get_name() const override;
+
+private:
+    void _npe_check(JsonValue* obj) const;
 };
 
 } // namespace starrocks::vectorized
