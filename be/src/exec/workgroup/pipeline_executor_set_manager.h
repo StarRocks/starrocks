@@ -38,8 +38,9 @@ namespace starrocks::workgroup {
 /// - shared_executors: when closing BE process.
 ///
 /// ExecutorsManager is owned by WorkGroupManager.
+///
 /// All the methods need to be protected by the `WorkGroupManager::_mutex` outside by callers, except the methods
-/// with `unlocked` as suffix.
+/// with `unlocked` suffix. And the methods with `unlocked`suffix should not call other protected methods.
 class ExecutorsManager {
 public:
     ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf);
@@ -54,7 +55,8 @@ public:
     void reclaim_cpuids_from_worgroup(WorkGroup* wg);
     const CpuUtil::CpuIds& get_cpuids_of_workgroup(WorkGroup* wg) const;
 
-    std::unique_ptr<PipelineExecutorSet> maybe_create_exclusive_executors_unlocked(WorkGroup* wg) const;
+    std::unique_ptr<PipelineExecutorSet> maybe_create_exclusive_executors_unlocked(WorkGroup* wg,
+                                                                                   const CpuUtil::CpuIds& cpuids) const;
 
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);

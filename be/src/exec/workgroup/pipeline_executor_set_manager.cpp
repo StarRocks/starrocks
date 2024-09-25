@@ -110,8 +110,8 @@ const CpuUtil::CpuIds& ExecutorsManager::get_cpuids_of_workgroup(WorkGroup* wg) 
 /// The `PipelineExecutorSet::start()` registers metrics, which acquires the metric lock. However, the metric collector
 /// first acquires the metric lock and then requests the `WorkGroupManager` lock to update the metric.
 /// Therefore, during `start`, it is crucial not to hold the `WorkGroupManager` lock to avoid a potential deadlock.
-std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_executors_unlocked(WorkGroup* wg) const {
-    const auto& cpuids = get_cpuids_of_workgroup(wg);
+std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_executors_unlocked(
+        WorkGroup* wg, const CpuUtil::CpuIds& cpuids) const {
     if (wg->exclusive_cpu_cores() == 0 || cpuids.empty()) {
         LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
