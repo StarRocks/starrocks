@@ -94,12 +94,16 @@ static Status io_error(const std::string& context, int err_number) {
     switch (err_number) {
     case 0:
         return Status::OK();
+    case EIO:
+        return Status::IOError(fmt::format("{}: {}", context, std::strerror(err_number)));
     case ENOENT:
         return Status::NotFound(fmt::format("{}: {}", context, std::strerror(err_number)));
     case EEXIST:
         return Status::AlreadyExist(fmt::format("{}: {}", context, std::strerror(err_number)));
+    case ENOSPC:
+        return Status::CapacityLimitExceed(fmt::format("{}: {}", context, std::strerror(err_number)));
     default:
-        return Status::IOError(fmt::format("{}: {}", context, std::strerror(err_number)));
+        return Status::InternalError(fmt::format("{}: {}", context, std::strerror(err_number)));
     }
 }
 
