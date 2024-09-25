@@ -221,10 +221,8 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * @param basePartitionMaps the external base table's partition name map which to be updated
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
      */
-    public static Map<Table, Map<String, Range<PartitionKey>>> syncBaseTablePartitionInfos(
-            MaterializedView mv,
-            Expr mvPartitionExpr,
-            Map<Table, Map<String, Set<String>>> basePartitionMaps) {
+    public static Map<Table, Map<String, Range<PartitionKey>>> syncBaseTablePartitionInfos(MaterializedView mv,
+                                                                                           Expr mvPartitionExpr) {
         Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         if (partitionTableAndColumn.isEmpty()) {
             return Maps.newHashMap();
@@ -240,14 +238,6 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                         PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumn,
                                 mvPartitionExpr);
                 refBaseTablePartitionMap.put(refBT, refTablePartitionKeyMap);
-
-                // To solve multi partition columns' problem of external table, record the mv partition name to all the same
-                // partition names map here.
-                if (!refBT.isNativeTableOrMaterializedView()) {
-                    basePartitionMaps.put(refBT,
-                            PartitionUtil.getMVPartitionNameMapOfExternalTable(refBT,
-                                    refBTPartitionColumn, PartitionUtil.getPartitionNames(refBT)));
-                }
             }
         } catch (UserException | SemanticException e) {
             LOG.warn("Partition differ collects ref base table partition failed.", e);
@@ -336,17 +326,13 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                                                                      Range<PartitionKey> rangeToInclude,
                                                                      boolean isQueryRewrite) {
         Expr mvPartitionExpr = mv.getPartitionExpr();
-        // collect all ref base table's partition range map
-        Map<Table, Map<String, Set<String>>> extRBTMVPartitionNameMap = Maps.newHashMap();
-        Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap = syncBaseTablePartitionInfos(mv, mvPartitionExpr,
-                extRBTMVPartitionNameMap);
-        return computeRangePartitionDiff(mv, rangeToInclude, extRBTMVPartitionNameMap, rBTPartitionMap, isQueryRewrite);
+        Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap = syncBaseTablePartitionInfos(mv, mvPartitionExpr);
+        return computeRangePartitionDiff(mv, rangeToInclude, rBTPartitionMap, isQueryRewrite);
     }
 
     public static RangePartitionDiffResult computeRangePartitionDiff(
             MaterializedView mv,
             Range<PartitionKey> rangeToInclude,
-            Map<Table, Map<String, Set<String>>> extRBTMVPartitionNameMap,
             Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap,
             boolean isQueryRewrite) {
         Expr mvPartitionExpr = mv.getPartitionExpr();
@@ -393,6 +379,12 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             if (rangePartitionDiff == null) {
                 LOG.warn("Materialized view compute partition difference with base table failed: rangePartitionDiff is null.");
                 return null;
+            }
+            Map<Table, Map<String, Set<String>>> extRBTMVPartitionNameMap = Maps.newHashMap();
+            if (!isQueryRewrite) {
+                // To solve multi partition columns' problem of external table, record the mv partition name to all the same
+                // partition names map here.
+                collectExternalPartitionNameMapping(refBaseTableAndColumns, extRBTMVPartitionNameMap);
             }
             return new RangePartitionDiffResult(mvRangePartitionMap, rBTPartitionMap,
                     extRBTMVPartitionNameMap, rangePartitionDiff);

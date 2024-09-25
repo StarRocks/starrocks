@@ -1869,7 +1869,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
-        ExpressionPartitionDesc expressionPartitionDesc = null;
+        Expr partitionByExpr = null;
         DistributionDesc distributionDesc = null;
         List<String> sortKeys = null;
 
@@ -1897,17 +1897,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             // process partition by
             if (desc.primaryExpression() != null) {
-                if (expressionPartitionDesc != null) {
+                if (partitionByExpr != null) {
                     throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PARTITION", "building materialized view"),
                             clausePos);
                 }
                 Expr expr = (Expr) visit(desc.primaryExpression());
                 if (expr instanceof SlotRef) {
-                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
+                    partitionByExpr = expr;
                 } else if (expr instanceof FunctionCallExpr) {
                     AnalyzerUtils.checkAndExtractPartitionCol((FunctionCallExpr) expr, null,
                             AnalyzerUtils.MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT);
-                    expressionPartitionDesc = new ExpressionPartitionDesc(expr);
+                    partitionByExpr = expr;
                 } else {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
                             expr.getPos());
@@ -1941,9 +1941,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
-            if (expressionPartitionDesc != null) {
+            if (partitionByExpr != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "PARTITION BY"),
-                        expressionPartitionDesc.getPos());
+                        partitionByExpr.getPos());
             }
             if (distributionDesc != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
@@ -1974,7 +1974,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
+                partitionByExpr, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
                 createPos(context));
     }
 

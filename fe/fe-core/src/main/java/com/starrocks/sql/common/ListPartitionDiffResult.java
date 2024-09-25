@@ -18,11 +18,12 @@ import com.starrocks.catalog.Table;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The result of diffing between materialized view and the base tables.
  */
-public class ListPartitionDiffResult {
+public class ListPartitionDiffResult extends PartitionDiffResult {
     // The partition range of the materialized view: <mv partition name, mv partition range>
     public final Map<String, PListCell> mvListPartitionMap;
     // The partition range of the base tables: <base table, <base table partition name, base table partition range>>
@@ -36,7 +37,9 @@ public class ListPartitionDiffResult {
     public ListPartitionDiffResult(Map<String, PListCell> mvListPartitionMap,
                                    Map<Table, Map<String, PListCell>> refBaseTablePartitionMap,
                                    ListPartitionDiff listPartitionDiff,
-                                   Map<Table, List<Integer>> refBaseTableRefIdxMap) {
+                                   Map<Table, List<Integer>> refBaseTableRefIdxMap,
+                                   Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap) {
+        super(refBaseTableMVPartitionMap);
         this.mvListPartitionMap = mvListPartitionMap;
         this.refBaseTablePartitionMap = refBaseTablePartitionMap;
         this.listPartitionDiff = listPartitionDiff;
