@@ -49,7 +49,7 @@ import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.policyengine.RangerAccessResultProcessor;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -60,12 +60,11 @@ import java.util.List;
 import java.util.Map;
 
 public class RangerInterfaceTest {
+    static ConnectContext connectContext;
+    static StarRocksAssert starRocksAssert;
 
-    ConnectContext connectContext;
-    StarRocksAssert starRocksAssert;
-
-    @Before
-    public void setUp() throws Exception {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
         new MockUp<RangerBasePlugin>() {
             @Mock
             void init() {
