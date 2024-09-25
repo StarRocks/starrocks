@@ -23,7 +23,7 @@ select * from t1;
 -- !result
 insert into t1 values( 999,888,'9999-12-03', 3),( 999,888,'9999-12-33', 3);
 -- result:
-E: (5025, "Partition value can't be null.")
+[REGEX].*Partition value can't be null.*
 -- !result
 select * from t1;
 -- result:
