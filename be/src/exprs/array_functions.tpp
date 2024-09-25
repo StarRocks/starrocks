@@ -51,7 +51,6 @@ private:
         size_t chunk_size = columns[0]->size();
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
 
-
         ColumnPtr dest_column = src_column->clone_empty();
 
         HashSet hash_set;
