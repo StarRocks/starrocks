@@ -100,6 +100,9 @@ public:
 
     bool is_local();
 
+    // for test
+    std::string get_brpc_dest_real_ip() { return _brpc_dest_real_ip; }
+
 private:
     Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
 
@@ -174,9 +177,11 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     // try to convert hostname to real ip
     _brpc_dest_real_ip = _brpc_dest_addr.hostname;
     if (!is_valid_ip(_brpc_dest_addr.hostname)) {
-        _brpc_dest_real_ip = hostname_to_ip(_brpc_dest_addr.hostname);
-        if (_brpc_dest_real_ip.empty()) {
-            LOG(WARNING) << "failed to get ip from host " << _brpc_dest_addr.hostname;
+        Status status = hostname_to_ip(_brpc_dest_addr.hostname, _brpc_dest_real_ip, BackendOptions::is_bind_ipv6());
+        if (!status.ok()) {
+            LOG(WARNING) << "failed to get brpc destination host ip from host " << _brpc_dest_addr.hostname
+                         << ", status: " << status.to_string();
+            return status;
         }
     }
 
