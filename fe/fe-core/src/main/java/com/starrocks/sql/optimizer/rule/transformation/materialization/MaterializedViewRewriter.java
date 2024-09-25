@@ -468,7 +468,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             }
         }
         return table.hasUniqueConstraints() && table.getUniqueConstraints().stream().anyMatch(
-                uniqueConstraint -> columnNames.containsAll(uniqueConstraint.getUniqueColumnNames()));
+                uniqueConstraint -> columnNames.containsAll(uniqueConstraint.getUniqueColumnNames(table)));
     }
 
     private boolean isSupportedPredicate(
