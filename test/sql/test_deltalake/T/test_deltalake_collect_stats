@@ -9,7 +9,7 @@ create external catalog delta_test_${uuid0} PROPERTIES (
 );
 
 set time_zone="Asia/Shanghai";
-
+set enable_query_trigger_analyze=false;
 set enable_delta_lake_column_statistics=false;
 
 function: assert_explain_costs_contains('select col_tinyint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'cardinality=8')
