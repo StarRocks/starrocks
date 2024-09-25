@@ -37,6 +37,9 @@ ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '3' );
 ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '2' );
 -- result:
 -- !result
+DROP RESOURCE GROUP rgd1_${uuid0};
+-- result:
+-- !result
 
 -- thread name 2:
 [UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
