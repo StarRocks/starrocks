@@ -240,11 +240,7 @@ MySQL > SELECT * FROM order_mv;
 
 ## Rewrite and accelerate queries with the asynchronous materialized view
 
-<<<<<<< HEAD:docs/en/using_starrocks/Materialized_view.md
-StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views. For more information, please refer to [Query Rewrite with Materialized Views](./query_rewrite_with_materialized_views.md).
-=======
-StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views. From v3.3.0 onwards, StarRocks further supports text-based materialized view rewrite. For more information, please refer to [Query Rewrite with Materialized Views](use_cases/query_rewrite_with_materialized_views.md).
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/en/using_starrocks/async_mv/Materialized_view.md
+StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views. For more information, please refer to [Query Rewrite with Materialized Views](./use_cases/query_rewrite_with_materialized_views.md).
 
 Currently, StarRocks supports rewriting queries on asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a candidate materialized view. When querying data in external catalogs, StarRocks does not ensure a strong consistency of the results because StarRocks cannot perceive the data changes in external catalogs. For more about asynchronous materialized views that are created based on an external catalog, please refer to [Data lake query acceleration with materialized views](use_cases/data_lake_query_acceleration_with_materialized_views.md).
 
@@ -278,11 +274,7 @@ You can alter the property of an asynchronous materialized view using [ALTER MAT
 
 ### Show asynchronous materialized views
 
-<<<<<<< HEAD:docs/en/using_starrocks/Materialized_view.md
-You can view the asynchronous materialized views in your database by using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) or querying the system metadata table in Information Schema.
-=======
-You can view the asynchronous materialized views in your database by using [SHOW MATERIALIZED VIEWS](../../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) or querying the system metadata view in Information Schema.
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/en/using_starrocks/async_mv/Materialized_view.md
+You can view the asynchronous materialized views in your database by using [SHOW MATERIALIZED VIEWS](../../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) or querying the system metadata table in Information Schema.
 
 - Check all asynchronous materialized views in your database.
 
@@ -302,11 +294,7 @@ You can view the asynchronous materialized views in your database by using [SHOW
   SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
-<<<<<<< HEAD:docs/en/using_starrocks/Materialized_view.md
-- Check all asynchronous materialized views by querying the metadata table `materialized_views` in Information Schema. For more information, please refer to [information_schema.materialized_views](../sql-reference/information_schema.md#materialized_views).
-=======
-- Check all asynchronous materialized views by querying the metadata view `materialized_views` in Information Schema. For more information, please refer to [information_schema.materialized_views](../../sql-reference/information_schema/materialized_views.md).
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/en/using_starrocks/async_mv/Materialized_view.md
+- Check all asynchronous materialized views by querying the metadata table `materialized_views` in Information Schema. For more information, please refer to [information_schema.materialized_views](../../sql-reference/information_schema.md#materialized_views).
 
   ```SQL
   SELECT * FROM information_schema.materialized_views;
@@ -322,11 +310,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### Check the execution status of asynchronous materialized view
 
-<<<<<<< HEAD:docs/en/using_starrocks/Materialized_view.md
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' [Information Schema](../sql-reference/information_schema.md).
-=======
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../../sql-reference/information_schema/tasks.md) and [`task_runs`](../../sql-reference/information_schema/task_runs.md) in [Information Schema](../../sql-reference/information_schema/information_schema.md).
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/en/using_starrocks/async_mv/Materialized_view.md
+You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' [Information Schema](../../sql-reference/information_schema.md).
 
 The following example checks the execution status of the materialized view that was created most recently:
 

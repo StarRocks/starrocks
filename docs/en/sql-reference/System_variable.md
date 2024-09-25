@@ -232,33 +232,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: ms
 * **Introduced in**: v3.1.9, v3.2.5
 
-<<<<<<< HEAD
-=======
-### enable_materialized_view_agg_pushdown_rewrite
-
-* **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown).
-* **Default**: false
-* **Introduced in**: v3.3.0
-
-### enable_materialized_view_text_match_rewrite
-
-* **Description**: Whether to enable text-based materialized view rewrite. When this item is set to true, the optimizer will compare the query with the existing materialized views. A query will be rewritten if the abstract syntax tree of the materialized view's definition matches that of the query or its sub-query.
-* **Default**: true
-* **Introduced in**: v3.2.5, v3.3.0
-
-### materialized_view_subuqery_text_match_max_count
-
-* **Description**: Specifies the maximum number of times that the system checks whether a query's sub-query matches the materialized views' definition.
-* **Default**: 4
-* **Introduced in**: v3.2.5, v3.3.0
-
-### enable_force_rule_based_mv_rewrite
-
-* **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
-* **Default**: true
-* **Introduced in**: v3.3.0
-
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291))
 ### enable_view_based_mv_rewrite
 
 * **Description**: Whether to enable query rewrite for logical view-based materialized views. If this item is set to `true`, the logical view is used as a unified node to rewrite the queries against itself for better performance. If this item is set to `false`, the system transcribes the queries against logical views into queries against physical tables or materialized views and then rewrites them.

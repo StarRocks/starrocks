@@ -240,11 +240,7 @@ MySQL > SELECT * FROM order_mv;
 
 ## 使用异步物化视图改写加速查询
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Materialized_view.md
-StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透明改写。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。详细内容，请参考[物化视图查询改写](./query_rewrite_with_materialized_views.md)。
-=======
-StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透明改写。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。自 v3.3.0 起，StarRocks 进一步支持基于文本的物化视图改写。详细内容，请参考[物化视图查询改写](use_cases/query_rewrite_with_materialized_views.md)。
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/zh/using_starrocks/async_mv/Materialized_view.md
+StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透明改写。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。详细内容，请参考[物化视图查询改写](./use_cases/query_rewrite_with_materialized_views.md)。
 
 目前，StarRocks 支持基于 Default catalog、Hive catalog、Hudi catalog 和 Iceberg catalog 的异步物化视图的查询改写。当查询 Default catalog 数据时，StarRocks 通过排除数据与基表不一致的物化视图，来保证改写之后的查询与原始查询结果的强一致性。当物化视图数据过期时，不会作为候选物化视图。在查询外部目录数据时，由于 StarRocks 无法感知外部目录分区中的数据变化，因此不保证结果的强一致性。关于基于 External Catalog 的异步物化视图，请参考[使用物化视图加速数据湖查询](use_cases/data_lake_query_acceleration_with_materialized_views.md)。
 
@@ -298,11 +294,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
   SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Materialized_view.md
-- 通过 Information Schema 中的系统元数据表 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../sql-reference/information_schema.md#materialized_views)。
-=======
-- 通过 Information Schema 中的系统元数据视图 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../../sql-reference/information_schema/materialized_views.md)。
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/zh/using_starrocks/async_mv/Materialized_view.md
+- 通过 Information Schema 中的系统元数据表 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../../sql-reference/information_schema.md#materialized_views)。
 
   ```SQL
   SELECT * FROM information_schema.materialized_views;
@@ -318,11 +310,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### 查看异步物化视图的执行状态
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Materialized_view.md
-您可以通过查询 StarRocks 的 [Information Schema](../sql-reference/information_schema.md) 中的 `tasks` 和 `task_runs` 元数据表来查看异步物化视图的执行（构建或刷新）状态。
-=======
-您可以通过查询 StarRocks 的 [Information Schema](../../sql-reference/information_schema/information_schema.md) 中的 [`tasks`](../../sql-reference/information_schema/tasks.md) 和 [`task_runs`](../../sql-reference/information_schema/task_runs.md) 元数据视图来查看异步物化视图的执行（构建或刷新）状态。
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/zh/using_starrocks/async_mv/Materialized_view.md
+您可以通过查询 StarRocks 的 [Information Schema](../../sql-reference/information_schema.md) 中的 `tasks` 和 `task_runs` 元数据表来查看异步物化视图的执行（构建或刷新）状态。
 
 以下示例查看最新创建的异步物化视图的执行状态：
 

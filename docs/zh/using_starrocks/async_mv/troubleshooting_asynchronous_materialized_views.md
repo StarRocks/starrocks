@@ -284,11 +284,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
 从 v3.0 版本开始，您可以在创建物化视图时定义以下属性（Session Variable），或者使用 ALTER MATERIALIZED VIEW 命令进行添加：
 
-<<<<<<< HEAD:docs/zh/using_starrocks/troubleshooting_asynchronous_materialized_views.md
 示例：
-=======
-  如 [创建分区物化视图](use_cases/create_partitioned_materialized_view.md) 所描述，对物化视图进行分区可以实现增量构建与刷新，能够规避在初始刷新时占用太多资源的问题。
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/zh/using_starrocks/async_mv/troubleshooting_asynchronous_materialized_views.md
 
 ```SQL
 -- 在创建物化视图时定义属性。
@@ -297,27 +293,10 @@ REFRESH ASYNC
 PROPERTIES ( 'session.enable_spill'='true' )
 AS <query>;
 
-<<<<<<< HEAD:docs/zh/using_starrocks/troubleshooting_asynchronous_materialized_views.md
 -- 添加属性。
 ALTER MATERIALIZED VIEW mv2 
     SET ('session.enable_spill' = 'true');
 ```
-=======
-  v3.2 之前版本中，物化视图刷新任务的默认超时时间为 5 分钟，v3.2 版本之后默认为 1 小时。当遇到超时异常时，可以尝试修改超时时间：
-
-  ```SQL
-  ALTER MATERIALIZED VIEW mv2 SET ( 'session.query_timeout' = '4000' );
-  ```
-
-- **分析物化视图性能瓶颈**
-
-  如果物化视图计算复杂，其本身计算耗时就会很久。您可以通过 Query Profile 分析性能瓶颈，并进行优化：
-
-  1. 通过查询 `information_schema.task_runs` 获取刷新任务的 `query_id`。
-  2. 通过上述的 `query_id`，获取并分析其 Query Profile。
-     - [GET_QUERY_PROFILE](../../sql-reference/sql-functions/utility-functions/get_query_profile.md): 根据 `query_id` 获取原始 Query Profile。
-     - [ANALYZE PROFILE](../../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md): 以 Fragment 为单位分析 Query Profile，并以树形结构展示。
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/zh/using_starrocks/async_mv/troubleshooting_asynchronous_materialized_views.md
 
 ### 物化视图不可用
 
@@ -353,11 +332,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-<<<<<<< HEAD:docs/zh/using_starrocks/troubleshooting_asynchronous_materialized_views.md
 - 使用 SHOW PROCESSLIST 和 KILL 语句终止正在运行的刷新任务：
-=======
-- 通过 [CANCEL REFRESH MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 终止正在运行的刷新任务。
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291)):docs/zh/using_starrocks/async_mv/troubleshooting_asynchronous_materialized_views.md
 
   ```SQL
   -- 获取正在运行的刷新任务的 ConnectionId。

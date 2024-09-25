@@ -292,11 +292,7 @@ An asynchronous materialized view is a physical table. You can operate it as any
 
 StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
 
-<<<<<<< HEAD
-See [Asynchronous materialized view -  Rewrite queries with the asynchronous materialized view](../../../using_starrocks/Materialized_view.md#rewrite-and-accelerate-queries-with-the-asynchronous-materialized-view) for further information.
-=======
-See [Asynchronous materialized view -  Rewrite queries with the asynchronous materialized view](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information.
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291))
+See [Asynchronous materialized view -  Rewrite queries with the asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md#rewrite-and-accelerate-queries-with-the-asynchronous-materialized-view) for further information.
 
 ### Supported data types
 
