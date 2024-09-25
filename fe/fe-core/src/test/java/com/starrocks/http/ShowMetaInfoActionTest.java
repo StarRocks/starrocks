@@ -40,7 +40,7 @@ public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
     private static final String DB_NAME = "TEST_DB";
     private static final String TABLE_NAME = "TEST_TABLE";
     private static final long EXPECTED_SINGLE_REPLICA_SIZE = 1024L;
-    private static final int httpSlowRequestThresholdMs = Config.http_slow_request_threshold_ms;
+    private static final int HTTP_SLOW_REQUEST_THRESHOLD_MS = Config.http_slow_request_threshold_ms;
 
     @Override
     public void doSetUp() {
@@ -59,7 +59,7 @@ public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
 
     @After
     public void tearDown() {
-        Config.http_slow_request_threshold_ms = httpSlowRequestThresholdMs;
+        Config.http_slow_request_threshold_ms = HTTP_SLOW_REQUEST_THRESHOLD_MS;
     }
 
     @Test
