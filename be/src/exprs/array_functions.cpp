@@ -520,10 +520,10 @@ private:
 
         auto* result_ptr = result->get_data().data();
 
-        [[maybe_unused]] size_t first_null_position = array_size;
+        [[maybe_unused]] size_t first_null_position = 0;
         for (size_t i = 0; i < array_size; i++) {
             if constexpr (NullableElement) {
-                if (is_null(null_map_elements, offset + i) && first_null_position == array_size) {
+                if (is_null(null_map_elements, offset + i) && first_null_position == 0) {
                     first_null_position = i + 1;
                     continue;
                 }
@@ -617,7 +617,7 @@ private:
 
             if constexpr (!NullableElement && NullableTarget) {
                 if (is_null(null_map_targets, i)) {
-                    result_ptr[i] = PositionEnabled ? array_size : 0;
+                    result_ptr[i] = 0;
                     continue;
                 }
             }
@@ -727,7 +727,6 @@ private:
     }
 
     // array is non-nullable.
-    // array_contains(array, arg)
     template <bool ConstArray = false>
     static StatusOr<ColumnPtr> _array_contains_non_nullable(const ArrayColumn& array, const Column& arg) {
         bool nullable_element = false;
