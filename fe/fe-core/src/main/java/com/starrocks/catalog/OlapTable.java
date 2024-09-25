@@ -3345,11 +3345,9 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, WriteQuorum.writeQuorumToName(writeQuorumType));
         }
 
-        // fast schema evolution only when it is set true
+        // fast schema evolution
         boolean useFastSchemaEvolution = getUseFastSchemaEvolution();
-        if (useFastSchemaEvolution) {
-            properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "true");
-        }
+        properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, String.valueOf(useFastSchemaEvolution));
 
         // unique constraint
         String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
