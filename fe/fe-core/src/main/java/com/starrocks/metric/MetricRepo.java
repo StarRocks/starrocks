@@ -934,7 +934,7 @@ public final class MetricRepo {
         Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getAllDatabaseTransactionMgrs();
         for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
-            GaugeMetricImpl<Long> txnNum = new GaugeMetricImpl<>("running_txn_num", MetricUnit.NOUNIT,
+            GaugeMetricImpl<Long> txnNum = new GaugeMetricImpl<>("txn_running", MetricUnit.NOUNIT,
                      "number of running transactions");
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mgr.getDbId());
             if (null == db) {
