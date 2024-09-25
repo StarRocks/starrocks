@@ -23,7 +23,11 @@ select * from t1;
 -- !result
 insert into t1 values( 999,888,'9999-12-03', 3),( 999,888,'9999-12-33', 3);
 -- result:
+<<<<<<< HEAD
 E: (1064, "Partition value can't be null.")
+=======
+[REGEX].*Partition value can't be null.*
+>>>>>>> 4af7bf6593 ([BugFix] Fix test_hive_sink fail (#51365))
 -- !result
 select * from t1;
 -- result:
