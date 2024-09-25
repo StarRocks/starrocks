@@ -788,6 +788,7 @@ public class StmtExecutor {
     public void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
         UUID queryId = context.getQueryId();
+        final TUniqueId executionId = context.getExecutionId();
         Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
         clonedUserVars.putAll(context.getUserVariables());
         boolean hasUserVariableHint = parsedStmt.getAllQueryScopeHints()
@@ -825,6 +826,7 @@ public class StmtExecutor {
                                 entry.getValue().deriveUserVariableExpressionResult(context);
                             } finally {
                                 context.setQueryId(queryId);
+                                context.setExecutionId(executionId);
                                 context.resetReturnRows();
                                 context.getState().reset();
                             }
