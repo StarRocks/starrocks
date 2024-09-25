@@ -11,6 +11,9 @@ create external catalog delta_test_${uuid0} PROPERTIES (
 set time_zone="Asia/Shanghai";
 -- result:
 -- !result
+set enable_query_trigger_analyze=false;
+-- result:
+-- !result
 set enable_delta_lake_column_statistics=false;
 -- result:
 -- !result
