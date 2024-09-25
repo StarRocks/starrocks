@@ -62,12 +62,15 @@ public class UniqueConstraint extends Constraint {
         this.uniqueColumns = uniqueColumns;
     }
 
-    public List<String> getUniqueColumnNames() {
+    public List<String> getUniqueColumnNames(Table selfTable) {
         Table targetTable;
         if (referencedTable != null) {
             targetTable = referencedTable;
-        } else {
+        // The dbName and tableName may be null if upgraded from older version.
+        } else if (!Strings.isNullOrEmpty(dbName) && !Strings.isNullOrEmpty(tableName)) {
             targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        } else {
+            targetTable = selfTable;
         }
         List<String> result = new ArrayList<>(uniqueColumns.size());
         for (ColumnId columnId : uniqueColumns) {
@@ -97,7 +100,7 @@ public class UniqueConstraint extends Constraint {
                 return false;
             }
         }
-        Set<String> uniqueColumnSet = getUniqueColumnNames().stream().map(String::toLowerCase)
+        Set<String> uniqueColumnSet = getUniqueColumnNames(parentTable).stream().map(String::toLowerCase)
                 .collect(Collectors.toSet());
         return uniqueColumnSet.equals(foreignKeys);
     }
@@ -117,7 +120,7 @@ public class UniqueConstraint extends Constraint {
         return sb.toString();
     }
 
-    public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints) {
+    public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints, Table selfTable) {
         List<String> constraintStrs = Lists.newArrayList();
         for (UniqueConstraint constraint : constraints) {
             StringBuilder constraintSb = new StringBuilder();
@@ -130,7 +133,7 @@ public class UniqueConstraint extends Constraint {
             if (constraint.tableName != null) {
                 constraintSb.append(constraint.tableName).append(".");
             }
-            constraintSb.append(Joiner.on(",").join(constraint.getUniqueColumnNames()));
+            constraintSb.append(Joiner.on(",").join(constraint.getUniqueColumnNames(selfTable)));
             constraintStrs.add(constraintSb.toString());
         }
 
