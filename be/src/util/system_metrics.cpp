@@ -40,6 +40,7 @@
 #include <cstdio>
 #include <memory>
 
+#include "common/config.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "jemalloc/jemalloc.h"
@@ -319,7 +320,27 @@ void SystemMetrics::_update_memory_metrics() {
 #endif
 
     // update the jemalloc tracker
-    GlobalEnv::GetInstance()->jemalloc_metadata_traker()->set(_memory_metrics->jemalloc_metadata_bytes.value());
+    {
+        if (GlobalEnv::GetInstance()->jemalloc_metadata_traker()) {
+            size_t metadata = _memory_metrics->jemalloc_metadata_bytes.value();
+            GlobalEnv::GetInstance()->jemalloc_metadata_traker()->set(metadata);
+        }
+
+        if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
+            size_t resident = _memory_metrics->jemalloc_resident_bytes.value();
+            size_t allocated = _memory_metrics->jemalloc_allocated_bytes.value();
+            size_t metadata = _memory_metrics->jemalloc_metadata_bytes.value();
+            if (resident > 0 && allocated > 0 && metadata > 0) {
+                size_t fragmentation = resident - allocated - metadata;
+                fragmentation *= config::jemalloc_fragmentation_ratio;
+                // Handle the case that just release a lot of memory but not get purged
+                fragmentation = std::min(fragmentation, (size_t)(resident * config::jemalloc_fragmentation_ratio));
+                if (fragmentation > 0) {
+                    GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()->set(fragmentation);
+                }
+            }
+        }
+    }
 
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                  \
     if (GlobalEnv::GetInstance()->tracker() != nullptr) {                                   \
