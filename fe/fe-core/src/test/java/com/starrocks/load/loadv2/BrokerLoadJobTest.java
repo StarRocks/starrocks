@@ -55,7 +55,6 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
@@ -87,9 +86,6 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 
 public class BrokerLoadJobTest {
-
-    @Mocked
-    private ConnectContext context;
 
     @BeforeClass
     public static void start() {
@@ -186,10 +182,6 @@ public class BrokerLoadJobTest {
                 loadStmt.getEtlJobType();
                 minTimes = 0;
                 result = EtlJobType.BROKER;
-                ConnectContext.get();
-                result = context;
-                context.getCurrentWarehouseId();
-                result = 1000L;
             }
         };
 
