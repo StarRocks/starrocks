@@ -115,6 +115,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return databaseTransactionMgr;
     }
 
+    public Map<Long, DatabaseTransactionMgr> getAllDatabaseTransactionMgrs() {
+        return dbIdToDatabaseTransactionMgrs;
+    }
+
     public void addDatabaseTransactionMgr(Long dbId) {
         if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, globalStateMgr)) == null) {
             LOG.debug("add database transaction manager for db {}", dbId);
