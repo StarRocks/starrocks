@@ -239,15 +239,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: ms
 * **Introduced in**: v3.1.9, v3.2.5
 
-<<<<<<< HEAD
-=======
-### enable_materialized_view_agg_pushdown_rewrite
-
-* **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown).
-* **Default**: false
-* **Introduced in**: v3.3.0
-
->>>>>>> 164b1b2b2d ([Doc] Organize query acceleration and administration (#51291))
 ### enable_materialized_view_text_match_rewrite
 
 * **Description**: Whether to enable text-based materialized view rewrite. When this item is set to true, the optimizer will compare the query with the existing materialized views. A query will be rewritten if the abstract syntax tree of the materialized view's definition matches that of the query or its sub-query.
