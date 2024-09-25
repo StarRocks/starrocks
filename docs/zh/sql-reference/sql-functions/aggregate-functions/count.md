@@ -17,7 +17,7 @@ displayed_sidebar: docs
 
 - COUNT(DISTINCT expr) 返回某列去重后非 NULL 值的行数。
 
-COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 实现精确去重](../../../using_starrocks/Using_bitmap.md)。
+COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 实现精确去重](../../../using_starrocks/distinct_values/Using_bitmap.md)。
 
 **从 2.4 版本开始，StarRocks 支持在一条查询里使用多个 COUNT(DISTINCT)。**
 
