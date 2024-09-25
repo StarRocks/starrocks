@@ -31,6 +31,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -99,6 +100,12 @@ public class StarManagerHttpServiceActionTest {
                 @Mock
                 void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {}
             };
+            new Expectations(request) {
+                {
+                    request.getRequest().uri();
+                    result = "http://test_uri";
+                }
+            };
             starManagerHttpServiceAction.executeWithoutPassword(request, response);
         }
         { // Internal error case
@@ -114,7 +121,7 @@ public class StarManagerHttpServiceActionTest {
             };
             DdlException ddlException = Assert.assertThrows(DdlException.class, () ->
                     starManagerHttpServiceAction.executeWithoutPassword(request, response));
-            Assert.assertEquals(ddlException.getMessage(), "Internal Error");
+            Assert.assertEquals(ddlException.getMessage(), "Failed to access star manager's http service");
         }
     }
 }
