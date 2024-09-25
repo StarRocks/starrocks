@@ -1421,9 +1421,9 @@ public class CreateTableTest {
         Assert.assertTrue(table.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint = table.getUniqueConstraints();
         Assert.assertEquals(1, uniqueConstraint.size());
-        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumnNames().size());
-        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumnNames().get(0));
-        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumnNames().get(1));
+        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumnNames(table).size());
+        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumnNames(table).get(0));
+        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumnNames(table).get(1));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table2(\n" +
@@ -1445,10 +1445,10 @@ public class CreateTableTest {
         Assert.assertTrue(table2.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint2 = table2.getUniqueConstraints();
         Assert.assertEquals(2, uniqueConstraint2.size());
-        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumnNames().size());
-        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumnNames().get(0));
-        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumnNames().size());
-        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumnNames().get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumnNames(table2).size());
+        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumnNames(table2).get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumnNames(table2).size());
+        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumnNames(table2).get(0));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_primary_key_table1(\n" +

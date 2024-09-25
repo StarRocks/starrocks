@@ -108,7 +108,7 @@ public class UniquenessBasedTablePruneRule implements TreeRewriteRule {
             }
             Map<String, ColumnRefOperator> nameToColRefMap = scanOp.getColumnNameToColRefMap();
             List<ColumnRefSet> uniqueKeys = table.getUniqueConstraints().stream().map(uc ->
-                    new ColumnRefSet(uc.getUniqueColumnNames().stream().map(nameToColRefMap::get)
+                    new ColumnRefSet(uc.getUniqueColumnNames(table).stream().map(nameToColRefMap::get)
                             .collect(Collectors.toList()))).collect(Collectors.toList());
             uniqueKeys = propagateThroughProjection(optExpression, uniqueKeys);
             optToUniqueKeys.put(optExpression, uniqueKeys);
