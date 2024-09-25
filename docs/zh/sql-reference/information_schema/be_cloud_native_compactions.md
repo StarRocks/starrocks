@@ -20,5 +20,5 @@ displayed_sidebar: docs
 | FINISH_TIME | 结束执行的时间。如果任务还在执行中，值为 NULL。              |
 | PROGRESS    | 进度的百分比，范围是 0 到 100。                              |
 | STATUS      | 任务运行状态。                                               |
-| PROFILE     | 实时的 profile 信息，比如读取数据耗时、写入数据耗时、排队时间等等。 |
+| PROFILE     | 实时的 Profile 信息，比如读取数据耗时、写入数据耗时、排队时间等等。 |
 
