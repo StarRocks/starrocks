@@ -389,6 +389,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
 PROPERTIES (
 "compression" = "LZ4",
+"fast_schema_evolution" = "false",
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
