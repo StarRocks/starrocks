@@ -20,4 +20,4 @@ The following fields are provided in `be_cloud_native_compactions`:
 | FINISH_TIME | Task finish time. `NULL` is returned if the task is still in progress. |
 | PROGRESS    | Percentage of progress, ranging from 0 to 100.               |
 | STATUS      | Task status.                                                 |
-| PROFILE     | real time profile, including data read time、data write time、in queue time, etc. |
+| PROFILE     | Real time profile, including data read time、data write time、in-queue time, etc. |
