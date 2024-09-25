@@ -631,7 +631,8 @@ public class ResourceGroupMgr implements Writable {
 
     public void createBuiltinResourceGroupsIfNotExist() {
         try {
-
+            // Create default resource groups only when there are BEs.
+            // Otherwise, we cannot get the number of cores of BE as `cpu_weight.`
             if (BackendResourceStat.getInstance().getNumBes() <= 0) {
                 return;
             }
