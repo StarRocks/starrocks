@@ -639,6 +639,15 @@ public class DatabaseTransactionMgr {
         return runningTxnNums;
     }
 
+    public long getRunningTxnNumsWithLock() {
+        readLock();
+        try {
+            return runningTxnNums;
+        } finally {
+            readUnlock();
+        }
+    }
+
     @VisibleForTesting
     protected int getRunningRoutineLoadTxnNums() {
         return runningRoutineLoadTxnNums;
