@@ -442,7 +442,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("No column definition in add column clause.");
         }
         try {
-            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+            if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                 columnDef.setAggregateType(AggregateType.REPLACE);
             }
             columnDef.analyze(true);
@@ -557,7 +557,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         boolean hasNormalColumn = false;
         for (ColumnDef colDef : columnDefs) {
             try {
-                if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                     colDef.setAggregateType(AggregateType.REPLACE);
                 }
                 colDef.analyze(true);
@@ -721,7 +721,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("No column definition in modify column clause.");
         }
         try {
-            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+            if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
                 columnDef.setAggregateType(AggregateType.REPLACE);
             }
             columnDef.analyze(true);
