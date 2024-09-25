@@ -641,7 +641,7 @@ private:
                         break;
                     }
                 }
-                // compare value
+
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
                               std::is_same_v<StructColumn, ElementColumn> ||
                               std::is_same_v<JsonColumn, ElementColumn>) {
@@ -1065,8 +1065,6 @@ private:
         bool nullable_target = false;
         bool const_target = false;
         ColumnPtr targets_holder;
-        // [[maybe_unused]] ColumnViewer<TYPE_ARRAY> viewer(array);
-        // LOG(INFO) << viewer.size();
 
         const UInt32Column& array_offsets = array.offsets();
         const UInt32Column& target_offsets = arg.offsets();
