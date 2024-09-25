@@ -334,8 +334,8 @@ void SystemMetrics::_update_memory_metrics() {
                 size_t fragmentation = resident - allocated - metadata;
                 fragmentation *= config::jemalloc_fragmentation_ratio;
                 // Handle the case that just release a lot of memory but not get purged
-                fragmentation = std::min(fragmentation, (size_t)(resident * config::jemalloc_fragmentation_ratio));
-                if (fragmentation > 0) {
+                bool mostly_allocated = allocated > (resident * 0.5);
+                if (fragmentation > 0 && mostly_allocated) {
                     GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()->set(fragmentation);
                 }
             }
