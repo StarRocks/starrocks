@@ -56,11 +56,12 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
                     .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
+                    .addColumn(new Column("ColumnStats", ScalarType.createVarcharType(128)))
                     .build();
 
     public static List<String> showBasicStatsMeta(ConnectContext context,
                                                   BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "");
         long dbId = basicStatsMeta.getDbId();
         long tableId = basicStatsMeta.getTableId();
         List<String> columns = basicStatsMeta.getColumns();
@@ -93,6 +94,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
         row.set(6, (int) (basicStatsMeta.getHealthy() * 100) + "%");
+        row.set(7, basicStatsMeta.getColumnStatsString());
 
         return row;
     }
