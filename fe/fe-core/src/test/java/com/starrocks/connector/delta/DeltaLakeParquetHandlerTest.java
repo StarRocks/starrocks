@@ -59,7 +59,8 @@ public class DeltaLakeParquetHandlerTest {
     String deltaLakePath = Objects.requireNonNull(ClassLoader.getSystemClassLoader()
             .getResource("connector/deltalake")).getPath();
 
-    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>>  checkpointCache = CacheBuilder.newBuilder()
+    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache =
+            CacheBuilder.newBuilder()
             .expireAfterWrite(3600, TimeUnit.SECONDS)
             .weigher((key, value) ->
                     Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
@@ -67,8 +68,8 @@ public class DeltaLakeParquetHandlerTest {
             .build(new CacheLoader<>() {
                 @NotNull
                 @Override
-                public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
-                    return DeltaLakeParquetHandler.readParquetFile(pair.first, pair.second, hdfsConfiguration);
+                public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
+                    return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
                 }
             });
 
@@ -77,7 +78,8 @@ public class DeltaLakeParquetHandlerTest {
         String path = deltaLakePath + "/00000000000000000030.checkpoint.parquet";
         DeltaLakeParquetHandler deltaLakeParquetHandler = new DeltaLakeParquetHandler(hdfsConfiguration, checkpointCache);
         StructType readSchema = LogReplay.getAddRemoveReadSchema(true);
-        FileStatus fileStatus = FileStatus.of(path, 0, 0);
+        FileStatus fileStatus = FileStatus.of(path, 111, 111111);
+        DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(fileStatus);
 
         List<Row> addRows = Lists.newArrayList();
         try (CloseableIterator<ColumnarBatch> parquetIter = deltaLakeParquetHandler.readParquetFiles(
@@ -119,7 +121,7 @@ public class DeltaLakeParquetHandlerTest {
         Assert.assertEquals(30, pathList.size());
         Assert.assertEquals(18, partitionValues.size());
         Assert.assertFalse(checkpointCache.asMap().isEmpty());
-        Assert.assertTrue(checkpointCache.asMap().containsKey(Pair.create(path, readSchema)));
+        Assert.assertTrue(checkpointCache.asMap().containsKey(Pair.create(deltaLakeFileStatus, readSchema)));
     }
 
     @Test
