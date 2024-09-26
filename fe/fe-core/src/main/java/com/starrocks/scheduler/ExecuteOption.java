@@ -118,7 +118,7 @@ public class ExecuteOption {
             return false;
         }
         if (containsKey(TaskRun.PARTITION_START) || containsKey(TaskRun.PARTITION_END)
-                || containsKey(TaskRun.START_TASK_RUN_ID)) {
+                || containsKey(TaskRun.START_TASK_RUN_ID) || containsKey(TaskRun.PARTITION_VALUES)) {
             return true;
         }
         return false;

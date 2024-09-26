@@ -1,4 +1,4 @@
--- name: test_mv_refresh_list_partitions_basic
+-- name: test_mv_refresh_list_partitions_partial_refresh
 create database db_${uuid0};
 -- result:
 -- !result
@@ -57,41 +57,38 @@ partition by dt
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
-'partition_refresh_number' = '-1',
+'partition_refresh_number' = '1',
 "replication_num" = "1"
 ) 
 as select dt, province, sum(age) from t3 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view  test_mv1 partition ('2024-01-01') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	20
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t3 where dt='2024-01-01'  group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	20
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt='2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t3 where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	40
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -106,35 +103,29 @@ PROPERTIES (
 as select dt, province, sum(age) from t3 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view test_mv1 partition ('beijing') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	40
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t3  where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	40
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3  where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t3  where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	60
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -149,7 +140,7 @@ PROPERTIES (
 as select dt, province, sum(age) from t3 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1;
+refresh materialized view test_mv1 partition ('2024-01-01');
 function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
 -- result:
 None
@@ -158,30 +149,27 @@ select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	60
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3  where dt='2024-01-01'  group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t3  where dt='2024-01-01'  group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	60
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3  where dt='2024-01-01'  group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t3  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	80
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -197,35 +185,29 @@ PROPERTIES (
 as select dt, province, sum(age) from t4 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view  test_mv1 partition ('beijing') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	20
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	20
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	40
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -240,35 +222,29 @@ PROPERTIES (
 as select dt, province, sum(age) from t4 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view  test_mv1 partition ('beijing') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	40
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	40
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	60
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -283,7 +259,7 @@ PROPERTIES (
 as select dt, province, sum(age) from t4 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1;
+refresh materialized view  test_mv1 partition ('beijing');
 function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
 -- result:
 None
@@ -291,31 +267,25 @@ None
 select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	60
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	60
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	80
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -331,35 +301,32 @@ PROPERTIES (
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view  test_mv1 partition ('2024-01-01') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	20
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	20
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	40
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -374,35 +341,29 @@ PROPERTIES (
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view  test_mv1 partition ('beijing') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	40
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	40
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	60
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -417,7 +378,7 @@ PROPERTIES (
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1;
+refresh materialized view  test_mv1 partition ('2024-01-01');
 function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
 -- result:
 None
@@ -426,30 +387,27 @@ select * from test_mv1 order by 1, 2;
 -- result:
 2024-01-01	beijing	60
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+True
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	60
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	80
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -466,37 +424,34 @@ PROPERTIES (
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view  test_mv1 partition('2024-01-01') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
-2024-01-02	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	80
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	100
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:
@@ -512,30 +467,26 @@ PROPERTIES (
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1 with sync mode;
+refresh materialized view  test_mv1 partition ('beijing') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5 where province='beijing' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	100
-2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
 -- !result
@@ -559,41 +510,38 @@ PROPERTIES (
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
-refresh materialized view  test_mv1;
+refresh materialized view  test_mv1 partition('2024-01-01');
 function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
 -- result:
 None
 -- !result
 select * from test_mv1 order by 1, 2;
 -- result:
-2024-01-02	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	120
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
 -- !result
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	140
 2024-01-01	guangdong	20
-2024-01-02	guangdong	20
 -- !result
 drop materialized view test_mv1;
 -- result:

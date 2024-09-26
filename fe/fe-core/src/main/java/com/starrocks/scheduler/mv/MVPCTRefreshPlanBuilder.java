@@ -17,6 +17,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
@@ -62,6 +63,34 @@ public class MVPCTRefreshPlanBuilder {
     private final MvTaskRunContext mvContext;
     private final MVPCTRefreshPartitioner mvRefreshPartitioner;
     private final boolean isRefreshFailOnFilterData;
+
+    // push down partition predicates into table relation
+    private static final String EXTRA_PREDICATE_KEY = "_EXTRA_";
+    // record mv's plan builder message to trace push-downed partition names and predicates
+    private final Map<String, String> mvPlanBuildMessage = Maps.newLinkedHashMap();
+
+    private void tracePartitionNames(Table table, Set<String> partitionNames) {
+        if (table == null || CollectionUtils.isEmpty(partitionNames)) {
+            return;
+        }
+        mvPlanBuildMessage.put(table.getName(), Joiner.on(",").join(partitionNames));
+    }
+
+    private void tracePartitionPredicate(Table table, Expr partitionPredicate) {
+        if (table == null || partitionPredicate == null) {
+            return;
+        }
+        mvPlanBuildMessage.put(table.getName(), partitionPredicate.debugString());
+    }
+
+    private void tracePartitionPredicates(List<Expr> partitionPredicate) {
+        mvPlanBuildMessage.put(EXTRA_PREDICATE_KEY,
+                partitionPredicate.stream().map(Expr::debugString).collect(Collectors.joining(",")));
+    }
+
+    public Map<String, String> getPlanBuilderMessage() {
+        return mvPlanBuildMessage;
+    }
 
     public MVPCTRefreshPlanBuilder(MaterializedView mv,
                                    MvTaskRunContext mvContext,
@@ -186,6 +215,7 @@ public class MVPCTRefreshPlanBuilder {
                     mv.getName(), numOfPushDownIntoTables);
             return insertStmt;
         }
+        tracePartitionPredicates(extraPartitionPredicates);
         if (queryRelation instanceof SelectRelation) {
             SelectRelation selectRelation = (SelectRelation) queryRelation;
             extraPartitionPredicates.add(selectRelation.getWhereClause());
@@ -242,6 +272,7 @@ public class MVPCTRefreshPlanBuilder {
                 mv.getName(), tableRelation.getName(), Joiner.on(",").join(tablePartitionNames));
         tableRelation.setPartitionNames(
                 new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+        tracePartitionNames(table, tablePartitionNames);
         return true;
     }
 
@@ -280,6 +311,7 @@ public class MVPCTRefreshPlanBuilder {
                         "relation {},  partition predicate:{} ",
                 mv.getName(), tableRelation.getName(), partitionPredicate.toSql());
         tableRelation.setPartitionPredicate(partitionPredicate);
+        tracePartitionPredicate(table, partitionPredicate);
         return true;
     }
 

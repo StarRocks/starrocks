@@ -467,6 +467,8 @@ import com.starrocks.sql.automv.ast.AlterTunespaceClause;
 import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.util.EitherOr;
 import com.starrocks.transaction.GtidGenerator;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
@@ -496,6 +498,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -2052,14 +2055,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StarRocksParser.RefreshMaterializedViewStatementContext context) {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
-        PartitionRangeDesc partitionRangeDesc = null;
+        PartitionRangeDesc rangePartitionDesc = null;
+        Set<PListCell> cells = null;
         if (context.partitionRangeDesc() != null) {
-            partitionRangeDesc =
+            rangePartitionDesc =
                     (PartitionRangeDesc) visit(context.partitionRangeDesc());
+        } else if (context.listPartitionValues() != null) {
+            StarRocksParser.ListPartitionValuesContext listPartitionValuesContext =
+                    context.listPartitionValues();
+            if (listPartitionValuesContext.multiListPartitionValues() != null) {
+                List<List<String>> multiListValues =
+                        parseMultiListPartitionValues(listPartitionValuesContext.multiListPartitionValues());
+                cells = multiListValues.stream()
+                        .map(items -> new PListCell(ImmutableList.of(items)))
+                        .collect(Collectors.toSet());
+            } else {
+                List<String> singleListValues =
+                        parseSingleListPartitionValues(listPartitionValuesContext.singleListPartitionValues());
+                cells = singleListValues.stream()
+                        .map(item -> new PListCell(item))
+                        .collect(Collectors.toSet());
+            }
         }
-        return new RefreshMaterializedViewStatement(mvName, partitionRangeDesc, context.FORCE() != null,
-                context.SYNC() != null,
-                createPos(context));
+        return new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
+                context.FORCE() != null, context.SYNC() != null, createPos(context));
     }
 
     @Override
@@ -7320,7 +7339,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 createPos(context));
     }
 
-    public List<String> parseListPartitionValueList(StarRocksParser.ListPartitionValueListContext valueListContext) {
+    public List<String> parseSingleListPartitionValues(StarRocksParser.SingleListPartitionValuesContext valueListContext) {
         return valueListContext.listPartitionValue().stream().map(x -> {
             if (x.NULL() != null) {
                 return PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
@@ -7332,7 +7351,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSingleItemListPartitionDesc(StarRocksParser.SingleItemListPartitionDescContext context) {
-        List<String> values = parseListPartitionValueList(context.listPartitionValueList());
+        List<String> values = parseSingleListPartitionValues(context.singleListPartitionValues());
         boolean ifNotExists = context.IF() != null;
         Map<String, String> properties = null;
         if (context.propertyList() != null) {
@@ -7346,12 +7365,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 values, properties, createPos(context));
     }
 
+    private List<List<String>> parseMultiListPartitionValues(StarRocksParser.MultiListPartitionValuesContext context) {
+        return context.singleListPartitionValues().stream()
+                .map(this::parseSingleListPartitionValues)
+                .collect(toList());
+    }
+
     @Override
     public ParseNode visitMultiItemListPartitionDesc(StarRocksParser.MultiItemListPartitionDescContext context) {
         boolean ifNotExists = context.IF() != null;
-        List<List<String>> multiValues = context.listPartitionValueList().stream()
-                .map(l -> parseListPartitionValueList(l))
-                .collect(toList());
+        List<List<String>> multiValues = parseMultiListPartitionValues(context.multiListPartitionValues());
         Map<String, String> properties = null;
         if (context.propertyList() != null) {
             properties = new HashMap<>();

@@ -49,9 +49,9 @@ public class TestUtil {
 
     @Test
     public void testEitherOr() {
-        EitherOr<String> a = EitherOr.either("abcd");
-        EitherOr<String> b = EitherOr.or("abcd");
-        Assert.assertEquals(a.get(), b.get());
+        EitherOr<String, String> a = EitherOr.left("abcd");
+        EitherOr<String, String> b = EitherOr.right("abcd");
+        Assert.assertEquals(a.left(), b.right());
         Assert.assertTrue(a.getFirst().isPresent());
         Assert.assertFalse(a.getSecond().isPresent());
         Assert.assertFalse(b.getFirst().isPresent());

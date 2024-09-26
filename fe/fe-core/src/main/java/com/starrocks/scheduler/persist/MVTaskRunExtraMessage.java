@@ -56,6 +56,8 @@ public class MVTaskRunExtraMessage implements Writable {
     private String nextPartitionStart;
     @SerializedName("nextPartitionEnd")
     private String nextPartitionEnd;
+    @SerializedName("nextPartitionValues")
+    private String nextPartitionValues;
 
     // task run starts to process time
     // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
@@ -64,6 +66,9 @@ public class MVTaskRunExtraMessage implements Writable {
 
     @SerializedName("executeOption")
     private ExecuteOption executeOption = new ExecuteOption(true);
+
+    @SerializedName("planBuilderMessage")
+    public Map<String, String> planBuilderMessage = Maps.newHashMap();
 
     public MVTaskRunExtraMessage() {
     }
@@ -167,12 +172,25 @@ public class MVTaskRunExtraMessage implements Writable {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
+    }
+
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
+    }
+
     public long getProcessStartTime() {
         return processStartTime;
     }
 
     public void setProcessStartTime(long processStartTime) {
         this.processStartTime = processStartTime;
+    }
+
+    public void setPlanBuilderMessage(Map<String, String> planBuilderMessage) {
+        this.planBuilderMessage = MvUtils.shrinkToSize(planBuilderMessage,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     @Override
