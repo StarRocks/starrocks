@@ -788,6 +788,10 @@ SegmentedChunk::SegmentedChunk(size_t segment_size) : _segment_size(segment_size
     _segments[0] = std::make_shared<Chunk>();
 }
 
+SegmentedChunkPtr SegmentedChunk::create(size_t segment_size) {
+    return std::make_shared<SegmentedChunk>(segment_size);
+}
+
 void SegmentedChunk::append_column(ColumnPtr column, SlotId slot_id) {
     // It's only used when initializing the chunk, so append the column to first chunk is enough
     DCHECK_EQ(_segments.size(), 1);
@@ -795,7 +799,7 @@ void SegmentedChunk::append_column(ColumnPtr column, SlotId slot_id) {
 }
 
 void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots) {
-    ChunkPtr open_segment = _segments[_segments.size() - 1];
+    ChunkPtr open_segment = _segments.back();
     size_t append_rows = chunk->num_rows();
     size_t append_index = 0;
     while (append_rows > 0) {
@@ -808,25 +812,24 @@ void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotI
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;
         if (open_segment->num_rows() == _segment_size) {
-            _segments.emplace_back(open_segment->clone_empty());
+            open_segment = open_segment->clone_empty();
+            _segments.emplace_back(open_segment);
         }
     }
 }
 
 void SegmentedChunk::append_chunk(const ChunkPtr& chunk) {
-    ChunkPtr open_segment = _segments[_segments.size() - 1];
+    ChunkPtr open_segment = _segments.back();
     size_t append_rows = chunk->num_rows();
     size_t append_index = 0;
     while (append_rows > 0) {
         size_t open_segment_append_rows = std::min(_segment_size - open_segment->num_rows(), append_rows);
-        for (int i = 0; i < chunk->num_columns(); i++) {
-            ColumnPtr column = chunk->get_column_by_index(i);
-            open_segment->columns()[i]->append(*column, append_index, open_segment_append_rows);
-        }
+        open_segment->append(*chunk, append_index, open_segment_append_rows);
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;
         if (open_segment->num_rows() == _segment_size) {
-            _segments.emplace_back(open_segment->clone_empty());
+            open_segment = open_segment->clone_empty();
+            _segments.emplace_back(open_segment);
         }
     }
 }
@@ -913,6 +916,10 @@ const std::vector<ChunkPtr>& SegmentedChunk::segments() const {
 }
 std::vector<ChunkPtr>& SegmentedChunk::segments() {
     return _segments;
+}
+
+ChunkUniquePtr SegmentedChunk::clone_empty(size_t reserve) {
+    return _segments[0]->clone_empty(reserve);
 }
 
 void SegmentedChunk::reset() {
