@@ -137,10 +137,6 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
                 params.sink_commit_infos.push_back(info);
             }
         }
-
-        // Send new errors to coordinator
-        runtime_state->get_unreported_errors(&(params.error_log));
-        params.__isset.error_log = (params.error_log.size() > 0);
     }
 
     auto backend_id = get_backend_id();
