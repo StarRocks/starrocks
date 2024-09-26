@@ -51,6 +51,9 @@ public:
     // Memory usage of lru cache
     size_t get_memory_usage() const;
 
+    // Adjust capacity
+    void set_capacity(size_t capacity);
+
 private:
     void _insert(const std::string& key, Rowset* ptr, size_t size);
     void _erase(const std::string& key);

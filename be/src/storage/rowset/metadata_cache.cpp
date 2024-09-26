@@ -47,6 +47,10 @@ size_t MetadataCache::get_memory_usage() const {
     return _cache->get_memory_usage();
 }
 
+void MetadataCache::set_capacity(size_t capacity) {
+    _cache->set_capacity(capacity);
+}
+
 void MetadataCache::_insert(const std::string& key, Rowset* ptr, size_t size) {
     Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, _cache_value_deleter);
     _cache->release(handle);

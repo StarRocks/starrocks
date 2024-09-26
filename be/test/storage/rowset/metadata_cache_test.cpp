@@ -140,4 +140,54 @@ TEST_F(MetadataCacheTest, test_manual_evcit) {
     }
 }
 
+TEST_F(MetadataCacheTest, test_warmup) {
+    const size_t N = 100;
+    vector<int64_t> keys;
+    for (size_t i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    {
+        vector<RowsetSharedPtr> rowsets;
+        auto tablet_ptr = create_tablet(1002, 10004);
+        auto metadata_cache_ptr = std::make_unique<MetadataCache>(10000000);
+        for (int i = 0; i < 10 * 32; i++) {
+            auto rowset_ptr = create_rowset(tablet_ptr, keys);
+            ASSERT_TRUE(rowset_ptr->load().ok());
+            ASSERT_TRUE(rowset_ptr->segment_memory_usage() > 0);
+            metadata_cache_ptr->cache_rowset(rowset_ptr.get());
+            rowsets.push_back(rowset_ptr);
+        }
+        size_t capacity = 0;
+        for (int i = 0; i < 5 * 32; i++) {
+            capacity += rowsets[i]->segment_memory_usage();
+        }
+        // evict 0-4
+        metadata_cache_ptr->set_capacity(capacity);
+        ASSERT_TRUE(rowsets[0]->segment_memory_usage() == 0);
+        ASSERT_TRUE(rowsets[10 * 32 - 1]->segment_memory_usage() > 0);
+    }
+    {
+        vector<RowsetSharedPtr> rowsets;
+        auto tablet_ptr = create_tablet(1002, 10004);
+        auto metadata_cache_ptr = std::make_unique<MetadataCache>(10000000);
+        for (int i = 0; i < 10 * 32; i++) {
+            auto rowset_ptr = create_rowset(tablet_ptr, keys);
+            ASSERT_TRUE(rowset_ptr->load().ok());
+            ASSERT_TRUE(rowset_ptr->segment_memory_usage() > 0);
+            metadata_cache_ptr->cache_rowset(rowset_ptr.get());
+            rowsets.push_back(rowset_ptr);
+        }
+        size_t capacity = 0;
+        for (int i = 0; i < 5 * 32; i++) {
+            capacity += rowsets[i]->segment_memory_usage();
+            // warmup
+            metadata_cache_ptr->warmup_rowset(rowsets[i].get());
+        }
+        // evict 5-9
+        metadata_cache_ptr->set_capacity(capacity);
+        ASSERT_TRUE(rowsets[5 * 32 - 1]->segment_memory_usage() > 0);
+        ASSERT_TRUE(rowsets[10 * 32 - 1]->segment_memory_usage() == 0);
+    }
+}
+
 } // namespace starrocks
