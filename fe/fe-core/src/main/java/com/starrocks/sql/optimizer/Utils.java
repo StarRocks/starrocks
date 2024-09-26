@@ -28,6 +28,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -784,7 +785,8 @@ public class Utils {
         try {
             statisticsCalculator.estimatorStats();
         } catch (Exception e) {
-            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            LOG.warn("[query={}] Failed to calculate statistics for expression: {}",
+                    DebugUtil.getSessionQueryId(), expr, e);
             return;
         }
 
