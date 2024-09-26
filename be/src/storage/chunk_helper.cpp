@@ -790,6 +790,7 @@ SegmentedChunk::SegmentedChunk(size_t segment_size) : _segment_size(segment_size
 
 void SegmentedChunk::append_column(ColumnPtr column, SlotId slot_id) {
     // It's only used when initializing the chunk, so append the column to first chunk is enough
+    DCHECK_EQ(_segments.size(), 1);
     _segments[0]->append_column(std::move(column), slot_id);
 }
 
@@ -807,7 +808,7 @@ void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotI
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;
         if (open_segment->num_rows() == _segment_size) {
-            _segments.emplace_back();
+            _segments.emplace_back(open_segment->clone_empty());
         }
     }
 }
@@ -825,7 +826,7 @@ void SegmentedChunk::append_chunk(const ChunkPtr& chunk) {
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;
         if (open_segment->num_rows() == _segment_size) {
-            _segments.emplace_back();
+            _segments.emplace_back(open_segment->clone_empty());
         }
     }
 }
@@ -849,6 +850,7 @@ void SegmentedChunk::append(const SegmentedChunkPtr& chunk, size_t offset) {
 }
 
 void SegmentedChunk::append_finished() {
+    DCHECK(_segments.size() >= 1);
     size_t num_columns = _segments[0]->num_columns();
     for (int i = 0; i < num_columns; i++) {
         _columns.emplace_back(std::make_shared<SegmentedColumn>(shared_from_this(), i));
@@ -915,7 +917,7 @@ std::vector<ChunkPtr>& SegmentedChunk::segments() {
 
 void SegmentedChunk::reset() {
     for (auto& chunk : _segments) {
-        chunk.reset();
+        chunk->reset();
     }
 }
 
