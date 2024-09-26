@@ -187,6 +187,8 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     FLAGS_logbufsecs = 30;
     // Set roll num.
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
+    // Enable compress for log file.
+    FLAGS_enable_compress = config::enable_compress_log;
 
     // Set log level.
     std::string loglevel = config::sys_log_level;

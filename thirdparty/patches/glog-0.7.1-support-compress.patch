@@ -1,0 +1,370 @@
+From ee496c6beaf76db67be6cdb8fc73bd121b6d8b03 Mon Sep 17 00:00:00 2001
+From: sevev <qiangzh95@gmail.com>
+Date: Wed, 25 Sep 2024 19:14:05 +0800
+Subject: [PATCH] support compress
+
+Signed-off-by: sevev <qiangzh95@gmail.com>
+---
+ CMakeLists.txt   |   7 ++
+ src/flags.cc     |   3 +
+ src/glog/flags.h |   2 +
+ src/logging.cc   | 196 ++++++++++++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 205 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 45064ab..412228b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -83,6 +83,12 @@ if (WITH_GFLAGS)
+ endif (WITH_GFLAGS)
+ 
+ find_package (Threads REQUIRED)
++find_package(ZLIB REQUIRED)
++if (ZLIB_FOUND)
++  message(STATUS "ZLIB found: ${ZLIB_LIBRARIES}")
++  include_directories (${ZLIB_INCLUDE_DIRS})
++endif()
++
+ find_package (Unwind)
+ 
+ if (Unwind_FOUND)
+@@ -444,6 +450,7 @@ if (HAVE_DBGHELP)
+ endif (HAVE_DBGHELP)
+ 
+ target_link_libraries (glog PRIVATE Threads::Threads)
++target_link_libraries (glog PUBLIC z)
+ 
+ if (CMAKE_THREAD_LIBS_INIT)
+   set (glog_libraries_options_for_static_linking "${glog_libraries_options_for_static_linking} ${CMAKE_THREAD_LIBS_INIT}")
+diff --git a/src/flags.cc b/src/flags.cc
+index 7329c80..f24579a 100644
+--- a/src/flags.cc
++++ b/src/flags.cc
+@@ -139,6 +139,9 @@ GLOG_DEFINE_bool(stop_logging_if_full_disk, false,
+ 
+ GLOG_DEFINE_string(log_split_method, "day", "split log by size, day, hour");
+ 
++GLOG_DEFINE_bool(enable_compress, true,
++                 "enable compress for log file");
++
+ GLOG_DEFINE_int32(log_filenum_quota, 10, "max log file num in log dir");
+ 
+ GLOG_DEFINE_string(log_backtrace_at, "",
+diff --git a/src/glog/flags.h b/src/glog/flags.h
+index 31d5e6e..2c13d36 100644
+--- a/src/glog/flags.h
++++ b/src/glog/flags.h
+@@ -186,6 +186,8 @@ DECLARE_int32(log_filenum_quota);
+ 
+ DECLARE_string(log_split_method);
+ 
++DECLARE_bool(enable_compress);
++
+ #pragma pop_macro("DECLARE_VARIABLE")
+ #pragma pop_macro("DECLARE_bool")
+ #pragma pop_macro("DECLARE_string")
+diff --git a/src/logging.cc b/src/logging.cc
+index 970cba1..5fb22cd 100644
+--- a/src/logging.cc
++++ b/src/logging.cc
+@@ -47,6 +47,11 @@
+ #include <tuple>
+ #include <type_traits>
+ #include <utility>
++#include <zlib.h>
++#include <condition_variable>
++#include <queue>
++#include <atomic>
++#include <fstream>
+ 
+ #include "config.h"
+ #include "glog/platform.h"
+@@ -452,6 +457,82 @@ typedef struct filetime {
+     }
+ }Filetime;
+ 
++
++class LogFileObject;
++struct CompressTask {
++    CompressTask() {}
++    CompressTask(FILE* file, std::string src_file_path, std::string dest_file_path,
++                 LogFileObject* log_file) : 
++        src_file_(file),
++        src_file_path_(src_file_path),
++        dest_file_path_(dest_file_path),
++        log_file_(log_file) {}
++
++    FILE* src_file_;
++    std::string dest_file_path_;
++    std::string src_file_path_;
++    LogFileObject* log_file_;
++};
++
++class BackgroundCompressor {
++public:
++    BackgroundCompressor() : stop_thread(false) {
++        worker_thread = std::thread(&BackgroundCompressor::run, this);
++    }
++
++    ~BackgroundCompressor() {
++        {
++            std::unique_lock<std::mutex> lock(queue_mutex);
++            stop_thread = true;
++        }
++        condition.notify_one();
++        if (worker_thread.joinable()) {
++            worker_thread.join();
++        }
++    }
++
++    void SubmitTask(FILE* file, std::string& src_file_path, std::string& dest_file_path,
++                    LogFileObject* log_file) {
++        {
++            std::unique_lock<std::mutex> lock(queue_mutex);
++            task_queue.push(CompressTask(file, src_file_path, dest_file_path, log_file));
++        }
++        condition.notify_one();
++    }
++
++    bool FileExists(const std::string& filename) {
++        std::ifstream file(filename.c_str());
++        return file.good();
++    }
++
++    void CompressFile(CompressTask& task);
++
++private:
++    std::thread worker_thread;
++    std::mutex queue_mutex;
++    std::condition_variable condition;
++    std::queue<CompressTask> task_queue;
++    std::atomic<bool> stop_thread;
++
++    void run() {
++        while (true) {
++            CompressTask task;
++            {
++                std::unique_lock<std::mutex> lock(queue_mutex);
++                condition.wait(lock, [this] { return !task_queue.empty() || stop_thread; });
++
++                if (stop_thread && task_queue.empty()) {
++                    break;
++                }
++                task = task_queue.front();
++                task_queue.pop();
++            }
++            CompressFile(task);
++        }
++    }
++};
++
++
+ // Encapsulates all file-system related state
+ class LogFileObject : public base::Logger {
+  public:
+@@ -485,6 +566,8 @@ class LogFileObject : public base::Logger {
+ 
+   void CheckFileNumQuota();
+ 
++  void PushCompressedLogFile(std::string& filepath);
++
+  private:
+   static const uint32 kRolloverAttemptFrequency = 0x20;
+ 
+@@ -509,8 +592,10 @@ class LogFileObject : public base::Logger {
+   bool CreateLogfile(const string& time_pid_string);
+ 
+   std::list<Filetime> file_list_;
++  std::list<Filetime> compressed_file_list_;
+   bool inited_;
+   struct ::tm tm_time_;
++  BackgroundCompressor compressor_;
+ };
+ 
+ // Encapsulate all log cleaner related states
+@@ -1007,6 +1092,50 @@ string PrettyDuration(const std::chrono::duration<int>& secs) {
+   return result.str();
+ }
+ 
++void BackgroundCompressor::CompressFile(CompressTask& task) {
++    if (FileExists(task.dest_file_path_)) {
++        if (task.src_file_ != nullptr) {
++            fclose(task.src_file_);
++        }
++        unlink(task.src_file_path_.c_str());
++        return;
++    }
++    const int buffer_size = 16384; // 16KB buffer
++    char buffer[buffer_size];
++
++    std::string output_filename = task.dest_file_path_ + ".tmp";
++    gzFile output_file = gzopen(output_filename.c_str(), "wb");
++    if (!output_file) {
++        fprintf(stderr, "Failed to open output file: %s\n", output_filename.c_str());
++        if (task.src_file_ != nullptr) {
++            fclose(task.src_file_);
++        }
++        return;
++    }
++
++    size_t read_size;
++    while ((read_size = fread(buffer, 1, buffer_size, task.src_file_)) > 0) {
++        gzwrite(output_file, buffer, static_cast<unsigned int>(read_size));
++    }
++
++    gzclose(output_file);
++
++    bool flag = rename(output_filename.c_str(), task.dest_file_path_.c_str()) == 0;
++    if (!flag) {
++        fprintf(stderr, "Failed to rename temp file to destination file: %s\n", task.dest_file_path_.c_str());
++    }
++    if (task.src_file_ != nullptr) {
++        fclose(task.src_file_);
++    }
++    // TODO(zhangqiang)
++    if (flag) {
++        task.log_file_->PushCompressedLogFile(task.dest_file_path_);
++        // remove src file
++        unlink(task.src_file_path_.c_str());
++    }
++}
++
++
+ LogFileObject::LogFileObject(LogSeverity severity, const char* base_filename)
+     : base_filename_selected_(base_filename != nullptr),
+       base_filename_((base_filename != nullptr) ? base_filename : ""),
+@@ -1015,7 +1144,8 @@ LogFileObject::LogFileObject(LogSeverity severity, const char* base_filename)
+       severity_(severity),
+       rollover_attempt_(kRolloverAttemptFrequency - 1),
+       start_time_(std::chrono::system_clock::now()),
+-      inited_(false) {}
++      inited_(false),
++      compressor_() {}
+ 
+ LogFileObject::~LogFileObject() {
+   std::lock_guard<std::mutex> l{mutex_};
+@@ -1171,6 +1301,19 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
+   return true;  // Everything worked
+ }
+ 
++void LogFileObject::PushCompressedLogFile(std::string& compressed_file) {
++    std::lock_guard<std::mutex> l{mutex_};
++    struct stat fstat;
++    if (::stat(compressed_file.c_str(), &fstat) < 0) {
++        fprintf(stderr, "state %s fail\n", compressed_file.c_str());
++        return;
++    }
++    Filetime file_time;
++    file_time.time = fstat.st_mtime;
++    file_time.name = compressed_file;
++    compressed_file_list_.push_back(file_time);
++}
++
+ void LogFileObject::CheckFileNumQuota() {
+     struct dirent *entry;
+     DIR *dp;
+@@ -1187,6 +1330,7 @@ void LogFileObject::CheckFileNumQuota() {
+     }
+ 
+     file_list_.clear();
++    compressed_file_list_.clear();
+     while ((entry = readdir(dp)) != NULL) {
+         if (DT_DIR == entry->d_type ||
+                 DT_LNK == entry->d_type) {
+@@ -1196,6 +1340,13 @@ void LogFileObject::CheckFileNumQuota() {
+         //fprintf(stderr, "filename: %s\n", filename.c_str());
+         if (filename.find(symlink_basename_ + '.' + LogSeverityNames[severity_]) == 0) {
+             std::string filepath = log_dirs[0] + "/" + filename;
++            std::string tmp_suffix = ".tmp";
++            if (filepath.length() >= tmp_suffix.length() &&
++                filepath.compare(filepath.length() - tmp_suffix.length(), tmp_suffix.length(), tmp_suffix) == 0 &&
++                !inited_) {
++                    unlink(filepath.c_str());
++                    continue;
++            }
+             struct stat fstat;
+             if (::stat(filepath.c_str(), &fstat) < 0) {
+                 fprintf(stderr, "state %s fail\n", filepath.c_str());
+@@ -1206,18 +1357,47 @@ void LogFileObject::CheckFileNumQuota() {
+             Filetime file_time;
+             file_time.time = fstat.st_mtime;
+             file_time.name = filepath;
+-            file_list_.push_back(file_time);
++
++            std::string compressed_suffix = ".gz";
++            if (filepath.length() >= compressed_suffix.length() &&
++                filepath.compare(filepath.length() - compressed_suffix.length(), 
++                                 compressed_suffix.length(), compressed_suffix) == 0) {
++                compressed_file_list_.push_back(file_time);
++            } else {
++                file_list_.push_back(file_time);
++            }
+         }
+     }
+ 
+     closedir(dp);
+     file_list_.sort();
++    compressed_file_list_.sort();
+ 
+     while (FLAGS_log_filenum_quota > 0 && file_list_.size() >= FLAGS_log_filenum_quota) {
+        // fprintf(stderr, "delete %s\n", file_list_.front().name.c_str());
+         unlink(file_list_.front().name.c_str());
+         file_list_.pop_front();
+     }
++
++    while (FLAGS_log_filenum_quota > 0 && compressed_file_list_.size() >= FLAGS_log_filenum_quota) {
++        unlink(compressed_file_list_.front().name.c_str());
++        compressed_file_list_.pop_front();
++    }
++
++    if (!inited_ && FLAGS_enable_compress) {
++        // resubmit compress task for all files in file_list_
++        int num = 0;
++        for (auto& filename : file_list_) {
++            num++;
++            if (num == file_list_.size()) {
++                continue;
++            }
++            std::string src_file_path = filename.name;
++            std::string dst_file_path = src_file_path + ".gz";
++            FILE* src_file = fopen(src_file_path.c_str(), "r");
++            compressor_.SubmitTask(src_file, src_file_path, dst_file_path, this);
++        }
++    }
+ }
+ 
+ void LogFileObject::Write(
+@@ -1264,12 +1444,18 @@ void LogFileObject::Write(
+   }
+ 
+   if (is_split) {
++    if (FLAGS_enable_compress) {
++        std::string src_file_path = file_list_.back().name;
++        std::string dst_file_path = src_file_path + ".gz";
++        FILE* src_file = fopen(src_file_path.c_str(), "r");
++        compressor_.SubmitTask(src_file, src_file_path, dst_file_path, this);
++    }
+     file_ = nullptr;
+     file_length_ = bytes_since_flush_ = dropped_mem_length_ = 0;
+     rollover_attempt_ = kRolloverAttemptFrequency - 1;
+   }
+ 
+-    if ((file_ == NULL) && (!inited_) && (FLAGS_log_split_method == "size")) {
++  if ((file_ == NULL) && (!inited_) && (FLAGS_log_split_method == "size")) {
+       CheckFileNumQuota();
+       const char* filename = file_list_.back().name.c_str();
+       int fd = open(filename, O_WRONLY | O_CREAT /* | O_EXCL */ | O_APPEND, 0664);
+@@ -1306,6 +1492,10 @@ void LogFileObject::Write(
+             unlink(file_list_.front().name.c_str());
+             file_list_.pop_front();
+         }
++        while (FLAGS_log_filenum_quota > 0 && compressed_file_list_.size() >= FLAGS_log_filenum_quota) {
++            unlink(compressed_file_list_.front().name.c_str());
++            compressed_file_list_.pop_front();
++        }
+     }
+     localtime_r(&t, &tm_time);
+ 
+-- 
+2.34.1
+

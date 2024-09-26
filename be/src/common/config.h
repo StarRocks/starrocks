@@ -193,6 +193,8 @@ CONF_Int32(sys_log_verbose_level, "10");
 // The log buffer level.
 CONF_String(log_buffer_level, "");
 
+CONF_Bool(enable_compress_log, "true");
+
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
 
