@@ -54,14 +54,14 @@ public class DeltaLakeJsonHandlerTest {
     private final String deltaLakePath = Objects.requireNonNull(ClassLoader.getSystemClassLoader()
             .getResource("connector/deltalake")).getPath();
 
-    private final LoadingCache<String, List<JsonNode>>  jsonCache = CacheBuilder.newBuilder()
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache = CacheBuilder.newBuilder()
             .expireAfterWrite(3600, TimeUnit.SECONDS)
             .maximumSize(100)
             .build(new CacheLoader<>() {
                 @NotNull
                 @Override
-                public List<JsonNode> load(@NotNull String filePath) throws IOException {
-                    return DeltaLakeJsonHandler.readJsonFile(filePath, hdfsConfiguration);
+                public List<JsonNode> load(@NotNull DeltaLakeFileStatus fileStatus) throws IOException {
+                    return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), hdfsConfiguration);
                 }
             });
 
@@ -91,7 +91,8 @@ public class DeltaLakeJsonHandlerTest {
         DeltaLakeJsonHandler deltaLakeJsonHandler = new DeltaLakeJsonHandler(hdfsConfiguration, jsonCache);
 
         StructType readSchema = LogReplay.getAddRemoveReadSchema(true);
-        FileStatus fileStatus = FileStatus.of(path, 0, 0);
+        FileStatus fileStatus = FileStatus.of(path, 123, 123);
+        DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(fileStatus);
 
         List<Row> addRows = Lists.newArrayList();
         try (CloseableIterator<ColumnarBatch> jsonIter = deltaLakeJsonHandler.readJsonFiles(
@@ -130,6 +131,6 @@ public class DeltaLakeJsonHandlerTest {
         Assert.assertEquals("2024-01-06", partitionValues.get("col_date"));
 
         Assert.assertFalse(jsonCache.asMap().isEmpty());
-        Assert.assertTrue(jsonCache.asMap().containsKey(path));
+        Assert.assertTrue(jsonCache.asMap().containsKey(deltaLakeFileStatus));
     }
 }

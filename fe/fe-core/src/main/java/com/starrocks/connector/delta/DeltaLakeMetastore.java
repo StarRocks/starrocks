@@ -56,8 +56,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     protected final Configuration hdfsConfiguration;
     protected final DeltaLakeCatalogProperties properties;
 
-    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache;
-    private final LoadingCache<String, List<JsonNode>> jsonCache;
+    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     public DeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration,
                               DeltaLakeCatalogProperties properties) {
@@ -77,8 +77,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
-                    public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first, pair.second, hdfsConfiguration);
+                    public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
                     }
                 });
 
@@ -90,8 +90,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
-                    public List<JsonNode> load(@NotNull String filePath) throws IOException {
-                        return DeltaLakeJsonHandler.readJsonFile(filePath, hdfsConfiguration);
+                    public List<JsonNode> load(@NotNull DeltaLakeFileStatus fileStatus) throws IOException {
+                        return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), hdfsConfiguration);
                     }
                 });
     }
