@@ -96,6 +96,7 @@ int init_test_env(int argc, char** argv) {
     config::disable_storage_page_cache = true;
     auto st = global_env->init();
     CHECK(st.ok()) << st;
+
     auto* exec_env = ExecEnv::GetInstance();
     // Pagecache is turned on by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
