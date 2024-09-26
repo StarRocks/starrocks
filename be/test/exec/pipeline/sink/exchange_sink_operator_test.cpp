@@ -39,10 +39,12 @@ protected:
 
     void SetUp() override {
         state = new RuntimeState();
-        delete state;
     }
 
-    void TearDown() override { delete channel; }
+    void TearDown() override {
+        delete channel;
+        delete state;
+    }
 };
 
 Status mock_hostname_to_ip(const std::string& host, std::string& ip, bool ipv6) {
@@ -53,8 +55,8 @@ Status mock_hostname_to_ip(const std::string& host, std::string& ip, bool ipv6) 
     return Status::InternalError("Invalid host");
 }
 
-TEST_F(ExchangeSinkOperatorChannelTest, TestInitWithValidHostname) {
-    brpc_dest.hostname = "invalid.cm.invalid";
+TEST_F(ExchangeSinkOperatorChannelTest, test_init_with_valid_hostname) {
+    brpc_dest.hostname = "valid.hostname.com";
     brpc_dest.port = 123;
     channel = new ExchangeSinkOperator::Channel(parent, brpc_dest, fragment_instance_id, dest_node_id, num_shuffles,
                                                 enable_exchange_pass_through, enable_exchange_perf,
@@ -67,7 +69,7 @@ TEST_F(ExchangeSinkOperatorChannelTest, TestInitWithValidHostname) {
     EXPECT_EQ(channel->get_brpc_dest_real_ip(), "192.168.1.1");
 }
 
-TEST_F(ExchangeSinkOperatorChannelTest, TestInitWithInvalidHostname) {
+TEST_F(ExchangeSinkOperatorChannelTest, test_init_with_invalid_hostname) {
     brpc_dest.hostname = "invalid.hostname.com";
     brpc_dest.port = 123;
     channel = new ExchangeSinkOperator::Channel(parent, brpc_dest, fragment_instance_id, dest_node_id, num_shuffles,
