@@ -1,0 +1,5 @@
+-- name: test_partition_ttl
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_ttl" = "3 month");
+show create table ss;
+alter table ss set ("partition_ttl" = "6 month");
+show create table ss;
