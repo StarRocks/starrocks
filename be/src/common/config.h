@@ -80,6 +80,11 @@ CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
 // it will be set to physical memory size.
 CONF_String(mem_limit, "90%");
 
+// Enable the jemalloc tracker, which is responsible for reserving memory
+CONF_Bool(enable_jemalloc_memory_tracker, "true");
+// Consider part of jemalloc memory as fragmentation: ratio * (RSS-allocated-metadata)
+CONF_mDouble(jemalloc_fragmentation_ratio, "0.3");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
