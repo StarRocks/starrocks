@@ -17,6 +17,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
@@ -41,6 +43,7 @@ public class CoordinatorMonitorTest {
             List<DefaultCoordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
+            Pair<PPlanFragmentCancelReason, String> coord1Cancel = new Pair<>(null, null);
 
             CountDownLatch cancelInvocationLatch = new CountDownLatch(2);
             new Expectations(qeProcessor, coord1, coord2, coord3) {
@@ -51,19 +54,19 @@ public class CoordinatorMonitorTest {
 
                 {
                     coord1.getQueryId();
-                    result = new TUniqueId();
+                    result = new TUniqueId(0xaabbccddL, 0xaabbccddL);
                     minTimes = 0;
                 }
 
                 {
                     coord2.getQueryId();
-                    result = new TUniqueId();
+                    result = new TUniqueId(0xddccbbaaL, 0xddccbbaaL);
                     minTimes = 0;
                 }
 
                 {
                     coord3.getQueryId();
-                    result = new TUniqueId();
+                    result = new TUniqueId(0xccbbddaaL, 0xccddbbaaL);
                     minTimes = 0;
                 }
 
@@ -99,6 +102,8 @@ public class CoordinatorMonitorTest {
                     result = new mockit.Delegate<Boolean>() {
                         void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
                             cancelInvocationLatch.countDown();
+                            coord1Cancel.first = cancelReason;
+                            coord1Cancel.second = cancelledMessage;
                         }
                     };
                     times = 1;
@@ -130,6 +135,9 @@ public class CoordinatorMonitorTest {
 
             // Wait until invoking coord1.cancel and coord3.cancel once or timeout.
             Assert.assertTrue(cancelInvocationLatch.await(5, TimeUnit.SECONDS));
+
+            Assert.assertEquals(PPlanFragmentCancelReason.INTERNAL_ERROR, coord1Cancel.first);
+            Assert.assertEquals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR, coord1Cancel.second);
         } finally {
             Config.heartbeat_timeout_second = prevHeartbeatTimeout;
         }
