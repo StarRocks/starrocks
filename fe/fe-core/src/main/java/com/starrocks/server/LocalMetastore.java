@@ -2129,8 +2129,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         try {
                             chosenBackendIds = chosenBackendIdBySeq(replicationNum, table.getLocation());
                         } catch (DdlException ex) {
-                            throw new DdlException(String.format("%s, table=%s, default_replication_num=%d",
-                                    ex.getMessage(), table.getName(), Config.default_replication_num));
+                            throw new DdlException(String.format(
+                                    "%s, table=%s, replication_num=%d, default_replication_num=%d",
+                                    ex.getMessage(), table.getName(), replicationNum, Config.default_replication_num));
                         }
                     }
                     backendsPerBucketSeq.add(chosenBackendIds);
