@@ -488,6 +488,7 @@ public:
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
     SlotDescriptor* get_slot_descriptor(SlotId id) const;
+    SlotDescriptor* get_slot_descriptor_with_column(SlotId id) const;
 
     // return all registered tuple descriptors
     void get_tuple_descs(std::vector<TupleDescriptor*>* descs) const;
@@ -502,6 +503,7 @@ private:
     TableDescriptorMap _tbl_desc_map;
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
+    SlotDescriptorMap _slot_with_column_name_map;
 
     DescriptorTbl() = default;
 };
