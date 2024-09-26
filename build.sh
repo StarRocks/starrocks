@@ -431,13 +431,13 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
-                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..                 \
                   -DBUILD_BE=${BUILD_BE}                                \
                   -DWITH_TENANN=${WITH_TENANN}                          \
                   -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
-                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..                \
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
-                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
