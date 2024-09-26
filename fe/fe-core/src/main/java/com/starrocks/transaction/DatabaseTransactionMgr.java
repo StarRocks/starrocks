@@ -634,18 +634,8 @@ public class DatabaseTransactionMgr {
         return labelToTxnIds.get(label);
     }
 
-    @VisibleForTesting
-    protected int getRunningTxnNums() {
+    public int getRunningTxnNums() {
         return runningTxnNums;
-    }
-
-    public long getRunningTxnNumsWithLock() {
-        readLock();
-        try {
-            return runningTxnNums;
-        } finally {
-            readUnlock();
-        }
     }
 
     @VisibleForTesting

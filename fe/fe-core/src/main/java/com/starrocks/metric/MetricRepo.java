@@ -938,10 +938,10 @@ public final class MetricRepo {
             if (null == db) {
                 continue;
             }
-            GaugeMetricImpl<Long> txnNum = new GaugeMetricImpl<>("txn_running", MetricUnit.NOUNIT,
+            GaugeMetricImpl<Integer> txnNum = new GaugeMetricImpl<>("txn_running", MetricUnit.NOUNIT,
                      "number of running transactions");
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
-            txnNum.setValue(mgr.getRunningTxnNumsWithLock());
+            txnNum.setValue(mgr.getRunningTxnNums());
             visitor.visit(txnNum);
         }
     }
