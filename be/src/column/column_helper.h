@@ -333,6 +333,33 @@ public:
         }
     }
 
+    template <LogicalType LT>
+    static const RunTimeColumnType<LT>* get_data_column_by_type(const Column* column) {
+        using ColumnType = RunTimeColumnType<LT>;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return down_cast<const ColumnType*>(&nullable_column->data_column_ref());
+        } else if (column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            return down_cast<const ColumnType*>(const_column->data_column().get());
+        } else {
+            return reinterpret_cast<const ColumnType*>(column);
+        }
+    }
+
+    static NullColumn* get_null_column(const Column* column) {
+        if (column->only_null()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            const auto* nullable_column = down_cast<const NullableColumn*>(const_column->data_column().get());
+            return nullable_column->null_column().get();
+        } else if (column->is_nullable()) {
+            auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return nullable_column->null_column().get();
+        } else {
+            return nullptr;
+        }
+    }
+
     static const Column* get_data_column(const Column* column) {
         if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
