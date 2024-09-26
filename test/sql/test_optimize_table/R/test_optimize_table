@@ -94,6 +94,8 @@ PROPERTIES (
 -- !result
 
 
+
+
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
@@ -113,6 +115,8 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
+
+
 
 
 -- name: test_online_optimize_table
@@ -320,6 +324,8 @@ select count(*) from t;
 -- result:
 63
 -- !result
+
+
 -- name: test_online_optimize_table_pk
 create table t(k int) primary key(k) distributed by hash(k) buckets 10;
 -- result:
@@ -538,4 +544,316 @@ select * from t;
 18
 19
 20
+-- !result
+
+-- name: test_online_optimize_table_stream_load
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t distributed by hash(k);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+select count(*) from t;
+-- result:
+63
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+select count(*) from t;
+-- result:
+63
 -- !result
