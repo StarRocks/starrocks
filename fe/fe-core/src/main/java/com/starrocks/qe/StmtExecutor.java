@@ -1256,10 +1256,12 @@ public class StmtExecutor {
         } catch (RejectedExecutionException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            LOG.warn("analyze statement exceed concurrency limit {}", analyzeStmt.toString(), e);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } catch (ExecutionException | InterruptedException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-            analyzeStatus.setReason("The statistics tasks running failed");
+            analyzeStatus.setReason("analyze failed due to " + e.getMessage());
+            LOG.warn("analyze statement failed {}", analyzeStmt.toString(), e);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } finally {
             context.getSessionVariable().setQueryTimeoutS(timeout);
