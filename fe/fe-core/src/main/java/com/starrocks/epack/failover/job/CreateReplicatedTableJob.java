@@ -42,6 +42,7 @@ import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -99,8 +100,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         String engine = table.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name();
         KeysDesc keysDesc = new KeysDesc(table.getKeysType(), keysColumnNames);
         PartitionDesc partitionDesc = getPartitionDesc(table);
-        DistributionDesc distributionDesc = table.getDefaultDistributionInfo()
-                .toDistributionDesc(table.getIdToColumn());
+        DistributionDesc distributionDesc = getDistributionDesc(table);
         Map<String, String> properties = getProperties(table);
         List<String> sortKeysColumnNames = getSortKeysColumnNames(table);
 
@@ -273,6 +273,20 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
 
         expressionPartitionDesc.setSystem(true);
         return expressionPartitionDesc;
+    }
+
+    private static DistributionDesc getDistributionDesc(OlapTable table) {
+        if (table.getPartitionInfo().isPartitioned()) {
+            return table.getDefaultDistributionInfo().toDistributionDesc(table.getIdToColumn());
+        }
+
+        Collection<Partition> partitions = table.getPartitions();
+        if (partitions.isEmpty()) {
+            return table.getDefaultDistributionInfo().toDistributionDesc(table.getIdToColumn());
+        }
+
+        // Use distribution desc of the first partition
+        return partitions.iterator().next().getDistributionInfo().toDistributionDesc(table.getIdToColumn());
     }
 
     private static Map<String, String> getProperties(OlapTable table) {
