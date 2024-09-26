@@ -19,7 +19,10 @@
 namespace starrocks::workgroup {
 
 ExecutorsManager::ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf)
-        : _parent(parent), _conf(std::move(conf)) {
+        : _parent(parent),
+          _conf(std::move(conf)),
+          _shared_executors(std::make_unique<PipelineExecutorSet>(_conf, "com", _conf.total_cpuids,
+                                                                  std::vector<CpuUtil::CpuIds>{})) {
     _wg_to_cpuids[COMMON_WORKGROUP] = _conf.total_cpuids;
     for (auto cpuid : _conf.total_cpuids) {
         _cpu_owners[cpuid].set_wg(COMMON_WORKGROUP);
@@ -30,9 +33,7 @@ void ExecutorsManager::close() const {
     for_each_executors([](auto& executors) { executors.close(); });
 }
 
-Status ExecutorsManager::start_shared_executors() {
-    _shared_executors =
-            std::make_unique<PipelineExecutorSet>(_conf, "com", _conf.total_cpuids, std::vector<CpuUtil::CpuIds>{});
+Status ExecutorsManager::start_shared_executors_unlocked() const {
     return _shared_executors->start();
 }
 
@@ -106,13 +107,15 @@ const CpuUtil::CpuIds& ExecutorsManager::get_cpuids_of_workgroup(WorkGroup* wg) 
     return it->second;
 }
 
-PipelineExecutorSet* ExecutorsManager::create_and_assign_executors(WorkGroup* wg) const {
-    const auto& cpuids = get_cpuids_of_workgroup(wg);
+/// The `PipelineExecutorSet::start()` registers metrics, which acquires the metric lock. However, the metric collector
+/// first acquires the metric lock and then requests the `WorkGroupManager` lock to update the metric.
+/// Therefore, during `start`, it is crucial not to hold the `WorkGroupManager` lock to avoid a potential deadlock.
+std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_executors_unlocked(
+        WorkGroup* wg, const CpuUtil::CpuIds& cpuids) const {
     if (wg->exclusive_cpu_cores() == 0 || cpuids.empty()) {
         LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
-        wg->set_executors(_shared_executors.get());
-        return _shared_executors.get();
+        return nullptr;
     }
 
     auto executors = std::make_unique<PipelineExecutorSet>(_conf, std::to_string(wg->id()), cpuids,
@@ -126,14 +129,12 @@ PipelineExecutorSet* ExecutorsManager::create_and_assign_executors(WorkGroup* wg
         LOG(INFO) << "[WORKGROUP] assign shared executors to workgroup "
                   << "[workgroup=" << wg->to_string() << "] ";
         executors->close();
-        wg->set_executors(_shared_executors.get());
-        return _shared_executors.get();
+        return nullptr;
     }
 
     LOG(INFO) << "[WORKGROUP] assign dedicated executors to workgroup "
               << "[workgroup=" << wg->to_string() << "] ";
-    wg->set_exclusive_executors(std::move(executors));
-    return wg->executors();
+    return executors;
 }
 
 void ExecutorsManager::change_num_connector_scan_threads(uint32_t num_connector_scan_threads) {
