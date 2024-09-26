@@ -886,7 +886,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
             // warehouse
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 jobInfo.add(warehouse.getName());
             } else {
