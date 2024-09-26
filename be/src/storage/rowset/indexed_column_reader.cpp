@@ -106,9 +106,9 @@ Status IndexedColumnReader::new_iterator(const IndexReadOptions& opts, std::uniq
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts)
+IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts)
         : _reader(reader),
-          _opts(opts),
+          _opts(std::move(opts)),
           _ordinal_iter(&reader->_ordinal_index_reader),
           _value_iter(&reader->_value_index_reader) {}
 
