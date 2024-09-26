@@ -492,15 +492,11 @@ ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_row
     res->append(*segment, segment_offset, cut_rows);
     offset += cut_rows;
 
-    // move to next segment and release previous one
-    size_t new_segment_id = offset / chunk->segment_size();
-    if (new_segment_id != segment_id) {
-        chunk->segments()[segment_id].reset();
-        segment_id = new_segment_id;
-    }
+    // move to next segment
+    segment_id = offset / chunk->segment_size();
 
     if (empty()) {
-        chunk.reset();
+        chunk->reset();
         offset = 0;
     }
     return res;

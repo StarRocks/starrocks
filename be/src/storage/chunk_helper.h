@@ -181,6 +181,8 @@ public:
     SegmentedChunk(size_t segment_size);
     ~SegmentedChunk() = default;
 
+    static SegmentedChunkPtr create(size_t segment_size);
+
     void append_column(ColumnPtr column, SlotId slot_id);
     void append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots);
     void append_chunk(const ChunkPtr& chunk);
@@ -196,6 +198,7 @@ public:
     std::vector<ChunkPtr>& segments();
     size_t segment_size() const;
     void reset();
+    ChunkUniquePtr clone_empty(size_t reserve);
 
     Status upgrade_if_overflow();
     Status downgrade();
