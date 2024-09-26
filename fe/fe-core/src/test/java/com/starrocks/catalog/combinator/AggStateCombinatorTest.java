@@ -401,7 +401,7 @@ public class AggStateCombinatorTest {
     }
 
     @Test
-    public void testCreateAggStateTable1() throws Exception {
+    public void testCreateAggStateTableUnionWithPerTable() {
         var builtInAggregateFunctions = getBuiltInAggFunctions();
         List<String> columns = new ArrayList<>();
         List<String> colNames = new ArrayList<>();
@@ -428,7 +428,6 @@ public class AggStateCombinatorTest {
                 Joiner.on(",\n").join(columns) +
                 ") DISTRIBUTED BY HASH(k1) \n" +
                 "PROPERTIES (  \"replication_num\" = \"1\");";
-        System.out.println(sql);
         starRocksAssert.withTable(sql,
                 () -> {
                     Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
@@ -438,32 +437,104 @@ public class AggStateCombinatorTest {
                     // test _union/_merge for per agg function
                     for (int i = 0; i < colNames.size(); i++) {
                         // test _union
-                        {
-                            String fnName = FunctionSet.getAggStateUnionName(funcNames.get(i));
-                            String colName = colNames.get(i);
-                            String unionFnName = String.format("%s(%s)", fnName, colName);
-                            String sql1 = "select k1, " + unionFnName + " from test_agg_state_table group by k1";
-                            // System.out.println(sql1);
-                            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
-                            // System.out.println(plan);
-                            PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                    "     table: test_agg_state_table, rollup: test_agg_state_table");
-                        }
-
-                        // test _merge
-                        {
-                            String fnName = FunctionSet.getAggStateMergeName(funcNames.get(i));
-                            String colName = colNames.get(i);
-                            String unionFnName = String.format("%s(%s)", fnName, colName);
-                            String sql1 = "select k1, " + unionFnName + " from test_agg_state_table group by k1";
-                            // System.out.println(sql1);
-                            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
-                            PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                    "     table: test_agg_state_table, rollup: test_agg_state_table");
-                        }
+                        String fnName = FunctionSet.getAggStateUnionName(funcNames.get(i));
+                        String colName = colNames.get(i);
+                        String unionFnName = String.format("%s(%s)", fnName, colName);
+                        String sql1 = "select k1, " + unionFnName + " from test_agg_state_table group by k1";
+                        // System.out.println(sql1);
+                        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
+                        // System.out.println(plan);
+                        PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                                "     table: test_agg_state_table, rollup: test_agg_state_table");
                     }
+                });
+    }
+
+    @Test
+    public void testCreateAggStateTableMergeWithPerTable() {
+        var builtInAggregateFunctions = getBuiltInAggFunctions();
+        List<String> columns = new ArrayList<>();
+        List<String> colNames = new ArrayList<>();
+        List<String> funcNames = new ArrayList<>();
+
+        // prepare agg state table
+        {
+            int i = 0;
+            for (AggregateFunction aggFunc : builtInAggregateFunctions) {
+                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+                    continue;
+                }
+                String colName = "v" + i;
+                colNames.add(colName);
+                funcNames.add(aggFunc.functionName());
+                List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
+                columns.add(buildAggStateColumn(aggFunc.functionName(),
+                        argTypes.stream().map(Type::toSql).collect(Collectors.toList()), colName));
+                i++;
+            }
+        }
+        String sql = " CREATE TABLE test_agg_state_table ( \n" +
+                "k1  date, \n" +
+                Joiner.on(",\n").join(columns) +
+                ") DISTRIBUTED BY HASH(k1) \n" +
+                "PROPERTIES (  \"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql,
+                () -> {
+                    Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase()).getTable("test_agg_state_table");
+                    List<Column> tableColumns = table.getColumns();
+                    Assert.assertEquals(columns.size() + 1, tableColumns.size());
+                    // test _union/_merge for per agg function
+                    for (int i = 0; i < colNames.size(); i++) {
+                        // test _merge
+                        String fnName = FunctionSet.getAggStateMergeName(funcNames.get(i));
+                        String colName = colNames.get(i);
+                        String unionFnName = String.format("%s(%s)", fnName, colName);
+                        String sql1 = "select k1, " + unionFnName + " from test_agg_state_table group by k1";
+                        // System.out.println(sql1);
+                        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
+                        PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                                "     table: test_agg_state_table, rollup: test_agg_state_table");
+                    }
+                });
+    }
 
 
+
+    @Test
+    public void testCreateAggStateTableWithAllFunctions() {
+        var builtInAggregateFunctions = getBuiltInAggFunctions();
+        List<String> columns = new ArrayList<>();
+        List<String> colNames = new ArrayList<>();
+        List<String> funcNames = new ArrayList<>();
+
+        // prepare agg state table
+        {
+            int i = 0;
+            for (AggregateFunction aggFunc : builtInAggregateFunctions) {
+                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+                    continue;
+                }
+                String colName = "v" + i;
+                colNames.add(colName);
+                funcNames.add(aggFunc.functionName());
+                List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
+                columns.add(buildAggStateColumn(aggFunc.functionName(),
+                        argTypes.stream().map(Type::toSql).collect(Collectors.toList()), colName));
+                i++;
+            }
+        }
+        String sql = " CREATE TABLE test_agg_state_table ( \n" +
+                "k1  date, \n" +
+                Joiner.on(",\n").join(columns) +
+                ") DISTRIBUTED BY HASH(k1) \n" +
+                "PROPERTIES (  \"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql,
+                () -> {
+                    Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                            .getDb(connectContext.getDatabase()).getTable("test_agg_state_table");
+                    List<Column> tableColumns = table.getColumns();
+                    Assert.assertEquals(columns.size() + 1, tableColumns.size());
                     // test _union
                     {
                         List<String> unionColumns =
