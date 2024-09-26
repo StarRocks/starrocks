@@ -1163,8 +1163,12 @@ public class StmtExecutor {
         }
 
         // Generate a query plan for query detail
+        // Explaining internal table is very quick, we prefer to use EXPLAIN COSTS
+        // But explaining external table is expensive, may need to access lots of metadata, so have to use EXPLAIN
         if (context.getQueryDetail() != null) {
-            StatementBase.ExplainLevel level = StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
+                    StatementBase.ExplainLevel.defaultValue() :
+                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
             context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
                     level));
         }
@@ -2098,7 +2102,9 @@ public class StmtExecutor {
         }
 
         if (context.getQueryDetail() != null) {
-            StatementBase.ExplainLevel level = StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
+                    StatementBase.ExplainLevel.defaultValue() :
+                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
             context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT,
                     level));
         }
