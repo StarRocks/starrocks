@@ -202,6 +202,10 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
             return null;
         }
         Attribute objectClass = attrs.get("objectClass");
+        if (objectClass == null) {
+            LOG.warn("cannot find 'objectClass' attribute from group '{}'", groupDN);
+            return null;
+        }
         NamingEnumeration<?> e = objectClass.getAll();
         String objectClassName = null;
         while (e.hasMore()) {
@@ -219,6 +223,10 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         Set<String> memberNames = new HashSet<>();
         Attributes attrs = ctx.getAttributes(groupDN, new String[] {"member"});
         Attribute member = attrs.get("member");
+        if (member == null) {
+            LOG.warn("cannot find 'member' attribute from general group '{}'", groupDN);
+            return memberNames;
+        }
         NamingEnumeration<?> e = member.getAll();
         while (e.hasMore()) {
             String memberDN = (String) e.next();
@@ -242,6 +250,10 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         Set<String> memberNames = new HashSet<>();
         Attributes attrs = ctx.getAttributes(groupDN, new String[] {"memberUid"});
         Attribute memberUid = attrs.get("memberUid");
+        if (memberUid == null) {
+            LOG.warn("cannot find 'memberUid' attribute from posix group '{}'", groupDN);
+            return memberNames;
+        }
         NamingEnumeration<?> e = memberUid.getAll();
         while (e.hasMore()) {
             String memberUidValue = (String) e.next();
@@ -273,6 +285,10 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         }
 
         Attribute member = attrs.get("member");
+        if (member == null) {
+            LOG.warn("cannot find 'member' attribute from ad group '{}'", groupDN);
+            return memberNames;
+        }
         NamingEnumeration<?> e = member.getAll();
         while (e.hasMore()) {
             String memberDN = (String) e.next();
