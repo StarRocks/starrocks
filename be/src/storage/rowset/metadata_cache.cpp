@@ -39,6 +39,10 @@ void MetadataCache::evict_rowset(Rowset* ptr) {
     _erase(ptr->rowset_id_str());
 }
 
+void MetadataCache::warmup_rowset(Rowset* ptr) {
+    _ping(ptr->rowset_id_str());
+}
+
 size_t MetadataCache::get_memory_usage() const {
     return _cache->get_memory_usage();
 }
@@ -55,6 +59,13 @@ void MetadataCache::_erase(const std::string& key) {
 void MetadataCache::_cache_value_deleter(const CacheKey& /*key*/, void* value) {
     // close this rowset, release metadata memory
     reinterpret_cast<Rowset*>(value)->close();
+}
+
+void MetadataCache::_warmup(const std::string& key) {
+    Cache::Handle* handle = _cache->lookup(CacheKey(key));
+    if (handle != nullptr) {
+        _cache->release(handle);
+    }
 }
 
 } // namespace starrocks

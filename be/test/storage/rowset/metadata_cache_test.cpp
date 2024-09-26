@@ -132,9 +132,11 @@ TEST_F(MetadataCacheTest, test_manual_evcit) {
         rowsets.push_back(rowset_ptr);
     }
     for (int i = 0; i < 10; i++) {
+        metadata_cache_ptr->warmup_rowset(rowsets[i].get());
         ASSERT_TRUE(rowsets[i]->segment_memory_usage() > 0);
         metadata_cache_ptr->evict_rowset(rowsets[i].get());
         ASSERT_TRUE(rowsets[i]->segment_memory_usage() == 0);
+        metadata_cache_ptr->warmup_rowset(rowsets[i].get());
     }
 }
 
