@@ -322,7 +322,7 @@ echo "Get params:
     BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
     WITH_TENANN                 -- $WITH_TENANN
-    WITH_RELATIVE_SRC_PATH          -- $WITH_RELATIVE_SRC_PATH
+    WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
 "
 
 check_tool()
@@ -437,7 +437,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..                \
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
-                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
