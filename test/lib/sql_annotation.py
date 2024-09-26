@@ -23,12 +23,14 @@ sql_annotation
 """
 from functools import wraps
 
+from nose.plugins.multiprocess import TimedOutException
 from cup import log
-from nose import tools
 
 
-def init(record_mode=False):
-    """init"""
+def timeout():
+    """
+    timeout exception
+    """
 
     def receive(func):
         """init decorator"""
@@ -36,35 +38,39 @@ def init(record_mode=False):
         @wraps(func)
         def wrapper(*args, **kwargs):
             """wrapper"""
-            name = args[1].name
-            args[0].db = args[1].db
-            args[0].case_info = args[1]
-            args[0].resource = args[1].resource
 
-            log.info(
-                """
-*********************************************
-Start to run: %s
-*********************************************"""
-                % name
-            )
-            # record mode, init info
-            if record_mode:
-                args[0].res_log.append(args[1].info)
+            try:
+                res = func(*args, **kwargs)
+                return res
+            except TimedOutException as e:
+                raise AssertionError("TimedOutException: exceed the process-timeout limit!")
+            except Exception as e:
+                raise e
 
-            # drop database
-            for each_db in args[0].db:
-                # drop database in init
-                log.info("init drop db: %s" % each_db)
-                args[0].drop_database(each_db)
+        return wrapper
 
-            # drop resource
-            for each_resource in args[0].resource:
-                # drop resource in init
-                log.info("init drop resource: %s" % each_resource)
-                args[0].drop_resource(each_resource)
+    return receive
 
-            return func(*args, **kwargs)
+
+def ignore_timeout():
+    """
+    ignore timeout exception
+    """
+
+    def receive(func):
+        """init decorator"""
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            """wrapper"""
+
+            try:
+                res = func(*args, **kwargs)
+                return res
+            except TimedOutException as e:
+                log.warning("[Ignore] TimedOutException: exceed the process-timeout limit!")
+            except Exception as e:
+                raise e
 
         return wrapper
 
