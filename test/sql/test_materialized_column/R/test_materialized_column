@@ -756,7 +756,7 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_for_add_optimization;
 -- result:
 -- !result
--- name: test_schema_change_for_constant_expression
+-- name: test_schema_change_for_constant_expression @slow
 CREATE DATABASE test_schema_change_for_constant_expression;
 -- result:
 -- !result
