@@ -39,6 +39,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -124,6 +125,7 @@ import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
+import com.starrocks.sql.plan.ScanAttachPredicateContext;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -545,7 +547,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         .setHintsReplicaIds(node.getReplicaIds())
                         .setHasTableHints(node.hasTableHints())
                         .setUsePkIndex(node.isUsePkIndex())
+                        .setId(UUIDUtil.genUUID().toString())
                         .build();
+                ScanAttachPredicateContext.initAttachScanPredicate(
+                        (LogicalOlapScanOperator) scanOperator,
+                        node,
+                        outputVariables);
             } else {
                 scanOperator = new LogicalBinlogScanOperator(
                         node.getTable(),

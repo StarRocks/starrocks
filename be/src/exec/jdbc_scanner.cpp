@@ -200,7 +200,15 @@ void JDBCScanner::_init_profile() {
 
 StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
     auto type = slot_desc->type().type;
-    if (java_class == "java.lang.Short") {
+    if (java_class == "java.lang.Byte") {
+        if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
+            return Status::NotSupported(
+                    fmt::format("Type mismatches on column[{}], JDBC result type is Byte, please set the type to "
+                                "one of tinyint,smallint,int,bigint",
+                                slot_desc->col_name()));
+        }
+        return TYPE_TINYINT;
+    } else if (java_class == "java.lang.Short") {
         if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
             return Status::NotSupported(
                     fmt::format("Type mismatches on column[{}], JDBC result type is Short, please set the type to "

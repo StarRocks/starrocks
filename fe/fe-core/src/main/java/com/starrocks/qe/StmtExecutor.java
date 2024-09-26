@@ -166,6 +166,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.ScanAttachPredicateContext;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -476,6 +477,14 @@ public class StmtExecutor {
                 boolean isQuery = parsedStmt instanceof QueryStatement;
                 // set isQuery before `forwardToLeader` to make it right for audit log.
                 context.getState().setIsQuery(isQuery);
+
+                if (isQuery) {
+                    QueryStatement queryStatement = (QueryStatement) parsedStmt;
+                    if (queryStatement.hasQueryAttachScanPredicate()) {
+                        ScanAttachPredicateContext
+                                .beginAttachScanPredicate(queryStatement.getQueryAttachScanPredicate());
+                    }
+                }
             }
 
             if (parsedStmt.isExistQueryScopeHint()) {
@@ -750,6 +759,7 @@ public class StmtExecutor {
             context.getState().setError(e.getMessage());
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
+            ScanAttachPredicateContext.endAttachScanPredicate();
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(context.getState().getErrorMessage());

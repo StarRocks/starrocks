@@ -70,7 +70,9 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
             oss << " LIMIT " << limit;
         }
     }
-    return oss.str();
+    std::string log = oss.str();
+    LOG(INFO) << " get_jdbc_sql: " << log;
+    return log;
 }
 
 JDBCDataSource::JDBCDataSource(const JDBCDataSourceProvider* provider, const TScanRange& scan_range)

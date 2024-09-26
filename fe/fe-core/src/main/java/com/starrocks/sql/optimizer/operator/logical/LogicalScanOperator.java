@@ -47,6 +47,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
+    protected String id;
     protected Table table;
 
     /**
@@ -87,6 +88,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Table getTable() {
         return table;
+    }
+
+    public String getId() {
+        return id;
     }
 
     public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
@@ -206,6 +211,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         @Override
         public B withOperator(O scanOperator) {
             super.withOperator(scanOperator);
+            builder.id = scanOperator.id;
             builder.table = scanOperator.table;
             builder.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
             builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
@@ -241,6 +247,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
         public B setTable(Table table) {
             builder.table = table;
+            return (B) this;
+        }
+
+        public B setId(String id) {
+            builder.id = id;
             return (B) this;
         }
     }

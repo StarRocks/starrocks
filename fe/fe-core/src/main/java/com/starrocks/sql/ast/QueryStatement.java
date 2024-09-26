@@ -25,6 +25,8 @@ public class QueryStatement extends StatementBase {
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
 
+    protected QueryAttachScanPredicate queryAttachScanPredicate;
+
     public QueryStatement(QueryRelation queryRelation, OriginStatement originStatement) {
         super(queryRelation.getPos());
         this.queryRelation = queryRelation;
@@ -50,6 +52,18 @@ public class QueryStatement extends StatementBase {
 
     public boolean hasOutFileClause() {
         return outFileClause != null;
+    }
+
+    public void setQueryAttachScanPredicate(QueryAttachScanPredicate queryAttachScanPredicate) {
+        this.queryAttachScanPredicate = queryAttachScanPredicate;
+    }
+
+    public QueryAttachScanPredicate getQueryAttachScanPredicate() {
+        return queryAttachScanPredicate;
+    }
+
+    public boolean hasQueryAttachScanPredicate() {
+        return queryAttachScanPredicate != null;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
