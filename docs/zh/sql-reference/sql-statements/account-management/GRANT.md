@@ -103,11 +103,16 @@ GRANT
 #### Table 相关
 
 ```SQL
-GRANT  
-    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
-    ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
-           { { DATABASE <database_name> } | ALL DATABASES }}
+-- 赋予**特定表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON TABLE <table_name> [, < table_name >,...]
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+
+-- 赋予特定或所有 Database 中的**所有表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
