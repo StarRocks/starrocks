@@ -97,7 +97,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.SAMPLE,
                 StatsConstants.ScheduleType.SCHEDULE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
 
         String sql = "insert into test.t0 values(1,2,3)";
         ConnectContext context = StatisticUtils.buildConnectContext();
