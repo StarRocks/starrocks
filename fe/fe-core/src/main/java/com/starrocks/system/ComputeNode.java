@@ -588,10 +588,6 @@ public class ComputeNode implements IComputable, Writable {
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
                     BackendResourceStat.getInstance().setNumHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
-
-                    if (hbResponse.getCpuCores() > 0) {
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
-                    }
                 }
             }
 
