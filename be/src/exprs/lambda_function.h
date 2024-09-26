@@ -88,7 +88,6 @@ private:
     Status extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx);
 
     std::vector<SlotId> _captured_slot_ids;
-    // @TODO change to set
     std::vector<SlotId> _arguments_ids;
     std::vector<SlotId> _common_sub_expr_ids;
     std::vector<Expr*> _common_sub_expr;

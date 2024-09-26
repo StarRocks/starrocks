@@ -69,7 +69,6 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                                                        NullColumnPtr result_null_column) {
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
-
     // 1. evaluate outer common expressions
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
         ASSIGN_OR_RETURN(auto col, context->evaluate(expr, chunk));
@@ -178,8 +177,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         if constexpr (all_const_input) {
             ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
             tmp_col->check_or_die();
-
-            column = FunctionHelper::get_data_column_of_const(tmp_col);
+            // if result is a const column, we should unpack it first and make it to be the elements column of array column
+            column = ColumnHelper::unpack_and_duplicate_const_column(tmp_col->size(), tmp_col);
             column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
         } else {
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
@@ -207,7 +206,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
         aligned_offsets = UInt32Column::create();
         aligned_offsets->append(0);
-        aligned_offsets->append(column->size());
+        aligned_offsets->append(data_column->size());
         auto array_column =
                 std::make_shared<ArrayColumn>(data_column, ColumnHelper::as_column<UInt32Column>(aligned_offsets));
         array_column->check_or_die();
@@ -235,7 +234,6 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 // NOTE the return column must be of the return type.
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> input_elements;
-
     bool is_single_nullable_child = false;
 
     NullColumnPtr result_null_column = nullptr;
