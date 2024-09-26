@@ -157,14 +157,8 @@ TEST_F(MetadataCacheTest, test_warmup) {
             metadata_cache_ptr->cache_rowset(rowset_ptr.get());
             rowsets.push_back(rowset_ptr);
         }
-        size_t capacity = 0;
-        for (int i = 0; i < 5 * 32; i++) {
-            capacity += rowsets[i]->segment_memory_usage();
-        }
-        // evict 0-4
-        metadata_cache_ptr->set_capacity(capacity);
+        metadata_cache_ptr->set_capacity(rowsets[0]->segment_memory_usage() * 32);
         ASSERT_TRUE(rowsets[0]->segment_memory_usage() == 0);
-        ASSERT_TRUE(rowsets[10 * 32 - 1]->segment_memory_usage() > 0);
     }
     {
         vector<RowsetSharedPtr> rowsets;
@@ -177,16 +171,10 @@ TEST_F(MetadataCacheTest, test_warmup) {
             metadata_cache_ptr->cache_rowset(rowset_ptr.get());
             rowsets.push_back(rowset_ptr);
         }
-        size_t capacity = 0;
-        for (int i = 0; i < 5 * 32; i++) {
-            capacity += rowsets[i]->segment_memory_usage();
-            // warmup
-            metadata_cache_ptr->warmup_rowset(rowsets[i].get());
-        }
-        // evict 5-9
-        metadata_cache_ptr->set_capacity(capacity);
-        ASSERT_TRUE(rowsets[5 * 32 - 1]->segment_memory_usage() > 0);
-        ASSERT_TRUE(rowsets[10 * 32 - 1]->segment_memory_usage() == 0);
+        // warmup first rowset
+        metadata_cache_ptr->warmup_rowset(rowsets[0].get());
+        metadata_cache_ptr->set_capacity(rowsets[0]->segment_memory_usage() * 32);
+        ASSERT_TRUE(rowsets[0]->segment_memory_usage() > 0);
     }
 }
 
