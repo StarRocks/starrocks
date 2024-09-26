@@ -32,3 +32,9 @@ ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releas
 ASYNC_PROFILER_NAME="async-profiler-2.9-linux-x64.tar.gz"
 ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-x64"
 ASYNC_PROFILER_MD5SUM="29127cee36b7acf069d31603b4558361"
+
+# cachelib
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230130.tar.gz"
+CACHELIB_NAME="cachelib.tar.gz"
+CACHELIB_SOURCE="cachelib"
+CACHELIB_MD5SUM="7cc245be5cb10afa6aeea0121ec77e9e"
