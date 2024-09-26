@@ -30,13 +30,13 @@ public class DeltaLakeEngine extends DefaultEngine {
     private final Configuration hadoopConf;
     private final DeltaLakeCatalogProperties properties;
     // Cache for checkpoint metadata, key is file path and read schema, value is list of ColumnarBatch
-    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
     // Cache for json metadata, key is file path, value is list of JsonNode
-    private final LoadingCache<String, List<JsonNode>> jsonCache;
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     protected DeltaLakeEngine(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
-                              LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache,
-                              LoadingCache<String, List<JsonNode>> jsonCache) {
+                              LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                              LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         super(hadoopConf);
         this.hadoopConf = hadoopConf;
         this.properties = properties;
@@ -57,8 +57,8 @@ public class DeltaLakeEngine extends DefaultEngine {
     }
 
     public static DeltaLakeEngine create(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
-                                         LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache,
-                                         LoadingCache<String, List<JsonNode>> jsonCache) {
+                                         LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                                         LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         return new DeltaLakeEngine(hadoopConf, properties, checkpointCache, jsonCache);
     }
 }
