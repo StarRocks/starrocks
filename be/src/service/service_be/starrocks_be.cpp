@@ -29,6 +29,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "service/brpc.h"
 #include "service/service.h"
@@ -170,6 +171,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* global_env = GlobalEnv::GetInstance();
     EXIT_IF_ERROR(global_env->init());
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
+
+    // make sure global variables are initialized
+    auto* global_vars = GlobalVariables::GetInstance();
+    CHECK(global_vars->is_init()) << "global variables not initialized";
+    LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
 
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";

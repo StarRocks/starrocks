@@ -503,10 +503,6 @@ public:
     static ColumnPtr create_const_null_column(size_t chunk_size);
 
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
-
-    static NullColumnPtr one_size_not_null_column;
-
-    static NullColumnPtr one_size_null_column;
 };
 
 // Hold a slice of chunk

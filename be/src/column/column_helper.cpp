@@ -32,10 +32,6 @@
 
 namespace starrocks {
 
-NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
-
-NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
-
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
