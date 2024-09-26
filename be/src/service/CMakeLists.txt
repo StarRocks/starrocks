@@ -32,7 +32,7 @@ add_library(Service
 )
 
 # only build starrocks_be when TEST is off
-if (NOT ${MAKE_TEST} STREQUAL "ON")
+if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     add_executable(starrocks_be
         starrocks_main.cpp
         )

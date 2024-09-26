@@ -21,6 +21,7 @@
 #include "fs/fs.h" // FileInfo
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/location_provider.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -128,6 +129,11 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
+    void set_fs(const std::shared_ptr<FileSystem> fs) { _fs = std::move(fs); }
+    void set_location_provider(const std::shared_ptr<LocationProvider> location_provider) {
+        _location_provider = std::move(location_provider);
+    }
+
     const OlapWriterStatistics& stats() const { return _stats; }
 
 protected:
@@ -141,6 +147,8 @@ protected:
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    std::shared_ptr<FileSystem> _fs;
+    std::shared_ptr<LocationProvider> _location_provider;
     OlapWriterStatistics _stats;
 
     bool _is_compaction = false;

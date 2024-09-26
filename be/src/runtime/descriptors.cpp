@@ -772,7 +772,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
     for (const auto& tdesc : thrift_tbl.slotDescriptors) {
         SlotDescriptor* slot_d = pool->add(new SlotDescriptor(tdesc));
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
-
+        if (!slot_d->col_name().empty()) {
+            (*tbl)->_slot_with_column_name_map[tdesc.id] = slot_d;
+        }
         // link to parent
         auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
 
@@ -809,6 +811,17 @@ SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     auto i = _slot_desc_map.find(id);
 
     if (i == _slot_desc_map.end()) {
+        return nullptr;
+    } else {
+        return i->second;
+    }
+}
+
+SlotDescriptor* DescriptorTbl::get_slot_descriptor_with_column(SlotId id) const {
+    // TODO: is there some boost function to do exactly this?
+    auto i = _slot_with_column_name_map.find(id);
+
+    if (i == _slot_with_column_name_map.end()) {
         return nullptr;
     } else {
         return i->second;
