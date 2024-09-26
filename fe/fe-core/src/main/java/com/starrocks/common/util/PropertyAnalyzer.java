@@ -1102,6 +1102,9 @@ public class PropertyAnalyzer {
                     analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
                             tableName.getTbl(), columnIds));
                 } else {
+                    if (GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).isEmpty()) {
+                        throw new SemanticException(String.format("table: %s does not exist", tableName));
+                    }
                     List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(table, columnNames);
                     analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
                             tableName.getTbl(), columnIds));
