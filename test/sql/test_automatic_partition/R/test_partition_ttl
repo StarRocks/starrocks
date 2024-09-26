@@ -1,0 +1,41 @@
+-- name: test_partition_ttl
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_ttl" = "3 month");
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+PARTITION BY date_trunc('month', event_day)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_ttl" = "3 month",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table ss set ("partition_ttl" = "6 month");
+-- result:
+-- !result
+show create table ss;
+-- result:
+ss	CREATE TABLE `ss` (
+  `event_day` date NULL COMMENT "",
+  `pv` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`event_day`)
+PARTITION BY date_trunc('month', event_day)
+DISTRIBUTED BY HASH(`event_day`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"partition_ttl" = "6 month",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result

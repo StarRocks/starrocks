@@ -100,7 +100,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         Pair<String, PeriodDuration> ttlDuration = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-            ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+            ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {

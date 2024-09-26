@@ -210,6 +210,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             PropertyAnalyzer.analyzePartitionLiveNumber(properties, false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            PropertyAnalyzer.analyzePartitionTTL(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
             PropertyAnalyzer.analyzeReplicationNum(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
