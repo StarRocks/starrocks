@@ -17,6 +17,7 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -87,7 +88,7 @@ public class ExecuteExceptionHandler {
         Tracers.record(Tracers.Module.EXTERNAL, "HMS.RETRY", String.valueOf(context.retryTime + 1));
     }
 
-    private static void handleRpcException(RpcException e, RetryContext context) {
+    private static void handleRpcException(RpcException e, RetryContext context) throws Exception {
         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
         // and hence there is no need to log it here.
         ConnectContext connectContext = context.connectContext;
@@ -100,6 +101,25 @@ public class ExecuteExceptionHandler {
                     context.execPlan == null ? "" : context.execPlan.getExplainString(TExplainLevel.COSTS),
                     e);
         }
+        // rebuild the exec plan in case the node is not available any more.
+        rebuildExecPlan(e, context);
+    }
+
+    private static void rebuildExecPlan(Exception e, RetryContext context) throws Exception {
+        try {
+            context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
+        } catch (Exception e1) {
+            // encounter exception when re-plan, just log the new error but throw the original cause.
+            if (LOG.isDebugEnabled()) {
+                ConnectContext connectContext = context.connectContext;
+                LOG.debug("encounter exception when retry, [QueryId={}] [SQL={}], ",
+                        DebugUtil.printId(connectContext.getExecutionId()),
+                        context.parsedStmt.getOrigStmt() == null ? "" :
+                                context.parsedStmt.getOrigStmt().originStmt,
+                        e1);
+            }
+            throw e;
+        }
     }
 
     private static void handleUserException(UserException e, RetryContext context) throws Exception {
@@ -107,26 +127,16 @@ public class ExecuteExceptionHandler {
         if (context.parsedStmt instanceof QueryStatement) {
             for (String errMsg : SCHEMA_NOT_MATCH_ERROR) {
                 if (msg.contains(errMsg)) {
-                    try {
-                        ExecPlan execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
-                        context.execPlan = execPlan;
-                        return;
-                    } catch (Exception e1) {
-                        // encounter exception when re-plan, just log the new error but throw the original cause.
-                        if (LOG.isDebugEnabled()) {
-                            ConnectContext connectContext = context.connectContext;
-                            LOG.debug("encounter exception when retry, [QueryId={}] [SQL={}], ",
-                                    DebugUtil.printId(connectContext.getExecutionId()),
-                                    context.parsedStmt.getOrigStmt() == null ? "" :
-                                            context.parsedStmt.getOrigStmt().originStmt,
-                                    e1);
-                        }
-                        throw e;
-                    }
+                    rebuildExecPlan(e, context);
+                    return;
                 }
             }
+            // if it is cancelled due to backend not alive, rebuild the plan and retry again
+            if (e.getErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
+                rebuildExecPlan(e, context);
+                return;
+            }
         }
-
         throw e;
     }
 
