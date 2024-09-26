@@ -56,10 +56,15 @@ public class SqlParser {
     private static final String EOF = "<EOF>";
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
-        if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
-            return parseWithTrinoDialect(sql, sessionVariable);
-        } else {
-            return parseWithStarRocksDialect(sql, sessionVariable);
+        try {
+            if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
+                return parseWithTrinoDialect(sql, sessionVariable);
+            } else {
+                return parseWithStarRocksDialect(sql, sessionVariable);
+            }
+        } catch (OutOfMemoryError e) {
+            LOG.warn("parser out of memory, sql is:" + sql);
+            throw e;
         }
     }
 
