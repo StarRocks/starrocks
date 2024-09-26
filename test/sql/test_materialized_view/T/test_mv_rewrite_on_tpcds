@@ -1,4 +1,4 @@
--- name: test_TPCDS_query94
+-- name: test_TPCDS_query94 @slow
 function: prepare_data("tpcds", "${db[0]}")
 
 set materialized_view_rewrite_mode='force';

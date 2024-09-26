@@ -1,4 +1,4 @@
--- name: test_hash_based_process
+-- name: test_hash_based_process @slow
 CREATE TABLE `t0` (
   `v1` int(11) NOT NULL,
   `v2` int(11) NOT NULL,
