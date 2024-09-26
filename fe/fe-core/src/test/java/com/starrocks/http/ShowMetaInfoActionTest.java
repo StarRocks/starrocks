@@ -14,47 +14,70 @@
 
 package com.starrocks.http;
 
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import mockit.Expectations;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.Assert.assertTrue;
 
 public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
 
-    private static final long DB_ID = 1000 + testDbId;
     private static final String DB_NAME = "TEST_DB";
     private static final String TABLE_NAME = "TEST_TABLE";
     private static final long EXPECTED_SINGLE_REPLICA_SIZE = 1024L;
     private static final int HTTP_SLOW_REQUEST_THRESHOLD_MS = Config.http_slow_request_threshold_ms;
 
-    @Override
-    public void doSetUp() {
-        Database db = new Database(DB_ID, DB_NAME);
+    @Before
+    public void setUp() {
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        Database db = new Database(testDbId, DB_NAME);
         OlapTable table = newTable(TABLE_NAME, EXPECTED_SINGLE_REPLICA_SIZE);
         db.registerTableUnlocked(table);
 
-        // inject our test db
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getFullNameToDb();
-        fullNameToDb.put(DB_NAME, db);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getDb(db.getId());
+                minTimes = 0;
+                result = db;
 
-        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
-        idToDb.put(DB_ID, db);
+                globalStateMgr.getDb(DB_NAME);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+            }
+        };
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.listDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList(DB_NAME);
+            }
+        };
+
+        setUpWithGlobalStateMgr(globalStateMgr);
     }
 
     @After

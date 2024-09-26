@@ -489,7 +489,7 @@ public abstract class StarRocksHttpTestCase {
         };
     }
 
-    private void setUpWithGlobalStateMgr(GlobalStateMgr globalStateMgr) {
+    protected void setUpWithGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         NodeMgr nodeMgr = new NodeMgr();
