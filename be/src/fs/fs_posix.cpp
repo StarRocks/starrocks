@@ -102,8 +102,6 @@ static Status io_error(const std::string& context, int err_number) {
         return Status::NotFound(fmt::format("{}: {}", context, std::strerror(err_number)));
     case EEXIST:
         return Status::AlreadyExist(fmt::format("{}: {}", context, std::strerror(err_number)));
-    case ENOSPC:
-        return Status::CapacityLimitExceed(fmt::format("{}: {}", context, std::strerror(err_number)));
     default:
         return Status::InternalError(fmt::format("{}: {}", context, std::strerror(err_number)));
     }
