@@ -197,7 +197,7 @@ public:
     void incr_cpu_runtime_ns(int64_t delta_ns) { _cpu_runtime_ns += delta_ns; }
     int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
 
-    void set_executors(PipelineExecutorSet* executors) { _executors = executors; }
+    void set_shared_executors(PipelineExecutorSet* executors) { _executors = executors; }
     void set_exclusive_executors(std::unique_ptr<PipelineExecutorSet> executors) {
         _exclusive_executors = std::move(executors);
         _executors = _exclusive_executors.get();
