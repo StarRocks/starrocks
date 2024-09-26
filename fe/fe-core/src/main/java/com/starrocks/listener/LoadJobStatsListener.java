@@ -54,18 +54,37 @@ public class LoadJobStatsListener implements LoadJobListener {
     @Override
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
                                               DmlType dmlType) {
-        if (dmlType != DmlType.INSERT_OVERWRITE) {
+        if (dmlType != DmlType.INSERT_OVERWRITE && needTrigger()) {
             StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
         }
     }
 
     @Override
     public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
-        StatisticUtils.triggerCollectionOnInsertOverwrite(stats, db, table, true, true);
+        if (needTrigger()) {
+            StatisticUtils.triggerCollectionOnInsertOverwrite(stats, db, table, true, true);
+        }
+    }
+
+    /**
+     * Whether to trigger the statistics collection
+     */
+    private boolean needTrigger() {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return false;
+        }
+        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+        if (stateMgr == null || !stateMgr.isLeader() || !stateMgr.isReady()) {
+            return false;
+        }
+        return true;
     }
 
     private void onTransactionFinish(TransactionState transactionState, boolean sync) {
         if (!Config.enable_statistic_collect_on_first_load) {
+            return;
+        }
+        if (!needTrigger()) {
             return;
         }
 

@@ -520,10 +520,12 @@ public class InsertOverwriteJobRunner {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
 
-        // trigger listeners after insert overwrite committed, trigger listeners after
-        // write unlock to avoid holding lock too long
-        GlobalStateMgr.getCurrentState().getOperationListenerBus()
-                .onInsertOverwriteJobCommitFinish(db, tmpTargetTable, stats);
+        if (!isReplay) {
+            // trigger listeners after insert overwrite committed, trigger listeners after
+            // write unlock to avoid holding lock too long
+            GlobalStateMgr.getCurrentState().getOperationListenerBus()
+                    .onInsertOverwriteJobCommitFinish(db, tmpTargetTable, stats);
+        }
     }
 
     private void prepareInsert() {
