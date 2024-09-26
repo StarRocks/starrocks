@@ -40,7 +40,7 @@ void MetadataCache::evict_rowset(Rowset* ptr) {
 }
 
 void MetadataCache::warmup_rowset(Rowset* ptr) {
-    _ping(ptr->rowset_id_str());
+    _warmup(ptr->rowset_id_str());
 }
 
 size_t MetadataCache::get_memory_usage() const {
