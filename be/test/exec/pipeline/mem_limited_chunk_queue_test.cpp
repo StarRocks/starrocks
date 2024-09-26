@@ -45,7 +45,12 @@ public:
                                                           workgroup::WorkGroup::DEFAULT_VERSION, 4, 100.0, 0, 1.0,
                                                           workgroup::WorkGroupType::WG_DEFAULT);
         dummy_wg->init();
+<<<<<<< HEAD
         dummy_wg->set_executors(ExecEnv::GetInstance()->workgroup_manager()->shared_executors());
+=======
+        dummy_wg->set_shared_executors(ExecEnv::GetInstance()->workgroup_manager()->shared_executors());
+
+>>>>>>> 9320703235 ([BugFix] Fix deadlock when starting exclusive resource group executor (#51385))
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
         ASSERT_OK(dummy_dir_mgr->init(path));
 
