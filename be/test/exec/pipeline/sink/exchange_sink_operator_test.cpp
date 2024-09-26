@@ -37,9 +37,7 @@ protected:
 
     RuntimeState* state;
 
-    void SetUp() override {
-        state = new RuntimeState();
-    }
+    void SetUp() override { state = new RuntimeState(); }
 
     void TearDown() override {
         delete channel;
