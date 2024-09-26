@@ -1227,7 +1227,6 @@ SELECT c_partition, APPROX_TOP_K(c_decimal, 1) OVER(PARTITION BY c_partition) FR
 -- !result
 SELECT APPROX_TOP_K(c_decimal) FROM t_partition WHERE c_id > 10000;
 -- result:
-[]
 -- !result
 SELECT APPROX_TOP_K(c_decimal) FROM t_partition WHERE c_id > 10000 GROUP BY c_partition;
 -- result:

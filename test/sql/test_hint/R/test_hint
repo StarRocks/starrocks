@@ -331,7 +331,6 @@ None	1
 -- !result
 set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1;
 -- result:
-[]
 -- !result
 select @aVar, @bVar, @cVar;
 -- result:
@@ -339,7 +338,6 @@ select @aVar, @bVar, @cVar;
 -- !result
 set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1;
 -- result:
-[]
 -- !result
 select @aVar, @bVar, @cVar;
 -- result:
@@ -347,7 +345,6 @@ select @aVar, @bVar, @cVar;
 -- !result
 set @aVar = 6, @bVar = @aVar + 1, @cVar = @eVar + 1;
 -- result:
-[]
 -- !result
 select @aVar, @bVar, @cVar;
 -- result:
@@ -364,7 +361,6 @@ select /*+ SET_USER_VARIABLE (@aVarHint = 6, @bVarHint = @aVarHint + 1) */  @aVa
 
 set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
 -- result:
-[]
 -- !result
 select @xVar, @yVar, @zVar;
 -- result:
@@ -372,7 +368,6 @@ select @xVar, @yVar, @zVar;
 -- !result
 set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
 -- result:
-[]
 -- !result
 select @xVar, @yVar, @zVar;
 -- result:
@@ -385,27 +380,21 @@ create table cities (
    ) PRIMARY KEY (city_id)
 DISTRIBUTED BY HASH(city_id);
 -- result:
-[]
 -- !result
 insert into cities(city_id, population, city) values(1, 2000,"beijing");
 -- result:
-[]
 -- !result
 insert into cities(city_id, population, city) values(2, 2000,"shanghai");
 -- result:
-[]
 -- !result
 insert into cities(city_id, population, city) values(3, 2000,"guangzhou");
 -- result:
-[]
 -- !result
 insert into cities(city_id, population, city) values(4, 1000,"shenzhen");
 -- result:
-[]
 -- !result
 insert into cities(city_id, population, city) values(5, 2000, "chengdu");
 -- result:
-[]
 -- !result
 select /*+ SET_USER_VARIABLE (@aVarHint = (select max(population) from cities), @bVarHint = (select  max(city_id) from cities where population =  @aVarHint)) */  @aVarHint, @bVarHint;
 -- result:
@@ -417,7 +406,6 @@ None	None
 -- !result
 set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
 -- result:
-[]
 -- !result
 select @secondVar,@thirdVar;
 -- result:

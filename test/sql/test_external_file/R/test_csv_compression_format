@@ -40,7 +40,6 @@ PROPERTIES
     "column_separator" = ","
 );
 -- result:
-[]
 -- !result
 select * from test_csv_snappy_format where a = 'Alice';
 -- result:
@@ -60,7 +59,6 @@ select * from test_csv_snappy_format where a = '99999';
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
-[]
 -- !result
 select count(*) from test_csv_snappy_format;
 -- result:
@@ -68,7 +66,6 @@ select count(*) from test_csv_snappy_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = false;
 -- result:
-[]
 -- !result
 select count(*) from test_csv_snappy_format;
 -- result:
@@ -115,7 +112,6 @@ PROPERTIES
     "column_separator" = ","
 );
 -- result:
-[]
 -- !result
 select * from test_csv_lzo_format where a = 'Alice';
 -- result:
@@ -135,7 +131,6 @@ select * from test_csv_lzo_format where a = '99999';
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
-[]
 -- !result
 select count(*) from test_csv_lzo_format;
 -- result:
@@ -143,7 +138,6 @@ select count(*) from test_csv_lzo_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = false;
 -- result:
-[]
 -- !result
 select count(*) from test_csv_lzo_format;
 -- result:

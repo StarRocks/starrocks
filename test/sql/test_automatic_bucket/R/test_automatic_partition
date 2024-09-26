@@ -455,27 +455,21 @@ PROPERTIES (
 "bucket_size" = "1"
 );
 -- result:
-[]
 -- !result
 insert into t values(1,1);
 -- result:
-[]
 -- !result
 insert into t values(1,2);
 -- result:
-[]
 -- !result
 insert into t values(1,3);
 -- result:
-[]
 -- !result
 insert into t values(1,4);
 -- result:
-[]
 -- !result
 insert into t values(1,5);
 -- result:
-[]
 -- !result
 select * from t;
 -- result:
@@ -487,7 +481,6 @@ select * from t;
 -- !result
 delete from t where k = 1;
 -- result:
-[]
 -- !result
 select * from t;
 -- result:
@@ -496,11 +489,9 @@ select * from t;
 -- name: test_mutable_bucket @sequential
 create database ggg;
 -- result:
-[]
 -- !result
 use ggg;
 -- result:
-[]
 -- !result
 create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -509,7 +500,6 @@ PROPERTIES (
 "mutable_bucket_num" = "2"
 );
 -- result:
-[]
 -- !result
 show create table t;
 -- result:
@@ -535,7 +525,6 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 -- !result
 insert into t values('2021-01-01', 1);
 -- result:
-[]
 -- !result
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
 -- result:
@@ -543,7 +532,6 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 -- !result
 alter table t set('mutable_bucket_num'='3');
 -- result:
-[]
 -- !result
 show create table t;
 -- result:
@@ -565,7 +553,6 @@ PROPERTIES (
 -- !result
 insert into t values('2021-01-01', 1);
 -- result:
-[]
 -- !result
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
 -- result:

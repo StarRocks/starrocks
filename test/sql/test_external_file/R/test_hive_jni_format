@@ -47,7 +47,6 @@ PROPERTIES
     "format" = "avro"
 );
 -- result:
-[]
 -- !result
 select * from test_hive_avro_format where col_string = 'world';
 -- result:
@@ -69,7 +68,6 @@ select col_tinyint,col_timestamp from test_hive_avro_format  order by 1 limit 3;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_avro_format;
 -- result:
@@ -77,7 +75,6 @@ select count(*) from test_hive_avro_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = false;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_avro_format;
 -- result:
@@ -137,7 +134,6 @@ PROPERTIES
     "format" = "rcbinary"
 );
 -- result:
-[]
 -- !result
 select * from test_hive_rcbinary_format where col_string = 'world';
 -- result:
@@ -159,7 +155,6 @@ select col_tinyint,col_timestamp from test_hive_rcbinary_format  order by 1 limi
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_rcbinary_format;
 -- result:
@@ -167,7 +162,6 @@ select count(*) from test_hive_rcbinary_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = false;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_rcbinary_format;
 -- result:
@@ -227,7 +221,6 @@ PROPERTIES
     "format" = "rctext"
 );
 -- result:
-[]
 -- !result
 select * from test_hive_rctext_format where col_string = 'world';
 -- result:
@@ -244,7 +237,6 @@ select col_tinyint,col_decimal,col_array from test_hive_rctext_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_rctext_format;
 -- result:
@@ -252,7 +244,6 @@ select count(*) from test_hive_rctext_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = false;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_rctext_format;
 -- result:
@@ -312,7 +303,6 @@ PROPERTIES
     "format" = "sequence"
 );
 -- result:
-[]
 -- !result
 select * from test_hive_sequence_format where col_string = 'world';
 -- result:
@@ -329,7 +319,6 @@ select col_tinyint,col_decimal,col_array from test_hive_sequence_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_sequence_format;
 -- result:
@@ -337,7 +326,6 @@ select count(*) from test_hive_sequence_format;
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = false;
 -- result:
-[]
 -- !result
 select count(*) from test_hive_sequence_format;
 -- result:
@@ -377,7 +365,6 @@ PROPERTIES
     "format" = "sequence"
 );
 -- result:
-[]
 -- !result
 select col_int,col_struct from hive_hdfs_sequencefile_struct_mix_deflate order by 1 limit 1;
 -- result:

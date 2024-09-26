@@ -529,7 +529,7 @@ CREATE TABLE `t_auto_increment_incorrect_col_id` (
   `k2` string default "abc" COMMENT "",
   `k3` BIGINT AUTO_INCREMENT COMMENT "",
   `k4` string default "bcd"COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
@@ -582,7 +582,7 @@ CREATE TABLE `t_auto_increment_partial_update_only` (
   `k2` BIGINT NOT NULL COMMENT "",
   `k3` BIGINT NOT NULL COMMENT "",
   `k4` BIGINT AUTO_INCREMENT COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
