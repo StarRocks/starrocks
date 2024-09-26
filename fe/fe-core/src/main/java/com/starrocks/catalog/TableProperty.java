@@ -368,6 +368,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildBinlogAvailableVersion();
                 break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                buildPartitionTTL();
                 buildPartitionLiveNumber();
                 buildDataCachePartitionDuration();
                 buildLocation();
@@ -449,7 +450,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
 
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-            Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+            Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, false);
             if (ttlDuration != null) {
                 partitionTTL = ttlDuration.second;
             }

@@ -3322,6 +3322,12 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
         }
 
+        // partition ttl
+        if (tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            properties.put(
+                    PropertyAnalyzer.PROPERTIES_PARTITION_TTL, tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL));
+        }
+
         // compression type
         TCompressionType compressionType = getCompressionType();
         if (compressionType == TCompressionType.LZ4_FRAME) {

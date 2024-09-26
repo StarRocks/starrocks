@@ -377,7 +377,7 @@ public class PropertyAnalyzer {
         return partitionTimeToLive;
     }
 
-    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties) {
+    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties, boolean removeProperties) {
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL)) {
             String ttlStr = properties.get(PROPERTIES_PARTITION_TTL);
             PeriodDuration duration;
@@ -386,7 +386,9 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new SemanticException(String.format("illegal %s: %s", PROPERTIES_PARTITION_TTL, e.getMessage()));
             }
-            properties.remove(PROPERTIES_PARTITION_TTL);
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_TTL);
+            }
             return Pair.create(ttlStr, duration);
         }
         return Pair.create(null, PeriodDuration.ZERO);
@@ -1395,7 +1397,7 @@ public class PropertyAnalyzer {
                             + " is only supported by partitioned materialized-view");
                 }
 
-                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
                 materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
