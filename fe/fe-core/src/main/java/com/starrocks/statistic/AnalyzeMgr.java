@@ -299,6 +299,10 @@ public class AnalyzeMgr implements Writable {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
     }
 
+    public BasicStatsMeta getTableBasicStatsMeta(long tableId) {
+        return basicStatsMetaMap.get(tableId);
+    }
+
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
         return basicStatsMetaMap;
     }
@@ -816,7 +820,8 @@ public class AnalyzeMgr implements Writable {
     }
 
     private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
-        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        BasicStatsMeta basicStatsMeta =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
         if (basicStatsMeta == null) {
             // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
             BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),

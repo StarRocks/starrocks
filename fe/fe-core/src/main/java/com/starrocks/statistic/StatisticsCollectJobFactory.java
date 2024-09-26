@@ -387,7 +387,7 @@ public class StatisticsCollectJobFactory {
         }
 
         BasicStatsMeta basicStatsMeta =
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
         double healthy = 0;
         LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         if (basicStatsMeta != null) {

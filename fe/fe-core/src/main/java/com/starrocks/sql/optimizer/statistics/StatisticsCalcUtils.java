@@ -109,7 +109,7 @@ public class StatisticsCalcUtils {
             long rowCount = 0;
 
             BasicStatsMeta basicStatsMeta =
-                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
             StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
             LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
             if (StatsConstants.AnalyzeType.FULL == analyzeType) {

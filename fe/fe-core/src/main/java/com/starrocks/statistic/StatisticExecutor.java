@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -23,7 +24,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -44,22 +44,27 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
+import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
-                                                   List<String> columnNames) throws AnalysisException {
+                                                   List<String> columnNames) {
         if (table == null) {
             // Statistical information query is an unlocked operation,
             // so it is possible for the table to be deleted while the code is running
@@ -75,45 +80,85 @@ public class StatisticExecutor {
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context, Long dbId, Long tableId,
                                                    List<String> columnNames) {
-        String sql;
-        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
-        if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-            Table table = null;
-            if (dbId == null) {
-                List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
-                for (Long id : dbIds) {
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
-                    if (db == null) {
-                        continue;
-                    }
-                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-                    if (table == null) {
-                        continue;
-                    }
-                    break;
-                }
-            } else {
-                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
-            }
-
-            if (table == null) {
-                // Statistical information query is an unlocked operation,
-                // so it is possible for the table to be deleted while the code is running
-                return Collections.emptyList();
-            }
-
-            List<Type> columnTypes = Lists.newArrayList();
-            for (String colName : columnNames) {
-                columnTypes.add(StatisticUtils.getQueryStatisticsColumnType(table, colName));
-            }
-
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames, columnTypes);
-        } else {
-            sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
+        // TODO: remove this hack
+        Table table = lookupTable(dbId, tableId);
+        if (table == null) {
+            // Statistical information query is an unlocked operation,
+            // so it is possible for the table to be deleted while the code is running
+            return Collections.emptyList();
         }
 
-        return executeStatisticDQL(context, sql);
+        Map<String, ColumnStatsMeta> analyzedColumns = meta != null ? meta.getAnalyzedColumns() : Maps.newHashMap();
+        List<ColumnStatsMeta> columnStatsMetaList = Lists.newArrayList();
+        for (String name : columnNames) {
+            if (meta == null || !analyzedColumns.containsKey(name)) {
+                columnStatsMetaList.add(
+                        new ColumnStatsMeta(name, StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.MIN));
+            } else {
+                columnStatsMetaList.add(analyzedColumns.get(name));
+            }
+        }
+
+        return queryColumnStats(context, dbId, tableId, columnStatsMetaList, table);
+    }
+
+    private static Table lookupTable(Long dbId, Long tableId) {
+        Table table = null;
+        if (dbId == null) {
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+            for (Long id : dbIds) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+                if (db == null) {
+                    continue;
+                }
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                if (table == null) {
+                    continue;
+                }
+                break;
+            }
+        } else {
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+        }
+        return table;
+    }
+
+    private @NotNull List<TStatisticData> queryColumnStats(ConnectContext context, Long dbId, Long tableId,
+                                                           List<ColumnStatsMeta> columnStatsMetaList,
+                                                           Table table) {
+        List<ColumnStatsMeta> columnWithFullStats =
+                columnStatsMetaList.stream()
+                        .filter(x -> x.getType() == StatsConstants.AnalyzeType.FULL)
+                        .collect(Collectors.toList());
+        List<ColumnStatsMeta> columnWithSampleStats =
+                columnStatsMetaList.stream()
+                        .filter(x -> x.getType() == StatsConstants.AnalyzeType.SAMPLE)
+                        .collect(Collectors.toList());
+
+        List<TStatisticData> columnStats = Lists.newArrayList();
+        if (CollectionUtils.isNotEmpty(columnWithFullStats)) {
+            List<String> columnNamesForStats = columnWithFullStats.stream().map(ColumnStatsMeta::getColumnName)
+                            .collect(Collectors.toList());
+            List<Type> columnTypesForStats =
+                    columnWithFullStats.stream()
+                            .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
+                            .collect(Collectors.toList());
+
+            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
+                    dbId, tableId, columnNamesForStats, columnTypesForStats);
+            List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+            columnStats.addAll(tStatisticData);
+        }
+        if (CollectionUtils.isNotEmpty(columnWithSampleStats)) {
+            List<String> columnNamesForStats = columnWithSampleStats.stream().map(ColumnStatsMeta::getColumnName)
+                            .collect(Collectors.toList());
+            String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNamesForStats);
+            List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+            columnStats.addAll(tStatisticData);
+        }
+        return columnStats;
     }
 
     public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds,
@@ -336,13 +381,28 @@ public class StatisticExecutor {
                 }
             }
         } else {
+            AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
             if (table.isNativeTableOrMaterializedView()) {
-                long existUpdateRows = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExistUpdateRows(table.getId());
-                BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
-                        statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
-                        statsJob.getProperties(), existUpdateRows);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshBasicStatisticsCache(
+                BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
+                if (basicStatsMeta == null) {
+                    long existUpdateRows = analyzeMgr.getExistUpdateRows(table.getId());
+                    basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
+                            statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
+                            statsJob.getProperties(), existUpdateRows);
+                } else {
+                    basicStatsMeta = basicStatsMeta.clone();
+                    basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
+                    basicStatsMeta.setProperties(statsJob.getProperties());
+                    basicStatsMeta.setAnalyzeType(statsJob.getType());
+                }
+
+                for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
+                    ColumnStatsMeta meta =
+                            new ColumnStatsMeta(column, statsJob.getType(), analyzeStatus.getEndTime());
+                    basicStatsMeta.addColumnStatsMeta(meta);
+                }
+                analyzeMgr.addBasicStatsMeta(basicStatsMeta);
+                analyzeMgr.refreshBasicStatisticsCache(
                         basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
                         refreshAsync);
             } else {
