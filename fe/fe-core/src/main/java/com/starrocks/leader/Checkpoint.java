@@ -243,6 +243,7 @@ public class Checkpoint extends FrontendDaemon {
         globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage(imageDir);
+            globalStateMgr.initDefaultWarehouse();
             globalStateMgr.replayJournal(logVersion);
             globalStateMgr.clearExpiredJobs();
             globalStateMgr.saveImage();
