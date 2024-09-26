@@ -60,9 +60,9 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
 
     private final Configuration hadoopConf;
     private final int maxBatchSize;
-    private final LoadingCache<String, List<JsonNode>> jsonCache;
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
-    public DeltaLakeJsonHandler(Configuration hadoopConf, LoadingCache<String, List<JsonNode>> jsonCache) {
+    public DeltaLakeJsonHandler(Configuration hadoopConf, LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         super(hadoopConf);
         this.hadoopConf = hadoopConf;
         this.maxBatchSize = hadoopConf.getInt("delta.kernel.default.json.reader.batch-size", 1024);
@@ -161,13 +161,14 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
 
             private void tryGetNextFileJson() throws ExecutionException, IOException {
                 if (scanFileIter.hasNext()) {
-                    currentFile = scanFileIter.next().getPath();
-                    Path filePath = new Path(currentFile);
+                    DeltaLakeFileStatus fileStatus = DeltaLakeFileStatus.of(scanFileIter.next());
+                    currentFile = fileStatus.getPath();
+                    Path filePath = new Path(fileStatus.getPath());
                     if (filePath.getName().equals(LAST_CHECKPOINT_FILE_NAME)) {
                         // can not read last_checkpoint file from cache
                         currentReadJsonList = readJsonFile(currentFile, hadoopConf);
                     } else {
-                        currentReadJsonList = jsonCache.get(currentFile);
+                        currentReadJsonList = jsonCache.get(fileStatus);
                     }
                     currentReadLine = 0;
                 }
