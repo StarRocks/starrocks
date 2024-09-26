@@ -499,7 +499,7 @@ private:
                                                 const TargetColumn& targets,
                                                 const NullColumn::Container* null_map_elements,
                                                 const NullColumn::Container* null_map_targets) {
-        using ValueType = ElementColumn::ValueType;
+        using ValueType = typename ElementColumn::ValueType;
         using ValueHash = std::conditional_t<std::is_same_v<ValueType, Slice>, SliceHash, StdHash<ValueType>>;
         using ValueEqual = std::conditional_t<std::is_same_v<ValueType, Slice>, SliceNormalEqual,
                                               phmap::priv::hash_default_eq<ValueType>>;
