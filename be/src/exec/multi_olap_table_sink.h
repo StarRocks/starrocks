@@ -102,13 +102,25 @@ public:
      * @brief Sends a chunk of data to the MultiOlapTableSink.
      * 
      * This method is called to send a chunk of data to the sink.
-     * if is_full() return false, send_chunk() will not block
+     * if is_full() return false, send_chunk_nonblocking() will not block
      * 
      * @param state The runtime state.
      * @param chunk The chunk of data to send.
      * @return The status of the send operation.
      */
     Status send_chunk_nonblocking(RuntimeState* state, Chunk* chunk) override;
+
+    /*
+     * @brief Sends a chunk of data to the MultiOlapTableSink synchronously.
+     *
+     * This method is called to send a chunk of data to the sink.
+     * send_chunk() will block until the chunk is sent.
+     *
+     * @param state The runtime state.
+     * @param chunk The chunk of data to send.
+     * @return The status of the send operation.
+     */
+    Status send_chunk(RuntimeState* state, Chunk* chunk) override;
 
     /**
      * @brief Checks if the MultiOlapTableSink is full.

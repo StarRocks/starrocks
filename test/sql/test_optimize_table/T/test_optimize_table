@@ -224,3 +224,63 @@ select * from t;
 function: wait_optimize_table_finish()
 show create table t;
 select * from t;
+
+-- name: test_online_optimize_table_stream_load
+create database db_${uuid0};
+use db_${uuid0};
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+
+show create table t;
+alter table t distributed by hash(k);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+select sleep(1);
+-- show partitions from t;
+select count(*) from t;
+function: wait_optimize_table_finish()
+show create table t;
+-- show partitions from t;
+select count(*) from t;
