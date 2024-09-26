@@ -203,13 +203,9 @@ Status PlanFragmentExecutor::open() {
     }
 
     Status status = _open_internal_vectorized();
-    if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
+    if (!status.ok() && !status.is_cancelled()) {
         LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
                      << ", status=" << status;
-        // Log error message in addition to returning in Status. Queries that do not
-        // fetch results (e.g. insert) may not receive the message directly and can
-        // only retrieve the log.
-        _runtime_state->log_error(status.message());
     }
 
     update_status(status);
