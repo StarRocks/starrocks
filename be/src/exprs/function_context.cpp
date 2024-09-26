@@ -108,7 +108,7 @@ bool FunctionContext::is_notnull_constant_column(int i) const {
     return col && col->is_constant() && !col->is_null(0);
 }
 
-starrocks::ColumnPtr FunctionContext::get_constant_column(int i) const {
+ColumnPtr FunctionContext::get_constant_column(int i) const {
     if (i < 0 || i >= _constant_columns.size()) {
         return nullptr;
     }
