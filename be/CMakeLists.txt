@@ -712,6 +712,16 @@ if (ENABLE_FAULT_INJECTION)
     message(STATUS "enable fault injection")
 endif()
 
+option(ASSERT_STATUS_CHECKED "build with assert status checked" OFF)
+if (ASSERT_STATUS_CHECKED)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_ASSERT_STATUS_CHECKED")
+endif()
+
+if (BUILD_FORMAT_LIB)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fPIC -DBUILD_FORMAT_LIB")
+    message(STATUS "enable build format library")
+endif()
+
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible
@@ -832,7 +842,6 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
 
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-    hdfs
     jvm
 )
 set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
@@ -955,29 +964,34 @@ if (${WITH_TENANN} STREQUAL "ON")
 endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES})
 
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
+    ${STARROCKS_LINK_LIBS}
+    ${STARROCKS_DEPENDENCIES}
+    hdfs
+)
 set(BUILD_FOR_SANITIZE "OFF")
+
 # Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
     message("use jemalloc")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+        set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libsan)
     else()
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+        set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libasan)
     endif()
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
-    set(BUILD_FOR_SANITIZE "ON")
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-liblsan)
+     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     message("use jemalloc")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libubsan jemalloc)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
+    set(STARROCKS_MEMORY_DEPENDENCIES_LIBS -static-libtsan)
     set(BUILD_FOR_SANITIZE "ON")
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
@@ -1029,9 +1043,15 @@ if (${MAKE_TEST} STREQUAL "ON")
     add_definitions(-DBE_TEST)
     add_definitions(-DFIU_ENABLE)
 else()
-    # output *.a, *.so, *.dylib to output/tmp
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+    if (BUILD_FORMAT_LIB)
+        # output *.a, *.so, *.dylib to output/format-lib-tmp
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
+        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
+    else()
+        # output *.a, *.so, *.dylib to output/tmp
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+    endif ()
     # output *.exe to output/lib
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_DIR}/lib)
 endif ()
@@ -1101,8 +1121,13 @@ add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
 
+if (BUILD_FORMAT_LIB)
+    message(STATUS "Build starrocks format lib")
+    add_subdirectory(${SRC_DIR}/starrocks_format)
+endif()
+
 if (WITH_BENCH STREQUAL "ON")
-     message(STATUS "Build binary with bench")
+    message(STATUS "Build binary with bench")
     add_subdirectory(${SRC_DIR}/bench)
 endif()
 

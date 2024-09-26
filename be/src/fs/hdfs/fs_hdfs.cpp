@@ -37,7 +37,7 @@ namespace starrocks {
 
 class GetHdfsFileReadOnlyHandle {
 public:
-    GetHdfsFileReadOnlyHandle(const FSOptions options, std::string path, int buffer_size)
+    GetHdfsFileReadOnlyHandle(const FSOptions& options, std::string path, int buffer_size)
             : _options(std::move(options)), _path(std::move(path)), _buffer_size(buffer_size) {}
 
     StatusOr<hdfsFS> getOrCreateFS() {
@@ -384,7 +384,7 @@ Status HDFSWritableFile::close() {
 
 class HdfsFileSystem : public FileSystem {
 public:
-    HdfsFileSystem(const FSOptions& options) : _options(options) {}
+    HdfsFileSystem(const FSOptions& options) : _options(std::move(options)) {}
     ~HdfsFileSystem() override = default;
 
     HdfsFileSystem(const HdfsFileSystem&) = delete;

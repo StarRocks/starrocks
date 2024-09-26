@@ -19,7 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 
-add_library(Storage STATIC
+set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
@@ -224,6 +224,7 @@ add_library(Storage STATIC
     sstable/iterator.cpp
     sstable/options.cpp
     sstable/merger.cpp
+    lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -234,6 +235,7 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
@@ -263,3 +265,11 @@ add_library(Storage STATIC
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
     index/vector/tenann/tenann_index_utils.cpp)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
+endif()
+
+add_library(Storage STATIC
+    ${STORAGE_FILES}
+)

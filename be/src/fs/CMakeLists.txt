@@ -32,8 +32,11 @@ set(EXEC_FILES
     s3/poco_http_client.cpp
     s3/poco_common.cpp
     fs_util.cpp
-    fs_starlet.cpp
     )
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND EXEC_FILES fs_starlet.cpp)
+endif()
 
 add_library(FileSystem STATIC
     ${EXEC_FILES}

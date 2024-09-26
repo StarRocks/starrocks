@@ -239,7 +239,7 @@ public:
     // MIN_DATE | 0
     static const Timestamp MIN_TIMESTAMP = (1892325482100162560LL);
 
-    // seconds from 1970.01.01
+    // seconds since julian date epoch to 1970.01.01
     static const Timestamp UNIX_EPOCH_SECONDS = (210866803200LL);
 };
 

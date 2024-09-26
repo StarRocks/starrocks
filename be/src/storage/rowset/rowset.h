@@ -50,6 +50,7 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 
 namespace starrocks {
 
