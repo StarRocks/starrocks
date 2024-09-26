@@ -260,11 +260,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-<<<<<<< HEAD
 import org.apache.thrift.TException;
-=======
 import org.threeten.extra.PeriodDuration;
->>>>>>> e900d10664 ([Enhancement] Support partition ttl for expression partition table (#51297))
 
 import java.io.IOException;
 import java.time.LocalDateTime;
