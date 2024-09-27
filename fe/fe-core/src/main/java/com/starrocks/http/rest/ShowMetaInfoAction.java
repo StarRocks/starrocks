@@ -187,28 +187,8 @@ public class ShowMetaInfoAction extends RestBaseAction {
                     // in implementation, cloud native table is a subtype of olap table
                     totalSize += calculateSizeForOlapTable((OlapTable) table, singleReplica);
                 }
-<<<<<<< HEAD
-
-                OlapTable olapTable = (OlapTable) table;
-                long tableSize = 0;
-                for (Partition partition : olapTable.getAllPartitions()) {
-                    long partitionSize = 0;
-                    for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        long indexSize = 0;
-                        for (Tablet tablet : mIndex.getTablets()) {
-                            indexSize += tablet.getDataSize(true);
-                        } // end for tablets
-                        partitionSize += indexSize;
-                    } // end for tables
-                    tableSize += partitionSize;
-                } // end for partitions
-                totalSize += tableSize;
             } // end for tables
-            result.put(dbName, Long.valueOf(totalSize));
-=======
-            }
             result.put(dbName, totalSize);
->>>>>>> baa27ff35f ([Enhancement] Show_meta_info api supports cloud native table (#30033))
         } // end for dbs
         return result;
     }
@@ -216,7 +196,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
     @VisibleForTesting
     public long calculateSizeForOlapTable(OlapTable olapTable, boolean singleReplica) {
         long tableSize = 0;
-        for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+        for (Partition partition : olapTable.getAllPartitions()) {
             long partitionSize = 0;
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 partitionSize += mIndex.getDataSize(singleReplica);
