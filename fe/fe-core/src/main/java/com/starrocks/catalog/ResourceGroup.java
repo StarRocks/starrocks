@@ -63,6 +63,9 @@ public class ResourceGroup {
     public static final Set<String> BUILTIN_WG_NAMES =
             ImmutableSet.of(DEFAULT_RESOURCE_GROUP_NAME, DEFAULT_MV_RESOURCE_GROUP_NAME);
 
+    // BE actually stores nanoseconds, so the maximum value needs to be limited to prevent overflow.
+    public static final long MAX_BIG_QUERY_CPU_SECOND_LIMIT = Long.MAX_VALUE / 1_000_000_000L;
+
     private static class ColumnMeta {
         public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier) {
             this(column, valueSupplier, true);

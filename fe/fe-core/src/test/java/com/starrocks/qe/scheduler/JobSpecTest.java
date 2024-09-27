@@ -32,9 +32,11 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
@@ -147,6 +149,8 @@ public class JobSpecTest extends SchedulerTestBase {
      */
     @Test
     public void testQueryResourceGroup() throws Exception {
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(BACKEND1_ID, 16);
+        GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
 
         new MockUp<ResourceGroupMgr>() {
             @Mock
