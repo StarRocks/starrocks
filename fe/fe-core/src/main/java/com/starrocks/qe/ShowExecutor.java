@@ -114,6 +114,7 @@ import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -1199,6 +1200,11 @@ public class ShowExecutor {
                     }
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
                 }
+            }
+
+            if (table instanceof OlapTable) {
+                OlapTable olapTbl = (OlapTable) table;
+                LOG.info("JSON metadata length: {}", GsonUtils.GSON.toJson(olapTbl).length());
             }
 
             List<String> createTableStmt = Lists.newArrayList();
